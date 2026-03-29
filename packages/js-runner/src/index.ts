@@ -51,10 +51,45 @@ export interface RunnerHealthRpcRequest {
   requestId: RunnerRequestId;
 }
 
+export interface RunnerHostReadRequest {
+  kind: "read";
+  requestId: RunnerRequestId;
+  hostId: string;
+  path: string;
+}
+
+export interface RunnerHostWriteRequest {
+  kind: "write";
+  requestId: RunnerRequestId;
+  hostId: string;
+  path: string;
+  content: string;
+}
+
+export interface RunnerHostEditRequest {
+  kind: "edit";
+  requestId: RunnerRequestId;
+  hostId: string;
+  path: string;
+  patch: string;
+}
+
+export interface RunnerHostExecRequest {
+  kind: "exec";
+  requestId: RunnerRequestId;
+  hostId: string;
+  command: string;
+  timeoutMs?: number;
+}
+
 export type RunnerRpcRequest =
   | RunnerInvokeRpcRequest
   | RunnerCancelRpcRequest
-  | RunnerHealthRpcRequest;
+  | RunnerHealthRpcRequest
+  | RunnerHostReadRequest
+  | RunnerHostWriteRequest
+  | RunnerHostEditRequest
+  | RunnerHostExecRequest;
 
 export interface RunnerInvokeSuccessResponse {
   kind: "invoke_result";
@@ -89,11 +124,70 @@ export interface RunnerHealthResponse {
   health: RunnerHostHealth;
 }
 
+export interface RunnerHostReadResponse {
+  hostId: string;
+  path: string;
+  content: string | null;
+}
+
+export interface RunnerHostWriteResponse {
+  hostId: string;
+  path: string;
+  content: string;
+}
+
+export interface RunnerHostEditResponse {
+  hostId: string;
+  path: string;
+  content: string;
+}
+
+export interface RunnerHostExecResponse {
+  hostId: string;
+  command: string;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+export interface RunnerHostErrorResponse {
+  ok: false;
+  error: {
+    code: CapabilityErrorCode;
+    message: string;
+    details?: unknown;
+  };
+}
+
+export interface RunnerHostAdapter {
+  read?: (
+    request: RunnerHostReadRequest
+  ) => Promise<RunnerHostReadResponse | RunnerHostErrorResponse> | RunnerHostReadResponse | RunnerHostErrorResponse;
+  write?: (
+    request: RunnerHostWriteRequest
+  ) => Promise<RunnerHostWriteResponse | RunnerHostErrorResponse> | RunnerHostWriteResponse | RunnerHostErrorResponse;
+  edit?: (
+    request: RunnerHostEditRequest
+  ) => Promise<RunnerHostEditResponse | RunnerHostErrorResponse> | RunnerHostEditResponse | RunnerHostErrorResponse;
+  exec?: (
+    request: RunnerHostExecRequest
+  ) => Promise<RunnerHostExecResponse | RunnerHostErrorResponse> | RunnerHostExecResponse | RunnerHostErrorResponse;
+}
+
 export type RunnerRpcResponse =
   | RunnerInvokeSuccessResponse
   | RunnerInvokeErrorResponse
   | RunnerCancelResponse
-  | RunnerHealthResponse;
+  | RunnerHealthResponse
+  | RunnerHostReadResponse
+  | RunnerHostWriteResponse
+  | RunnerHostEditResponse
+  | RunnerHostExecResponse
+  | RunnerHostErrorResponse;
+
+export interface JsRunnerHostOptions {
+  hostAdapter?: RunnerHostAdapter;
+}
 
 interface RunnerHostCore {
   dispatch(request: RunnerRpcRequest): Promise<RunnerRpcResponse>;
@@ -104,8 +198,10 @@ export class JsRunnerHost {
   readonly #core: RunnerHostCore;
   #requestSequence = 0;
 
-  constructor() {
-    this.#core = createRunnerHostCore() as RunnerHostCore;
+  constructor(options: JsRunnerHostOptions = {}) {
+    this.#core = createRunnerHostCore({
+      hostAdapter: options.hostAdapter
+    }) as RunnerHostCore;
   }
 
   async invoke(request: RunnerInvocation): Promise<RunnerInvocationResult> {
@@ -114,7 +210,7 @@ export class JsRunnerHost {
       requestId: this.#nextRequestId(),
       invocation: request
     });
-    if (response.kind !== "invoke_result") {
+    if (!("kind" in response) || response.kind !== "invoke_result") {
       throw new CapabilityError("E_RUNTIME", "Unexpected RPC response for invoke");
     }
     if (response.ok) {
@@ -137,7 +233,7 @@ export class JsRunnerHost {
       requestId: this.#nextRequestId(),
       targetRequestId
     });
-    if (response.kind !== "cancel_result") {
+    if (!("kind" in response) || response.kind !== "cancel_result") {
       throw new CapabilityError("E_RUNTIME", "Unexpected RPC response for cancel");
     }
     return {

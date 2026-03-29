@@ -93,12 +93,7 @@ function createChromeHarness({
   const messageBus = createMessageBus();
   let hasOffscreen = false;
   let disposeOffscreen: null | (() => void) = null;
-  const hostFactory = createHost ?? (() => {
-    if (!host) {
-      throw new Error("createChromeHarness requires host or createHost");
-    }
-    return host;
-  });
+  const hostFactory = createHost ?? (host ? () => host : undefined);
   const runtimeApi = {
     ...messageBus,
     onInstalled: {
@@ -142,10 +137,16 @@ function createChromeHarness({
       hasOffscreen = true;
       if (autoRegisterOffscreen) {
         disposeOffscreen?.();
-        disposeOffscreen = createOffscreenRunnerBridge({
-          runtimeApi,
-          createHost: () => hostFactory()
-        }).registerRuntimeListener();
+        disposeOffscreen = createOffscreenRunnerBridge(
+          hostFactory
+            ? {
+                runtimeApi,
+                createHost: () => hostFactory()
+              }
+            : {
+                runtimeApi
+              }
+        ).registerRuntimeListener();
       }
     }),
     closeDocument: vi.fn(async () => {
@@ -1322,6 +1323,70 @@ describe("mv3-shell manifest", () => {
       }
     });
 
+    dispose();
+    harness.cleanup();
+  });
+
+  it("returns structured host substrate errors through the default offscreen host", async () => {
+    const harness = createChromeHarness({});
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.set_default",
+        hostId: "local"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "local"
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.read",
+        path: "/workspace/demo.txt"
+      })
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_RUNTIME",
+        message: "Execution host adapter is not configured for read",
+        details: {
+          kind: "read",
+          hostId: "local",
+          reason: "adapter_missing"
+        }
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.exec",
+        command: "pwd"
+      })
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_RUNTIME",
+        message: "Execution host adapter is not configured for exec",
+        details: {
+          kind: "exec",
+          hostId: "local",
+          reason: "adapter_missing"
+        }
+      }
+    });
+
+    expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(1);
     dispose();
     harness.cleanup();
   });

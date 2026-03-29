@@ -1,6 +1,17 @@
+import type {
+  RunnerHostAdapter,
+  RunnerHostHealth,
+  RunnerRpcRequest,
+  RunnerRpcResponse
+} from "./index.js";
+
 export interface RunnerHostCore {
-  dispatch(request: unknown): Promise<unknown>;
-  getHealth(): unknown;
+  dispatch(request: RunnerRpcRequest): Promise<RunnerRpcResponse>;
+  getHealth(): RunnerHostHealth;
 }
 
-export function createRunnerHostCore(): RunnerHostCore;
+export function createRunnerHostCore(
+  options?: {
+    hostAdapter?: RunnerHostAdapter;
+  }
+): RunnerHostCore;

@@ -1,5 +1,7 @@
 import { JsRunnerHost } from "@bbl-next/js-runner";
-import { describe, expect, it } from "vitest";
+// @ts-ignore source JS module has no declaration file yet
+import { createRunnerHostCore } from "../src/runner-host-core.js";
+import { describe, expect, it, vi } from "vitest";
 
 describe("js-runner", () => {
   it("executes a runner module with ctx and input", async () => {
@@ -199,6 +201,167 @@ describe("js-runner", () => {
       targetRequestId: "missing",
       cancelled: false
     });
+  });
+
+  it("routes host substrate requests through an explicit host adapter", async () => {
+    const hostAdapter = {
+      read: vi.fn(async (request) => ({
+        hostId: request.hostId,
+        path: request.path,
+        content: "hello"
+      })),
+      write: vi.fn(async (request) => ({
+        hostId: request.hostId,
+        path: request.path,
+        content: request.content
+      })),
+      edit: vi.fn(async (request) => ({
+        hostId: request.hostId,
+        path: request.path,
+        content: `patched:${request.patch}`
+      })),
+      exec: vi.fn(async (request) => ({
+        hostId: request.hostId,
+        command: request.command,
+        exitCode: 0,
+        stdout: `ran:${request.command}`,
+        stderr: ""
+      }))
+    };
+    const core = createRunnerHostCore({ hostAdapter });
+
+    await expect(
+      core.dispatch({
+        kind: "read",
+        requestId: "read-1",
+        hostId: "local",
+        path: "/workspace/demo.txt"
+      })
+    ).resolves.toEqual({
+      hostId: "local",
+      path: "/workspace/demo.txt",
+      content: "hello"
+    });
+
+    await expect(
+      core.dispatch({
+        kind: "write",
+        requestId: "write-1",
+        hostId: "local",
+        path: "/workspace/demo.txt",
+        content: "hello"
+      })
+    ).resolves.toEqual({
+      hostId: "local",
+      path: "/workspace/demo.txt",
+      content: "hello"
+    });
+
+    await expect(
+      core.dispatch({
+        kind: "edit",
+        requestId: "edit-1",
+        hostId: "local",
+        path: "/workspace/demo.txt",
+        patch: "\nworld"
+      })
+    ).resolves.toEqual({
+      hostId: "local",
+      path: "/workspace/demo.txt",
+      content: "patched:\nworld"
+    });
+
+    await expect(
+      core.dispatch({
+        kind: "exec",
+        requestId: "exec-1",
+        hostId: "local",
+        command: "pwd",
+        timeoutMs: 25
+      })
+    ).resolves.toEqual({
+      hostId: "local",
+      command: "pwd",
+      exitCode: 0,
+      stdout: "ran:pwd",
+      stderr: ""
+    });
+
+    expect(hostAdapter.read).toHaveBeenCalledWith({
+      kind: "read",
+      requestId: "read-1",
+      hostId: "local",
+      path: "/workspace/demo.txt"
+    });
+    expect(hostAdapter.write).toHaveBeenCalledWith({
+      kind: "write",
+      requestId: "write-1",
+      hostId: "local",
+      path: "/workspace/demo.txt",
+      content: "hello"
+    });
+    expect(hostAdapter.edit).toHaveBeenCalledWith({
+      kind: "edit",
+      requestId: "edit-1",
+      hostId: "local",
+      path: "/workspace/demo.txt",
+      patch: "\nworld"
+    });
+    expect(hostAdapter.exec).toHaveBeenCalledWith({
+      kind: "exec",
+      requestId: "exec-1",
+      hostId: "local",
+      command: "pwd",
+      timeoutMs: 25
+    });
+  });
+
+  it("returns structured host substrate errors when no adapter is configured", async () => {
+    const core = createRunnerHostCore();
+    const requests = [
+      {
+        kind: "read",
+        requestId: "read-missing",
+        hostId: "local",
+        path: "/workspace/demo.txt"
+      },
+      {
+        kind: "write",
+        requestId: "write-missing",
+        hostId: "local",
+        path: "/workspace/demo.txt",
+        content: "hello"
+      },
+      {
+        kind: "edit",
+        requestId: "edit-missing",
+        hostId: "local",
+        path: "/workspace/demo.txt",
+        patch: "\nworld"
+      },
+      {
+        kind: "exec",
+        requestId: "exec-missing",
+        hostId: "local",
+        command: "pwd",
+        timeoutMs: 25
+      }
+    ];
+
+    for (const request of requests) {
+      await expect(core.dispatch(request)).resolves.toMatchObject({
+        ok: false,
+        error: {
+          code: "E_RUNTIME",
+          message: `Execution host adapter is not configured for ${request.kind}`,
+          details: {
+            kind: request.kind,
+            hostId: "local",
+            reason: "adapter_missing"
+          }
+        }
+      });
+    }
   });
 
   it("marks health as degraded after a failure and resets after success", async () => {

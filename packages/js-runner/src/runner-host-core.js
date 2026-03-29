@@ -58,7 +58,22 @@ function loadModule(module) {
   return factory(exportsObject, moduleObject);
 }
 
-export function createRunnerHostCore() {
+function createHostAdapterError(request, reason, message) {
+  return {
+    ok: false,
+    error: {
+      code: "E_RUNTIME",
+      message,
+      details: {
+        kind: request.kind,
+        hostId: request.hostId ?? null,
+        reason
+      }
+    }
+  };
+}
+
+export function createRunnerHostCore({ hostAdapter } = {}) {
   const inflight = new Map();
   const health = {
     lastRequestAt: undefined,
@@ -142,6 +157,34 @@ export function createRunnerHostCore() {
     }
   }
 
+  async function dispatchHostOperation(request) {
+    if (!hostAdapter) {
+      return createHostAdapterError(
+        request,
+        "adapter_missing",
+        `Execution host adapter is not configured for ${request.kind}`
+      );
+    }
+
+    const handler = hostAdapter[request.kind];
+    if (typeof handler !== "function") {
+      return createHostAdapterError(
+        request,
+        "operation_not_supported",
+        `Execution host adapter does not implement ${request.kind}`
+      );
+    }
+
+    try {
+      return await handler(request);
+    } catch (error) {
+      return {
+        ok: false,
+        error: normalizeRunnerError(error)
+      };
+    }
+  }
+
   async function dispatch(request) {
     switch (request.kind) {
       case "invoke":
@@ -186,6 +229,11 @@ export function createRunnerHostCore() {
           ok: true,
           health: getHealth()
         };
+      case "read":
+      case "write":
+      case "edit":
+      case "exec":
+        return dispatchHostOperation(request);
       default:
         return {
           kind: "invoke_result",
