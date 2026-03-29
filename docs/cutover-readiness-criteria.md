@@ -78,8 +78,6 @@
 
 - 只有 v0 substrate，但没有迁移矩阵
 - 有 backlog，但没有 parity dashboard
-- site runtime 只有 fixture，没有真实注入链
-- BrowserVFS 还在对外泄露旧底层路径
 - runtime 问题仍只能回旧仓 diagnostics 里查
 
 ## Current Assessment
@@ -92,8 +90,8 @@
 
 主要原因：
 
-1. site runtime 真实链路未收口
-2. 迁移控制面刚建立，还未长期维护
+1. 迁移控制面刚建立，还未长期维护
+2. browser automation / screenshot / download / intervention 仍未迁入主线
 3. diagnostics / provider / studio / automation parity 仍未成体系
 
 ## Maintenance Rule

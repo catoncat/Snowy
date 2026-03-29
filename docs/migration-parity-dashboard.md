@@ -14,12 +14,12 @@
 | Area | Status | Why |
 |---|---|---|
 | descriptor / contract / projection | `green` | canonical model、projection、registry 基础已成形 |
-| core runtime ctx / invoke | `yellow` | 基础已做，但 permissions / trace / nested invoke 仍有 review gap |
+| core runtime ctx / invoke | `green` | permissions / trace / nested invoke 已收口并有测试 |
 | BrowserVFS baseline | `green` | read/write/snapshot/rehydrate/quota/package discovery 已落地 |
-| BrowserVFS public skill URI parity | `yellow` | canonical `mem://skills/...` 口径仍在收口 |
+| BrowserVFS public skill URI parity | `green` | canonical `mem://skills/...` round-trip 已测 |
 | JS Runner host | `green` | host / cancel / timeout / health / offscreen bridge 已测 |
-| MV3 shell substrate | `yellow` | 最小壳已成，真实站点注入链未收口 |
-| site runtime baseline | `yellow` | fixture 链路已成，但 active-tab 边界和 real injection 仍在 review |
+| MV3 shell substrate | `green` | offscreen bridge 与显式 page-hook bridge 已测 |
+| site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
 | old browser automation parity | `red` | 旧 background/focus/CDP 体系尚未正式迁入 |
 | old visual/download/intervention parity | `red` | 旧产品能力未在新仓形成主链 |
 | skill SDK / authoring | `yellow` | typed facade 与文档已起步，完整 authoring/studio 不足 |
@@ -37,10 +37,11 @@
 - core invoke baseline
 - BrowserVFS baseline
 - JS Runner host
+- MV3 shell substrate
+- site runtime baseline
 
 ### 仍不能宣称“已完成迁移”的关键层
 
-- site runtime 真实注入和 active-tab 边界
 - 完整 browser automation 能力
 - diagnostics / observability
 - provider/profile 层

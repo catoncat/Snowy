@@ -119,14 +119,20 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 ## 当前未完成项
 
-1. `ISSUE-011` Review: ctx permission and trace contract drift
-2. `ISSUE-012` Review: site runtime active-tab boundary regression
-3. `ISSUE-013` Review: phase 4 real injection chain is still mocked
-4. `ISSUE-014` Review: BrowserVFS canonical skill URI drift
+当前没有可直接认领的 open issue。
+
+如果 `bun run workflow:claim:preview` 返回 blocked：
+
+1. 先确认是否还有 `status: in-progress`
+2. 若没有，进入下一批规划
+3. 对照 `docs/locked-decisions-2026-03-29.md`、`project_plan.md`、代码和测试补新的 review / planning issue
 
 ## 推荐领取顺序
 
-1. `ISSUE-011`
-2. `ISSUE-012`
-3. `ISSUE-014`
-4. `ISSUE-013`
+当前没有推荐领取顺序。
+
+下一步建议：
+
+1. `bun run workflow:plan:preview`
+2. 若需要，补新的 `Review:` issue
+3. 再回到 claim 流程
