@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import manifest from "../manifest.json";
 // @ts-ignore source JS module has no declaration file yet
 import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCREEN_REASONS, createBackgroundRunnerBridge } from "../src/background.js";
@@ -147,6 +148,12 @@ describe("mv3-shell manifest", () => {
     expect(manifest.side_panel).toMatchObject({
       default_path: "src/sidepanel.html"
     });
+  });
+
+  it("keeps the offscreen entry free of TypeScript source imports", () => {
+    const source = readFileSync(new URL("../src/offscreen.js", import.meta.url), "utf8");
+
+    expect(source).not.toMatch(/\.ts["']/);
   });
 
   it("creates the offscreen document once and uses the WORKERS reason", async () => {

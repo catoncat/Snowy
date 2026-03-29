@@ -31,6 +31,30 @@ function isoNow() {
   return new Date().toISOString();
 }
 
+function createTimeoutPromise(kind, requestId, timeoutMs) {
+  let timerId;
+  const promise = new Promise((_, reject) => {
+    timerId = setTimeout(() => {
+      reject({
+        code: "E_TIMEOUT",
+        message: `Runner bridge timed out for ${kind}`,
+        details: {
+          kind,
+          requestId
+        }
+      });
+    }, timeoutMs);
+  });
+  return {
+    promise,
+    clear() {
+      if (timerId != null) {
+        clearTimeout(timerId);
+      }
+    }
+  };
+}
+
 export function createBackgroundRunnerBridge({
   chromeApi = globalThis.chrome,
   timeoutMs = RUNNER_BRIDGE_TIMEOUT_MS,
@@ -90,6 +114,7 @@ export function createBackgroundRunnerBridge({
 
   async function sendToOffscreen(kind, payload = {}) {
     const requestId = payload.requestId ?? nextRequestId();
+    const timeout = createTimeoutPromise(kind, requestId, timeoutMs);
     try {
       const response = await Promise.race([
         chromeApi.runtime.sendMessage({
@@ -98,18 +123,7 @@ export function createBackgroundRunnerBridge({
           requestId,
           ...payload
         }),
-        new Promise((_, reject) => {
-          setTimeout(() => {
-            reject({
-              code: "E_TIMEOUT",
-              message: `Runner bridge timed out for ${kind}`,
-              details: {
-                kind,
-                requestId
-              }
-            });
-          }, timeoutMs);
-        })
+        timeout.promise
       ]);
       if (!response || response.ok !== true) {
         state.hostReady = false;
@@ -136,6 +150,8 @@ export function createBackgroundRunnerBridge({
         ok: false,
         error: toBridgeError(error, "E_TIMEOUT")
       };
+    } finally {
+      timeout.clear();
     }
   }
 
