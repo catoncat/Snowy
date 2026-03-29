@@ -79,7 +79,9 @@ export function createBackgroundRunnerBridge({
   let requestSequence = 0;
   const state = {
     hostReady: false,
-    hostLastSeenAt: undefined
+    hostLastSeenAt: undefined,
+    hostRecoveredAt: undefined,
+    hostRecoveryReason: undefined
   };
 
   function nextRequestId() {
@@ -123,6 +125,50 @@ export function createBackgroundRunnerBridge({
     } finally {
       creating = null;
     }
+  }
+
+  function buildBridgeState(extra = {}) {
+    return {
+      hostReady: state.hostReady,
+      hostLastSeenAt: state.hostLastSeenAt,
+      hostRecoveredAt: state.hostRecoveredAt,
+      hostRecoveryReason: state.hostRecoveryReason,
+      ...extra
+    };
+  }
+
+  function shouldRecoverHost(response) {
+    if (!response?.ok) {
+      return "ensure_failed";
+    }
+    if (response.data?.health?.status === "degraded") {
+      return "unhealthy_host";
+    }
+    return null;
+  }
+
+  async function recoverHost(reason) {
+    if ((await hasOffscreenDocument()) && typeof chromeApi.offscreen?.closeDocument === "function") {
+      await chromeApi.offscreen.closeDocument();
+    }
+    const documentState = await ensureOffscreenDocument();
+    const response = await sendToOffscreen("runner.ensure_host");
+    if (!response.ok) {
+      return response;
+    }
+    state.hostRecoveredAt = isoNow();
+    state.hostRecoveryReason = reason;
+    return {
+      ok: true,
+      data: {
+        ...response.data,
+        bridge: buildBridgeState({
+          offscreenUrl: documentState.offscreenUrl,
+          recovered: true,
+          recoveryReason: reason
+        })
+      }
+    };
   }
 
   async function sendToOffscreen(kind, payload = {}) {
@@ -171,18 +217,18 @@ export function createBackgroundRunnerBridge({
   async function ensureHost() {
     const documentState = await ensureOffscreenDocument();
     const response = await sendToOffscreen("runner.ensure_host");
-    if (!response.ok) {
-      return response;
+    const recoveryReason = shouldRecoverHost(response);
+    if (recoveryReason) {
+      return recoverHost(recoveryReason);
     }
     return {
       ok: true,
       data: {
         ...response.data,
-        bridge: {
+        bridge: buildBridgeState({
           offscreenUrl: documentState.offscreenUrl,
-          hostReady: state.hostReady,
-          hostLastSeenAt: state.hostLastSeenAt
-        }
+          recovered: false
+        })
       }
     };
   }
@@ -216,10 +262,9 @@ export function createBackgroundRunnerBridge({
       ok: true,
       data: {
         ...response.data,
-        bridge: {
-          hostReady: state.hostReady,
-          hostLastSeenAt: state.hostLastSeenAt
-        }
+        bridge: buildBridgeState({
+          recovered: false
+        })
       }
     };
   }
@@ -272,10 +317,7 @@ export function createBackgroundRunnerBridge({
   }
 
   function getBridgeState() {
-    return {
-      hostReady: state.hostReady,
-      hostLastSeenAt: state.hostLastSeenAt
-    };
+    return buildBridgeState();
   }
 
   return {

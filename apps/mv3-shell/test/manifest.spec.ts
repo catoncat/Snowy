@@ -68,10 +68,15 @@ function createMessageBus() {
 
 function createChromeHarness({
   host,
+  createHost,
   autoRegisterOffscreen = true,
   hangOffscreen = false
 }: {
-  host: {
+  host?: {
+    dispatch: (request: unknown) => Promise<unknown>;
+    getHealth: () => unknown;
+  };
+  createHost?: () => {
     dispatch: (request: unknown) => Promise<unknown>;
     getHealth: () => unknown;
   };
@@ -81,6 +86,12 @@ function createChromeHarness({
   const messageBus = createMessageBus();
   let hasOffscreen = false;
   let disposeOffscreen: null | (() => void) = null;
+  const hostFactory = createHost ?? (() => {
+    if (!host) {
+      throw new Error("createChromeHarness requires host or createHost");
+    }
+    return host;
+  });
   const runtimeApi = {
     ...messageBus,
     onInstalled: {
@@ -113,7 +124,7 @@ function createChromeHarness({
         disposeOffscreen?.();
         disposeOffscreen = createOffscreenRunnerBridge({
           runtimeApi,
-          createHost: () => host
+          createHost: () => hostFactory()
         }).registerRuntimeListener();
       }
     }),
@@ -131,6 +142,10 @@ function createChromeHarness({
     },
     runtimeApi,
     offscreenApi,
+    dropOffscreenListener() {
+      disposeOffscreen?.();
+      disposeOffscreen = null;
+    },
     cleanup() {
       disposeOffscreen?.();
     }
@@ -462,6 +477,162 @@ describe("mv3-shell manifest", () => {
         code: "E_TIMEOUT"
       }
     });
+  });
+
+  it("recreates the offscreen document when the existing host stops responding", async () => {
+    const createHost = vi.fn(() => ({
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0
+            }
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1
+          }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0
+      }))
+    }));
+    const harness = createChromeHarness({ createHost });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+
+    await expect(bridge.ensureHost()).resolves.toMatchObject({
+      ok: true,
+      data: {
+        bridge: {
+          recovered: false,
+          hostReady: true
+        }
+      }
+    });
+
+    harness.dropOffscreenListener();
+
+    await expect(bridge.ensureHost()).resolves.toMatchObject({
+      ok: true,
+      data: {
+        ready: true,
+        bridge: {
+          recovered: true,
+          recoveryReason: "ensure_failed",
+          hostReady: true
+        }
+      }
+    });
+
+    expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(1);
+    expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(2);
+    expect(createHost).toHaveBeenCalledTimes(2);
+    harness.cleanup();
+  });
+
+  it("recreates the offscreen document when the host reports degraded health", async () => {
+    const createHost = vi
+      .fn()
+      .mockImplementationOnce(() => ({
+        dispatch: vi.fn(async (request) => {
+          if (request.kind === "health") {
+            return {
+              kind: "health_result",
+              requestId: request.requestId,
+              ok: true,
+              health: {
+                status: "degraded",
+                inflightCount: 0,
+                consecutiveFailures: 1
+              }
+            };
+          }
+          return {
+            kind: "invoke_result",
+            requestId: request.requestId,
+            ok: true,
+            result: {
+              result: "ok",
+              durationMs: 1
+            }
+          };
+        }),
+        getHealth: vi.fn(() => ({
+          status: "degraded",
+          inflightCount: 0,
+          consecutiveFailures: 1
+        }))
+      }))
+      .mockImplementationOnce(() => ({
+        dispatch: vi.fn(async (request) => {
+          if (request.kind === "health") {
+            return {
+              kind: "health_result",
+              requestId: request.requestId,
+              ok: true,
+              health: {
+                status: "idle",
+                inflightCount: 0,
+                consecutiveFailures: 0
+              }
+            };
+          }
+          return {
+            kind: "invoke_result",
+            requestId: request.requestId,
+            ok: true,
+            result: {
+              result: "ok",
+              durationMs: 1
+            }
+          };
+        }),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0
+        }))
+      }));
+    const harness = createChromeHarness({ createHost });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+
+    await expect(bridge.ensureHost()).resolves.toMatchObject({
+      ok: true,
+      data: {
+        health: {
+          status: "idle"
+        },
+        bridge: {
+          recovered: true,
+          recoveryReason: "unhealthy_host",
+          hostReady: true
+        }
+      }
+    });
+
+    expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(1);
+    expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(2);
+    expect(createHost).toHaveBeenCalledTimes(2);
+    harness.cleanup();
   });
 
   it("injects, invokes, and verifies the page hook through chrome.scripting", async () => {
