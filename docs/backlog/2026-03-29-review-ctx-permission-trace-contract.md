@@ -1,11 +1,11 @@
 ---
 id: ISSUE-011
 title: "Review: ctx permission and trace contract drift"
-status: open
+status: in-progress
 priority: p0
 source: "codex review 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: agent
 tags:
   - review
   - contracts
