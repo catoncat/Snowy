@@ -94,9 +94,13 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 这些命令可以用，但它们不是 workflow 的脑：
 
 ```bash
-bun run workflow:claim:preview
-bun run workflow:claim
-bun run workflow:claim:json
+BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview
+BBL_AGENT_NAME=<agent-name> bun run workflow:claim
+BBL_AGENT_NAME=<agent-name> bun run workflow:claim:json
+
+bun run workflow:claim:preview -- --name=<agent-name>
+bun run workflow:claim -- --name=<agent-name>
+bun run workflow:claim:json -- --name=<agent-name>
 
 bun run workflow:new-review-issue -- --title=... --group=... --epic=... --acceptance-ref=... --scope=... --accept=...
 bun run workflow:plan:preview

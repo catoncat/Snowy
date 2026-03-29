@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   chooseIssue,
   dependenciesSatisfied,
+  isNamedAgentAssignee,
   parseFrontmatter,
   type IssueFile
 } from "./claim-issue";
@@ -18,6 +19,13 @@ function issueFromFrontmatter(frontmatterBlock: string): IssueFile {
 }
 
 describe("auto-claim-issues-next", () => {
+  it("requires a real agent name for a persisted claim", () => {
+    expect(isNamedAgentAssignee("atlas")).toBe(true);
+    expect(isNamedAgentAssignee(" agent ")).toBe(false);
+    expect(isNamedAgentAssignee("unassigned")).toBe(false);
+    expect(isNamedAgentAssignee("")).toBe(false);
+  });
+
   it("parses inline arrays with comments", () => {
     const issue = issueFromFrontmatter(`---
 id: ISSUE-002
@@ -67,7 +75,7 @@ write_scope:
 ---`);
 
     const result = chooseIssue([active, candidate], {
-      assignee: "agent",
+      assignee: "atlas",
       dryRun: true,
       json: false,
       allowConflicts: false
@@ -79,4 +87,3 @@ write_scope:
     }
   });
 });
-

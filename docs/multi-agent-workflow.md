@@ -75,6 +75,8 @@
 
 - 任何 Agent 都可以做 claim 判断
 - 但只有运行在 canonical workspace 的那个 Agent，才应该真正执行 claim / 状态回写
+- 真正 claim 时，`assignee` 必须写该 Agent 自己选定的名字，不能写通用 `agent`
+- 同一位 Agent 在当前上下文里应持续复用同一个名字，方便其他 Agent 识别 ownership
 
 ### Helper Rule
 
@@ -194,9 +196,13 @@
 这些命令是 helper，不是 workflow 的脑：
 
 ```bash
-bun run workflow:claim:preview
-bun run workflow:claim
-bun run workflow:claim:json
+BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview
+BBL_AGENT_NAME=<agent-name> bun run workflow:claim
+BBL_AGENT_NAME=<agent-name> bun run workflow:claim:json
+
+bun run workflow:claim:preview -- --name=<agent-name>
+bun run workflow:claim -- --name=<agent-name>
+bun run workflow:claim:json -- --name=<agent-name>
 
 bun run workflow:new-review-issue -- --title=... --group=... --epic=... --acceptance-ref=... --scope=... --accept=...
 bun run workflow:plan:preview

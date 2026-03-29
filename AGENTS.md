@@ -234,6 +234,7 @@
 - 所有 Agent 默认能力相同；差异来自当前状态和当前上下文
 - role prompt 只作为可选 stance overlay，不是系统前提
 - claim / done 回写只在 canonical workspace 可靠
+- 真正 claim 时，`assignee` 必须写 Agent 自己选定并持续复用的名字，不能写通用 `agent`
 - 若 claim 预览返回无可认领 issue，当前 Agent 必须进入下一批规划，而不是默认停工
 
 ## 10. Commands
@@ -242,9 +243,10 @@
 - `bun run test`
 - `bun run typecheck`
 - `bun run check`
-- `bun run workflow:claim:preview`
-- `bun run workflow:claim`
-- `bun run workflow:claim:json`
+- `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview`
+- `BBL_AGENT_NAME=<agent-name> bun run workflow:claim`
+- `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:json`
+- `bun run workflow:claim -- --name=<agent-name>`
 - `bun run workflow:plan:preview`
 - `bun run workflow:plan`
 - `bun run workflow:plan:json`

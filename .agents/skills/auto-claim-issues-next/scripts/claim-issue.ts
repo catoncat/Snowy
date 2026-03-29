@@ -54,7 +54,7 @@ function fail(message: string): never {
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = {
-    assignee: "agent",
+    assignee: String(process.env.BBL_AGENT_NAME || "").trim(),
     dryRun: false,
     json: false,
     allowConflicts: false
@@ -82,7 +82,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     if (key === "issue" && value) {
       out.issueId = value;
     }
-    if (key === "assignee" && value) {
+    if ((key === "assignee" || key === "name") && value) {
       out.assignee = value;
     }
     if (key === "group" && value) {
@@ -91,6 +91,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
   }
 
   return out;
+}
+
+const RESERVED_ASSIGNEE_NAMES = new Set(["agent", "human", "unassigned"]);
+
+export function isNamedAgentAssignee(value: string): boolean {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return false;
+  }
+  return !RESERVED_ASSIGNEE_NAMES.has(normalized.toLowerCase());
 }
 
 function stripQuotes(raw: string): string {
@@ -313,6 +323,7 @@ export function toIssueSummary(issue: IssueFile) {
     title: readString(issue, "title"),
     status: issueStatus(issue),
     priority: issuePriority(issue),
+    assignee: readString(issue, "assignee"),
     parallel_group: readString(issue, "parallel_group"),
     depends_on: readArray(issue, "depends_on"),
     write_scope: readArray(issue, "write_scope"),
@@ -483,6 +494,7 @@ function printResult(result: ClaimResult, asJson: boolean): void {
   console.log(`reason: ${result.reason}`);
   console.log(`id: ${result.issue.id}`);
   console.log(`title: ${result.issue.title}`);
+  console.log(`assignee: ${result.issue.assignee || "(none)"}`);
   console.log(`parallel_group: ${result.issue.parallel_group}`);
   console.log(`path: ${result.issue.path}`);
   console.log(`depends_on: ${result.issue.depends_on.join(", ") || "(none)"}`);
@@ -497,6 +509,11 @@ export function main() {
   const result = chooseIssue(issues, args);
 
   if (result.kind === "claimed") {
+    if (!isNamedAgentAssignee(args.assignee)) {
+      fail(
+        "真正 claim 时必须写 Agent 自己的名字，使用 --name=<your-name>、--assignee=<your-name>，或设置 BBL_AGENT_NAME；不要用 agent/human/unassigned"
+      );
+    }
     const target = findById(issues, result.issue.id);
     if (!target) {
       fail(`claim 目标不存在: ${result.issue.id}`);
@@ -519,4 +536,3 @@ export function main() {
 if (import.meta.main) {
   main();
 }
-
