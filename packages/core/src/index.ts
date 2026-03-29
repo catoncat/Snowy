@@ -254,6 +254,11 @@ export interface HostControlPlaneSnapshotInput {
   hosts?: HostControlPlaneRecordInput[];
 }
 
+export interface HostSubstrateTarget {
+  hostId: string;
+  via: "explicit" | "default";
+}
+
 interface CatalogEntryInput {
   id: string;
   family: string;
@@ -499,10 +504,59 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
   ],
   host: [
     catalogEntry({
+      id: "host.read", family: "host", operation: "read",
+      risk: "medium", sideEffects: "reads", permissions: ["host.read"],
+      description: "Read content from the selected execution host",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          hostId: { type: "string" }
+        },
+        required: ["path"]
+      }
+    }),
+    catalogEntry({
+      id: "host.write", family: "host", operation: "write",
+      risk: "high", sideEffects: "external", permissions: ["host.write"],
+      description: "Write content to a path on the selected execution host",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" },
+          hostId: { type: "string" }
+        },
+        required: ["path", "content"]
+      }
+    }),
+    catalogEntry({
+      id: "host.edit", family: "host", operation: "edit",
+      risk: "high", sideEffects: "external", permissions: ["host.edit"],
+      description: "Apply an edit patch to a path on the selected execution host",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          patch: { type: "string" },
+          hostId: { type: "string" }
+        },
+        required: ["path", "patch"]
+      }
+    }),
+    catalogEntry({
       id: "host.exec", family: "host", operation: "exec",
       risk: "high", sideEffects: "external", permissions: ["host.exec"],
-      description: "Execute a command on the host machine",
-      inputSchema: { type: "object", properties: { command: { type: "string" }, timeoutMs: { type: "number" } }, required: ["command"] }
+      description: "Execute a command on the selected execution host",
+      inputSchema: {
+        type: "object",
+        properties: {
+          command: { type: "string" },
+          timeoutMs: { type: "number" },
+          hostId: { type: "string" }
+        },
+        required: ["command"]
+      }
     }),
   ],
 };
@@ -622,6 +676,30 @@ export function setDefaultExecutionHost(
   hostId: string
 ): HostControlPlaneSnapshot {
   return mapExecutionHost(snapshot, hostId, (host) => host, hostId);
+}
+
+export function resolveHostSubstrateTarget(
+  snapshot: HostControlPlaneSnapshot,
+  input: {
+    hostId?: string | null;
+  } = {}
+): HostSubstrateTarget {
+  if (input.hostId) {
+    if (!snapshot.hosts.some((host) => host.hostId === input.hostId)) {
+      throw new CapabilityError("E_CAPABILITY_NOT_FOUND", `Unknown execution host: ${input.hostId}`);
+    }
+    return {
+      hostId: input.hostId,
+      via: "explicit"
+    };
+  }
+  if (snapshot.defaultHostId) {
+    return {
+      hostId: snapshot.defaultHostId,
+      via: "default"
+    };
+  }
+  throw new CapabilityError("E_BAD_INPUT", "host substrate requires hostId or a default host");
 }
 
 export function createBootstrapSummary(input: BootstrapSummaryInput = {}): BootstrapSummary {

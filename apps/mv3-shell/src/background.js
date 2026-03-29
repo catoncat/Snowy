@@ -66,6 +66,16 @@ function invalidHostControlPlane(message) {
   };
 }
 
+function invalidHostSubstrate(message) {
+  return {
+    ok: false,
+    error: {
+      code: "E_BAD_INPUT",
+      message
+    }
+  };
+}
+
 function toExecutionHostHealthStatus(localState) {
   if (localState.health?.status === "degraded" || localState.error) {
     return "degraded";
@@ -282,6 +292,16 @@ export function createBackgroundRunnerBridge({
     return hostId;
   }
 
+  function resolveHostSubstrateHostId(hostId, action) {
+    if (typeof hostId === "string" && hostId.trim()) {
+      return resolveHostId(hostId, action);
+    }
+    if (typeof state.defaultHostId === "string" && state.defaultHostId.trim()) {
+      return state.defaultHostId;
+    }
+    return invalidHostSubstrate(`${action} requires hostId or a default host`);
+  }
+
   async function readLocalHostControlState() {
     const checkedAt = isoNow();
     const offscreenPresent = await hasOffscreenDocument();
@@ -444,6 +464,28 @@ export function createBackgroundRunnerBridge({
     return {
       ok: true,
       data: host
+    };
+  }
+
+  async function routeHostSubstrate(kind, payload = {}) {
+    const resolvedHostId = resolveHostSubstrateHostId(payload.hostId, kind);
+    if (typeof resolvedHostId !== "string") {
+      return resolvedHostId;
+    }
+    const ensured = await ensureHost();
+    if (!ensured.ok) {
+      return ensured;
+    }
+    const response = await sendToOffscreen(kind, {
+      ...payload,
+      hostId: resolvedHostId
+    });
+    if (!response.ok) {
+      return response;
+    }
+    return {
+      ok: true,
+      data: response.data
     };
   }
 
@@ -932,6 +974,29 @@ export function createBackgroundRunnerBridge({
         return cancel(message.targetRequestId);
       case "runner.health":
         return health();
+      case "host.read":
+        return routeHostSubstrate("host.read", {
+          hostId: message.hostId,
+          path: message.path
+        });
+      case "host.write":
+        return routeHostSubstrate("host.write", {
+          hostId: message.hostId,
+          path: message.path,
+          content: message.content
+        });
+      case "host.edit":
+        return routeHostSubstrate("host.edit", {
+          hostId: message.hostId,
+          path: message.path,
+          patch: message.patch
+        });
+      case "host.exec":
+        return routeHostSubstrate("host.exec", {
+          hostId: message.hostId,
+          command: message.command,
+          timeoutMs: message.timeoutMs
+        });
       case "hosts.list":
         return listHosts();
       case "hosts.get":

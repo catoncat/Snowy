@@ -14,6 +14,7 @@ import {
   disconnectExecutionHost,
   getBuiltinsByNamespace,
   hasPublicNamespaceCoverage,
+  resolveHostSubstrateTarget,
   setDefaultExecutionHost,
   typedCapabilities,
   typedCapabilitiesForPermissions,
@@ -22,6 +23,7 @@ import {
 import { BrowserVfs } from "../../browser-vfs/src/index";
 import {
   HOST_CONTROL_PLANE_ACTIONS,
+  HOST_SUBSTRATE_ACTIONS,
   assertCapabilityDescriptor,
   CapabilityError,
   capabilityNamespace,
@@ -66,6 +68,12 @@ describe("core", () => {
       "hosts.set_default",
       "hosts.health"
     ]);
+    expect(HOST_SUBSTRATE_ACTIONS).toEqual([
+      "host.read",
+      "host.write",
+      "host.edit",
+      "host.exec"
+    ]);
     expect(getBuiltinsByNamespace("hosts").map((entry) => entry.id)).toEqual([
       "hosts.list",
       "hosts.get",
@@ -74,7 +82,12 @@ describe("core", () => {
       "hosts.set_default",
       "hosts.health"
     ]);
-    expect(getBuiltinsByNamespace("host").map((entry) => entry.id)).toEqual(["host.exec"]);
+    expect(getBuiltinsByNamespace("host").map((entry) => entry.id)).toEqual([
+      "host.read",
+      "host.write",
+      "host.edit",
+      "host.exec"
+    ]);
   });
 
   it("projects tools from the registry", () => {
@@ -357,6 +370,9 @@ describe("core", () => {
 
   it("keeps host substrate actions separate from the hosts control plane", () => {
     expect(getBuiltinsByNamespace("host").map((entry) => entry.id)).toEqual([
+      "host.read",
+      "host.write",
+      "host.edit",
       "host.exec"
     ]);
     expect(getBuiltinsByNamespace("hosts").map((entry) => entry.id)).toEqual([
@@ -385,6 +401,46 @@ describe("core", () => {
       "hosts.disconnect",
       "hosts.set_default"
     ]);
+  });
+
+  it("routes host substrate requests through explicit hostId or default host", () => {
+    const snapshot = createHostControlPlaneSnapshot({
+      defaultHostId: "local",
+      hosts: [
+        {
+          hostId: "local",
+          kind: "local",
+          connected: true
+        },
+        {
+          hostId: "ssh-prod",
+          kind: "remote",
+          connected: true
+        }
+      ]
+    });
+
+    expect(resolveHostSubstrateTarget(snapshot, { hostId: "ssh-prod" })).toEqual({
+      hostId: "ssh-prod",
+      via: "explicit"
+    });
+    expect(resolveHostSubstrateTarget(snapshot, {})).toEqual({
+      hostId: "local",
+      via: "default"
+    });
+    expect(() =>
+      resolveHostSubstrateTarget(
+        createHostControlPlaneSnapshot({
+          hosts: [
+            {
+              hostId: "local",
+              kind: "local"
+            }
+          ]
+        }),
+        {}
+      )
+    ).toThrow("host substrate requires hostId or a default host");
   });
 
   it("projects bridge-side MCP export handoffs from exportable descriptors only", () => {

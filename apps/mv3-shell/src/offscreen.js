@@ -29,6 +29,33 @@ export function createOffscreenRunnerBridge({
 } = {}) {
   const host = createHost();
 
+  async function dispatchHostOperation(kind, message) {
+    const operation = kind.replace("host.", "");
+    const response = await host.dispatch({
+      kind: operation,
+      requestId: message.requestId,
+      hostId: message.hostId,
+      path: message.path,
+      content: message.content,
+      patch: message.patch,
+      command: message.command,
+      timeoutMs: message.timeoutMs
+    });
+    if (response && typeof response === "object" && response.ok === false) {
+      return {
+        ok: false,
+        error: response.error ?? {
+          code: "E_RUNTIME",
+          message: `Execution host operation failed: ${kind}`
+        }
+      };
+    }
+    return {
+      ok: true,
+      data: response
+    };
+  }
+
   async function handleMessage(message) {
     if (!message || message.target !== target) {
       return undefined;
@@ -76,6 +103,11 @@ export function createOffscreenRunnerBridge({
             requestId: message.requestId
           })
         };
+      case "host.read":
+      case "host.write":
+      case "host.edit":
+      case "host.exec":
+        return dispatchHostOperation(message.kind, message);
       default:
         return {
           ok: false,

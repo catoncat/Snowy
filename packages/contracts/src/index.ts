@@ -7,6 +7,13 @@ export const BOOTSTRAP_RESOURCE_KEYS = ["runtime", "config", "skills", "hosts"] 
 export type BootstrapResourceKey = (typeof BOOTSTRAP_RESOURCE_KEYS)[number];
 
 export type BootstrapResourceBundle = Partial<Record<BootstrapResourceKey, Record<string, unknown>>>;
+export const HOST_SUBSTRATE_ACTIONS = [
+  "host.read",
+  "host.write",
+  "host.edit",
+  "host.exec"
+] as const;
+export type HostSubstrateAction = (typeof HOST_SUBSTRATE_ACTIONS)[number];
 export const HOST_CONTROL_PLANE_ACTIONS = [
   "hosts.list",
   "hosts.get",

@@ -3,6 +3,7 @@ import {
   AI_SURFACE_PRIMITIVES,
   BOOTSTRAP_RESOURCE_KEYS,
   HOST_CONTROL_PLANE_ACTIONS,
+  HOST_SUBSTRATE_ACTIONS,
   assertCapabilityDescriptor,
   allowedActorsForSkillTransition,
   canActorGrantSkillTrusted,
@@ -99,6 +100,15 @@ describe("contracts", () => {
       "hosts.disconnect",
       "hosts.set_default",
       "hosts.health"
+    ]);
+  });
+
+  it("locks the minimal execution host substrate action set", () => {
+    expect(HOST_SUBSTRATE_ACTIONS).toEqual([
+      "host.read",
+      "host.write",
+      "host.edit",
+      "host.exec"
     ]);
   });
 

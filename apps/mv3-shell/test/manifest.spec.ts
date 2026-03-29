@@ -1079,6 +1079,253 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("routes host substrate read/write/edit/exec through an explicit local host id", async () => {
+    const files = new Map<string, string>();
+    const host = {
+      dispatch: vi.fn(async (request: unknown) => {
+        const typedRequest = request as {
+          kind: string;
+          requestId?: string;
+          hostId?: string;
+          path?: string;
+          content?: string;
+          patch?: string;
+          command?: string;
+        };
+        switch (typedRequest.kind) {
+          case "health":
+            return {
+              kind: "health_result",
+              requestId: typedRequest.requestId,
+              ok: true,
+              health: {
+                status: "idle",
+                inflightCount: 0,
+                consecutiveFailures: 0
+              }
+            };
+          case "read":
+            return {
+              hostId: typedRequest.hostId,
+              path: typedRequest.path,
+              content: files.get(typedRequest.path!) ?? null
+            };
+          case "write":
+            files.set(typedRequest.path!, typedRequest.content ?? "");
+            return {
+              hostId: typedRequest.hostId,
+              path: typedRequest.path,
+              content: typedRequest.content
+            };
+          case "edit": {
+            const next = `${files.get(typedRequest.path!) ?? ""}${typedRequest.patch ?? ""}`;
+            files.set(typedRequest.path!, next);
+            return {
+              hostId: typedRequest.hostId,
+              path: typedRequest.path,
+              content: next
+            };
+          }
+          case "exec":
+            return {
+              hostId: typedRequest.hostId,
+              command: typedRequest.command,
+              exitCode: 0,
+              stdout: `executed:${typedRequest.command}`,
+              stderr: ""
+            };
+          default:
+            return {
+              ok: false,
+              error: {
+                code: "E_RUNTIME",
+                message: `Unknown host request: ${typedRequest.kind}`
+              }
+            };
+        }
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0
+      }))
+    };
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.write",
+        hostId: "local",
+        path: "/workspace/notes.txt",
+        content: "hello"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "local",
+        path: "/workspace/notes.txt",
+        content: "hello"
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.read",
+        hostId: "local",
+        path: "/workspace/notes.txt"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "local",
+        path: "/workspace/notes.txt",
+        content: "hello"
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.edit",
+        hostId: "local",
+        path: "/workspace/notes.txt",
+        patch: "\nworld"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "local",
+        path: "/workspace/notes.txt",
+        content: "hello\nworld"
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.exec",
+        hostId: "local",
+        command: "echo hi"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "local",
+        command: "echo hi",
+        exitCode: 0,
+        stdout: "executed:echo hi"
+      }
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("routes host substrate requests through the default host when hostId is omitted", async () => {
+    const host = {
+      dispatch: vi.fn(async (request: unknown) => {
+        const typedRequest = request as {
+          kind: string;
+          requestId?: string;
+          hostId?: string;
+          command?: string;
+        };
+        if (typedRequest.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: typedRequest.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0
+            }
+          };
+        }
+        if (typedRequest.kind === "exec") {
+          return {
+            hostId: typedRequest.hostId,
+            command: typedRequest.command,
+            exitCode: 0,
+            stdout: `default:${typedRequest.command}`,
+            stderr: ""
+          };
+        }
+        return {
+          ok: false,
+          error: {
+            code: "E_RUNTIME",
+            message: `Unknown host request: ${typedRequest.kind}`
+          }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0
+      }))
+    };
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.exec",
+        command: "pwd"
+      })
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_BAD_INPUT",
+        message: "host.exec requires hostId or a default host"
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.set_default",
+        hostId: "local"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "local"
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.exec",
+        command: "pwd"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "local",
+        command: "pwd",
+        exitCode: 0,
+        stdout: "default:pwd"
+      }
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("connects, checks health, sets default, and disconnects the local host", async () => {
     const host = {
       dispatch: vi.fn(async (request) => {
