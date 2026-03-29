@@ -1,0 +1,87 @@
+# Start Here
+
+## 这仓库为什么存在
+
+这个仓库不是旧仓的普通 feature 分支，而是一次架构重构的主线实验场。
+
+核心目标不是“替一个沙盒库”，而是：
+
+> 去掉 `LIFO/browser_bash` 之后，仍然让 Browser Brain Loop 拥有可执行、可扩展、可分享、可自举的网站能力与运行时能力。
+
+## 你必须先知道的 5 件事
+
+1. 用户概念只保留 `Skill`
+2. 公共能力面只保留 `Capability API`
+3. `CapabilityDescriptor` 是唯一 canonical model
+4. 网站能力默认建立在浏览器自身能力上，不把 host 当默认前提
+5. 旧仓是参考对象，不是兼容对象
+
+## 新仓要替换什么
+
+- 替换掉旧仓里以 `LIFO/browser_bash` 为中心的运行时心智
+- 替换掉 `Plugin`/`Skill`/`Site Adapter` 多概念叠加
+- 替换掉 tool plan builder 的大量硬编码
+
+## 新仓要保留什么
+
+- 浏览器侧大脑
+- `mem://` 文件抽象
+- CDP / DOM / 页面登录态复用
+- Skill 作为安装和分享单位
+- MCP 作为外部能力的接入与导出通道
+
+## 不要做什么
+
+- 不要把 `Plugin` 重新扶正成主概念
+- 不要把 `ToolContract` 再变回真相源
+- 不要把 shell 命令重新塞回 VFS/skill discovery
+- 不要因为旧仓有现成实现，就原样搬回新仓
+
+## 当前已实现到哪里
+
+已完成 v0 slice：
+
+- canonical descriptor / tool projection
+- family provider registry
+- skill runtime context
+- BrowserVFS v0
+- JS Runner host v0
+- Site Runtime v0
+- MV3 shell v0
+
+详情见 `docs/v0-slice.md`
+
+## 进入代码前的强制阅读顺序
+
+1. `AGENTS.md`
+2. `docs/start-here.md`
+3. `docs/locked-decisions-2026-03-29.md`
+4. `docs/v0-slice.md`
+5. `docs/legacy-reference-map.md`
+6. 当前 backlog issue
+7. `docs/next-development-slices-2026-03-29.md`
+
+## 如果你要改架构层
+
+先看旧仓：
+
+- `/Users/envvar/work/repos/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
+- `/Users/envvar/work/repos/browser-brain-loop/docs/kernel-architecture.md`
+
+再看研究仓：
+
+- `~/work/repos/_research/pi-mono/`
+- `~/work/repos/_research/AIPex/`
+- `~/work/repos/_research/opencli/`
+- `~/work/repos/_research/bb-browser/`
+- `~/work/repos/_research/bb-browser/bb-sites/`
+
+## 如果你只处理某个 lane
+
+- `contracts-core`: 先读 `packages/contracts/src/index.ts`、`packages/core/src/index.ts`
+- `browser-vfs`: 先读 `packages/browser-vfs/src/index.ts`
+- `js-runner`: 先读 `packages/js-runner/src/index.ts`
+- `site-runtime`: 先读 `packages/site-runtime/src/index.ts`
+- `mv3-shell`: 先读 `apps/mv3-shell/manifest.json` 和 `src/`
+- `sdk-docs`: 先读 `packages/skill-sdk/src/index.ts` 和 `docs/`
+

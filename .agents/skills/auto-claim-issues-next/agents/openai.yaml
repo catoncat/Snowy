@@ -1,0 +1,4 @@
+skills:
+  display_name: "Auto Claim Issues Next"
+  default_prompt: "Use $auto-claim-issues-next to claim the next eligible backlog issue or a specific ISSUE-xxx, respecting depends_on and write_scope conflicts."
+
