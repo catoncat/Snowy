@@ -108,6 +108,12 @@ bun run workflow:claim:json
 - `## 相关 commits` 必须写对应 code commit 的 hash 和 message；不要保留 `未提交`
 - 如果仓库级 `bun run check` 被 write scope 外的并行改动阻塞，可以在 issue 中注明 blocker，但仍要把本 slice 已通过的聚焦检查写清楚
 
+## Review Follow-ups
+
+- 评审若发现“父 issue 已完成，但仍有后续架构缺口”，应新开 `Review:` 子 issue，而不是重写父 issue 的 Goal
+- 父 issue 保持 `done` 时，必须追加 `## Sub Issues` 记录对应 follow-up，保留父子关系
+- 子 issue 负责记录剩余缺口；父 issue 的 `## 工作总结` 只回写已完成范围
+
 ## 当前未完成项
 
 1. `ISSUE-011` Review: ctx permission and trace contract drift

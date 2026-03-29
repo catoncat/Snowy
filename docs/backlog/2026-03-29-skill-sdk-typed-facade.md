@@ -38,8 +38,10 @@ claimed_at: 2026-03-29T09:04:15.814Z
 - 将 `defineSkill()` 从纯声明投影改为默认包装 typed context
 - skill handler 现在可直接使用 `ctx.capabilities.memfs.read()` 与 `ctx.capabilities.site.fetchWithSession()`
 - 补了 typecheck 驱动的 SDK 测试，覆盖默认 typed facade 和 camelCase alias 的实际调用
+- 后续 `cbceec0` 已把 facade 收紧为按声明权限生成的 partial capability view，避免类型口径高于运行时可用能力
 - `bun run check` 已通过
 
 ## 相关 commits
 
 - `87f82bb` `feat(skill-sdk): wrap defineSkill with typed ctx`
+- `cbceec0` `Tighten typed skill capability facade`

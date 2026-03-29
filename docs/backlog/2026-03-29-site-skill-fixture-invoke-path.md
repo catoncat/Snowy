@@ -32,6 +32,10 @@ claimed_at: 2026-03-29T09:07:17.128Z
 
 - 从 skill action 到 runner 到 verifier 有集成测试
 
+## Sub Issues
+
+- `ISSUE-013` `Review: phase 4 real injection chain is still mocked`
+
 ## 工作总结
 
 ### 2026-03-29 补记

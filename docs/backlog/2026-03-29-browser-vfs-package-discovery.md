@@ -27,6 +27,10 @@ check_cmd: bun run check
 - 可以枚举 `mem://library/skills/*`
 - package root 判断逻辑明确
 
+## Sub Issues
+
+- `ISSUE-014` `Review: BrowserVFS canonical skill URI drift`
+
 ## 工作总结
 
 ### 2026-03-29 补记

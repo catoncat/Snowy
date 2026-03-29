@@ -29,12 +29,12 @@ check_cmd: "bun run check"
 
 ## Review Finding
 
-- `mem://skills/...` 目前会在 stat/sourceUri 等接口回吐成 `mem://library/...`
-- `list("mem://skills")` 直接报错，skill package 根目录还不是一等入口
+- `resolveMemUri()` 已把 `mem://skills/...` 当作 library alias，`discoverPackages("mem://skills")` 也能工作；root discovery 已不是 blocker
+- 但 `stat()`、`list()`、`discoverPackages()`、snapshot metadata `sourceUri` 等对外结果仍回吐 `mem://library/skills/...`
 - 这会把 public skill URI 心智重新拖回底层 scope 视角
 
 ## Acceptance
 
-- `mem://skills/<id>/...` 在 read/stat/list/snapshot/sourceUri 等接口里保持一致
-- `mem://skills` 可被枚举，用于 skill package discovery
-- tests 覆盖 canonical URI round-trip，不再暴露 `mem://library/skills/...` 作为对外主口径
+- `mem://skills/<id>/...` 在 stat/list/discoverPackages/snapshot/sourceUri 等对外接口里保持 canonical round-trip
+- `mem://skills` 可被枚举，且返回结果继续使用 `mem://skills/...` 口径
+- tests 覆盖 public skill URI 不再暴露 `mem://library/skills/...` 作为主输出

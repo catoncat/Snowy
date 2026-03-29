@@ -30,6 +30,11 @@ claimed_at: 2026-03-29T08:54:59.844Z
 - injection plan 有结构化模型
 - installer / verifier / runner 边界被测试锁住
 
+## Sub Issues
+
+- `ISSUE-012` `Review: site runtime active-tab boundary regression`
+- `ISSUE-013` `Review: phase 4 real injection chain is still mocked`
+
 ## 工作总结
 
 ### 2026-03-29 补记

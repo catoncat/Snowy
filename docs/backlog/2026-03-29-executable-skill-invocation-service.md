@@ -28,6 +28,10 @@ check_cmd: bun run check
 - skill invocation 有稳定 service 接口
 - depth / trace / permission 语义被测住
 
+## Sub Issues
+
+- `ISSUE-011` `Review: ctx permission and trace contract drift`
+
 ## 工作总结
 
 ### 2026-03-29 补记
