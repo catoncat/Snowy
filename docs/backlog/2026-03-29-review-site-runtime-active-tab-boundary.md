@@ -52,3 +52,9 @@ claimed_at: 2026-03-29T09:41:42.717Z
 ## 相关 commits
 
 - `bdff4db` `Reinstate active-tab site runtime boundary`
+
+## Sub Issues
+
+- `ISSUE-015` `Review: site runtime manifest exposure follow-up`
+  - 原因：`ISSUE-012` 已标记完成后，仍发现 manifest 默认暴露 `page-hook.js` 且缺少 inactive-tab 的 runtime 回归测试。
+  - 结果：follow-up 已在 `b148266` 中完成并关闭。
