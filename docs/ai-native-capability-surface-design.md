@@ -502,6 +502,12 @@ Skill 最适合承载：
 3. audit 先并入 runtime resources
 4. Skill 继续用 package + `SKILL.md`
 
+当前 contracts/core 应显式把这条边界收口成：
+
+- `CapabilityDescriptor` / `ToolContract` = action
+- bootstrap bundle keys = `runtime` / `config` / `skills` / `hosts`
+- workflow = skill package + `skills.invoke`
+
 只有当 resources 真的需要统一投影到多种 northbound surface 时，再抽 `ResourceDescriptor`。
 
 ### 9.2 `ToolContract` 继续降级为动作投影
@@ -707,6 +713,8 @@ Skill 只需要：
 2. 最小 resource registry / bootstrap bundle
 3. audience / projection 规则
 4. 不引入多余 descriptor family
+
+其中第 1 步和 bootstrap bundle keys 已可先在 contracts/core 以轻量边界常量落地；真正 resource registry 仍属于后续实现。
 
 ### Phase 2: 先把产品自我认知做出来
 

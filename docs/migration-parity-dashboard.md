@@ -13,7 +13,7 @@
 
 | Area | Status | Why |
 |---|---|---|
-| descriptor / contract / projection | `green` | canonical model、projection、registry 基础已成形 |
+| descriptor / contract / projection | `green` | canonical model、projection、registry 基础已成形，且 action-only 边界已显式锁定 |
 | core runtime ctx / invoke | `green` | permissions / trace / nested invoke 已收口并有测试 |
 | BrowserVFS baseline | `green` | read/write/snapshot/rehydrate/quota/package discovery 已落地 |
 | BrowserVFS public skill URI parity | `green` | canonical `mem://skills/...` round-trip 已测 |

@@ -1,6 +1,8 @@
 import {
+  AI_SURFACE_BOUNDARY,
   BUILTIN_CAPABILITIES,
   BUILTIN_CATALOG,
+  BUILTIN_BOOTSTRAP_RESOURCE_KEYS,
   BUILTIN_EXPORT_HANDOFFS,
   CapabilityRegistry,
   FamilyProviderRegistry,
@@ -56,6 +58,33 @@ describe("core", () => {
       {
         name: "page_click",
         capabilityId: "page.click"
+      }
+    ]);
+  });
+
+  it("keeps bootstrap resources and workflows outside the action capability catalog", () => {
+    expect(AI_SURFACE_BOUNDARY).toMatchObject({
+      actions: {
+        primitive: "action"
+      },
+      bootstrapResources: ["runtime", "config", "skills", "hosts"],
+      workflows: {
+        primitive: "workflow",
+        invocation: "skills.invoke"
+      }
+    });
+    expect(BUILTIN_BOOTSTRAP_RESOURCE_KEYS).toEqual(["runtime", "config", "skills", "hosts"]);
+    expect(BUILTIN_CAPABILITIES.some((entry) =>
+      BUILTIN_BOOTSTRAP_RESOURCE_KEYS.includes(entry.id as typeof BUILTIN_BOOTSTRAP_RESOURCE_KEYS[number])
+    )).toBe(false);
+    expect(getBuiltinsByNamespace("runtime")).toMatchObject([
+      {
+        id: "runtime.list_capabilities",
+        description: "List all registered action capabilities"
+      },
+      {
+        id: "runtime.get_capability",
+        description: "Get an action capability descriptor by id"
       }
     ]);
   });

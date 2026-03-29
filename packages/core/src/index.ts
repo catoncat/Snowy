@@ -1,4 +1,6 @@
 import {
+  AI_SURFACE_BOUNDARY as CONTRACT_AI_SURFACE_BOUNDARY,
+  BOOTSTRAP_RESOURCE_KEYS,
   assertCapabilityDescriptor,
   descriptorsToCapabilityExportHandoffs,
   descriptorToToolContract,
@@ -11,7 +13,9 @@ import {
   type CapabilityTraceEntry,
   type ExecutionBinding,
   type JsonSchema,
-  type ToolContract
+  type ToolContract,
+  type AiSurfaceBoundary,
+  type BootstrapResourceKey
 } from "@bbl-next/contracts";
 
 export interface CapabilityProviderRequest {
@@ -131,6 +135,11 @@ export class CapabilityRegistry {
     return descriptorsToCapabilityExportHandoffs(this.list());
   }
 }
+
+export const AI_SURFACE_BOUNDARY: AiSurfaceBoundary = CONTRACT_AI_SURFACE_BOUNDARY;
+export const BUILTIN_BOOTSTRAP_RESOURCE_KEYS: BootstrapResourceKey[] = [
+  ...BOOTSTRAP_RESOURCE_KEYS
+];
 
 interface CatalogEntryInput {
   id: string;
@@ -327,13 +336,13 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
     catalogEntry({
       id: "runtime.list_capabilities", family: "runtime", operation: "list_capabilities",
       risk: "low", sideEffects: "reads", permissions: ["runtime.list_capabilities"],
-      description: "List all registered capabilities",
+      description: "List all registered action capabilities",
       inputSchema: { type: "object" }
     }),
     catalogEntry({
       id: "runtime.get_capability", family: "runtime", operation: "get_capability",
       risk: "low", sideEffects: "reads", permissions: ["runtime.get_capability"],
-      description: "Get a capability descriptor by id",
+      description: "Get an action capability descriptor by id",
       inputSchema: { type: "object", properties: { capabilityId: { type: "string" } }, required: ["capabilityId"] }
     }),
   ],

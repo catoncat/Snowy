@@ -1,4 +1,7 @@
 import {
+  AI_SURFACE_BOUNDARY,
+  AI_SURFACE_PRIMITIVES,
+  BOOTSTRAP_RESOURCE_KEYS,
   assertCapabilityDescriptor,
   allowedActorsForSkillTransition,
   canActorGrantSkillTrusted,
@@ -65,6 +68,24 @@ describe("contracts", () => {
         sideEffects: "writes",
         supportsVerify: true,
         supportsStreaming: false
+      }
+    });
+  });
+
+  it("locks CapabilityDescriptor and ToolContract to the action primitive", () => {
+    expect(AI_SURFACE_PRIMITIVES).toEqual(["action", "resource", "workflow"]);
+    expect(BOOTSTRAP_RESOURCE_KEYS).toEqual(["runtime", "config", "skills", "hosts"]);
+    expect(AI_SURFACE_BOUNDARY).toEqual({
+      actions: {
+        primitive: "action",
+        descriptorModel: "CapabilityDescriptor",
+        toolProjection: "ToolContract"
+      },
+      bootstrapResources: ["runtime", "config", "skills", "hosts"],
+      workflows: {
+        primitive: "workflow",
+        packaging: "skill-package",
+        invocation: "skills.invoke"
       }
     });
   });

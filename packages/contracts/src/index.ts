@@ -1,5 +1,13 @@
 export type JsonSchema = Record<string, unknown>;
 
+export const AI_SURFACE_PRIMITIVES = ["action", "resource", "workflow"] as const;
+export type AiSurfacePrimitive = (typeof AI_SURFACE_PRIMITIVES)[number];
+
+export const BOOTSTRAP_RESOURCE_KEYS = ["runtime", "config", "skills", "hosts"] as const;
+export type BootstrapResourceKey = (typeof BOOTSTRAP_RESOURCE_KEYS)[number];
+
+export type BootstrapResourceBundle = Partial<Record<BootstrapResourceKey, Record<string, unknown>>>;
+
 export type CapabilityRisk = "low" | "medium" | "high";
 export type CapabilitySideEffects = "none" | "reads" | "writes" | "external";
 export type SkillStatus =
@@ -27,6 +35,7 @@ export interface ExecutionBinding {
   options?: Record<string, unknown>;
 }
 
+// CapabilityDescriptor is the canonical model for invokable actions only.
 export interface CapabilityDescriptor {
   id: string;
   version: number;
@@ -44,6 +53,7 @@ export interface CapabilityDescriptor {
   executionBinding: ExecutionBinding;
 }
 
+// ToolContract is a northbound projection of an action capability, not a full AI surface model.
 export interface ToolContract {
   name: string;
   capabilityId: string;
@@ -57,6 +67,34 @@ export interface ToolContract {
     supportsStreaming: boolean;
   };
 }
+
+export interface AiSurfaceBoundary {
+  actions: {
+    primitive: "action";
+    descriptorModel: "CapabilityDescriptor";
+    toolProjection: "ToolContract";
+  };
+  bootstrapResources: readonly BootstrapResourceKey[];
+  workflows: {
+    primitive: "workflow";
+    packaging: "skill-package";
+    invocation: "skills.invoke";
+  };
+}
+
+export const AI_SURFACE_BOUNDARY: AiSurfaceBoundary = {
+  actions: {
+    primitive: "action",
+    descriptorModel: "CapabilityDescriptor",
+    toolProjection: "ToolContract"
+  },
+  bootstrapResources: BOOTSTRAP_RESOURCE_KEYS,
+  workflows: {
+    primitive: "workflow",
+    packaging: "skill-package",
+    invocation: "skills.invoke"
+  }
+};
 
 export interface CapabilityExportHandoff {
   capabilityId: string;
