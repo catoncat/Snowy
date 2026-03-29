@@ -1,10 +1,12 @@
 import {
   assertCapabilityDescriptor,
+  descriptorsToCapabilityExportHandoffs,
   descriptorToToolContract,
   CapabilityError,
   MAX_SKILL_CALL_DEPTH,
   PUBLIC_CAPABILITY_NAMESPACES,
   capabilityNamespace,
+  type CapabilityExportHandoff,
   type CapabilityDescriptor,
   type CapabilityTraceEntry,
   type ExecutionBinding,
@@ -123,6 +125,10 @@ export class CapabilityRegistry {
 
   projectTools(): ToolContract[] {
     return this.list().map((descriptor) => descriptorToToolContract(descriptor));
+  }
+
+  projectMcpExportHandoffs(): CapabilityExportHandoff[] {
+    return descriptorsToCapabilityExportHandoffs(this.list());
   }
 }
 
@@ -342,6 +348,8 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
 };
 
 export const BUILTIN_CAPABILITIES: CapabilityDescriptor[] = Object.values(BUILTIN_CATALOG).flat();
+export const BUILTIN_EXPORT_HANDOFFS: CapabilityExportHandoff[] =
+  descriptorsToCapabilityExportHandoffs(BUILTIN_CAPABILITIES);
 
 export function getBuiltinsByNamespace(namespace: string): CapabilityDescriptor[] {
   return BUILTIN_CATALOG[namespace] ?? [];

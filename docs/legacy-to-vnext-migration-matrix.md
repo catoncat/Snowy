@@ -46,7 +46,7 @@
 | orchestration/session/run queue/compaction | `BrainOrchestrator`, session manager, loop | future mainline brain layer | keep-product-capability | `not-started` | 当前新仓只是 runtime substrate |
 | hooks system / extension points | `hook-runner.ts`, plugin hooks | future executable Skill setup hooks | replace-and-simplify | `not-started` | 方向存在，主链未实现 |
 | diagnostics / runtime debug / audit | debug snapshot + diagnostics HTTP | future observability layer | keep-and-rebuild | `not-started` | 新仓没有等价 debug 面 |
-| MCP export / external capability bridge | bridge + export plan | bridge-side MCP export | defer-but-required | `not-started` | locked decision 已定，主链未实现 |
+| MCP export / external capability bridge | bridge + export plan | bridge-side MCP export | defer-but-required | `partial` | descriptor-derived handoff contract 已有代码和测试；真正 bridge-side MCP server/transport 仍未实现 |
 | Skill Studio / versions / lifecycle UI | old panel skills/plugins UI | future Skill Studio | keep-product-need | `not-started` | 生命周期模型有，产品 UI 没有 |
 
 ## 明确不按旧仓原样迁的东西

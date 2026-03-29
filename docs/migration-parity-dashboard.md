@@ -28,7 +28,7 @@
 | Skill Studio / lifecycle product surface | `red` | 生命周期模型有，产品 UI 没有 |
 | provider / profile routing | `red` | 新仓未迁旧 LLM provider/profile 层 |
 | diagnostics / debug / audit | `red` | 新仓没有旧仓同等级 debug/diagnostics 面 |
-| bridge-side MCP export | `red` | 仍是 locked decision，不是已实现能力 |
+| bridge-side MCP export | `yellow` | descriptor-derived handoff contract 已落地并有测试；真正 bridge-side MCP server/transport 仍未实现 |
 
 ## Current Gate View
 

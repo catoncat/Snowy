@@ -1,6 +1,7 @@
 import {
   BUILTIN_CAPABILITIES,
   BUILTIN_CATALOG,
+  BUILTIN_EXPORT_HANDOFFS,
   CapabilityRegistry,
   FamilyProviderRegistry,
   SkillInvocationService,
@@ -55,6 +56,45 @@ describe("core", () => {
       {
         name: "page_click",
         capabilityId: "page.click"
+      }
+    ]);
+  });
+
+  it("projects bridge-side MCP export handoffs from exportable descriptors only", () => {
+    const registry = new CapabilityRegistry([
+      descriptor({
+        id: "runtime.summary",
+        risk: "low",
+        sideEffects: "reads",
+        permissions: ["runtime.summary"],
+        exportable: true,
+        exportName: "runtime_summary",
+        exportRisk: "medium",
+        executionBinding: {
+          family: "runtime",
+          operation: "summary"
+        }
+      }),
+      descriptor({
+        id: "page.click",
+        exportable: false
+      })
+    ]);
+
+    expect(registry.projectMcpExportHandoffs()).toEqual([
+      {
+        capabilityId: "runtime.summary",
+        exportName: "runtime_summary",
+        description: "Click",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        risk: "medium",
+        permissions: ["runtime.summary"],
+        annotations: {
+          sideEffects: "reads",
+          supportsVerify: true,
+          supportsStreaming: false
+        }
       }
     ]);
   });
@@ -299,6 +339,30 @@ describe("core", () => {
           expect(d.exportable, `${d.id} should be exportable`).toBe(true);
         }
       }
+    });
+
+    it("derives bridge-side MCP handoff data only from exportable builtins", () => {
+      expect(BUILTIN_EXPORT_HANDOFFS.map((entry) => entry.capabilityId)).toEqual(
+        expect.arrayContaining([
+          "memfs.read",
+          "memfs.stat",
+          "page.query",
+          "tabs.list",
+          "runtime.list_capabilities"
+        ])
+      );
+      expect(BUILTIN_EXPORT_HANDOFFS.map((entry) => entry.capabilityId)).not.toEqual(
+        expect.arrayContaining([
+          "page.click",
+          "memfs.write",
+          "runner.invoke",
+          "host.exec",
+          "site.fetch_with_session"
+        ])
+      );
+      expect(BUILTIN_EXPORT_HANDOFFS.every((entry) => entry.exportName.trim().length > 0)).toBe(
+        true
+      );
     });
 
     it("getBuiltinsByNamespace returns correct descriptors", () => {

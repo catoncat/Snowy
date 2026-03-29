@@ -3,6 +3,7 @@
 ## Implemented
 
 - canonical `CapabilityDescriptor` model and `ToolContract` projection
+- descriptor-derived MCP export handoff contract for exportable capabilities
 - skill lifecycle state machine with `trusted` as an enabled-only flag
 - public capability registry + family provider dispatch
 - skill runtime ctx with permission checks, trace, and reentrancy guard
@@ -15,6 +16,6 @@
 
 - real IndexedDB migration/versioning strategy
 - descriptor-driven full builtin catalog beyond the v0 namespace baseline
-- bridge-side MCP export server
+- bridge-side MCP export server/transport beyond the descriptor-derived handoff contract
 - full Skill Studio UI
 - Chrome integration for real script injection, runner RPC, and offscreen lifecycle

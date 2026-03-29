@@ -58,6 +58,21 @@ export interface ToolContract {
   };
 }
 
+export interface CapabilityExportHandoff {
+  capabilityId: string;
+  exportName: string;
+  description: string;
+  inputSchema: JsonSchema;
+  outputSchema: JsonSchema;
+  risk: CapabilityRisk;
+  permissions: string[];
+  annotations: {
+    sideEffects: CapabilitySideEffects;
+    supportsVerify: boolean;
+    supportsStreaming: boolean;
+  };
+}
+
 export interface SkillLifecycleState {
   status: SkillStatus;
   trusted: boolean;
@@ -177,6 +192,38 @@ export function descriptorToToolContract(
       supportsStreaming: descriptor.supportsStreaming
     }
   };
+}
+
+export function descriptorToCapabilityExportHandoff(
+  descriptor: CapabilityDescriptor
+): CapabilityExportHandoff | null {
+  assertCapabilityDescriptor(descriptor);
+  if (!descriptor.exportable) {
+    return null;
+  }
+  return {
+    capabilityId: descriptor.id,
+    exportName: descriptor.exportName?.trim() || descriptor.id,
+    description: descriptor.description,
+    inputSchema: descriptor.inputSchema,
+    outputSchema: descriptor.outputSchema,
+    risk: descriptor.exportRisk ?? descriptor.risk,
+    permissions: [...descriptor.permissions],
+    annotations: {
+      sideEffects: descriptor.sideEffects,
+      supportsVerify: descriptor.supportsVerify,
+      supportsStreaming: descriptor.supportsStreaming
+    }
+  };
+}
+
+export function descriptorsToCapabilityExportHandoffs(
+  descriptors: CapabilityDescriptor[]
+): CapabilityExportHandoff[] {
+  return descriptors.flatMap((descriptor) => {
+    const handoff = descriptorToCapabilityExportHandoff(descriptor);
+    return handoff ? [handoff] : [];
+  });
 }
 
 export function canTransitionSkillState(
