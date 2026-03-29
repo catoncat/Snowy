@@ -1,11 +1,11 @@
 ---
 id: ISSUE-016
 title: "Review: BrowserVFS IndexedDB migration strategy is still implicit"
-status: open
+status: in-progress
 priority: p1
 source: "next-batch review 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: agent
 tags:
   - review
   - browser-vfs
@@ -20,6 +20,7 @@ write_scope:
   - packages/browser-vfs/test/browser-vfs.spec.ts
 acceptance_ref: project_plan.md
 check_cmd: "bun run check"
+claimed_at: 2026-03-29T10:15:16.420Z
 ---
 
 ## Goal
