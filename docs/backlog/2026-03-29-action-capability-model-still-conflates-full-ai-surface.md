@@ -1,7 +1,7 @@
 ---
 id: ISSUE-029
 title: "Review: action capability model still conflates full AI surface"
-status: in-progress
+status: done
 priority: p1
 source: "AI-native surface follow-up 2026-03-29"
 created: 2026-03-29
@@ -47,3 +47,14 @@ claimed_at: 2026-03-29T11:15:06.968Z
 - `CapabilityDescriptor` 与 `ToolContract` 的 action-only 语义被测试和文档锁住。
 - 该 slice 不引入新的重型 descriptor family，只收口现有 action model 边界。
 
+## 工作总结
+
+- 在 `packages/contracts` 增加轻量 AI surface boundary 常量，明确 `CapabilityDescriptor` / `ToolContract` 只代表 action，并把 bootstrap resource keys 固定为 `runtime/config/skills/hosts`。
+- 在 `packages/core` 透出同一套边界常量，并把 `runtime.list_capabilities` / `runtime.get_capability` 的描述改成 action-only 口径，避免继续把 capability catalog 误读成完整 AI surface。
+- 在 contracts/core 测试中锁定 action/resource/workflow 分层，并同步更新 AI surface 设计文档、v0 slice、migration matrix、parity dashboard。
+- 已运行 `bun run check`。
+- 残留风险：当前只完成 action-only boundary 和 bootstrap key 分层，真正 resource registry / bootstrap surface 仍由后续 issue 承接。
+
+## 相关 commits
+
+- `4a64670` `contracts/core: lock action-only AI surface boundary`
