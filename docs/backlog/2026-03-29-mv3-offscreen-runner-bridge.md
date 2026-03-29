@@ -1,7 +1,7 @@
 ---
 id: ISSUE-006
 title: "MV3 offscreen runner bridge"
-status: in-progress
+status: done
 priority: p0
 source: "v0 follow-up"
 created: 2026-03-29
@@ -44,6 +44,13 @@ claimed_at: 2026-03-29T08:53:00.551Z
 - 已补 `mv3-shell` 侧桥接测试，当前 `apps/mv3-shell/test/manifest.spec.ts` 共 5 项通过
 - 当前未改 `status` 为 `done`，因为仓库级 `bun run typecheck` 被并行中的 `packages/site-runtime/test/site-runtime.spec.ts` 变更阻塞；该测试要求的新导出尚未在 `packages/site-runtime/src/index.ts` 实现
 
+### 2026-03-29 17:07 CST
+
+- 已提交 `feat: add mv3 offscreen runner bridge`
+- 已确认 `bun x vitest run apps/mv3-shell/test/manifest.spec.ts` 通过（6/6）
+- 已确认全仓 `bun run typecheck` 与 `bun run test` 通过
+- 本 slice 已收口；offscreen bridge 当前以本地 self-contained runner host 形式落在 `apps/mv3-shell`
+
 ## 相关 commits
 
-- 未提交
+- `b9b11d9` `feat: add mv3 offscreen runner bridge`
