@@ -62,12 +62,14 @@ claimed_at: 2026-03-29T12:25:31.684Z
 
 - 在 `contracts/core` 补上 `hosts.*` public namespace 与最小 control plane descriptors，明确 `host.*` substrate 和 `hosts.*` 产品控制面的边界。
 - 在 MV3 background bridge 落地本地 host control plane：`hosts.list/get/connect/disconnect/set_default/health`，且 `list/get/set_default` 不会隐式拉起 offscreen host。
+- 后续又把 host state/health 语义收紧到 control plane contract：`connected/disconnected/degraded` 与 `healthy/degraded/unknown` 分离，且 bootstrap 复用同一套 host snapshot 语义。
 - 补齐 `packages/contracts/test/contracts.spec.ts`、`packages/core/test/core.spec.ts`、`apps/mv3-shell/test/manifest.spec.ts`，并通过 `bun run check`。
 - 剩余缺口已拆到 `ISSUE-032`：`host.*` 仍只有 `host.exec`，default host 选择也还没真正进入 substrate 路由。
 
 ## 相关 commits
 
 - `14e4d3e` `core/mv3-shell: add hosts control plane`
+- `bc58e7d` `feat: add execution host control plane`
 
 ## Sub Issues
 
