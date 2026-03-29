@@ -22,31 +22,38 @@
 2. `docs/locked-decisions-2026-03-29.md`
    - 已拍板约束
    - 实现不能偷偷偏离
-3. `docs/ai-native-capability-surface-design.md`
+3. `docs/document-system-contract.md`
+   - 文档系统分层
+   - Doc Freshness Gate / Definition Of Done
+4. `docs/agent-bootstrap-context-pack.md`
+   - 新 agent 的最短高信号上下文包
+5. `docs/ai-native-capability-surface-design.md`
    - 产品如何把自己暴露给 AI
    - capability / resource / workflow / host 的当前主轴
-4. 当前正在处理的 `docs/backlog/<issue>.md`
+6. `docs/ai-surface-index.md`
+   - 当前 AI surface 的简明地图
+7. 当前正在处理的 `docs/backlog/<issue>.md`
    - 当前 slice 的 `Goal` / `Acceptance` / `write_scope` / `depends_on`
    - 任务状态唯一以这里为准
-5. `packages/*/src/index.ts` + `packages/*/test/*.spec.ts`
+8. `packages/*/src/index.ts` + `packages/*/test/*.spec.ts`
    - 当前仓已经实现出来的行为口径
    - 若实现与旧设计冲突，先记 backlog/review，再改实现，不要口头覆盖
-6. `docs/v0-slice.md`
+9. `docs/v0-slice.md`
    - 当前 v0 已完成范围
    - 用来判断“这是不是已经做过”
-7. `project_plan.md`
+10. `project_plan.md`
    - phase 级推进蓝图
    - 用来指导下一批 issue 拆分
-8. `docs/legacy-to-vnext-migration-matrix.md`
+11. `docs/legacy-to-vnext-migration-matrix.md`
    - 旧仓能力面到新仓目标面的覆盖矩阵
-9. `docs/migration-parity-dashboard.md`
+12. `docs/migration-parity-dashboard.md`
    - 迁移状态总览
-10. `docs/cutover-readiness-criteria.md`
+13. `docs/cutover-readiness-criteria.md`
    - 切主线门槛
-11. `docs/legacy-reference-map.md`
+14. `docs/legacy-reference-map.md`
    - 旧仓 / 研究仓的参考地图
    - 只负责告诉你去哪里看，不直接决定新仓实现
-12. 旧仓 `docs/skill-runtime-site-capability-redesign-2026-03-29.md`
+15. 旧仓 `docs/skill-runtime-site-capability-redesign-2026-03-29.md`
    - 顶层设计来源
    - 仅作上游设计依据，不覆盖新仓 locked decisions
 
@@ -77,13 +84,15 @@
 
 1. `AGENTS.md`
 2. `docs/source-of-truth-map.md`
-3. `docs/start-here.md`
-4. `docs/locked-decisions-2026-03-29.md`
-5. `docs/ai-native-capability-surface-design.md`
-6. `docs/v0-slice.md`
-7. `docs/legacy-reference-map.md`
-8. 你要做的那个 `docs/backlog/<issue>.md`
-9. 如涉及旧仓迁移，再读：
+3. `docs/agent-bootstrap-context-pack.md`
+4. `docs/start-here.md`
+5. `docs/locked-decisions-2026-03-29.md`
+6. `docs/ai-native-capability-surface-design.md`
+7. `docs/ai-surface-index.md`
+8. `docs/v0-slice.md`
+9. `docs/legacy-reference-map.md`
+10. 你要做的那个 `docs/backlog/<issue>.md`
+11. 如涉及旧仓迁移，再读：
    - `docs/legacy-to-vnext-migration-matrix.md`
    - `docs/migration-parity-dashboard.md`
    - `docs/cutover-readiness-criteria.md`
@@ -97,10 +106,12 @@
 ### 只想知道“这套架构到底想成为什么”
 
 1. `docs/start-here.md`
-2. `docs/locked-decisions-2026-03-29.md`
-3. `docs/ai-native-capability-surface-design.md`
-4. `project_plan.md`
-5. 旧仓 redesign doc
+2. `docs/agent-bootstrap-context-pack.md`
+3. `docs/locked-decisions-2026-03-29.md`
+4. `docs/ai-native-capability-surface-design.md`
+5. `docs/ai-surface-index.md`
+6. `project_plan.md`
+7. 旧仓 redesign doc
 
 ## 5. 包级真相入口
 
@@ -118,17 +129,18 @@
 
 ## 6. 当前推荐的“主依赖文档”集合
 
-如果只保留最核心的 9 份，优先看这 9 个：
+如果只保留最核心的 10 份，优先看这 10 个：
 
 1. `AGENTS.md`
 2. `docs/source-of-truth-map.md`
-3. `docs/locked-decisions-2026-03-29.md`
-4. `docs/ai-native-capability-surface-design.md`
-5. `docs/backlog/*.md`
-6. `docs/v0-slice.md`
-7. `project_plan.md`
-8. `docs/legacy-to-vnext-migration-matrix.md`
-9. `docs/migration-parity-dashboard.md`
+3. `docs/document-system-contract.md`
+4. `docs/agent-bootstrap-context-pack.md`
+5. `docs/locked-decisions-2026-03-29.md`
+6. `docs/ai-native-capability-surface-design.md`
+7. `docs/backlog/*.md`
+8. `docs/v0-slice.md`
+9. `project_plan.md`
+10. `docs/legacy-to-vnext-migration-matrix.md`
 
 ## 7. 现在该怎么继续规划
 

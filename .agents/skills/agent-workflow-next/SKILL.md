@@ -19,12 +19,15 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 
 1. `AGENTS.md`
 2. `docs/source-of-truth-map.md`
-3. `docs/start-here.md`
-4. `docs/locked-decisions-2026-03-29.md`
-5. `docs/v0-slice.md`
-6. `docs/legacy-reference-map.md`
-7. `docs/backlog/README.md`
-8. `docs/multi-agent-workflow.md`
+3. `docs/agent-bootstrap-context-pack.md`
+4. `docs/document-system-contract.md`
+5. `docs/start-here.md`
+6. `docs/locked-decisions-2026-03-29.md`
+7. `docs/ai-surface-index.md`
+8. `docs/v0-slice.md`
+9. `docs/legacy-reference-map.md`
+10. `docs/backlog/README.md`
+11. `docs/multi-agent-workflow.md`
 
 ## 状态判断顺序
 
@@ -111,10 +114,13 @@ bun run workflow:plan
 
 - 若进入 issue 实现：
   - 最终要提交代码
+  - 若触及 public/core surface，先执行 Doc Freshness Gate
+  - 用 Definition Of Done 判断是否需要 follow-up issue
   - 回写 `status: done`
   - 追加 `## 工作总结`
   - 追加 `## 相关 commits`
 - 若进入 next-batch planning：
-  - 先做 LLM review，再创建 issue
+  - 先做 drift review，再做 LLM review
+  - issue 先按 `slice / review / follow-up / decision / doc-debt` 分类
   - 不要只生成 planning 文档而不落 backlog
   - 不要把“下一步建议”只停留在口头

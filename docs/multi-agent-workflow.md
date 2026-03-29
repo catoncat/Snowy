@@ -36,10 +36,13 @@
 
 1. `AGENTS.md`
 2. `docs/source-of-truth-map.md`
-3. `docs/start-here.md`
-4. `docs/locked-decisions-2026-03-29.md`
-5. `docs/v0-slice.md`
-6. `docs/legacy-reference-map.md`
+3. `docs/agent-bootstrap-context-pack.md`
+4. `docs/document-system-contract.md`
+5. `docs/start-here.md`
+6. `docs/locked-decisions-2026-03-29.md`
+7. `docs/ai-surface-index.md`
+8. `docs/v0-slice.md`
+9. `docs/legacy-reference-map.md`
 
 ### Workflow Skills
 
@@ -157,8 +160,10 @@
 3. 必要时叠加 `worker` stance
 4. 按 TDD 推进
 5. 跑该 issue 的 `check_cmd`
-6. 提交代码
-7. 回写 issue：
+6. 若触及 public/core surface，执行 Doc Freshness Gate
+7. 按 Definition Of Done 检查是否缺 follow-up issue
+8. 提交代码
+9. 回写 issue：
    - `status: done`
    - `## 工作总结`
    - `## 相关 commits`
@@ -184,12 +189,16 @@
 
 1. 临时叠加 `coordinator` stance
 2. 使用 `next-batch-planner` skill
-3. 做一轮 LLM 主导的 review：
+3. 先做一轮 drift review：
+   - locked decisions drift
+   - AI surface drift
+   - doc freshness drift
+4. 再做一轮 LLM 主导的 review：
    - locked decisions drift
    - plan drift
    - implementation / test gap
-4. 每个发现都落成 backlog issue
-5. 用 helper 命令生成新的 planning 文档
+5. 每个发现都落成 backlog issue
+6. 用 helper 命令生成新的 planning 文档
 
 ## Recommended Commands
 

@@ -1,0 +1,90 @@
+# Agent Bootstrap Context Pack
+
+## Doc Class
+
+- `workflow-control`
+
+## 用途
+
+给新进入仓库的 Agent 一个高信号、小体积的上下文包。
+
+## 1. 仓库身份
+
+- 仓库：`browser-brain-loop-next`
+- 性质：Browser Brain Loop 的 vNext 主线实验仓
+- 主轴：`Skill + AI Surface + BrowserVFS + JS Runner + Site Runtime + Execution Host`
+
+## 2. 不能变的原则
+
+1. 用户级扩展单位只保留 `Skill`
+2. 浏览器仍是控制中枢
+3. Host 是一等执行面
+4. invokable actions 继续通过 public `Capability API`
+5. 少量强原语 + 足够上下文，优先于细碎 capability 设计
+
+## 3. 当前 AI Surface 心智
+
+- `actions`
+- `resources`
+- `skills/workflows`
+- `audit`
+
+最重要的区分：
+
+- `host.*`
+  - execution host 上的粗粒度原语
+- `hosts.*`
+  - execution host 本身的产品控制面
+
+## 4. 当前已落地的 v0
+
+- canonical action descriptor / tool projection
+- core capability registry / runtime ctx
+- BrowserVFS baseline
+- JS Runner baseline
+- Site Runtime baseline
+- MV3 shell baseline
+
+## 5. 当前最重要的未收口区
+
+1. AI-native product control plane
+2. bootstrap self-awareness surface
+3. execution host control plane
+4. diagnostics / debug / audit
+5. browser automation parity
+
+## 6. 新 Agent 默认 operating loop
+
+1. 先读：
+   - `AGENTS.md`
+   - `docs/source-of-truth-map.md`
+   - 本文件
+2. 再判断：
+   - 用户是否指定了 issue
+   - 是否有自己已 claim 的 `in-progress`
+   - 是否存在可 claim 的 `open`
+   - 若无，则进入 next-batch planning
+3. 进入 issue 后：
+   - 按 TDD 推进
+   - 跑 `check_cmd`
+   - 过 Doc Freshness Gate
+   - 回写 issue
+
+## 7. 当前最值得看的索引
+
+- 仓库工作规则：`AGENTS.md`
+- 真相源排序：`docs/source-of-truth-map.md`
+- 架构铁律：`docs/locked-decisions-2026-03-29.md`
+- AI surface 主轴：`docs/ai-native-capability-surface-design.md`
+- AI surface 当前地图：`docs/ai-surface-index.md`
+- 工作流：`docs/multi-agent-workflow.md`
+- backlog 派工：`docs/backlog/*.md`
+
+## 8. 维护规则
+
+以下变化出现时，必须回看本文件：
+
+1. 主轴变化
+2. 当前最重要未收口区变化
+3. 默认 operating loop 变化
+4. AI surface 主地图变化

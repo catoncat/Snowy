@@ -57,16 +57,19 @@
 
 1. `AGENTS.md`
 2. `docs/source-of-truth-map.md`
-3. `docs/start-here.md`
-4. `docs/locked-decisions-2026-03-29.md`
-5. `docs/ai-native-capability-surface-design.md`
-6. `docs/v0-slice.md`
-7. `docs/legacy-reference-map.md`
-8. `docs/legacy-to-vnext-migration-matrix.md`
-9. `docs/migration-parity-dashboard.md`
-10. `docs/cutover-readiness-criteria.md`
-11. 当前 backlog issue
-12. 当前 batch / planning 文档
+3. `docs/agent-bootstrap-context-pack.md`
+4. `docs/document-system-contract.md`
+5. `docs/start-here.md`
+6. `docs/locked-decisions-2026-03-29.md`
+7. `docs/ai-native-capability-surface-design.md`
+8. `docs/ai-surface-index.md`
+9. `docs/v0-slice.md`
+10. `docs/legacy-reference-map.md`
+11. `docs/legacy-to-vnext-migration-matrix.md`
+12. `docs/migration-parity-dashboard.md`
+13. `docs/cutover-readiness-criteria.md`
+14. 当前 backlog issue
+15. 当前 batch / planning 文档
 
 ## 如果你要判断“旧仓是不是已经迁完”
 
