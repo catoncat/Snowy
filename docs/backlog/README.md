@@ -134,20 +134,19 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 - 当前没有 `in-progress` issue
 
-### 仍可领取
+### 队列提示
 
-- `ISSUE-035` `Review: offscreen execution host is still contract-only`
-  - 当前 `claim:preview` 在 docs sync 收口后应返回该 issue
+- `ISSUE-035` 已完成：shared runner host path 现在有显式 host-adapter contract，默认 offscreen/local path 会返回结构化 `adapter_missing` error。
+- host adapter 的剩余实现已拆成 `ISSUE-038`。
+- 其余 open issue 与推荐领取顺序以 live backlog frontmatter 和 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview` 为准。
 
 ### 边界说明
 
-- `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030`、`ISSUE-031`、`ISSUE-032`、`ISSUE-034` 已完成；当前主缺口已转为 `ISSUE-035`
-- 当前 `workflow:claim:preview` 应指向 `ISSUE-035`
+- `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030`、`ISSUE-031`、`ISSUE-032`、`ISSUE-034`、`ISSUE-035` 已完成。
+- host substrate 仍未收口的主缺口是 `ISSUE-038` 对真实 local adapter 的跟进；更广的 operability 队列继续由 live backlog 管理。
 
 ## 推荐领取顺序
 
-当前推荐领取顺序：
-
-1. `ISSUE-035`
+- 先运行 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview`
 
 当前批次文档：`docs/next-development-slices-2026-03-29.md`
