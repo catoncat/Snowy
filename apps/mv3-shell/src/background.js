@@ -54,6 +54,29 @@ function invalidSiteRuntimeInvoke(message) {
   };
 }
 
+function defaultBootstrapSummaryBuilder({
+  generatedAt,
+  runtime,
+  skills,
+  hosts,
+  config
+}) {
+  const summary = {
+    status:
+      runtime.status === "degraded" || hosts.status === "degraded"
+        ? "degraded"
+        : runtime.status === "empty" && skills.status === "empty" && hosts.status === "empty"
+          ? "empty"
+          : "healthy",
+    generatedAt,
+    runtime,
+    skills,
+    hosts,
+    config
+  };
+  return summary;
+}
+
 function toCanonicalTab(activeTab) {
   return {
     tabId: activeTab.id,
@@ -92,7 +115,8 @@ export function createBackgroundRunnerBridge({
   offscreenPath = RUNNER_OFFSCREEN_DOCUMENT_PATH,
   reasons = RUNNER_OFFSCREEN_REASONS,
   justification = RUNNER_OFFSCREEN_JUSTIFICATION,
-  pageHookBridge = undefined
+  pageHookBridge = undefined,
+  bootstrapSummaryBuilder = defaultBootstrapSummaryBuilder
 } = {}) {
   let creating = null;
   let requestSequence = 0;
@@ -526,6 +550,100 @@ export function createBackgroundRunnerBridge({
     };
   }
 
+  async function bootstrap({
+    tab,
+    world = "main",
+    skillsSummary,
+    configSummary
+  } = {}) {
+    const generatedAt = isoNow();
+    const diagnosticsResult = await diagnostics({
+      tabId: typeof tab?.tabId === "number" ? tab.tabId : undefined,
+      world
+    });
+    if (!diagnosticsResult.ok) {
+      return diagnosticsResult;
+    }
+
+    const runtimeDiagnostics = diagnosticsResult.data;
+    const runnerHealth = runtimeDiagnostics.runner?.health;
+    const hasActiveTab = tab?.active === true && typeof tab?.tabId === "number" && typeof tab?.url === "string";
+    const runtimeStatus =
+      runtimeDiagnostics.status === "degraded"
+        ? hasActiveTab || runtimeDiagnostics.bridge.offscreenPresent
+          ? "degraded"
+          : "empty"
+        : hasActiveTab
+          ? "healthy"
+          : "empty";
+    const runtimeError = runtimeDiagnostics.runner?.error ?? runtimeDiagnostics.site?.error ?? null;
+
+    const hostItems = runtimeDiagnostics.bridge.offscreenPresent || runtimeDiagnostics.runner?.reachable
+      ? [
+          {
+            hostId: "local",
+            kind: "local",
+            connected: Boolean(runtimeDiagnostics.runner?.reachable),
+            state: runnerHealth?.status ?? (runtimeDiagnostics.runner?.reachable ? "idle" : "unavailable"),
+            isDefault: true
+          }
+        ]
+      : [];
+
+    return {
+      ok: true,
+      data: bootstrapSummaryBuilder({
+        generatedAt,
+        runtime: {
+          status: runtimeStatus,
+          mode: "active-tab-only",
+          activeTab: hasActiveTab
+            ? {
+                tabId: tab.tabId,
+                url: tab.url,
+                title: tab.title,
+                world
+              }
+            : null,
+          lastError: runtimeError
+            ? {
+                code: runtimeError.code,
+                message: runtimeError.message
+              }
+            : null,
+          actionCapabilities: {
+            total: 0,
+            namespaces: []
+          }
+        },
+        skills: {
+          status: (skillsSummary?.installedCount ?? 0) > 0 ? "healthy" : "empty",
+          installedCount: skillsSummary?.installedCount ?? 0,
+          enabledCount: skillsSummary?.enabledCount ?? 0,
+          trustedCount: skillsSummary?.trustedCount ?? 0,
+          recentChange: skillsSummary?.recentChange ?? null
+        },
+        hosts: {
+          status:
+            hostItems.length === 0
+              ? "empty"
+              : hostItems.some((entry) => entry.state === "degraded")
+                ? "degraded"
+                : "healthy",
+          defaultHostId: hostItems.length > 0 ? "local" : null,
+          totalCount: hostItems.length,
+          connectedCount: hostItems.filter((entry) => entry.connected).length,
+          items: hostItems
+        },
+        config: {
+          status: configSummary?.status ?? "placeholder",
+          fields: configSummary?.fields ?? ["model", "automation", "permissions", "preferences"],
+          note: configSummary?.note ?? "Config control plane is not implemented yet."
+        }
+      })
+    };
+  }
+
   async function route(message) {
     if (!message || message.target !== RUNNER_BACKGROUND_TARGET) {
       return undefined;
@@ -545,6 +663,13 @@ export function createBackgroundRunnerBridge({
         return diagnostics({
           tabId: message.tabId,
           world: message.world
+        });
+      case "runtime.bootstrap":
+        return bootstrap({
+          tab: message.tab,
+          world: message.world,
+          skillsSummary: message.skillsSummary,
+          configSummary: message.configSummary
         });
       default:
         return {
@@ -592,6 +717,7 @@ export function createBackgroundRunnerBridge({
     cancel,
     health,
     diagnostics,
+    bootstrap,
     route,
     registerRuntimeListener,
     getBridgeState

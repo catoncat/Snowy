@@ -7,6 +7,7 @@ import {
   CapabilityRegistry,
   FamilyProviderRegistry,
   SkillInvocationService,
+  createBootstrapSummary,
   createSkillRuntimeContext,
   getBuiltinsByNamespace,
   hasPublicNamespaceCoverage,
@@ -87,6 +88,140 @@ describe("core", () => {
         description: "Get an action capability descriptor by id"
       }
     ]);
+  });
+
+  it("builds a healthy bootstrap summary bundle", () => {
+    const summary = createBootstrapSummary({
+      generatedAt: "2026-03-29T00:00:00.000Z",
+      activeTab: {
+        tabId: 7,
+        url: "https://x.com/home",
+        title: "Home",
+        world: "main",
+        active: true
+      },
+      runtime: {
+        sessionId: "session-1",
+        loopState: "idle"
+      },
+      skills: {
+        installedCount: 2,
+        enabledCount: 1,
+        trustedCount: 1,
+        recentChange: "skill.twitter enabled"
+      },
+      hosts: {
+        items: [
+          {
+            hostId: "local",
+            kind: "local",
+            connected: true,
+            state: "idle",
+            isDefault: true
+          }
+        ]
+      }
+    });
+
+    expect(summary).toMatchObject({
+      status: "healthy",
+      generatedAt: "2026-03-29T00:00:00.000Z",
+      runtime: {
+        status: "healthy",
+        mode: "active-tab-only",
+        sessionId: "session-1",
+        activeTab: {
+          tabId: 7,
+          url: "https://x.com/home",
+          world: "main"
+        },
+        loopState: "idle",
+        actionCapabilities: {
+          total: BUILTIN_CAPABILITIES.length
+        }
+      },
+      skills: {
+        status: "healthy",
+        installedCount: 2,
+        enabledCount: 1,
+        trustedCount: 1
+      },
+      hosts: {
+        status: "healthy",
+        defaultHostId: "local",
+        totalCount: 1,
+        connectedCount: 1
+      },
+      config: {
+        status: "placeholder"
+      }
+    });
+  });
+
+  it("builds a degraded bootstrap summary bundle when runtime or hosts are degraded", () => {
+    const summary = createBootstrapSummary({
+      runtime: {
+        status: "degraded",
+        sessionId: "session-2",
+        loopState: "degraded",
+        lastError: {
+          code: "E_RUNTIME",
+          message: "runner unavailable"
+        }
+      },
+      hosts: {
+        items: [
+          {
+            hostId: "local",
+            kind: "local",
+            connected: false,
+            state: "degraded",
+            isDefault: true
+          }
+        ]
+      }
+    });
+
+    expect(summary).toMatchObject({
+      status: "degraded",
+      runtime: {
+        status: "degraded",
+        sessionId: "session-2",
+        loopState: "degraded",
+        lastError: {
+          code: "E_RUNTIME"
+        }
+      },
+      hosts: {
+        status: "degraded",
+        connectedCount: 0
+      }
+    });
+  });
+
+  it("builds an empty bootstrap summary bundle before any runtime state exists", () => {
+    const summary = createBootstrapSummary();
+
+    expect(summary).toMatchObject({
+      status: "empty",
+      runtime: {
+        status: "empty",
+        sessionId: null,
+        activeTab: null
+      },
+      skills: {
+        status: "empty",
+        installedCount: 0
+      },
+      hosts: {
+        status: "empty",
+        totalCount: 0
+      },
+      config: {
+        status: "placeholder",
+        fields: ["model", "automation", "permissions", "preferences"]
+      }
+    });
   });
 
   it("projects bridge-side MCP export handoffs from exportable descriptors only", () => {

@@ -574,6 +574,15 @@ Agent 要真正“知道自己是什么产品”，最重要的不是更多 prom
 - 可展开 resource
 - 按需深读
 
+当前最小可落地 contract 可以先是单一 bootstrap read path，返回：
+
+- `runtime` summary
+- `config` placeholder/summary
+- `skills` summary
+- `hosts` summary
+
+先把高信号摘要读出来，再继续扩展 resource registry。
+
 ## 11. 自然语言配置应该怎么设计
 
 “通过自然语言直接配置产品”是这条设计主轴里非常关键的一块。

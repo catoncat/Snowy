@@ -5,6 +5,7 @@
 - canonical `CapabilityDescriptor` model and `ToolContract` projection
 - action-only AI surface boundary for `CapabilityDescriptor` / `ToolContract`, with bootstrap resources kept separate
 - descriptor-derived MCP export handoff contract for exportable capabilities
+- minimal bootstrap read path for `runtime/config/skills/hosts` summaries via background bridge
 - skill lifecycle state machine with `trusted` as an enabled-only flag
 - public capability registry + family provider dispatch
 - skill runtime ctx with permission checks, trace, and reentrancy guard

@@ -141,6 +141,97 @@ export const BUILTIN_BOOTSTRAP_RESOURCE_KEYS: BootstrapResourceKey[] = [
   ...BOOTSTRAP_RESOURCE_KEYS
 ];
 
+export type BootstrapSummaryStatus = "healthy" | "degraded" | "empty";
+export type ConfigSummaryStatus = "ready" | "placeholder";
+
+export interface BootstrapActiveTabSummary {
+  tabId: number;
+  url: string;
+  title?: string;
+  world?: "content" | "main";
+}
+
+export interface RuntimeBootstrapSummary {
+  status: BootstrapSummaryStatus;
+  mode: "active-tab-only";
+  sessionId: string | null;
+  activeTab: BootstrapActiveTabSummary | null;
+  loopState: string | null;
+  lastError: {
+    code: string;
+    message: string;
+  } | null;
+  actionCapabilities: {
+    total: number;
+    namespaces: string[];
+  };
+}
+
+export interface SkillsBootstrapSummary {
+  status: "healthy" | "empty";
+  installedCount: number;
+  enabledCount: number;
+  trustedCount: number;
+  recentChange: string | null;
+}
+
+export interface HostBootstrapSummaryItem {
+  hostId: string;
+  kind: "local" | "remote";
+  connected: boolean;
+  state: string;
+  isDefault: boolean;
+}
+
+export interface HostsBootstrapSummary {
+  status: BootstrapSummaryStatus;
+  defaultHostId: string | null;
+  totalCount: number;
+  connectedCount: number;
+  items: HostBootstrapSummaryItem[];
+}
+
+export interface ConfigBootstrapSummary {
+  status: ConfigSummaryStatus;
+  fields: string[];
+  note: string;
+}
+
+export interface BootstrapSummary {
+  status: BootstrapSummaryStatus;
+  generatedAt: string;
+  runtime: RuntimeBootstrapSummary;
+  skills: SkillsBootstrapSummary;
+  hosts: HostsBootstrapSummary;
+  config: ConfigBootstrapSummary;
+}
+
+export interface BootstrapSummaryInput {
+  generatedAt?: string;
+  activeTab?: (BootstrapActiveTabSummary & { active?: boolean }) | null;
+  runtime?: {
+    status?: BootstrapSummaryStatus;
+    sessionId?: string | null;
+    loopState?: string | null;
+    lastError?: {
+      code: string;
+      message: string;
+    } | null;
+  };
+  skills?: Partial<Omit<SkillsBootstrapSummary, "status">>;
+  hosts?: {
+    items?: HostBootstrapSummaryItem[];
+    defaultHostId?: string | null;
+    status?: BootstrapSummaryStatus;
+  };
+  config?: {
+    status?: ConfigSummaryStatus;
+    fields?: string[];
+    note?: string;
+  };
+  capabilities?: CapabilityDescriptor[];
+}
+
 interface CatalogEntryInput {
   id: string;
   family: string;
@@ -359,6 +450,78 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
 export const BUILTIN_CAPABILITIES: CapabilityDescriptor[] = Object.values(BUILTIN_CATALOG).flat();
 export const BUILTIN_EXPORT_HANDOFFS: CapabilityExportHandoff[] =
   descriptorsToCapabilityExportHandoffs(BUILTIN_CAPABILITIES);
+
+export function createBootstrapSummary(input: BootstrapSummaryInput = {}): BootstrapSummary {
+  const capabilityCatalog = input.capabilities ?? BUILTIN_CAPABILITIES;
+  const actionNamespaces = [...new Set(capabilityCatalog.map((entry) => capabilityNamespace(entry.id)))];
+  const activeTab =
+    input.activeTab && input.activeTab.active !== false
+      ? {
+          tabId: input.activeTab.tabId,
+          url: input.activeTab.url,
+          title: input.activeTab.title,
+          world: input.activeTab.world
+        }
+      : null;
+
+  const runtimeStatus = input.runtime?.status ?? (activeTab ? "healthy" : "empty");
+  const runtime: RuntimeBootstrapSummary = {
+    status: runtimeStatus,
+    mode: "active-tab-only",
+    sessionId: input.runtime?.sessionId ?? null,
+    activeTab,
+    loopState: input.runtime?.loopState ?? null,
+    lastError: input.runtime?.lastError ?? null,
+    actionCapabilities: {
+      total: capabilityCatalog.length,
+      namespaces: actionNamespaces
+    }
+  };
+
+  const skills: SkillsBootstrapSummary = {
+    status: (input.skills?.installedCount ?? 0) > 0 ? "healthy" : "empty",
+    installedCount: input.skills?.installedCount ?? 0,
+    enabledCount: input.skills?.enabledCount ?? 0,
+    trustedCount: input.skills?.trustedCount ?? 0,
+    recentChange: input.skills?.recentChange ?? null
+  };
+
+  const hostItems = input.hosts?.items ?? [];
+  const connectedCount = hostItems.filter((entry) => entry.connected).length;
+  const hasDegradedHost = hostItems.some((entry) => entry.state === "degraded");
+  const hostsStatus =
+    input.hosts?.status
+    ?? (hasDegradedHost ? "degraded" : connectedCount > 0 ? "healthy" : "empty");
+  const hosts: HostsBootstrapSummary = {
+    status: hostsStatus,
+    defaultHostId: input.hosts?.defaultHostId ?? hostItems.find((entry) => entry.isDefault)?.hostId ?? null,
+    totalCount: hostItems.length,
+    connectedCount,
+    items: hostItems
+  };
+
+  const config: ConfigBootstrapSummary = {
+    status: input.config?.status ?? "placeholder",
+    fields: input.config?.fields ?? ["model", "automation", "permissions", "preferences"],
+    note: input.config?.note ?? "Config control plane is not implemented yet."
+  };
+
+  const status =
+    runtime.status === "degraded" || hosts.status === "degraded"
+      ? "degraded"
+      : runtime.status === "empty" && skills.status === "empty" && hosts.status === "empty"
+        ? "empty"
+        : "healthy";
+
+  return {
+    status,
+    generatedAt: input.generatedAt ?? new Date().toISOString(),
+    runtime,
+    skills,
+    hosts,
+    config
+  };
+}
 
 export function getBuiltinsByNamespace(namespace: string): CapabilityDescriptor[] {
   return BUILTIN_CATALOG[namespace] ?? [];

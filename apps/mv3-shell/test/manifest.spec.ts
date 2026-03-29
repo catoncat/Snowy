@@ -749,6 +749,217 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("exposes a healthy bootstrap summary bundle through the background bridge", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0
+            }
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1
+          }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0
+      }))
+    };
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await bridge.ensureHost();
+    const offscreenCreatesBeforeBootstrap = harness.offscreenApi.createDocument.mock.calls.length;
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.bootstrap",
+        tab: {
+          tabId: 21,
+          url: "https://x.com/home",
+          active: true,
+          title: "Home"
+        },
+        world: "main",
+        skillsSummary: {
+          installedCount: 2,
+          enabledCount: 1,
+          trustedCount: 1,
+          recentChange: "skill.twitter enabled"
+        }
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "healthy",
+        runtime: {
+          status: "healthy",
+          mode: "active-tab-only",
+          activeTab: {
+            tabId: 21,
+            url: "https://x.com/home",
+            world: "main"
+          }
+        },
+        skills: {
+          status: "healthy",
+          installedCount: 2,
+          enabledCount: 1,
+          trustedCount: 1
+        },
+        hosts: {
+          status: "healthy",
+          defaultHostId: "local",
+          totalCount: 1,
+          connectedCount: 1
+        },
+        config: {
+          status: "placeholder"
+        }
+      }
+    });
+
+    expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(
+      offscreenCreatesBeforeBootstrap
+    );
+    dispose();
+    harness.cleanup();
+  });
+
+  it("exposes a degraded bootstrap summary bundle when the local host is unhealthy", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "degraded",
+              inflightCount: 0,
+              consecutiveFailures: 2
+            }
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1
+          }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "degraded",
+        inflightCount: 0,
+        consecutiveFailures: 2
+      }))
+    };
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await bridge.ensureHost();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.bootstrap"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "degraded",
+        runtime: {
+          status: "degraded",
+          lastError: null
+        },
+        hosts: {
+          status: "degraded",
+          totalCount: 1,
+          connectedCount: 1
+        }
+      }
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("exposes an empty bootstrap summary bundle before runtime state exists", async () => {
+    const harness = createChromeHarness({
+      host: {
+        dispatch: vi.fn(),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0
+        }))
+      }
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.bootstrap"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "empty",
+        runtime: {
+          status: "empty",
+          activeTab: null
+        },
+        skills: {
+          status: "empty",
+          installedCount: 0
+        },
+        hosts: {
+          status: "empty",
+          totalCount: 0
+        },
+        config: {
+          status: "placeholder"
+        }
+      }
+    });
+
+    expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
+    dispose();
+    harness.cleanup();
+  });
+
   it("routes site runtime invoke through the background, offscreen host, and page hook bridge", async () => {
     const harness = createIntegratedChromeHarness({
       activeTab: {
