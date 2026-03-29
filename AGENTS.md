@@ -224,6 +224,7 @@
 - slice 总图：`docs/next-development-slices-2026-03-29.md`
 - 多 agent 协作说明：`docs/multi-agent-workflow.md`
 - claim skill：`.agents/skills/auto-claim-issues-next/`
+- batch planning skill：`.agents/skills/next-batch-planner/`
 - claim 只能由 coordinator 在 canonical workspace 执行
 - forked worker 不得自行 claim
 - 若 claim 预览返回无可认领 issue，coordinator 必须进入下一批规划，而不是默认停工
@@ -237,6 +238,10 @@
 - `bun run workflow:claim:preview`
 - `bun run workflow:claim`
 - `bun run workflow:claim:json`
+- `bun run workflow:plan:preview`
+- `bun run workflow:plan`
+- `bun run workflow:plan:json`
+- `bun run workflow:new-review-issue -- --title=... --group=... --epic=... --acceptance-ref=... --scope=... --accept=...`
 
 ## 11. First Places To Read Before Changing Code
 

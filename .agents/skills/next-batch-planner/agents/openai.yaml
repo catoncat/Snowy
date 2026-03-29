@@ -1,0 +1,3 @@
+skills:
+  display_name: "Next Batch Planner"
+  default_prompt: "Use $next-batch-planner when the current claim queue is empty, or when you need to convert review findings into backlog issues and generate the next planning batch."

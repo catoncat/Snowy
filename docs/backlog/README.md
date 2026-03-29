@@ -91,6 +91,10 @@ check_cmd: bun run test -- <target> | bun run check
 bun run workflow:claim:preview
 bun run workflow:claim
 bun run workflow:claim:json
+bun run workflow:plan:preview
+bun run workflow:plan
+bun run workflow:plan:json
+bun run workflow:new-review-issue -- --title=... --group=... --epic=... --acceptance-ref=... --scope=... --accept=...
 ```
 
 `preview` 的用途：

@@ -38,6 +38,7 @@
 ### Coordinator
 
 - `auto-claim-issues-next`
+- `next-batch-planner`
 - 文档读写
 
 ### Worker
@@ -103,6 +104,12 @@
 3. 把发现的新 gap 写成新的 `docs/backlog/*.md`
 4. 新建下一批 planning 文档，例如 `docs/next-development-slices-YYYY-MM-DD.md`
 5. 再回到 Phase 1 开始 claim
+
+推荐直接使用：
+
+- `bun run workflow:new-review-issue -- --title=... --group=... --epic=... --acceptance-ref=... --scope=... --accept=...`
+- `bun run workflow:plan:preview`
+- `bun run workflow:plan`
 
 ## Canonical Claim Rule
 
