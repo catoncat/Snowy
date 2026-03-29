@@ -1,7 +1,7 @@
 ---
 id: ISSUE-003
 title: "BrowserVFS version retention and rollback helpers"
-status: in-progress
+status: done
 priority: p0
 source: "v0 follow-up"
 created: 2026-03-29

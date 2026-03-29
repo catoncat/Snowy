@@ -6,7 +6,9 @@ import {
   SkillInvocationService,
   createSkillRuntimeContext,
   getBuiltinsByNamespace,
-  hasPublicNamespaceCoverage
+  hasPublicNamespaceCoverage,
+  typedCapabilities,
+  type BuiltinCapabilityMap
 } from "@bbl-next/core";
 import {
   assertCapabilityDescriptor,
@@ -418,6 +420,67 @@ describe("core", () => {
         capabilityId: "page.click",
         input: { uid: "p1" }
       });
+    });
+  });
+
+  describe("typedCapabilities", () => {
+    it("returns typed accessors for known namespaces", async () => {
+      const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+      const providers = new FamilyProviderRegistry();
+      providers.register({
+        family: "memfs",
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+      });
+      providers.register({
+        family: "page",
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+      });
+
+      const ctx = createSkillRuntimeContext({
+        registry,
+        providers,
+        sessionId: "s1",
+        skillId: "skill.test",
+        permissions: ["*"]
+      });
+
+      const caps = typedCapabilities(ctx);
+
+      // memfs namespace should have read, write, list, etc.
+      expect(caps.memfs).toBeDefined();
+      expect(typeof caps.memfs.read).toBe("function");
+      expect(typeof caps.memfs.write).toBe("function");
+
+      // page namespace should have query, click, fill
+      expect(caps.page).toBeDefined();
+      expect(typeof caps.page.click).toBe("function");
+
+      // call through typed accessor should work
+      const result = await caps.memfs.read({ uri: "mem://test" });
+      expect(result).toEqual({ operation: "read", input: { uri: "mem://test" } });
+    });
+
+    it("reflects only permitted capabilities", async () => {
+      const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+      const providers = new FamilyProviderRegistry();
+      providers.register({
+        family: "memfs",
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+      });
+
+      const ctx = createSkillRuntimeContext({
+        registry,
+        providers,
+        sessionId: "s1",
+        skillId: "skill.limited",
+        permissions: ["memfs.read"]
+      });
+
+      const caps = typedCapabilities(ctx);
+      expect(caps.memfs).toBeDefined();
+      expect(typeof caps.memfs.read).toBe("function");
+      // write is not permitted, so it won't be attached
+      expect(caps.memfs.write).toBeUndefined();
     });
   });
 });

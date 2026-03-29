@@ -532,3 +532,55 @@ export class SkillInvocationService {
     return { result, trace, depth };
   }
 }
+
+// ── Typed Capability Facade ───────────────────────────────────────
+
+type CapabilityFn = (input: unknown) => Promise<unknown>;
+
+export interface BuiltinCapabilityMap {
+  memfs: {
+    read: CapabilityFn;
+    write: CapabilityFn;
+    list: CapabilityFn;
+    mkdir: CapabilityFn;
+    rm: CapabilityFn;
+    mv: CapabilityFn;
+    copy: CapabilityFn;
+    snapshot: CapabilityFn;
+    rehydrate: CapabilityFn;
+  };
+  page: {
+    query: CapabilityFn;
+    click: CapabilityFn;
+    fill: CapabilityFn;
+  };
+  site: {
+    fetchWithSession: CapabilityFn;
+    fetch_with_session: CapabilityFn;
+  };
+  tabs: {
+    list: CapabilityFn;
+    getActive: CapabilityFn;
+    get_active: CapabilityFn;
+  };
+  runner: {
+    invoke: CapabilityFn;
+  };
+  skills: {
+    invoke: CapabilityFn;
+    list: CapabilityFn;
+  };
+  runtime: {
+    listCapabilities: CapabilityFn;
+    list_capabilities: CapabilityFn;
+    getCapability: CapabilityFn;
+    get_capability: CapabilityFn;
+  };
+  host: {
+    exec: CapabilityFn;
+  };
+}
+
+export function typedCapabilities(ctx: SkillRuntimeContext): BuiltinCapabilityMap {
+  return ctx.capabilities as unknown as unknown as BuiltinCapabilityMap;
+}

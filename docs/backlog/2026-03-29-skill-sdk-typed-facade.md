@@ -1,12 +1,14 @@
 ---
 id: ISSUE-009
-title: Skill SDK typed facade
-status: open
+title: "Skill SDK typed facade"
+status: in-progress
 priority: p0
-source: v0 follow-up
+source: "v0 follow-up"
 created: 2026-03-29
-assignee: unassigned
-tags: [skill-sdk, authoring]
+assignee: agent
+tags:
+  - skill-sdk
+  - authoring
 kind: slice
 epic: EPIC-skill-sdk
 parallel_group: sdk-docs
@@ -16,7 +18,8 @@ write_scope:
   - packages/core/src/index.ts
   - packages/core/test/core.spec.ts
 acceptance_ref: docs/next-development-slices-2026-03-29.md
-check_cmd: bun run check
+check_cmd: "bun run check"
+claimed_at: 2026-03-29T09:04:15.814Z
 ---
 
 ## Goal
