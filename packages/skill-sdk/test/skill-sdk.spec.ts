@@ -11,11 +11,11 @@ describe("skill-sdk", () => {
 
     it("returns a valid SkillDefinition from a declaration", () => {
       const skill = defineSkill(validDeclaration);
-      expect(skill).toEqual({
+      expect(skill).toMatchObject({
         id: "skill.test",
-        permissions: ["memfs.*"],
-        handler: validDeclaration.handler
+        permissions: ["memfs.*"]
       });
+      expect(skill.handler).not.toBe(validDeclaration.handler);
     });
 
     it("throws on empty id", () => {
@@ -58,6 +58,59 @@ describe("skill-sdk", () => {
       });
 
       expect(result.result).toEqual({ action: "ping", args: { msg: "hello" } });
+    });
+
+    it("gives the handler a typed capability facade by default", async () => {
+      const { SkillInvocationService, CapabilityRegistry, FamilyProviderRegistry, BUILTIN_CAPABILITIES } = await import("@bbl-next/core");
+
+      const skill = defineSkill({
+        id: "skill.read",
+        permissions: ["memfs.read", "site.fetch_with_session"],
+        handler: async (ctx) => {
+          const read: (input: unknown) => Promise<unknown> = ctx.capabilities.memfs.read;
+          const fetchWithSession: (input: unknown) => Promise<unknown> =
+            ctx.capabilities.site.fetchWithSession;
+
+          const file = await read({ uri: "mem://library/skills/demo/SKILL.md" });
+          const siteResult = await fetchWithSession({
+            url: "https://example.com/api/me"
+          });
+          return { file, siteResult };
+        }
+      });
+
+      const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+      const providers = new FamilyProviderRegistry();
+      providers.register({
+        family: "memfs",
+        invoke: ({ binding, input }) => ({ family: binding.family, operation: binding.operation, input })
+      });
+      providers.register({
+        family: "site",
+        invoke: ({ binding, input }) => ({ family: binding.family, operation: binding.operation, input })
+      });
+      const service = new SkillInvocationService({ registry, providers });
+      service.register(skill);
+
+      const result = await service.invoke({
+        sessionId: "s1",
+        skillId: "skill.read",
+        action: "run",
+        args: {}
+      });
+
+      expect(result.result).toEqual({
+        file: {
+          family: "memfs",
+          operation: "read",
+          input: { uri: "mem://library/skills/demo/SKILL.md" }
+        },
+        siteResult: {
+          family: "site",
+          operation: "fetch_with_session",
+          input: { url: "https://example.com/api/me" }
+        }
+      });
     });
   });
 });

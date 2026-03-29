@@ -11,13 +11,26 @@ export {
   type SkillRuntimeContext
 } from "@bbl-next/core";
 
+import { typedCapabilities, type BuiltinCapabilityMap, type SkillDefinition, type SkillRuntimeContext } from "@bbl-next/core";
+
+export type TypedSkillRuntimeContext = Omit<SkillRuntimeContext, "capabilities"> & {
+  capabilities: BuiltinCapabilityMap;
+};
+
 export interface SkillDeclaration {
   id: string;
   permissions: string[];
-  handler: (ctx: import("@bbl-next/core").SkillRuntimeContext, action: string, args: unknown) => Promise<unknown>;
+  handler: (ctx: TypedSkillRuntimeContext, action: string, args: unknown) => Promise<unknown>;
 }
 
-export function defineSkill(declaration: SkillDeclaration): import("@bbl-next/core").SkillDefinition {
+function withTypedContext(ctx: SkillRuntimeContext): TypedSkillRuntimeContext {
+  return {
+    ...ctx,
+    capabilities: typedCapabilities(ctx)
+  };
+}
+
+export function defineSkill(declaration: SkillDeclaration): SkillDefinition {
   if (!declaration.id || typeof declaration.id !== "string") {
     throw new Error("defineSkill: id must be a non-empty string");
   }
@@ -30,6 +43,6 @@ export function defineSkill(declaration: SkillDeclaration): import("@bbl-next/co
   return {
     id: declaration.id,
     permissions: declaration.permissions,
-    handler: declaration.handler
+    handler: (ctx, action, args) => declaration.handler(withTypedContext(ctx), action, args)
   };
 }
