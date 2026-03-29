@@ -9,6 +9,7 @@ import {
   canActorGrantSkillTrusted,
   canActorTransitionSkillState,
   canTransitionSkillState,
+  canTransitionRunPhase,
   capabilityNamespace,
   createSkillLifecycleVersionSurface,
   descriptorToToolContract,
@@ -16,12 +17,30 @@ import {
   grantSkillTrusted,
   isPublicCapabilityNamespace,
   PUBLIC_CAPABILITY_NAMESPACES,
+  RUN_PHASES,
+  RUN_PHASE_TRANSITIONS,
+  SESSION_ENTRY_TYPES,
+  LOOP_TERMINAL_STATUSES,
+  LOOP_TURN_STATUSES,
+  NO_PROGRESS_REASONS,
+  COMPACTION_REASONS,
   selectLatestTrustedSkillVersion,
   skillVersionRootUri,
   skillVersionUri,
   transitionSkillState,
   type CapabilityTraceEntry,
-  type CapabilityDescriptor
+  type CapabilityDescriptor,
+  type SessionHeader,
+  type SessionEntry,
+  type MessagePayload,
+  type CompactionPayload,
+  type RunState,
+  type LoopTurn,
+  type CompactionDraft,
+  type SessionContext,
+  type SessionContextMessage,
+  type KernelLlmAdapter,
+  type SessionStorage
 } from "@bbl-next/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -119,6 +138,100 @@ describe("contracts", () => {
     expect(
       transitionSkillState({ status: "installed", trusted: false }, "enabled")
     ).toEqual({ status: "enabled", trusted: false });
+  });
+
+  it("allows all legal skill status transitions", () => {
+    const legalTransitions: [string, string][] = [
+      ["draft", "staged"],
+      ["draft", "archived"],
+      ["staged", "installed"],
+      ["staged", "archived"],
+      ["installed", "enabled"],
+      ["installed", "archived"],
+      ["enabled", "disabled"],
+      ["enabled", "archived"],
+      ["disabled", "enabled"],
+      ["disabled", "archived"],
+    ];
+    for (const [from, to] of legalTransitions) {
+      expect(canTransitionSkillState(from as any, to as any)).toBe(true);
+    }
+    expect(legalTransitions).toHaveLength(10);
+  });
+
+  it("blocks all illegal skill status transitions", () => {
+    const allStatuses: string[] = [
+      "draft", "staged", "installed", "enabled", "disabled", "archived"
+    ];
+    const legalSet = new Set([
+      "draft->staged", "draft->archived",
+      "staged->installed", "staged->archived",
+      "installed->enabled", "installed->archived",
+      "enabled->disabled", "enabled->archived",
+      "disabled->enabled", "disabled->archived",
+    ]);
+    const illegalTransitions: [string, string][] = [];
+    for (const from of allStatuses) {
+      for (const to of allStatuses) {
+        if (from === to) continue;
+        if (!legalSet.has(`${from}->${to}`)) {
+          illegalTransitions.push([from, to]);
+        }
+      }
+    }
+    for (const [from, to] of illegalTransitions) {
+      expect(canTransitionSkillState(from as any, to as any)).toBe(false);
+    }
+    // Verify we actually checked a meaningful number of illegal transitions
+    expect(illegalTransitions.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("transitionSkillState throws on illegal transitions", () => {
+    const illegals: [string, string][] = [
+      ["archived", "draft"],
+      ["enabled", "installed"],
+      ["disabled", "draft"],
+      ["staged", "enabled"],
+      ["draft", "enabled"],
+    ];
+    for (const [from, to] of illegals) {
+      expect(() =>
+        transitionSkillState({ status: from as any, trusted: false }, to as any)
+      ).toThrow(`Illegal skill transition: ${from} -> ${to}`);
+    }
+  });
+
+  it("resets trusted flag on transitions away from enabled", () => {
+    const result = transitionSkillState(
+      { status: "enabled", trusted: true },
+      "disabled"
+    );
+    expect(result).toEqual({ status: "disabled", trusted: false });
+
+    const archived = transitionSkillState(
+      { status: "enabled", trusted: true },
+      "archived"
+    );
+    expect(archived).toEqual({ status: "archived", trusted: false });
+  });
+
+  it("preserves trusted flag when transitioning to enabled", () => {
+    // disabled→enabled preserves the existing trusted value
+    const result = transitionSkillState(
+      { status: "disabled", trusted: false },
+      "enabled"
+    );
+    expect(result).toEqual({ status: "enabled", trusted: false });
+  });
+
+  it("archived is a terminal state with no outgoing transitions", () => {
+    const allStatuses: string[] = [
+      "draft", "staged", "installed", "enabled", "disabled", "archived"
+    ];
+    for (const to of allStatuses) {
+      if (to === "archived") continue;
+      expect(canTransitionSkillState("archived", to as any)).toBe(false);
+    }
   });
 
   it("keeps trusted as an enabled-only flag", () => {
@@ -250,6 +363,201 @@ describe("contracts", () => {
           "release_gate_failed"
         ]
       }
+    });
+  });
+
+  // ── Session / Run / Loop / Compaction contract tests ──
+
+  describe("session model", () => {
+    it("exports all session entry types", () => {
+      expect(SESSION_ENTRY_TYPES).toEqual([
+        "message", "compaction", "thinking_level_change",
+        "model_change", "label", "session_info"
+      ]);
+    });
+
+    it("accepts a valid SessionHeader", () => {
+      const header: SessionHeader = {
+        id: "s-001",
+        createdAt: "2026-03-29T00:00:00.000Z",
+        title: "Test session"
+      };
+      expect(header.id).toBe("s-001");
+      expect(header.parentSessionId).toBeUndefined();
+    });
+
+    it("accepts a valid SessionEntry with message payload", () => {
+      const payload: MessagePayload = {
+        role: "user",
+        text: "Hello"
+      };
+      const entry: SessionEntry = {
+        entryId: "e-001",
+        type: "message",
+        timestamp: "2026-03-29T00:00:00.000Z",
+        payload
+      };
+      expect(entry.type).toBe("message");
+      expect((entry.payload as MessagePayload).role).toBe("user");
+    });
+
+    it("accepts a valid SessionEntry with compaction payload", () => {
+      const payload: CompactionPayload = {
+        reason: "threshold",
+        summary: "User discussed project setup.",
+        firstKeptEntryId: "e-005",
+        tokensBefore: 12000,
+        tokensAfter: 3000
+      };
+      const entry: SessionEntry = {
+        entryId: "e-010",
+        type: "compaction",
+        timestamp: "2026-03-29T00:01:00.000Z",
+        payload
+      };
+      expect(entry.type).toBe("compaction");
+      expect((entry.payload as CompactionPayload).reason).toBe("threshold");
+    });
+
+    it("accepts a valid SessionContext with compaction summary", () => {
+      const msg: SessionContextMessage = {
+        role: "compactionSummary",
+        content: "Previously: user discussed setup.",
+        entryId: "e-010"
+      };
+      const ctx: SessionContext = {
+        sessionId: "s-001",
+        entries: [],
+        messages: [msg]
+      };
+      expect(ctx.messages[0].role).toBe("compactionSummary");
+    });
+  });
+
+  describe("run state model", () => {
+    it("exports all run phases", () => {
+      expect(RUN_PHASES).toEqual(["idle", "running", "paused", "compacting", "stopped"]);
+    });
+
+    it("validates run phase transitions", () => {
+      expect(canTransitionRunPhase("idle", "running")).toBe(true);
+      expect(canTransitionRunPhase("idle", "stopped")).toBe(false);
+      expect(canTransitionRunPhase("running", "paused")).toBe(true);
+      expect(canTransitionRunPhase("running", "compacting")).toBe(true);
+      expect(canTransitionRunPhase("running", "stopped")).toBe(true);
+      expect(canTransitionRunPhase("running", "idle")).toBe(false);
+      expect(canTransitionRunPhase("paused", "running")).toBe(true);
+      expect(canTransitionRunPhase("paused", "stopped")).toBe(false);
+      expect(canTransitionRunPhase("compacting", "running")).toBe(true);
+      expect(canTransitionRunPhase("compacting", "idle")).toBe(true);
+      expect(canTransitionRunPhase("stopped", "idle")).toBe(true);
+      expect(canTransitionRunPhase("stopped", "running")).toBe(false);
+    });
+
+    it("accepts a valid RunState", () => {
+      const state: RunState = {
+        sessionId: "s-001",
+        phase: "idle",
+        retry: { active: false, attempt: 0, maxAttempts: 2 },
+        queue: { steer: [], followUp: [] }
+      };
+      expect(state.phase).toBe("idle");
+    });
+
+    it("locks the run phase transition table", () => {
+      expect(RUN_PHASE_TRANSITIONS).toEqual({
+        idle: ["running"],
+        running: ["paused", "compacting", "stopped"],
+        paused: ["running"],
+        compacting: ["running", "idle"],
+        stopped: ["idle"]
+      });
+    });
+  });
+
+  describe("loop turn model", () => {
+    it("exports all loop terminal statuses", () => {
+      expect(LOOP_TERMINAL_STATUSES).toEqual([
+        "done", "failed_execute", "failed_verify",
+        "progress_uncertain", "max_steps", "stopped", "timeout"
+      ]);
+    });
+
+    it("exports all loop turn statuses", () => {
+      expect(LOOP_TURN_STATUSES).toEqual([
+        "pending", "executing", "succeeded", "failed", "skipped"
+      ]);
+    });
+
+    it("exports all no-progress reasons", () => {
+      expect(NO_PROGRESS_REASONS).toEqual(["repeat_signature", "ping_pong"]);
+    });
+
+    it("accepts a valid LoopTurn", () => {
+      const turn: LoopTurn = {
+        turnId: "t-001",
+        sessionId: "s-001",
+        stepIndex: 0,
+        capabilityId: "page.click",
+        status: "executing",
+        startedAt: "2026-03-29T00:00:00.000Z"
+      };
+      expect(turn.status).toBe("executing");
+      expect(turn.terminalStatus).toBeUndefined();
+    });
+  });
+
+  describe("compaction contract", () => {
+    it("exports all compaction reasons", () => {
+      expect(COMPACTION_REASONS).toEqual(["overflow", "threshold", "manual"]);
+    });
+
+    it("accepts a valid CompactionDraft", () => {
+      const draft: CompactionDraft = {
+        reason: "overflow",
+        summary: "Context was too long, summarized.",
+        firstKeptEntryId: "e-005",
+        tokensBefore: 20000,
+        tokensAfter: 4000
+      };
+      expect(draft.reason).toBe("overflow");
+      expect(draft.previousSummary).toBeUndefined();
+    });
+
+    it("accepts a CompactionDraft with iterative previousSummary", () => {
+      const draft: CompactionDraft = {
+        reason: "threshold",
+        summary: "Updated summary.",
+        firstKeptEntryId: "e-010",
+        previousSummary: "Previous context summary.",
+        tokensBefore: 15000,
+        tokensAfter: 3500
+      };
+      expect(draft.previousSummary).toBe("Previous context summary.");
+    });
+  });
+
+  describe("kernel adapter interfaces", () => {
+    it("accepts a KernelLlmAdapter shape", () => {
+      const adapter: KernelLlmAdapter = {
+        complete: async () => "summary"
+      };
+      expect(typeof adapter.complete).toBe("function");
+    });
+
+    it("accepts a SessionStorage shape", () => {
+      const storage: SessionStorage = {
+        createSession: async () => {},
+        appendEntry: async () => {},
+        getEntries: async () => [],
+        listSessions: async () => [],
+        deleteSession: async () => {}
+      };
+      expect(typeof storage.createSession).toBe("function");
+      expect(typeof storage.appendEntry).toBe("function");
+      expect(typeof storage.getEntries).toBe("function");
+      expect(typeof storage.listSessions).toBe("function");
+      expect(typeof storage.deleteSession).toBe("function");
     });
   });
 });

@@ -502,3 +502,204 @@ export function revokeSkillTrusted(
     trusted: false
   };
 }
+
+// ──────────────────────────────────────────────────────────
+// Session Model
+// ──────────────────────────────────────────────────────────
+
+export const SESSION_ENTRY_TYPES = [
+  "message",
+  "compaction",
+  "thinking_level_change",
+  "model_change",
+  "label",
+  "session_info"
+] as const;
+export type SessionEntryType = (typeof SESSION_ENTRY_TYPES)[number];
+
+export interface SessionHeader {
+  id: string;
+  parentSessionId?: string;
+  createdAt: string;
+  title?: string;
+  model?: string;
+}
+
+export interface SessionEntry {
+  entryId: string;
+  parentId?: string;
+  type: SessionEntryType;
+  timestamp: string;
+  payload: unknown;
+}
+
+export interface MessagePayload {
+  role: "user" | "assistant" | "system";
+  text: string;
+  toolName?: string;
+  toolCallId?: string;
+}
+
+export interface CompactionPayload {
+  reason: CompactionReason;
+  summary: string;
+  firstKeptEntryId: string;
+  previousSummary?: string;
+  tokensBefore: number;
+  tokensAfter: number;
+}
+
+export interface SessionContext {
+  sessionId: string;
+  entries: SessionEntry[];
+  messages: SessionContextMessage[];
+}
+
+export interface SessionContextMessage {
+  role: "user" | "assistant" | "system" | "compactionSummary";
+  content: string;
+  entryId: string;
+  toolName?: string;
+  toolCallId?: string;
+}
+
+// ──────────────────────────────────────────────────────────
+// Run State Model
+// ──────────────────────────────────────────────────────────
+
+export const RUN_PHASES = [
+  "idle",
+  "running",
+  "paused",
+  "compacting",
+  "stopped"
+] as const;
+export type RunPhase = (typeof RUN_PHASES)[number];
+
+export interface RetryState {
+  active: boolean;
+  attempt: number;
+  maxAttempts: number;
+}
+
+export interface QueuedPrompt {
+  id: string;
+  text: string;
+  enqueuedAt: string;
+}
+
+export interface RunQueue {
+  steer: QueuedPrompt[];
+  followUp: QueuedPrompt[];
+}
+
+export interface RunState {
+  sessionId: string;
+  phase: RunPhase;
+  retry: RetryState;
+  queue: RunQueue;
+}
+
+/** Legal transitions for the run phase state machine. */
+export const RUN_PHASE_TRANSITIONS: Record<RunPhase, readonly RunPhase[]> = {
+  idle: ["running"],
+  running: ["paused", "compacting", "stopped"],
+  paused: ["running"],
+  compacting: ["running", "idle"],
+  stopped: ["idle"]
+};
+
+export function canTransitionRunPhase(from: RunPhase, to: RunPhase): boolean {
+  return (RUN_PHASE_TRANSITIONS[from] as readonly string[]).includes(to);
+}
+
+// ──────────────────────────────────────────────────────────
+// Loop Turn Model
+// ──────────────────────────────────────────────────────────
+
+export const LOOP_TERMINAL_STATUSES = [
+  "done",
+  "failed_execute",
+  "failed_verify",
+  "progress_uncertain",
+  "max_steps",
+  "stopped",
+  "timeout"
+] as const;
+export type LoopTerminalStatus = (typeof LOOP_TERMINAL_STATUSES)[number];
+
+export const NO_PROGRESS_REASONS = [
+  "repeat_signature",
+  "ping_pong"
+] as const;
+export type NoProgressReason = (typeof NO_PROGRESS_REASONS)[number];
+
+export const LOOP_TURN_STATUSES = [
+  "pending",
+  "executing",
+  "succeeded",
+  "failed",
+  "skipped"
+] as const;
+export type LoopTurnStatus = (typeof LOOP_TURN_STATUSES)[number];
+
+export interface LoopTurn {
+  turnId: string;
+  sessionId: string;
+  stepIndex: number;
+  capabilityId?: string;
+  status: LoopTurnStatus;
+  retryable?: boolean;
+  verified?: boolean;
+  lastError?: string;
+  timedOut?: boolean;
+  terminalStatus?: LoopTerminalStatus;
+  noProgressReason?: NoProgressReason;
+  startedAt: string;
+  endedAt?: string;
+}
+
+// ──────────────────────────────────────────────────────────
+// Compaction Contract
+// ──────────────────────────────────────────────────────────
+
+export const COMPACTION_REASONS = [
+  "overflow",
+  "threshold",
+  "manual"
+] as const;
+export type CompactionReason = (typeof COMPACTION_REASONS)[number];
+
+export interface CompactionDraft {
+  reason: CompactionReason;
+  summary: string;
+  firstKeptEntryId: string;
+  previousSummary?: string;
+  tokensBefore: number;
+  tokensAfter: number;
+}
+
+// ──────────────────────────────────────────────────────────
+// Kernel LLM Adapter (injected, not a capability)
+// ──────────────────────────────────────────────────────────
+
+export interface KernelLlmAdapter {
+  complete(opts: {
+    systemPrompt: string;
+    messages: Array<{ role: "user" | "assistant"; content: string }>;
+    maxTokens?: number;
+    signal?: AbortSignal;
+  }): Promise<string>;
+}
+
+// ──────────────────────────────────────────────────────────
+// Session Storage (persistence interface)
+// ──────────────────────────────────────────────────────────
+
+export interface SessionStorage {
+  createSession(header: SessionHeader): Promise<void>;
+  appendEntry(sessionId: string, entry: SessionEntry): Promise<void>;
+  getEntries(sessionId: string): Promise<SessionEntry[]>;
+  listSessions(): Promise<SessionHeader[]>;
+  deleteSession(sessionId: string): Promise<void>;
+}

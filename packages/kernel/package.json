@@ -1,0 +1,12 @@
+{
+  "name": "@bbl-next/kernel",
+  "description": "Session store, run state machine, loop engine, compaction",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bbl-next/contracts": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
