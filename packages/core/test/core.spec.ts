@@ -119,7 +119,17 @@ describe("core", () => {
   });
 
   it("blocks reentrancy deeper than the configured depth limit", async () => {
-    const registry = new CapabilityRegistry([descriptor()]);
+    const registry = new CapabilityRegistry([
+      descriptor(),
+      descriptor({
+        id: "skills.invoke",
+        permissions: ["skills.invoke"],
+        executionBinding: {
+          family: "skills",
+          operation: "invoke"
+        }
+      })
+    ]);
     const providers = new FamilyProviderRegistry();
     providers.register({
       family: "page",
@@ -131,7 +141,7 @@ describe("core", () => {
       providers,
       sessionId: "s1",
       skillId: "skill.page",
-      permissions: ["page.*"],
+      permissions: ["page.*", "skills.*"],
       depth: 3,
       invokeSkill: async () => "never"
     });
@@ -238,6 +248,11 @@ describe("core", () => {
           sideEffects: "reads",
           permissions: ["memfs.read"],
           executionBinding: { family: "memfs", operation: "read" }
+        }),
+        descriptor({
+          id: "skills.invoke",
+          permissions: ["skills.invoke"],
+          executionBinding: { family: "skills", operation: "invoke" }
         })
       ]);
       const providers = new FamilyProviderRegistry();
@@ -388,7 +403,7 @@ describe("core", () => {
       expect(service.list()).toHaveLength(2);
     });
 
-    it("each skill invocation gets its own isolated trace", async () => {
+    it("keeps child capability traces isolated while recording the parent skills.invoke call", async () => {
       const { service } = buildService();
       service.register({
         id: "skill.parent",
@@ -415,10 +430,19 @@ describe("core", () => {
         args: {}
       });
 
-      expect(result.trace).toHaveLength(1);
+      expect(result.trace).toHaveLength(2);
       expect(result.trace[0]).toMatchObject({
         capabilityId: "page.click",
         input: { uid: "p1" }
+      });
+      expect(result.trace[1]).toMatchObject({
+        capabilityId: "skills.invoke",
+        input: {
+          skillId: "skill.child",
+          action: "run",
+          args: {}
+        },
+        output: "child done"
       });
     });
   });

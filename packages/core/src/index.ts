@@ -41,6 +41,7 @@ export interface SkillRuntimeContextOptions {
   trace?: CapabilityTraceEntry[];
   confirm?: (descriptor: CapabilityDescriptor, input: unknown) => boolean | Promise<boolean>;
   invokeSkill?: (request: SkillInvocationRequest) => Promise<unknown>;
+  listSkills?: () => Promise<string[]> | string[];
 }
 
 export interface SkillRuntimeContext {
@@ -349,6 +350,13 @@ function attachCapability(target: Record<string, unknown>, parts: string[], call
   attachCapability(next, rest, (suffix, input) => call(`${head}.${suffix}`, input));
 }
 
+function asRecord(input: unknown): Record<string, unknown> {
+  if (typeof input !== "object" || input == null || Array.isArray(input)) {
+    throw new CapabilityError("E_BAD_INPUT", "Capability input must be an object");
+  }
+  return input as Record<string, unknown>;
+}
+
 export function createSkillRuntimeContext(
   options: SkillRuntimeContextOptions
 ): SkillRuntimeContext {
@@ -360,6 +368,54 @@ export function createSkillRuntimeContext(
     .filter((descriptor) =>
       options.permissions.some((permission) => matchesPermission(permission, descriptor.id))
     );
+
+  const invokeBuiltinCapability = async (
+    descriptor: CapabilityDescriptor,
+    input: unknown
+  ): Promise<unknown> => {
+    const { family, operation } = descriptor.executionBinding;
+    if (family !== "skills") {
+      return options.providers.invoke(descriptor, input, ctx);
+    }
+    switch (operation) {
+      case "invoke": {
+        if (depth >= MAX_SKILL_CALL_DEPTH) {
+          throw new CapabilityError(
+            "E_REENTRANCY_BLOCKED",
+            `Skill depth limit exceeded at ${options.skillId}`
+          );
+        }
+        if (!options.invokeSkill) {
+          throw new CapabilityError(
+            "E_RUNTIME",
+            "No skill invoker configured for runtime context"
+          );
+        }
+        const payload = asRecord(input);
+        const skillId = payload.skillId;
+        const action = payload.action;
+        if (typeof skillId !== "string" || typeof action !== "string") {
+          throw new CapabilityError(
+            "E_BAD_INPUT",
+            "skills.invoke requires string skillId and action"
+          );
+        }
+        return options.invokeSkill({
+          skillId,
+          action,
+          args: payload.args,
+          parentContext: ctx
+        });
+      }
+      case "list":
+        return options.listSkills ? await options.listSkills() : [];
+      default:
+        throw new CapabilityError(
+          "E_RUNTIME",
+          `Unsupported skills operation: ${operation}`
+        );
+    }
+  };
 
   const call = async (capabilityId: string, input: unknown): Promise<unknown> => {
     const descriptor = options.registry.require(capabilityId);
@@ -386,7 +442,7 @@ export function createSkillRuntimeContext(
     };
     trace.push(entry);
     try {
-      const output = await options.providers.invoke(descriptor, input, ctx);
+      const output = await invokeBuiltinCapability(descriptor, input);
       entry.endedAt = new Date().toISOString();
       entry.status = "succeeded";
       entry.output = output;
@@ -419,26 +475,8 @@ export function createSkillRuntimeContext(
         allowedDescriptors.find((descriptor) => descriptor.id === capabilityId)
     },
     skills: {
-      invoke: async (skillId, action, args) => {
-        if (depth >= MAX_SKILL_CALL_DEPTH) {
-          throw new CapabilityError(
-            "E_REENTRANCY_BLOCKED",
-            `Skill depth limit exceeded at ${skillId}.${action}`
-          );
-        }
-        if (!options.invokeSkill) {
-          throw new CapabilityError(
-            "E_RUNTIME",
-            "No skill invoker configured for runtime context"
-          );
-        }
-        return options.invokeSkill({
-          skillId,
-          action,
-          args,
-          parentContext: ctx
-        });
-      }
+      invoke: async (skillId, action, args) =>
+        call("skills.invoke", { skillId, action, args })
     }
   };
 
@@ -518,6 +556,7 @@ export class SkillInvocationService {
       depth,
       trace,
       confirm: this.#options.confirm,
+      listSkills: async () => this.list().map((registeredSkill) => registeredSkill.id),
       invokeSkill: (childRequest) =>
         this.invoke({
           sessionId: request.sessionId,
