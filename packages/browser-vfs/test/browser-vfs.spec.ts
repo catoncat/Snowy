@@ -45,6 +45,39 @@ describe("browser-vfs", () => {
     );
   });
 
+  it("keeps canonical skill URIs in stat, list, and snapshot outputs", async () => {
+    const vfs = await BrowserVfs.create({
+      workspaceId: "conversation-1"
+    });
+    const versionId = "2026-03-29T00:00:00.000Z";
+
+    await vfs.write("mem://skills/twitter/SKILL.md", "# twitter");
+    await vfs.snapshot(
+      "mem://skills/twitter",
+      `mem://skills/twitter/@versions/${versionId}`,
+      { trusted: true }
+    );
+
+    await expect(vfs.stat("mem://skills/twitter")).resolves.toMatchObject({
+      uri: "mem://skills/twitter"
+    });
+    await expect(vfs.list("mem://skills")).resolves.toEqual([
+      {
+        uri: "mem://skills/twitter",
+        name: "twitter",
+        kind: "dir",
+        size: 0
+      }
+    ]);
+    await expect(vfs.listSnapshots("mem://skills/twitter")).resolves.toEqual([
+      expect.objectContaining({
+        uri: `mem://skills/twitter/@versions/${versionId}`,
+        sourceUri: "mem://skills/twitter",
+        trusted: true
+      })
+    ]);
+  });
+
   it("persists snapshot metadata, retention, and rollback selection", async () => {
     const store = new IndexedDbVfsStore("vfs-snapshot-metadata");
     const first = await BrowserVfs.create({
@@ -90,7 +123,7 @@ describe("browser-vfs", () => {
     ]);
     expect(snapshots.find((snapshot) => snapshot.versionId === versions[2])).toMatchObject({
       trusted: true,
-      sourceUri: "mem://library/skills/twitter"
+      sourceUri: "mem://skills/twitter"
     });
     await expect(second.selectRollbackTarget(skillUri)).resolves.toMatchObject({
       versionId: versions[2],
@@ -203,9 +236,9 @@ describe("browser-vfs", () => {
 
       const packages = await vfs.discoverPackages();
       expect(packages).toEqual([
-        { id: "drafty", uri: "mem://library/skills/drafty", hasMarker: false },
-        { id: "github", uri: "mem://library/skills/github", hasMarker: true },
-        { id: "twitter", uri: "mem://library/skills/twitter", hasMarker: true }
+        { id: "drafty", uri: "mem://skills/drafty", hasMarker: false },
+        { id: "github", uri: "mem://skills/github", hasMarker: true },
+        { id: "twitter", uri: "mem://skills/twitter", hasMarker: true }
       ]);
     });
 
@@ -219,7 +252,7 @@ describe("browser-vfs", () => {
 
       const packages = await vfs.discoverPackages();
       expect(packages).toEqual([
-        { id: "twitter", uri: "mem://library/skills/twitter", hasMarker: true }
+        { id: "twitter", uri: "mem://skills/twitter", hasMarker: true }
       ]);
     });
 

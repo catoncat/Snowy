@@ -145,7 +145,27 @@ function encodeKey(scope: VfsScope, path: string, workspaceId?: string): string 
   return scope === "workspace" ? `${scope}:${workspaceId ?? "default"}:${path}` : `${scope}:${path}`;
 }
 
+function isSkillLibraryPath(path: string): boolean {
+  return path === "/skills" || path.startsWith("/skills/");
+}
+
+function canonicalizeSkillUri(uri: string): string {
+  if (uri === "mem://library/skills") {
+    return "mem://skills";
+  }
+  if (uri === "mem://library/skills/") {
+    return "mem://skills/";
+  }
+  if (uri.startsWith("mem://library/skills/")) {
+    return `mem://skills/${uri.slice("mem://library/skills/".length)}`;
+  }
+  return uri;
+}
+
 function toUri(scope: VfsScope, path: string): string {
+  if (scope === "library" && isSkillLibraryPath(path)) {
+    return path === "/skills" ? "mem://skills" : `mem://skills${path.slice("/skills".length)}`;
+  }
   return path === "/" ? `mem://${scope}/` : `mem://${scope}${path}`;
 }
 
@@ -628,7 +648,7 @@ export class BrowserVfs {
         record.snapshot?.createdAt ??
         (isIsoTimestamp(parsed.versionId) ? parsed.versionId : record.updatedAt),
       trusted: record.snapshot?.trusted ?? false,
-      sourceUri: record.snapshot?.sourceUri ?? toUri(scope, sourcePath)
+      sourceUri: canonicalizeSkillUri(record.snapshot?.sourceUri ?? toUri(scope, sourcePath))
     };
   }
 
