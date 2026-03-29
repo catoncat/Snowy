@@ -209,6 +209,30 @@ function createScriptingHarness() {
   };
 }
 
+function createIntegratedChromeHarness(options: {
+  host?: {
+    dispatch: (request: unknown) => Promise<unknown>;
+    getHealth: () => unknown;
+  };
+  createHost?: () => {
+    dispatch: (request: unknown) => Promise<unknown>;
+    getHealth: () => unknown;
+  };
+  autoRegisterOffscreen?: boolean;
+  hangOffscreen?: boolean;
+} = {}) {
+  const runtimeHarness = createChromeHarness(options);
+  const scriptingHarness = createScriptingHarness();
+
+  return {
+    ...runtimeHarness,
+    chromeApi: {
+      ...runtimeHarness.chromeApi,
+      scripting: scriptingHarness.chromeApi.scripting
+    }
+  };
+}
+
 describe("mv3-shell manifest", () => {
   it("declares the MV3 offscreen-ready shell", () => {
     const hostPermissions = (manifest as { host_permissions?: string[] }).host_permissions ?? [];
@@ -629,6 +653,227 @@ describe("mv3-shell manifest", () => {
     expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(
       offscreenClosesBeforeDiagnostics
     );
+    harness.cleanup();
+  });
+
+  it("routes site runtime invoke through the background, offscreen host, and page hook bridge", async () => {
+    const harness = createIntegratedChromeHarness({
+      host: {
+        dispatch: vi.fn(async (request) => {
+          if (request.kind === "invoke") {
+            return {
+              kind: "invoke_result",
+              requestId: request.requestId,
+              ok: true,
+              result: {
+                result: {
+                  query: request.invocation.input.query,
+                  tabUrl: request.invocation.ctx.tab.url,
+                  installationCount: request.invocation.ctx.site.installations.length
+                },
+                durationMs: 1
+              }
+            };
+          }
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0
+            }
+          };
+        }),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0
+        }))
+      }
+    });
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: harness.chromeApi
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "site.runtime.invoke",
+        skillId: "fixture.page",
+        action: "execute_fixture",
+        tab: {
+          tabId: 11,
+          url: "https://fixture.test/demo",
+          active: true
+        },
+        input: {
+          query: "hello runtime"
+        },
+        plan: {
+          skillId: "fixture.page",
+          action: "execute_fixture",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.fixture",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle"
+            }
+          ]
+        },
+        module: {
+          id: "fixture.page.execute",
+          source: `
+            exports.default = async ({ ctx, input }) => ({
+              query: input.query,
+              tabUrl: ctx.tab.url,
+              installationCount: ctx.site.installations.length
+            });
+          `
+        },
+        verifier: "page_hook_ok"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        verified: true,
+        result: {
+          ok: true,
+          action: "execute_fixture",
+          input: {
+            query: "hello runtime",
+            tabUrl: "https://fixture.test/demo",
+            installationCount: 1
+          },
+          installationId: "bbl-next.page-hook.fixture:1",
+          installedScriptId: "bbl-next.page-hook.fixture",
+          tabUrl: "https://fixture.test/demo",
+          installCount: 1
+        },
+        trace: [
+          "match:fixture.page",
+          "plan:1_steps",
+          "install:main:bbl-next.page-hook.fixture",
+          "invoke:execute_fixture",
+          "verify:page_hook_ok"
+        ]
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.diagnostics",
+        tabId: 11,
+        world: "main"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "healthy",
+        bridge: {
+          hostReady: true,
+          offscreenPresent: true
+        },
+        site: {
+          status: "healthy",
+          tabId: 11,
+          world: "main",
+          snapshot: {
+            installs: [
+              expect.objectContaining({
+                installationId: "bbl-next.page-hook.fixture:1"
+              })
+            ],
+            invocations: [
+              expect.objectContaining({
+                action: "execute_fixture",
+                installationId: "bbl-next.page-hook.fixture:1"
+              })
+            ],
+            verifications: [
+              {
+                action: "execute_fixture",
+                verified: true
+              }
+            ]
+          }
+        }
+      }
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("rejects site runtime invoke when the target tab is not active", async () => {
+    const harness = createIntegratedChromeHarness({
+      host: {
+        dispatch: vi.fn(async () => ({
+          kind: "health_result",
+          ok: true,
+          health: {
+            status: "idle",
+            inflightCount: 0,
+            consecutiveFailures: 0
+          }
+        })),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0
+        }))
+      }
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge: createPageHookBridge({
+        chromeApi: harness.chromeApi
+      })
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "site.runtime.invoke",
+        skillId: "fixture.page",
+        action: "execute_fixture",
+        tab: {
+          tabId: 11,
+          url: "https://fixture.test/demo",
+          active: false
+        },
+        input: {},
+        plan: {
+          skillId: "fixture.page",
+          action: "execute_fixture",
+          steps: []
+        },
+        module: {
+          id: "fixture.page.execute",
+          source: "exports.default = async () => ({ ok: true });"
+        }
+      })
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_BAD_INPUT",
+        message: "Site runtime invoke requires an active tab"
+      }
+    });
+
+    expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
+    dispose();
     harness.cleanup();
   });
 

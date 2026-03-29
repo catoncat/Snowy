@@ -44,6 +44,16 @@ function unwrapExecuteScriptResult(result) {
   return result;
 }
 
+function invalidSiteRuntimeInvoke(message) {
+  return {
+    ok: false,
+    error: {
+      code: "E_BAD_INPUT",
+      message
+    }
+  };
+}
+
 function createTimeoutPromise(kind, requestId, timeoutMs) {
   let timerId;
   const promise = new Promise((_, reject) => {
@@ -270,6 +280,127 @@ export function createBackgroundRunnerBridge({
     };
   }
 
+  async function invokeSiteRuntime({
+    skillId,
+    action,
+    tab,
+    input = {},
+    ctx = {},
+    plan,
+    module,
+    verifier
+  } = {}) {
+    if (!tab || typeof tab.tabId !== "number" || typeof tab.url !== "string") {
+      return invalidSiteRuntimeInvoke("Site runtime invoke requires tab metadata");
+    }
+    if (tab.active !== true) {
+      return invalidSiteRuntimeInvoke("Site runtime invoke requires an active tab");
+    }
+    if (!plan || !Array.isArray(plan.steps)) {
+      return invalidSiteRuntimeInvoke("Site runtime invoke requires an injection plan");
+    }
+    if (!module || typeof module.id !== "string" || typeof module.source !== "string") {
+      return invalidSiteRuntimeInvoke("Site runtime invoke requires a runner module");
+    }
+
+    const trace = [`match:${skillId}`];
+    const site = {
+      plan,
+      installations: []
+    };
+
+    if (plan.steps.length > 0) {
+      if (!pageHookBridge) {
+        return {
+          ok: false,
+          error: {
+            code: "E_RUNTIME",
+            message: "Page hook bridge is not configured"
+          }
+        };
+      }
+      trace.push(`plan:${plan.steps.length}_steps`);
+      for (const step of plan.steps) {
+        const installation = await pageHookBridge.install(step, tab);
+        site.installations.push({
+          step,
+          result: installation
+        });
+        trace.push(`install:${step.world}:${step.scriptId}`);
+      }
+    }
+
+    const runnerResponse = await invoke({
+      module,
+      input,
+      ctx: {
+        ...ctx,
+        tab,
+        site
+      }
+    });
+    if (!runnerResponse.ok) {
+      return runnerResponse;
+    }
+    if (runnerResponse.data?.ok !== true) {
+      return {
+        ok: false,
+        error: runnerResponse.data?.error ?? {
+          code: "E_RUNTIME",
+          message: "Runner invocation failed"
+        }
+      };
+    }
+
+    let result = runnerResponse.data.result?.result;
+    const targetInstallation = site.installations[site.installations.length - 1];
+    if (targetInstallation && pageHookBridge?.invoke) {
+      result = await pageHookBridge.invoke({
+        installation: targetInstallation,
+        action,
+        input: result,
+        tab,
+        ctx: {
+          ...ctx,
+          tab,
+          site
+        }
+      });
+    }
+    trace.push(`invoke:${action}`);
+
+    let verified = true;
+    if (verifier && targetInstallation && pageHookBridge?.verify) {
+      verified = Boolean(
+        await pageHookBridge.verify({
+          installation: targetInstallation,
+          action,
+          result,
+          tab
+        })
+      );
+      trace.push(`verify:${verifier}`);
+      if (!verified) {
+        return {
+          ok: false,
+          error: {
+            code: "E_VERIFY_FAILED",
+            message: `Verifier failed for ${skillId}.${action}`
+          }
+        };
+      }
+    }
+
+    return {
+      ok: true,
+      data: {
+        result,
+        verified,
+        trace
+      }
+    };
+  }
+
   async function diagnostics({
     tabId,
     world = "main"
@@ -364,6 +495,8 @@ export function createBackgroundRunnerBridge({
         return cancel(message.targetRequestId);
       case "runner.health":
         return health();
+      case "site.runtime.invoke":
+        return invokeSiteRuntime(message);
       case "runtime.diagnostics":
         return diagnostics({
           tabId: message.tabId,
@@ -411,6 +544,7 @@ export function createBackgroundRunnerBridge({
     ensureOffscreenDocument,
     ensureHost,
     invoke,
+    invokeSiteRuntime,
     cancel,
     health,
     diagnostics,
