@@ -58,12 +58,25 @@ check_cmd: bun run test -- <target> | bun run check
 ## 工作流
 
 1. 所有 agent 先读 `docs/start-here.md` 和 `docs/locked-decisions-2026-03-29.md`
-2. coordinator 在 canonical workspace 更新 `docs/next-development-slices-2026-03-29.md`
+2. coordinator 在 canonical workspace 更新当前 planning 文档
 3. coordinator 在 canonical workspace 执行 claim
 4. worker 根据已分配的 issue 实现，不自行 claim
 5. worker 完成后把结果回传给 coordinator/integrator
 6. coordinator 或 integrator 先提交对应 code commit
 7. coordinator 或 integrator 在 canonical workspace 把 issue 改为 `done`，并追加工作记录与 commit 记录
+
+## 当当前 batch 做完时
+
+如果 `bun run workflow:claim:preview` 返回“当前没有可认领的 open issue”，按下面处理：
+
+1. 先确认是否还存在 `status: in-progress`
+2. 若没有，再把当前实现对照：
+   - `docs/locked-decisions-2026-03-29.md`
+   - `project_plan.md`
+   - 已落地测试和代码
+3. 把新发现的问题写成新的 `docs/backlog/*.md`
+4. 新建新的 batch/planning 文档，不继续覆盖旧批次快照
+5. 再回到 claim 流程
 
 ## Canonical Workspace Rule
 
@@ -79,6 +92,11 @@ bun run workflow:claim:preview
 bun run workflow:claim
 bun run workflow:claim:json
 ```
+
+`preview` 的用途：
+
+- 有可做 issue：说明当前能直接派工
+- 没有可做 issue：说明 coordinator 应切到下一批规划，不是 worker 自己随便找活
 
 ## Completion Record
 

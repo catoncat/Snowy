@@ -56,6 +56,54 @@
 3. worker 只处理 coordinator 已分配的一个 claimed issue
 4. integrator 只做集成层与共享门禁
 
+## Workflow Loop
+
+### Phase 0: Sync Context
+
+1. coordinator 先确认 `AGENTS.md`、`docs/source-of-truth-map.md`、`docs/locked-decisions-2026-03-29.md`
+2. coordinator 读取 `docs/backlog/*.md`，确认哪些是 `open / in-progress / done`
+3. coordinator 只在 canonical workspace 做状态判断
+
+### Phase 1: Dispatch
+
+1. coordinator 运行 `bun run workflow:claim:preview`
+2. 若存在可做 slice，再运行 `bun run workflow:claim`
+3. coordinator 把以下 payload 发给 worker：
+   - `ISSUE-xxx`
+   - `write_scope`
+   - `acceptance_ref`
+   - 必要参考路径
+
+### Phase 2: Execute
+
+1. worker 只改自己的 `write_scope`
+2. worker 按 TDD 推进
+3. worker 完成后提交 code commit
+4. worker 回传：
+   - 改动文件
+   - 检查结果
+   - 风险 / blocker
+
+### Phase 3: Integrate
+
+1. integrator 跑仓库级 `bun run check`
+2. 若只是共享接线冲突，由 integrator 解决
+3. 若是 slice 本身没达 acceptance，退回 worker
+4. canonical workspace 回写 issue 为 `done`
+
+### Phase 4: Batch Boundary
+
+当 `bun run workflow:claim:preview` 返回“当前没有可认领的 open issue”时，不是停工，而是进入下一批规划：
+
+1. coordinator 检查是否还有 `in-progress` issue 未收口
+2. 若全部收口，跑一轮 review / drift check：
+   - 对照 `docs/locked-decisions-2026-03-29.md`
+   - 对照 `project_plan.md`
+   - 对照已落地代码和测试
+3. 把发现的新 gap 写成新的 `docs/backlog/*.md`
+4. 新建下一批 planning 文档，例如 `docs/next-development-slices-YYYY-MM-DD.md`
+5. 再回到 Phase 1 开始 claim
+
 ## Canonical Claim Rule
 
 - claim 只能在 coordinator 持有的 canonical workspace 中执行
@@ -68,6 +116,15 @@
   2. coordinator 把 `ISSUE-xxx`、`write_scope`、`acceptance_ref` 发给 worker
   3. worker 不再 claim，只实现
   4. coordinator 或 integrator 在 canonical workspace 回写最终状态
+
+## Empty-Backlog Rule
+
+- `workflow:claim:preview` 没有可 claim issue 时，默认含义是“进入 batch planning”，不是“项目结束”
+- 只有在以下 3 项都成立时，才可视为当前阶段真正完成：
+  1. 没有 `open` issue
+  2. 没有 `in-progress` issue
+  3. 已做完一轮 against locked decisions / plan / implementation 的 review
+- 若 review 发现 drift，优先新开 review issue，不要口头记住
 
 ## Handoff Contract
 
@@ -95,3 +152,4 @@
 - 用口头派工替代 backlog claim
 - forked worker 自己 claim
 - integrator 静默接管失败 slice
+- 所有 issue 做完后直接停住，不补下一批 backlog

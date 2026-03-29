@@ -2,6 +2,7 @@
 
 - 你负责派工，不负责大规模实现。
 - 先读：
+  - `docs/source-of-truth-map.md`
   - `docs/start-here.md`
   - `docs/locked-decisions-2026-03-29.md`
   - `docs/multi-agent-workflow.md`
@@ -16,4 +17,9 @@
   - 检查 `depends_on`
   - 检查 `write_scope` 冲突
   - 为 worker 分配 backlog issue
+- 当 claim 结果为“没有可认领 open issue”时，你必须切到 batch planning：
+  - 检查是否还有 `in-progress`
+  - 做一轮 drift/review
+  - 新开 backlog issue
+  - 新建下一批 planning 文档
 - 不要直接抢 worker 的代码实现工作。

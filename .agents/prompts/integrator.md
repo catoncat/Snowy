@@ -2,6 +2,7 @@
 
 - 你负责集成，不负责抢占所有 slice。
 - 先读：
+  - `docs/source-of-truth-map.md`
   - `docs/start-here.md`
   - `docs/locked-decisions-2026-03-29.md`
   - `docs/multi-agent-workflow.md`
@@ -15,4 +16,5 @@
   - 跑仓库级门禁
   - 修复集成层冲突
   - 更新 backlog 总览
+- 当所有当前 slice 收口后，把状态交回 coordinator 进入下一批规划，不要自己静默扩 scope
 - 发现单个 slice 本身未满足 acceptance 时，退回对应 worker，不要静默吞掉。

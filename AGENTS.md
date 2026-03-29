@@ -226,6 +226,7 @@
 - claim skill：`.agents/skills/auto-claim-issues-next/`
 - claim 只能由 coordinator 在 canonical workspace 执行
 - forked worker 不得自行 claim
+- 若 claim 预览返回无可认领 issue，coordinator 必须进入下一批规划，而不是默认停工
 
 ## 10. Commands
 
