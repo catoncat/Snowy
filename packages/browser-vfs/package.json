@@ -1,5 +1,6 @@
 {
   "name": "@bbl-next/browser-vfs",
+  "description": "In-browser mem:// VFS with IndexedDB persistence",
   "private": true,
   "type": "module",
   "dependencies": {

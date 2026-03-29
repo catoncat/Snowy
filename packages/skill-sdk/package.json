@@ -1,5 +1,6 @@
 {
   "name": "@bbl-next/skill-sdk",
+  "description": "Skill author SDK — defineSkill, typed capabilities",
   "private": true,
   "type": "module",
   "dependencies": {

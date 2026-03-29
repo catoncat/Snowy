@@ -1,5 +1,6 @@
 {
   "name": "@bbl-next/js-runner",
+  "description": "Isolated JS execution host with RPC protocol",
   "private": true,
   "type": "module",
   "dependencies": {

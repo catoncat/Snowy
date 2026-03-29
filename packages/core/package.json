@@ -1,5 +1,6 @@
 {
   "name": "@bbl-next/core",
+  "description": "Capability registry, provider dispatch, skill runtime context",
   "private": true,
   "type": "module",
   "dependencies": {

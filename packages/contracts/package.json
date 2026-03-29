@@ -1,5 +1,6 @@
 {
   "name": "@bbl-next/contracts",
+  "description": "Canonical model — types, validation, state machines",
   "private": true,
   "type": "module",
   "exports": {
