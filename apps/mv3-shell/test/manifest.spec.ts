@@ -70,7 +70,8 @@ function createChromeHarness({
   host,
   createHost,
   autoRegisterOffscreen = true,
-  hangOffscreen = false
+  hangOffscreen = false,
+  activeTab
 }: {
   host?: {
     dispatch: (request: unknown) => Promise<unknown>;
@@ -82,6 +83,11 @@ function createChromeHarness({
   };
   autoRegisterOffscreen?: boolean;
   hangOffscreen?: boolean;
+  activeTab?: {
+    id: number;
+    url: string;
+    active?: boolean;
+  } | null;
 }) {
   const messageBus = createMessageBus();
   let hasOffscreen = false;
@@ -117,6 +123,19 @@ function createChromeHarness({
     runtimeApi.sendMessage = vi.fn((message) => messageBus.sendMessage(message));
   }
 
+  const tabsApi = {
+    query: vi.fn(async () => (
+      activeTab
+        ? [
+            {
+              ...activeTab,
+              active: activeTab.active ?? true
+            }
+          ]
+        : []
+    ))
+  };
+
   const offscreenApi = {
     createDocument: vi.fn(async () => {
       hasOffscreen = true;
@@ -138,10 +157,12 @@ function createChromeHarness({
   return {
     chromeApi: {
       runtime: runtimeApi,
-      offscreen: offscreenApi
+      offscreen: offscreenApi,
+      tabs: tabsApi
     },
     runtimeApi,
     offscreenApi,
+    tabsApi,
     dropOffscreenListener() {
       disposeOffscreen?.();
       disposeOffscreen = null;
@@ -220,6 +241,11 @@ function createIntegratedChromeHarness(options: {
   };
   autoRegisterOffscreen?: boolean;
   hangOffscreen?: boolean;
+  activeTab?: {
+    id: number;
+    url: string;
+    active?: boolean;
+  } | null;
 } = {}) {
   const runtimeHarness = createChromeHarness(options);
   const scriptingHarness = createScriptingHarness();
@@ -242,6 +268,7 @@ describe("mv3-shell manifest", () => {
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.minimum_chrome_version).toBe("116");
     expect(manifest.permissions).toContain("offscreen");
+    expect(manifest.permissions).toContain("activeTab");
     expect(hostPermissions).toEqual([]);
     expect(webAccessibleResources).toEqual([]);
     expect(manifest.background).toMatchObject({
@@ -656,8 +683,78 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("exposes an empty runtime diagnostics snapshot when no page hook is installed", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0
+            }
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1
+          }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0
+      }))
+    };
+    const harness = createIntegratedChromeHarness({
+      host
+    });
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: harness.chromeApi
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge
+    });
+
+    await bridge.ensureHost();
+
+    await expect(
+      bridge.diagnostics({
+        tabId: 21,
+        world: "main"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "healthy",
+        site: {
+          status: "empty",
+          tabId: 21,
+          world: "main",
+          snapshot: null
+        }
+      }
+    });
+
+    harness.cleanup();
+  });
+
   it("routes site runtime invoke through the background, offscreen host, and page hook bridge", async () => {
     const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/demo"
+      },
       host: {
         dispatch: vi.fn(async (request) => {
           if (request.kind === "invoke") {
@@ -768,6 +865,11 @@ describe("mv3-shell manifest", () => {
       }
     });
 
+    expect(harness.tabsApi.query).toHaveBeenCalledWith({
+      active: true,
+      lastFocusedWindow: true
+    });
+
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
@@ -816,6 +918,10 @@ describe("mv3-shell manifest", () => {
 
   it("rejects site runtime invoke when the target tab is not active", async () => {
     const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 12,
+        url: "https://fixture.test/other"
+      },
       host: {
         dispatch: vi.fn(async () => ({
           kind: "health_result",
@@ -851,7 +957,7 @@ describe("mv3-shell manifest", () => {
         tab: {
           tabId: 11,
           url: "https://fixture.test/demo",
-          active: false
+          active: true
         },
         input: {},
         plan: {
@@ -868,10 +974,14 @@ describe("mv3-shell manifest", () => {
       ok: false,
       error: {
         code: "E_BAD_INPUT",
-        message: "Site runtime invoke requires an active tab"
+        message: "Site runtime invoke target must be the active tab"
       }
     });
 
+    expect(harness.tabsApi.query).toHaveBeenCalledWith({
+      active: true,
+      lastFocusedWindow: true
+    });
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
     dispose();
     harness.cleanup();

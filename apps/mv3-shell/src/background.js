@@ -54,6 +54,14 @@ function invalidSiteRuntimeInvoke(message) {
   };
 }
 
+function toCanonicalTab(activeTab) {
+  return {
+    tabId: activeTab.id,
+    url: activeTab.url,
+    active: activeTab.active === true
+  };
+}
+
 function createTimeoutPromise(kind, requestId, timeoutMs) {
   let timerId;
   const promise = new Promise((_, reject) => {
@@ -145,6 +153,42 @@ export function createBackgroundRunnerBridge({
       hostRecoveredAt: state.hostRecoveredAt,
       hostRecoveryReason: state.hostRecoveryReason,
       ...extra
+    };
+  }
+
+  async function resolveActiveTabMetadata(requestedTab) {
+    if (!requestedTab || typeof requestedTab.tabId !== "number") {
+      return invalidSiteRuntimeInvoke("Site runtime invoke requires tab metadata");
+    }
+    if (!chromeApi?.tabs?.query) {
+      return {
+        ok: false,
+        error: {
+          code: "E_RUNTIME",
+          message: "chrome.tabs.query is required for active tab metadata"
+        }
+      };
+    }
+
+    const activeTabs = await chromeApi.tabs.query({
+      active: true,
+      lastFocusedWindow: true
+    });
+    const activeTab = Array.isArray(activeTabs) ? activeTabs[0] : undefined;
+
+    if (!activeTab || typeof activeTab.id !== "number") {
+      return invalidSiteRuntimeInvoke("Site runtime invoke requires an active tab");
+    }
+    if (activeTab.id !== requestedTab.tabId) {
+      return invalidSiteRuntimeInvoke("Site runtime invoke target must be the active tab");
+    }
+    if (typeof activeTab.url !== "string") {
+      return invalidSiteRuntimeInvoke("Site runtime invoke requires active tab url metadata");
+    }
+
+    return {
+      ok: true,
+      data: toCanonicalTab(activeTab)
     };
   }
 
@@ -290,18 +334,17 @@ export function createBackgroundRunnerBridge({
     module,
     verifier
   } = {}) {
-    if (!tab || typeof tab.tabId !== "number" || typeof tab.url !== "string") {
-      return invalidSiteRuntimeInvoke("Site runtime invoke requires tab metadata");
-    }
-    if (tab.active !== true) {
-      return invalidSiteRuntimeInvoke("Site runtime invoke requires an active tab");
-    }
     if (!plan || !Array.isArray(plan.steps)) {
       return invalidSiteRuntimeInvoke("Site runtime invoke requires an injection plan");
     }
     if (!module || typeof module.id !== "string" || typeof module.source !== "string") {
       return invalidSiteRuntimeInvoke("Site runtime invoke requires a runner module");
     }
+    const resolvedTabResponse = await resolveActiveTabMetadata(tab);
+    if (!resolvedTabResponse.ok) {
+      return resolvedTabResponse;
+    }
+    const resolvedTab = resolvedTabResponse.data;
 
     const trace = [`match:${skillId}`];
     const site = {
@@ -321,7 +364,7 @@ export function createBackgroundRunnerBridge({
       }
       trace.push(`plan:${plan.steps.length}_steps`);
       for (const step of plan.steps) {
-        const installation = await pageHookBridge.install(step, tab);
+        const installation = await pageHookBridge.install(step, resolvedTab);
         site.installations.push({
           step,
           result: installation
@@ -335,7 +378,7 @@ export function createBackgroundRunnerBridge({
       input,
       ctx: {
         ...ctx,
-        tab,
+        tab: resolvedTab,
         site
       }
     });
@@ -359,10 +402,10 @@ export function createBackgroundRunnerBridge({
         installation: targetInstallation,
         action,
         input: result,
-        tab,
+        tab: resolvedTab,
         ctx: {
           ...ctx,
-          tab,
+          tab: resolvedTab,
           site
         }
       });
@@ -376,7 +419,7 @@ export function createBackgroundRunnerBridge({
           installation: targetInstallation,
           action,
           result,
-          tab
+          tab: resolvedTab
         })
       );
       trace.push(`verify:${verifier}`);
@@ -435,11 +478,12 @@ export function createBackgroundRunnerBridge({
     let site;
     if (pageHookBridge && typeof tabId === "number") {
       try {
+        const snapshot = await pageHookBridge.snapshotState({ tabId, world });
         site = {
-          status: "healthy",
+          status: snapshot == null ? "empty" : "healthy",
           tabId,
           world,
-          snapshot: await pageHookBridge.snapshotState({ tabId, world })
+          snapshot
         };
       } catch (error) {
         site = {
