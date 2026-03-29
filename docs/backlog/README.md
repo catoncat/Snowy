@@ -135,17 +135,30 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 - `ISSUE-026` `Review: MV3 runtime wiring is still harness-bound`
 - `ISSUE-028` `Review: skill lifecycle/version surface is still model-only`
 
-### 仍可领取
+### 当前不可认领
 
-- 当前没有可直接领取的 open issue
+- `ISSUE-029` `Review: action capability model still conflates full AI surface`
+  - 被 `ISSUE-028` 的 `packages/contracts/src/index.ts` / `docs/` 写域占用阻塞
+- `ISSUE-030` `Review: product self-awareness bootstrap surface is still missing`
+  - 依赖 `ISSUE-026`
+- `ISSUE-031` `Review: execution host control plane is still missing`
+  - 依赖 `ISSUE-026`
 
 ### 边界说明
 
-- `ISSUE-019` 已完成 descriptor-derived MCP export handoff contract；真正 bridge-side MCP server/transport 仍属于 deferred 边界，不应继续算作当前可领取项。
-- 当前 batch 只剩 `ISSUE-026` 与 `ISSUE-028` 在推进；若 `claim:preview` 继续返回无可认领项，应等待现有 in-progress slice 完成，或在它们完成后进入下一批规划。
+- 当前 `workflow:claim:preview` 会返回 blocked：
+  - `ISSUE-029` 属于 write-scope conflict
+  - `ISSUE-030` / `ISSUE-031` 属于 dependency blocked
+- 下一批规划已单独落到 `docs/next-development-slices-2026-03-29-batch-3.md`
 
 ## 推荐领取顺序
 
-当前无可直接领取的 open issue；等待 `ISSUE-026` / `ISSUE-028` 状态变化后再运行 preview 或进入下一批规划。
+当前没有可直接领取的 open issue；按收口与解锁顺序看，建议优先级如下：
 
-当前批次文档：`docs/next-development-slices-2026-03-29-batch-2.md`
+1. `ISSUE-026`
+2. `ISSUE-028`
+3. `ISSUE-029`
+4. `ISSUE-030`
+5. `ISSUE-031`
+
+当前批次文档：`docs/next-development-slices-2026-03-29-batch-3.md`
