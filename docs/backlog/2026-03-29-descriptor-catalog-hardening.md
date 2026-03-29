@@ -32,3 +32,13 @@ check_cmd: "bun run check"
 - builtin catalog 不再只是零散常量
 - namespace coverage 有明确测试
 - projection / descriptor 校验继续保持单一真相源
+
+## Completion
+
+**Commits:** `16b3cb3` (bootstrap with catalog hardening)
+
+**Changes:**
+- `packages/contracts/src/index.ts`: Added `PUBLIC_CAPABILITY_NAMESPACES`, `CapabilityNamespace` type, `capabilityNamespace()`, `isPublicCapabilityNamespace()`, schema type validation in `assertCapabilityDescriptor`
+- `packages/core/src/index.ts`: Replaced flat `BUILTIN_CAPABILITIES` with structured `BUILTIN_CATALOG` organized by 8 namespaces, added real `inputSchema` for all 21 builtins, added `getBuiltinsByNamespace()`
+- `packages/contracts/test/contracts.spec.ts`: 6 new tests (schema validation, namespace helpers)
+- `packages/core/test/core.spec.ts`: 8 new builtin catalog structure tests

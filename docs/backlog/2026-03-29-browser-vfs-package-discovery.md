@@ -27,3 +27,11 @@ check_cmd: bun run check
 - 可以枚举 `mem://library/skills/*`
 - package root 判断逻辑明确
 
+## Completion
+
+**Commits:** `94131aa` (feat: package discovery helpers)
+
+**Changes:**
+- `packages/browser-vfs/src/index.ts`: Added `VfsPackageInfo` interface, `PACKAGE_MARKER` constant ("SKILL.md"), `discoverPackages(rootUri?)` with @versions exclusion and sorted output, `isPackageRoot(uri)` marker detection, fixed `resolveMemUri` for bare `mem://skills` root
+- `packages/browser-vfs/test/browser-vfs.spec.ts`: 6 new tests — discover with/without marker, @versions exclusion, custom root URI, empty set, isPackageRoot positive/negative cases, PACKAGE_MARKER constant
+
