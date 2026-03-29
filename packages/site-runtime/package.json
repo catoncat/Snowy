@@ -1,10 +1,14 @@
 {
   "name": "@bbl-next/site-runtime",
+  "description": "Active-tab site skill matching and injection",
   "private": true,
   "type": "module",
   "dependencies": {
     "@bbl-next/contracts": "workspace:*",
     "@bbl-next/js-runner": "workspace:*"
+  },
+  "devDependencies": {
+    "mv3-shell": "workspace:*"
   },
   "exports": {
     ".": "./src/index.ts"

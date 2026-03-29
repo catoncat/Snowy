@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { JsRunnerHost } from "@bbl-next/js-runner";
 // @ts-ignore source JS module has no declaration file yet
-import { createPageHookBridge } from "../../../apps/mv3-shell/src/background.js";
+import { createPageHookBridge } from "mv3-shell/background";
 import {
   SiteSkillRegistry,
   SiteSkillRuntime,

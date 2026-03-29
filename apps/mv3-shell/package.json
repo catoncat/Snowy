@@ -1,5 +1,9 @@
 {
   "name": "mv3-shell",
+  "description": "Minimal Chrome MV3 extension shell",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "./background": "./src/background.js"
+  }
 }

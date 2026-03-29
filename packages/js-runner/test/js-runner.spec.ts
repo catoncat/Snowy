@@ -69,7 +69,7 @@ describe("js-runner", () => {
         module: {
           id: "slow",
           source:
-            "exports.default = async () => new Promise((resolve) => setTimeout(() => resolve('done'), 50));"
+            "exports.default = async () => new Promise(() => {});"
         },
         ctx: {},
         input: null,
@@ -108,10 +108,11 @@ describe("js-runner", () => {
         module: {
           id: "slow",
           source:
-            "exports.default = async () => new Promise((resolve) => setTimeout(() => resolve('done'), 50));"
+            "exports.default = async () => new Promise(() => {});"
         },
         ctx: {},
-        input: null
+        input: null,
+        timeoutMs: 50
       }
     });
 
@@ -134,7 +135,7 @@ describe("js-runner", () => {
           module: {
             id: "slow",
             source:
-              "exports.default = async () => new Promise((resolve) => setTimeout(() => resolve('done'), 50));"
+              "exports.default = async () => new Promise(() => {});"
           },
           ctx: {},
           input: null,
@@ -163,7 +164,7 @@ describe("js-runner", () => {
         module: {
           id: "slow",
           source:
-            "exports.default = async () => new Promise((resolve) => setTimeout(() => resolve('done'), 50));"
+            "exports.default = async () => new Promise(() => {});"
         },
         ctx: {},
         input: null,

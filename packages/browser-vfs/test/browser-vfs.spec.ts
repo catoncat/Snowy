@@ -5,6 +5,7 @@ import {
   IndexedDbVfsStore,
   INDEXED_DB_VFS_SCHEMA_VERSION,
   PACKAGE_MARKER,
+  resolveMemUri,
   snapshotInfoToSkillVersionRef
 } from "@bbl-next/browser-vfs";
 import {
@@ -476,6 +477,98 @@ describe("browser-vfs", () => {
 
     it("PACKAGE_MARKER constant equals SKILL.md", () => {
       expect(PACKAGE_MARKER).toBe("SKILL.md");
+    });
+  });
+
+  describe("resolveMemUri error paths", () => {
+    it("throws E_BAD_INPUT for non-mem:// URI", () => {
+      expect(() => resolveMemUri("https://example.com")).toThrow("Invalid mem uri");
+      expect(() => resolveMemUri("file:///tmp")).toThrow("Invalid mem uri");
+      expect(() => resolveMemUri("")).toThrow("Invalid mem uri");
+    });
+
+    it("throws E_BAD_INPUT for unknown scope", () => {
+      expect(() => resolveMemUri("mem://custom/foo")).toThrow("Unknown mem scope");
+      expect(() => resolveMemUri("mem://temp/bar")).toThrow("Unknown mem scope");
+    });
+
+    it("throws E_BAD_INPUT for dot segments in path", () => {
+      expect(() => resolveMemUri("mem://workspace/../etc")).toThrow("Invalid path segment: ..");
+      expect(() => resolveMemUri("mem://workspace/./foo")).toThrow("Invalid path segment: .");
+    });
+
+    it("maps mem://skills/ shorthand to library scope", () => {
+      const result = resolveMemUri("mem://skills/twitter");
+      expect(result.scope).toBe("library");
+      expect(result.path).toBe("/skills/twitter");
+    });
+
+    it("resolves all three explicit scopes", () => {
+      expect(resolveMemUri("mem://ephemeral/tmp").scope).toBe("ephemeral");
+      expect(resolveMemUri("mem://workspace/data").scope).toBe("workspace");
+      expect(resolveMemUri("mem://library/pkg").scope).toBe("library");
+    });
+  });
+
+  describe("VFS read error paths", () => {
+    it("throws E_BAD_INPUT when reading a directory as file", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await vfs.mkdir("mem://workspace/mydir");
+      await expect(vfs.read("mem://workspace/mydir")).rejects.toThrow("Path is not a file");
+    });
+  });
+
+  describe("VFS operation round-trips", () => {
+    it("edit: write → edit → read preserves changes", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await vfs.write("mem://workspace/file.txt", "hello");
+      await vfs.edit("mem://workspace/file.txt", (c) => c.toUpperCase());
+      const result = await vfs.read("mem://workspace/file.txt");
+      expect(result).toBe("HELLO");
+    });
+
+    it("mv: write → mv → stat(old) fails, read(new) succeeds", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await vfs.write("mem://workspace/a.txt", "data");
+      await vfs.mv("mem://workspace/a.txt", "mem://workspace/b.txt");
+
+      await expect(vfs.stat("mem://workspace/a.txt")).rejects.toThrow();
+      const content = await vfs.read("mem://workspace/b.txt");
+      expect(content).toBe("data");
+    });
+
+    it("copy: source and target are independent", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await vfs.write("mem://workspace/src.txt", "original");
+      await vfs.copy("mem://workspace/src.txt", "mem://workspace/dst.txt");
+
+      // Modify source after copy
+      await vfs.write("mem://workspace/src.txt", "modified");
+      const dst = await vfs.read("mem://workspace/dst.txt");
+      expect(dst).toBe("original");
+    });
+
+    it("mkdir → list round-trip", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await vfs.mkdir("mem://workspace/parent");
+      await vfs.write("mem://workspace/parent/child.txt", "ok");
+
+      const entries = await vfs.list("mem://workspace/parent");
+      expect(entries).toHaveLength(1);
+      expect(entries[0].name).toBe("child.txt");
+    });
+  });
+
+  describe("ephemeral scope", () => {
+    it("write → read → stat round-trip in ephemeral scope", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await vfs.write("mem://ephemeral/tmp.txt", "temp data");
+
+      const content = await vfs.read("mem://ephemeral/tmp.txt");
+      expect(content).toBe("temp data");
+
+      const info = await vfs.stat("mem://ephemeral/tmp.txt");
+      expect(info.kind).toBe("file");
     });
   });
 });

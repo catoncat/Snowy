@@ -20,7 +20,6 @@ import {
   typedCapabilitiesForPermissions,
   type BuiltinCapabilityMap
 } from "@bbl-next/core";
-import { BrowserVfs } from "../../browser-vfs/src/index";
 import {
   HOST_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
@@ -656,29 +655,24 @@ describe("core", () => {
       const memfsOperations = BUILTIN_CATALOG.memfs
         .map((descriptor) => descriptor.id.replace("memfs.", ""))
         .sort();
-      const browserVfsPublicMethods = Object.getOwnPropertyNames(BrowserVfs.prototype)
-        .filter((name) => !name.startsWith("#") && name !== "constructor");
+      // Explicit list of BrowserVfs public methods that should map to memfs capabilities.
+      // Maintained manually to avoid cross-package source import and prototype reflection.
+      const expectedVfsMethods = [
+        "copy",
+        "edit",
+        "list",
+        "mkdir",
+        "mv",
+        "read",
+        "rehydrate",
+        "rm",
+        "snapshot",
+        "stage",
+        "stat",
+        "write"
+      ];
 
-      expect(memfsOperations).toEqual(
-        browserVfsPublicMethods
-          .filter((name) =>
-            [
-              "read",
-              "write",
-              "edit",
-              "stat",
-              "list",
-              "mkdir",
-              "rm",
-              "mv",
-              "copy",
-              "stage",
-              "snapshot",
-              "rehydrate"
-            ].includes(name)
-          )
-          .sort()
-      );
+      expect(memfsOperations).toEqual(expectedVfsMethods);
     });
 
     it("has an entry for every public namespace", () => {
