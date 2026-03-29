@@ -1,7 +1,7 @@
 ---
 id: ISSUE-011
 title: "Review: ctx permission and trace contract drift"
-status: in-progress
+status: done
 priority: p0
 source: "codex review 2026-03-29"
 created: 2026-03-29
@@ -40,3 +40,15 @@ check_cmd: "bun run check"
 - `traceId` 进入 runtime ctx、capability trace entry 和 nested invoke 传播链路
 - skill-to-skill invoke 有显式 trace 关联语义，能把父 `skills.invoke` 与子 skill invocation 串起来
 - contracts/core 测试锁住高权限子 skill 调用策略，不再保持未定义状态
+
+## 工作总结
+
+- 在 `packages/contracts/src/index.ts` 为 `CapabilityTraceEntry` 补上 `parentTraceId` / `childTraceId`，把 nested skill invocation 的父子 trace 关联提升为显式 contract。
+- 在 `packages/core/src/index.ts` 为 runtime ctx 补上 `traceId` / `parentTraceId`，并让 `SkillInvocationService` 在 nested invoke 时生成子 trace、回填父 `skills.invoke` trace entry 的 `childTraceId`，同时保持父子 trace 数组隔离。
+- 将 nested skill 的有效权限收口为“callee 声明权限 ∩ caller 已获 grant”，不再允许父 skill 借道高权限子 skill 完成越权 capability 调用。
+- 在 `packages/contracts/test/contracts.spec.ts` 和 `packages/core/test/core.spec.ts` 新增覆盖，锁住 trace 链接字段、子调用权限裁剪、显式 trace 关联以及“低权限父 skill 不能借高权限子 skill”这几条 review contract。
+- 实际验证执行了 `bun run check`，结果通过，当前无 write scope 内残留 blocker。
+
+## 相关 commits
+
+- `165ba94` `Lock nested skill trace and permission contracts`
