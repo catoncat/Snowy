@@ -1,11 +1,11 @@
 ---
 id: ISSUE-029
 title: "Review: action capability model still conflates full AI surface"
-status: open
+status: in-progress
 priority: p1
 source: "AI-native surface follow-up 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: codex
 tags:
   - review
   - contracts
@@ -25,6 +25,7 @@ write_scope:
   - docs/
 acceptance_ref: docs/ai-native-capability-surface-design.md
 check_cmd: "bun run check"
+claimed_at: 2026-03-29T11:15:06.968Z
 ---
 
 ## Goal
