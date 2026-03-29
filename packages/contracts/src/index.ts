@@ -64,6 +64,9 @@ export interface SkillLifecycleState {
 }
 
 export interface CapabilityTraceEntry {
+  traceId?: string;
+  parentTraceId?: string;
+  childTraceId?: string;
   capabilityId: string;
   startedAt: string;
   endedAt?: string;

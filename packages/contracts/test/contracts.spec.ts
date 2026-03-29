@@ -7,6 +7,7 @@ import {
   isPublicCapabilityNamespace,
   PUBLIC_CAPABILITY_NAMESPACES,
   transitionSkillState,
+  type CapabilityTraceEntry,
   type CapabilityDescriptor
 } from "@bbl-next/contracts";
 import { describe, expect, it } from "vitest";
@@ -119,5 +120,24 @@ describe("contracts", () => {
     expect(PUBLIC_CAPABILITY_NAMESPACES).toEqual([
       "memfs", "page", "site", "tabs", "runner", "skills", "runtime", "host"
     ]);
+  });
+
+  it("allows trace entries to link parent and child skill invocations", () => {
+    const entry: CapabilityTraceEntry = {
+      traceId: "trace-root",
+      parentTraceId: "trace-parent",
+      childTraceId: "trace-child",
+      capabilityId: "skills.invoke",
+      startedAt: "2026-03-29T00:00:00.000Z",
+      status: "started",
+      input: {
+        skillId: "skill.child",
+        action: "run"
+      }
+    };
+
+    expect(entry.traceId).toBe("trace-root");
+    expect(entry.parentTraceId).toBe("trace-parent");
+    expect(entry.childTraceId).toBe("trace-child");
   });
 });

@@ -38,6 +38,8 @@ export interface SkillRuntimeContextOptions {
   skillId: string;
   permissions: string[];
   depth?: number;
+  traceId?: string;
+  parentTraceId?: string;
   trace?: CapabilityTraceEntry[];
   confirm?: (descriptor: CapabilityDescriptor, input: unknown) => boolean | Promise<boolean>;
   invokeSkill?: (request: SkillInvocationRequest) => Promise<unknown>;
@@ -48,6 +50,8 @@ export interface SkillRuntimeContext {
   sessionId: string;
   skillId: string;
   depth: number;
+  traceId: string;
+  parentTraceId?: string;
   permissions: string[];
   trace: CapabilityTraceEntry[];
   call(capabilityId: string, input: unknown): Promise<unknown>;
@@ -357,11 +361,55 @@ function asRecord(input: unknown): Record<string, unknown> {
   return input as Record<string, unknown>;
 }
 
+let traceCounter = 0;
+function generateTraceId(): string {
+  traceCounter += 1;
+  return `trace-${Date.now()}-${traceCounter}`;
+}
+
+interface NestedSkillInvocationEnvelope {
+  __skillInvocationMeta: true;
+  result: unknown;
+  traceId: string;
+  parentTraceId?: string;
+}
+
+function isNestedSkillInvocationEnvelope(
+  value: unknown
+): value is NestedSkillInvocationEnvelope {
+  return (
+    typeof value === "object"
+    && value != null
+    && (value as { __skillInvocationMeta?: unknown }).__skillInvocationMeta === true
+  );
+}
+
+function resolveGrantedPermissions(
+  registry: CapabilityRegistry,
+  declaredPermissions: string[],
+  parentPermissions?: string[]
+): string[] {
+  if (!parentPermissions) {
+    return [...declaredPermissions];
+  }
+
+  return registry
+    .list()
+    .filter(
+      (descriptor) =>
+        declaredPermissions.some((permission) => matchesPermission(permission, descriptor.id))
+        && parentPermissions.some((permission) => matchesPermission(permission, descriptor.id))
+    )
+    .map((descriptor) => descriptor.id);
+}
+
 export function createSkillRuntimeContext(
   options: SkillRuntimeContextOptions
 ): SkillRuntimeContext {
   const trace = options.trace ?? [];
   const depth = options.depth ?? 1;
+  const traceId = options.traceId ?? generateTraceId();
+  const parentTraceId = options.parentTraceId;
 
   const allowedDescriptors = options.registry
     .list()
@@ -435,6 +483,8 @@ export function createSkillRuntimeContext(
       }
     }
     const entry: CapabilityTraceEntry = {
+      traceId,
+      parentTraceId,
       capabilityId,
       startedAt: new Date().toISOString(),
       status: "started",
@@ -443,10 +493,16 @@ export function createSkillRuntimeContext(
     trace.push(entry);
     try {
       const output = await invokeBuiltinCapability(descriptor, input);
+      if (isNestedSkillInvocationEnvelope(output)) {
+        entry.childTraceId = output.traceId;
+      }
+      const normalizedOutput = isNestedSkillInvocationEnvelope(output)
+        ? output.result
+        : output;
       entry.endedAt = new Date().toISOString();
       entry.status = "succeeded";
-      entry.output = output;
-      return output;
+      entry.output = normalizedOutput;
+      return normalizedOutput;
     } catch (error) {
       entry.endedAt = new Date().toISOString();
       entry.status = "failed";
@@ -465,6 +521,8 @@ export function createSkillRuntimeContext(
     sessionId: options.sessionId,
     skillId: options.skillId,
     depth,
+    traceId,
+    parentTraceId,
     permissions: [...options.permissions],
     trace,
     call,
@@ -501,6 +559,8 @@ export interface SkillInvocationResult {
   result: unknown;
   trace: CapabilityTraceEntry[];
   depth: number;
+  traceId: string;
+  parentTraceId?: string;
 }
 
 export class SkillInvocationService {
@@ -547,28 +607,48 @@ export class SkillInvocationService {
     }
 
     const trace: CapabilityTraceEntry[] = [];
+    const grantedPermissions = resolveGrantedPermissions(
+      this.#options.registry,
+      skill.permissions,
+      request.parentContext?.permissions
+    );
     const ctx = createSkillRuntimeContext({
       registry: this.#options.registry,
       providers: this.#options.providers,
       sessionId: request.sessionId,
       skillId: request.skillId,
-      permissions: skill.permissions,
+      permissions: grantedPermissions,
       depth,
+      parentTraceId: request.parentContext?.traceId,
       trace,
       confirm: this.#options.confirm,
       listSkills: async () => this.list().map((registeredSkill) => registeredSkill.id),
-      invokeSkill: (childRequest) =>
-        this.invoke({
+      invokeSkill: async (childRequest) => {
+        const childResult = await this.invoke({
           sessionId: request.sessionId,
           skillId: childRequest.skillId,
           action: childRequest.action,
           args: childRequest.args,
           parentContext: ctx
-        }).then((r) => r.result)
+        });
+
+        return {
+          __skillInvocationMeta: true,
+          result: childResult.result,
+          traceId: childResult.traceId,
+          parentTraceId: childResult.parentTraceId
+        } satisfies NestedSkillInvocationEnvelope;
+      }
     });
 
     const result = await skill.handler(ctx, request.action, request.args);
-    return { result, trace, depth };
+    return {
+      result,
+      trace,
+      depth,
+      traceId: ctx.traceId,
+      parentTraceId: ctx.parentTraceId
+    };
   }
 }
 

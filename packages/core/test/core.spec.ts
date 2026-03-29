@@ -175,10 +175,56 @@ describe("core", () => {
 
     expect(ctx.trace).toHaveLength(1);
     expect(ctx.trace[0]).toMatchObject({
+      traceId: ctx.traceId,
       capabilityId: "page.click",
       status: "succeeded",
       output: { ok: true, input: { uid: "u1" } }
     });
+  });
+
+  it("assigns a generated traceId to the runtime context and trace entries", async () => {
+    const registry = new CapabilityRegistry([descriptor()]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "page",
+      invoke: ({ input }) => ({ ok: true, input })
+    });
+
+    const ctx = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "s1",
+      skillId: "skill.page",
+      permissions: ["page.*"]
+    });
+
+    await ctx.call("page.click", { uid: "u1" });
+
+    expect(ctx.traceId).toMatch(/^trace-/);
+    expect(ctx.trace[0]?.traceId).toBe(ctx.traceId);
+  });
+
+  it("reuses an explicit traceId for the runtime context and trace entries", async () => {
+    const registry = new CapabilityRegistry([descriptor()]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "page",
+      invoke: ({ input }) => ({ ok: true, input })
+    });
+
+    const ctx = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "s1",
+      skillId: "skill.page",
+      permissions: ["page.*"],
+      traceId: "trace-explicit"
+    });
+
+    await ctx.call("page.click", { uid: "u1" });
+
+    expect(ctx.traceId).toBe("trace-explicit");
+    expect(ctx.trace[0]?.traceId).toBe("trace-explicit");
   });
 
   describe("builtin catalog structure", () => {
@@ -294,10 +340,13 @@ describe("core", () => {
       });
       expect(result.trace).toHaveLength(1);
       expect(result.trace[0]).toMatchObject({
+        traceId: result.traceId,
         capabilityId: "page.click",
         status: "succeeded"
       });
       expect(result.depth).toBe(1);
+      expect(result.parentTraceId).toBeUndefined();
+      expect(result.traceId).toMatch(/^trace-/);
     });
 
     it("throws on unknown skill", async () => {
@@ -365,6 +414,37 @@ describe("core", () => {
       expect(result.depth).toBe(1);
     });
 
+    it("caps nested skill permissions to the caller grant set", async () => {
+      const { service } = buildService();
+      service.register({
+        id: "skill.parent",
+        permissions: ["memfs.read", "skills.invoke"],
+        handler: async (ctx) => ctx.skills.invoke("skill.child", "run", {})
+      });
+      service.register({
+        id: "skill.child",
+        permissions: ["memfs.read", "page.click"],
+        handler: async (ctx) => ({
+          permissions: ctx.permissions,
+          canRead: typeof (ctx.capabilities.memfs as { read?: unknown } | undefined)?.read,
+          canClick: typeof (ctx.capabilities.page as { click?: unknown } | undefined)?.click
+        })
+      });
+
+      const result = await service.invoke({
+        sessionId: "s1",
+        skillId: "skill.parent",
+        action: "run",
+        args: {}
+      });
+
+      expect(result.result).toEqual({
+        permissions: ["memfs.read"],
+        canRead: "function",
+        canClick: "undefined"
+      });
+    });
+
     it("blocks skill invocation beyond MAX_SKILL_CALL_DEPTH", async () => {
       const { service } = buildService();
       service.register({
@@ -406,6 +486,8 @@ describe("core", () => {
 
     it("keeps child capability traces isolated while recording the parent skills.invoke call", async () => {
       const { service } = buildService();
+      let childTraceId: string | undefined;
+      let childParentTraceId: string | undefined;
       service.register({
         id: "skill.parent",
         permissions: ["page.*", "skills.*"],
@@ -419,6 +501,8 @@ describe("core", () => {
         id: "skill.child",
         permissions: ["page.*"],
         handler: async (ctx) => {
+          childTraceId = ctx.traceId;
+          childParentTraceId = ctx.parentTraceId;
           await ctx.call("page.click", { uid: "c1" });
           return "child done";
         }
@@ -433,18 +517,47 @@ describe("core", () => {
 
       expect(result.trace).toHaveLength(2);
       expect(result.trace[0]).toMatchObject({
+        traceId: result.traceId,
         capabilityId: "page.click",
         input: { uid: "p1" }
       });
       expect(result.trace[1]).toMatchObject({
+        traceId: result.traceId,
         capabilityId: "skills.invoke",
         input: {
           skillId: "skill.child",
           action: "run",
           args: {}
         },
+        childTraceId,
         output: "child done"
       });
+      expect(childTraceId).toMatch(/^trace-/);
+      expect(childTraceId).not.toBe(result.traceId);
+      expect(childParentTraceId).toBe(result.traceId);
+    });
+
+    it("does not let a parent skill borrow a child skill's higher privilege", async () => {
+      const { service } = buildService();
+      service.register({
+        id: "skill.parent",
+        permissions: ["skills.invoke"],
+        handler: async (ctx) => ctx.skills.invoke("skill.child", "run", {})
+      });
+      service.register({
+        id: "skill.child",
+        permissions: ["page.click"],
+        handler: async (ctx) => ctx.call("page.click", { uid: "u1" })
+      });
+
+      await expect(
+        service.invoke({
+          sessionId: "s1",
+          skillId: "skill.parent",
+          action: "run",
+          args: {}
+        })
+      ).rejects.toMatchObject({ code: "E_PERMISSION_DENIED" });
     });
   });
 
