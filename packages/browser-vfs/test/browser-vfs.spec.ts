@@ -4,8 +4,15 @@ import {
   BrowserVfs,
   IndexedDbVfsStore,
   INDEXED_DB_VFS_SCHEMA_VERSION,
-  PACKAGE_MARKER
+  PACKAGE_MARKER,
+  snapshotInfoToSkillVersionRef
 } from "@bbl-next/browser-vfs";
+import {
+  createSkillLifecycleVersionSurface,
+  DEFAULT_SKILL_VERSION_RETENTION,
+  skillVersionRootUri,
+  skillVersionUri
+} from "@bbl-next/contracts";
 import { describe, expect, it } from "vitest";
 
 interface LegacyVfsDbSchema extends DBSchema {
@@ -181,6 +188,40 @@ describe("browser-vfs", () => {
         trusted: true
       })
     ]);
+  });
+
+  it("bridges snapshot primitives into the lifecycle/version engine surface", async () => {
+    const vfs = await BrowserVfs.create({
+      workspaceId: "conversation-1"
+    });
+    const versionId = "2026-03-29T00:00:00.000Z";
+
+    await vfs.write("mem://skills/twitter/SKILL.md", "# twitter");
+    await vfs.snapshot("mem://skills/twitter", skillVersionUri("twitter", versionId), {
+      trusted: true
+    });
+
+    const [snapshot] = await vfs.listSnapshots("mem://skills/twitter");
+    const version = snapshotInfoToSkillVersionRef(snapshot);
+    const surface = createSkillLifecycleVersionSurface({
+      skillId: "twitter",
+      lifecycle: {
+        status: "installed",
+        trusted: false
+      },
+      activeVersion: version,
+      versions: [version]
+    });
+
+    expect(skillVersionRootUri("twitter")).toBe("mem://skills/twitter/@versions");
+    expect(version).toEqual({
+      versionId,
+      uri: `mem://skills/twitter/@versions/${versionId}`,
+      createdAt: versionId,
+      trusted: true
+    });
+    expect(surface.policy.retention).toBe(DEFAULT_SKILL_VERSION_RETENTION);
+    expect(surface.rollbackTarget).toEqual(version);
   });
 
   it("persists snapshot metadata, retention, and rollback selection", async () => {

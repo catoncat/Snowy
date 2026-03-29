@@ -1,5 +1,9 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import { CapabilityError } from "@bbl-next/contracts";
+import {
+  CapabilityError,
+  DEFAULT_SKILL_VERSION_RETENTION,
+  type SkillVersionRef
+} from "@bbl-next/contracts";
 
 export type VfsScope = "ephemeral" | "workspace" | "library";
 export type VfsNodeKind = "file" | "dir";
@@ -39,6 +43,15 @@ export interface VfsStat {
 
 export interface VfsSnapshotInfo extends VfsSnapshotMetadata {
   uri: string;
+}
+
+export function snapshotInfoToSkillVersionRef(snapshot: VfsSnapshotInfo): SkillVersionRef {
+  return {
+    versionId: snapshot.versionId,
+    uri: snapshot.uri,
+    createdAt: snapshot.createdAt,
+    trusted: snapshot.trusted
+  };
 }
 
 export interface VfsSnapshotOptions {
@@ -318,7 +331,7 @@ function sortSnapshotsDesc(left: VfsSnapshotInfo, right: VfsSnapshotInfo): numbe
 
 function normalizeSnapshotRetention(value?: number): number {
   if (value == null) {
-    return 3;
+    return DEFAULT_SKILL_VERSION_RETENTION;
   }
   const normalized = Math.floor(value);
   if (normalized < 1) {

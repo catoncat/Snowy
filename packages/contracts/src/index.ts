@@ -78,6 +78,35 @@ export interface SkillLifecycleState {
   trusted: boolean;
 }
 
+export type SkillLifecycleActor = "agent" | "user" | "system";
+
+export type SkillRollbackTrigger =
+  | "verifier_failed_with_confirmation"
+  | "release_gate_failed";
+
+export interface SkillVersionRef {
+  versionId: string;
+  uri: string;
+  createdAt?: string;
+  trusted: boolean;
+}
+
+export interface SkillVersionPolicy {
+  snapshotRootUri: string;
+  versionFormat: "iso-timestamp";
+  retention: number;
+  rollbackTarget: "latest_trusted";
+  rollbackTriggers: readonly SkillRollbackTrigger[];
+}
+
+export interface SkillLifecycleVersionSurface {
+  skillId: string;
+  lifecycle: SkillLifecycleState;
+  activeVersion: SkillVersionRef | null;
+  rollbackTarget: SkillVersionRef | null;
+  policy: SkillVersionPolicy;
+}
+
 export interface CapabilityTraceEntry {
   traceId?: string;
   parentTraceId?: string;
@@ -92,6 +121,13 @@ export interface CapabilityTraceEntry {
 }
 
 export const MAX_SKILL_CALL_DEPTH = 3;
+
+export const DEFAULT_SKILL_VERSION_RETENTION = 3;
+
+export const DEFAULT_SKILL_ROLLBACK_TRIGGERS: readonly SkillRollbackTrigger[] = [
+  "verifier_failed_with_confirmation",
+  "release_gate_failed"
+];
 
 export const PUBLIC_CAPABILITY_NAMESPACES = [
   "memfs",
@@ -119,6 +155,30 @@ const SKILL_STATUS_TRANSITIONS: Record<SkillStatus, SkillStatus[]> = {
   archived: []
 };
 
+const SKILL_TRANSITION_ACTORS: Record<SkillStatus, Partial<Record<SkillStatus, readonly SkillLifecycleActor[]>>> = {
+  draft: {
+    staged: ["agent"],
+    archived: ["user", "system"]
+  },
+  staged: {
+    installed: ["agent"],
+    archived: ["user", "system"]
+  },
+  installed: {
+    enabled: ["user", "system"],
+    archived: ["user", "system"]
+  },
+  enabled: {
+    disabled: ["user", "system"],
+    archived: ["user", "system"]
+  },
+  disabled: {
+    enabled: ["user", "system"],
+    archived: ["user", "system"]
+  },
+  archived: {}
+};
+
 export class CapabilityError extends Error {
   readonly code: CapabilityErrorCode;
   readonly details?: unknown;
@@ -133,6 +193,17 @@ export class CapabilityError extends Error {
 
 export function capabilityNamespace(capabilityId: string): string {
   return capabilityId.split(".")[0];
+}
+
+function assertNonEmptyIdentifier(value: string, label: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new CapabilityError("E_BAD_INPUT", `${label} must be a non-empty string`);
+  }
+  if (normalized.includes("/")) {
+    throw new CapabilityError("E_BAD_INPUT", `${label} must not contain '/': ${value}`);
+  }
+  return normalized;
 }
 
 export function isPublicCapabilityNamespace(namespace: string): boolean {
@@ -231,6 +302,90 @@ export function canTransitionSkillState(
   to: SkillStatus
 ): boolean {
   return SKILL_STATUS_TRANSITIONS[from].includes(to);
+}
+
+export function allowedActorsForSkillTransition(
+  from: SkillStatus,
+  to: SkillStatus
+): SkillLifecycleActor[] {
+  return [...(SKILL_TRANSITION_ACTORS[from][to] ?? [])];
+}
+
+export function canActorTransitionSkillState(
+  actor: SkillLifecycleActor,
+  from: SkillStatus,
+  to: SkillStatus
+): boolean {
+  return allowedActorsForSkillTransition(from, to).includes(actor);
+}
+
+export function canActorGrantSkillTrusted(actor: SkillLifecycleActor): boolean {
+  return actor === "user";
+}
+
+export function skillVersionRootUri(skillId: string): string {
+  return `mem://skills/${assertNonEmptyIdentifier(skillId, "skillId")}/@versions`;
+}
+
+export function skillVersionUri(skillId: string, versionId: string): string {
+  return `${skillVersionRootUri(skillId)}/${assertNonEmptyIdentifier(versionId, "versionId")}`;
+}
+
+function compareSkillVersionRefs(left: SkillVersionRef, right: SkillVersionRef): number {
+  const leftOrder = left.createdAt ?? left.versionId;
+  const rightOrder = right.createdAt ?? right.versionId;
+  return rightOrder.localeCompare(leftOrder) || right.versionId.localeCompare(left.versionId);
+}
+
+export function selectLatestTrustedSkillVersion(
+  versions: SkillVersionRef[]
+): SkillVersionRef | null {
+  const trusted = versions.filter((version) => version.trusted);
+  if (trusted.length === 0) {
+    return null;
+  }
+  return [...trusted].sort(compareSkillVersionRefs)[0] ?? null;
+}
+
+export function createSkillVersionPolicy(
+  skillId: string,
+  overrides: Partial<SkillVersionPolicy> = {}
+): SkillVersionPolicy {
+  return {
+    snapshotRootUri: overrides.snapshotRootUri ?? skillVersionRootUri(skillId),
+    versionFormat: overrides.versionFormat ?? "iso-timestamp",
+    retention: overrides.retention ?? DEFAULT_SKILL_VERSION_RETENTION,
+    rollbackTarget: overrides.rollbackTarget ?? "latest_trusted",
+    rollbackTriggers: [
+      ...(overrides.rollbackTriggers ?? DEFAULT_SKILL_ROLLBACK_TRIGGERS)
+    ]
+  };
+}
+
+export function createSkillLifecycleVersionSurface({
+  skillId,
+  lifecycle,
+  activeVersion = null,
+  versions = [],
+  policy
+}: {
+  skillId: string;
+  lifecycle: SkillLifecycleState;
+  activeVersion?: SkillVersionRef | null;
+  versions?: SkillVersionRef[];
+  policy?: Partial<SkillVersionPolicy>;
+}): SkillLifecycleVersionSurface {
+  const resolvedPolicy = createSkillVersionPolicy(skillId, policy);
+  return {
+    skillId,
+    lifecycle,
+    activeVersion,
+    rollbackTarget:
+      resolvedPolicy.rollbackTarget === "latest_trusted"
+        ? selectLatestTrustedSkillVersion(versions)
+        : null,
+    policy: resolvedPolicy
+  };
 }
 
 export function transitionSkillState(

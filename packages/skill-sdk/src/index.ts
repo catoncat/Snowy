@@ -37,6 +37,15 @@ export interface SkillDeclaration<Permissions extends readonly string[] = string
   ) => Promise<unknown>;
 }
 
+/**
+ * Skill SDK intentionally stays thin.
+ *
+ * Lifecycle/version engine contracts live in `@bbl-next/contracts`, while
+ * BrowserVFS owns snapshot storage and rollback primitives. A future Skill
+ * Studio UI should consume those engine boundaries instead of redefining them
+ * inside the SDK.
+ */
+
 function withTypedContext<Permissions extends readonly string[]>(
   ctx: SkillRuntimeContext,
   permissions: Permissions
