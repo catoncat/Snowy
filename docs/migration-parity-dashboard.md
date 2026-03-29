@@ -20,7 +20,7 @@
 | JS Runner host | `green` | host / cancel / timeout / health / offscreen bridge 已测 |
 | MV3 shell substrate | `green` | offscreen bridge 与显式 page-hook bridge 已测 |
 | site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
-| AI-native product control plane | `yellow` | 最小 `runtime/config/skills/hosts` bootstrap summary 已有读路径；完整 control plane actions/audit 仍未实现 |
+| AI-native product control plane | `yellow` | 最小 `runtime/config/skills/hosts` bootstrap summary 与本地 `hosts.*` control plane 已落地并有测试；config/skills/audit control plane 仍未实现 |
 | old browser automation parity | `red` | 旧 background/focus/CDP 体系尚未正式迁入 |
 | old visual/download/intervention parity | `red` | 旧产品能力未在新仓形成主链 |
 | skill SDK / authoring | `yellow` | typed facade 与文档已起步，完整 authoring/studio 不足 |

@@ -1,11 +1,11 @@
 ---
 id: ISSUE-031
 title: "Review: execution host control plane is still missing"
-status: open
+status: done
 priority: p1
 source: "AI-native surface follow-up 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: codex
 tags:
   - review
   - host
@@ -20,13 +20,16 @@ depends_on:
   - ISSUE-026
 write_scope:
   - packages/contracts/src/index.ts
+  - packages/contracts/test/contracts.spec.ts
   - packages/core/src/index.ts
   - packages/core/test/core.spec.ts
   - apps/mv3-shell/src/background.js
   - apps/mv3-shell/src/offscreen.js
+  - apps/mv3-shell/test/manifest.spec.ts
   - docs/
 acceptance_ref: docs/ai-native-capability-surface-design.md
 check_cmd: "bun run check"
+claimed_at: 2026-03-29T12:25:31.684Z
 ---
 
 ## Goal
@@ -55,3 +58,17 @@ check_cmd: "bun run check"
   - `hosts.health`
 - 该 slice 继续坚持 Host 粗粒度原语，不把 `host.*` 扩散成细碎功能接口。
 
+## 工作总结
+
+- 在 `contracts/core` 补上 `hosts.*` public namespace 与最小 control plane descriptors，明确 `host.*` substrate 和 `hosts.*` 产品控制面的边界。
+- 在 MV3 background bridge 落地本地 host control plane：`hosts.list/get/connect/disconnect/set_default/health`，且 `list/get/set_default` 不会隐式拉起 offscreen host。
+- 补齐 `packages/contracts/test/contracts.spec.ts`、`packages/core/test/core.spec.ts`、`apps/mv3-shell/test/manifest.spec.ts`，并通过 `bun run check`。
+- 剩余缺口已拆到 `ISSUE-032`：`host.*` 仍只有 `host.exec`，default host 选择也还没真正进入 substrate 路由。
+
+## 相关 commits
+
+- `14e4d3e` `core/mv3-shell: add hosts control plane`
+
+## Sub Issues
+
+- `ISSUE-032` `Review: host substrate still lacks default routing and file primitives`

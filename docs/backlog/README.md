@@ -136,18 +136,18 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 ### 仍可领取
 
-- `ISSUE-031` `Review: execution host control plane is still missing`
+- `ISSUE-032` `Review: host substrate still lacks default routing and file primitives`
   - 当前 `claim:preview` 会直接返回该 issue
 
 ### 边界说明
 
-- `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030` 已完成；当前批次剩余未做项只剩 `ISSUE-031`
-- 当前 `workflow:claim:preview` 已恢复可领取状态，并指向 `ISSUE-031`
+- `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030`、`ISSUE-031` 已完成；当前主缺口已转为 `ISSUE-032`
+- 当前 `workflow:claim:preview` 应指向 `ISSUE-032`
 
 ## 推荐领取顺序
 
 当前推荐领取顺序：
 
-1. `ISSUE-031`
+1. `ISSUE-032`
 
 当前批次文档：`docs/next-development-slices-2026-03-29-batch-3.md`
