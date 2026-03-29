@@ -18,15 +18,5 @@
   },
   "side_panel": {
     "default_path": "src/sidepanel.html"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "src/page-hook.js"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
-    }
-  ]
+  }
 }

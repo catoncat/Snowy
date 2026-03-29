@@ -190,6 +190,47 @@ describe("site-runtime", () => {
     expect(installer.install).not.toHaveBeenCalled();
   });
 
+  it("rejects invoke when the tab is inactive even if the URL matches", async () => {
+    const installer = {
+      install: vi.fn(async () => undefined)
+    };
+    const registry = new SiteSkillRegistry([
+      {
+        skillId: "twitter.search",
+        matches: ["https://x.com/*"],
+        actions: [
+          {
+            name: "search_posts",
+            module: {
+              id: "twitter.search",
+              source: "exports.default = async () => ({ ok: true });"
+            }
+          }
+        ]
+      }
+    ]);
+    const runtime = new SiteSkillRuntime({
+      registry,
+      runnerHost: new JsRunnerHost(),
+      installer
+    });
+
+    await expect(
+      runtime.invoke({
+        skillId: "twitter.search",
+        action: "search_posts",
+        tab: {
+          ...tab,
+          active: false
+        }
+      })
+    ).rejects.toMatchObject({
+      code: "E_BAD_INPUT",
+      message: "Active tab does not match twitter.search"
+    });
+    expect(installer.install).not.toHaveBeenCalled();
+  });
+
   it("does not install hooks before an explicit action invoke", () => {
     const installer = {
       install: vi.fn(async () => undefined)

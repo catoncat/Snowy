@@ -139,11 +139,14 @@ function createChromeHarness({
 describe("mv3-shell manifest", () => {
   it("declares the MV3 offscreen-ready shell", () => {
     const hostPermissions = (manifest as { host_permissions?: string[] }).host_permissions ?? [];
+    const webAccessibleResources =
+      (manifest as { web_accessible_resources?: unknown[] }).web_accessible_resources ?? [];
 
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.minimum_chrome_version).toBe("116");
     expect(manifest.permissions).toContain("offscreen");
     expect(hostPermissions).toEqual([]);
+    expect(webAccessibleResources).toEqual([]);
     expect(manifest.background).toMatchObject({
       service_worker: "src/background.js",
       type: "module"
