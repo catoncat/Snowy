@@ -12,9 +12,10 @@
 
 - 任何新进入本仓的 agent，在动代码前必须先读：
   1. `docs/start-here.md`
-  2. `docs/locked-decisions-2026-03-29.md`
-  3. `docs/v0-slice.md`
-  4. `docs/legacy-reference-map.md`
+  2. `docs/source-of-truth-map.md`
+  3. `docs/locked-decisions-2026-03-29.md`
+  4. `docs/v0-slice.md`
+  5. `docs/legacy-reference-map.md`
 - 如果要改 architecture-level 代码，再去读旧仓：
   - `/Users/envvar/work/repos/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
   - `/Users/envvar/work/repos/browser-brain-loop/docs/kernel-architecture.md`

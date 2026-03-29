@@ -2,6 +2,14 @@
 
 Future mainline for the post-LIFO Browser Brain Loop runtime.
 
+## Docs
+
+- [Source Of Truth Map](docs/source-of-truth-map.md) - which docs actually drive implementation
+- [Start Here](docs/start-here.md) - repo purpose and mandatory reading order
+- [Locked Decisions](docs/locked-decisions-2026-03-29.md) - architecture constraints that should not drift
+- [V0 Slice](docs/v0-slice.md) - what has already been implemented
+- [Legacy Reference Map](docs/legacy-reference-map.md) - old repo and research repo lookup
+
 ## Packages
 
 - `@bbl-next/contracts`: canonical descriptor model, errors, lifecycle
@@ -23,4 +31,3 @@ Future mainline for the post-LIFO Browser Brain Loop runtime.
 - `bun run test`
 - `bun run typecheck`
 - `bun run check`
-

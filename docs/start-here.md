@@ -54,12 +54,13 @@
 ## 进入代码前的强制阅读顺序
 
 1. `AGENTS.md`
-2. `docs/start-here.md`
-3. `docs/locked-decisions-2026-03-29.md`
-4. `docs/v0-slice.md`
-5. `docs/legacy-reference-map.md`
-6. 当前 backlog issue
-7. `docs/next-development-slices-2026-03-29.md`
+2. `docs/source-of-truth-map.md`
+3. `docs/start-here.md`
+4. `docs/locked-decisions-2026-03-29.md`
+5. `docs/v0-slice.md`
+6. `docs/legacy-reference-map.md`
+7. 当前 backlog issue
+8. 当前 batch / planning 文档
 
 ## 如果你要改架构层
 
@@ -84,4 +85,3 @@
 - `site-runtime`: 先读 `packages/site-runtime/src/index.ts`
 - `mv3-shell`: 先读 `apps/mv3-shell/manifest.json` 和 `src/`
 - `sdk-docs`: 先读 `packages/skill-sdk/src/index.ts` 和 `docs/`
-
