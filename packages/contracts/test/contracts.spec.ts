@@ -2,6 +2,7 @@ import {
   AI_SURFACE_BOUNDARY,
   AI_SURFACE_PRIMITIVES,
   BOOTSTRAP_RESOURCE_KEYS,
+  HOST_CONTROL_PLANE_ACTIONS,
   assertCapabilityDescriptor,
   allowedActorsForSkillTransition,
   canActorGrantSkillTrusted,
@@ -88,6 +89,17 @@ describe("contracts", () => {
         invocation: "skills.invoke"
       }
     });
+  });
+
+  it("locks the minimal execution host control plane action set", () => {
+    expect(HOST_CONTROL_PLANE_ACTIONS).toEqual([
+      "hosts.list",
+      "hosts.get",
+      "hosts.connect",
+      "hosts.disconnect",
+      "hosts.set_default",
+      "hosts.health"
+    ]);
   });
 
   it("enforces the lifecycle state machine", () => {

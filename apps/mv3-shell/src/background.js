@@ -66,6 +66,23 @@ function invalidHostControlPlane(message) {
   };
 }
 
+function toExecutionHostHealthStatus(localState) {
+  if (localState.health?.status === "degraded" || localState.error) {
+    return "degraded";
+  }
+  if (localState.reachable) {
+    return "healthy";
+  }
+  return "unknown";
+}
+
+function toExecutionHostState(localState) {
+  if (localState.health?.status === "degraded" || localState.error) {
+    return "degraded";
+  }
+  return localState.reachable ? "connected" : "disconnected";
+}
+
 function defaultBootstrapSummaryBuilder({
   generatedAt,
   resourceKeys,
@@ -266,9 +283,11 @@ export function createBackgroundRunnerBridge({
   }
 
   async function readLocalHostControlState() {
+    const checkedAt = isoNow();
     const offscreenPresent = await hasOffscreenDocument();
     if (!offscreenPresent) {
       return {
+        checkedAt,
         offscreenPresent,
         reachable: false,
         health: null,
@@ -279,6 +298,7 @@ export function createBackgroundRunnerBridge({
     const response = await sendToOffscreen("runner.diagnostics");
     if (!response.ok) {
       return {
+        checkedAt,
         offscreenPresent,
         reachable: false,
         health: null,
@@ -290,6 +310,7 @@ export function createBackgroundRunnerBridge({
     }
 
     return {
+      checkedAt,
       offscreenPresent,
       reachable: response.data?.ready === true,
       health: response.data?.health ?? null,
@@ -299,15 +320,17 @@ export function createBackgroundRunnerBridge({
 
   function toLocalHostSnapshot(localState) {
     const connected = localState.reachable === true;
+    const health = {
+      status: toExecutionHostHealthStatus(localState),
+      ...(localState.checkedAt ? { checkedAt: localState.checkedAt } : {})
+    };
     const snapshot = {
       hostId: LOCAL_HOST_ID,
       kind: "local",
       connected,
-      state:
-        localState.health?.status
-        ?? (localState.offscreenPresent ? "degraded" : "disconnected"),
+      state: toExecutionHostState(localState),
       isDefault: state.defaultHostId === LOCAL_HOST_ID,
-      health: localState.health ?? null
+      health
     };
     if (localState.error) {
       return {
@@ -360,6 +383,7 @@ export function createBackgroundRunnerBridge({
       data: {
         defaultHostId: state.defaultHostId,
         host: toLocalHostSnapshot({
+          checkedAt: isoNow(),
           offscreenPresent: true,
           reachable: ensured.data?.ready === true,
           health: ensured.data?.health ?? null,
@@ -815,23 +839,24 @@ export function createBackgroundRunnerBridge({
     const runtimeError = runtimeDiagnostics.runner?.error ?? runtimeDiagnostics.site?.error ?? null;
 
     const localHost = toLocalHostSnapshot({
+      checkedAt: generatedAt,
       offscreenPresent: runtimeDiagnostics.bridge.offscreenPresent,
       reachable: Boolean(runtimeDiagnostics.runner?.reachable),
       health: runnerHealth ?? null,
-      error: runtimeDiagnostics.runner?.error ?? null
+      error:
+        runtimeDiagnostics.bridge.offscreenPresent
+          ? runtimeDiagnostics.runner?.error ?? null
+          : null
     });
-    const hostItems =
-      localHost.connected || localHost.state === "degraded"
-        ? [
-            {
-              hostId: localHost.hostId,
-              kind: localHost.kind,
-              connected: localHost.connected,
-              state: localHost.state,
-              isDefault: localHost.isDefault || state.defaultHostId == null
-            }
-          ]
-        : [];
+    const hostItems = [
+      {
+        hostId: localHost.hostId,
+        kind: localHost.kind,
+        connected: localHost.connected,
+        state: localHost.state,
+        isDefault: localHost.isDefault
+      }
+    ];
 
     const rawSkillsSummary = await resolveMaybe(listSkills);
     const skillEntries = Array.isArray(rawSkillsSummary)
@@ -872,12 +897,12 @@ export function createBackgroundRunnerBridge({
         },
         hosts: {
           status:
-            hostItems.length === 0
-              ? "empty"
-              : hostItems.some((entry) => entry.state === "degraded")
-                ? "degraded"
-                : "healthy",
-          defaultHostId: hostItems.length > 0 ? state.defaultHostId ?? LOCAL_HOST_ID : null,
+            hostItems.some((entry) => entry.state === "degraded")
+              ? "degraded"
+              : hostItems.some((entry) => entry.connected)
+                ? "healthy"
+                : "empty",
+          defaultHostId: state.defaultHostId,
           totalCount: hostItems.length,
           connectedCount: hostItems.filter((entry) => entry.connected).length,
           items: hostItems

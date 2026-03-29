@@ -12,6 +12,11 @@ import {
   type CapabilityDescriptor,
   type CapabilityTraceEntry,
   type ExecutionBinding,
+  type ExecutionHostHealthStatus,
+  type ExecutionHostKind,
+  type ExecutionHostRecord,
+  type ExecutionHostState,
+  type HostControlPlaneSnapshot,
   type JsonSchema,
   type ToolContract,
   type AiSurfaceBoundary,
@@ -177,9 +182,9 @@ export interface SkillsBootstrapSummary {
 
 export interface HostBootstrapSummaryItem {
   hostId: string;
-  kind: "local" | "remote";
+  kind: ExecutionHostKind;
   connected: boolean;
-  state: string;
+  state: ExecutionHostState;
   isDefault: boolean;
 }
 
@@ -230,6 +235,23 @@ export interface BootstrapSummaryInput {
     note?: string;
   };
   capabilities?: CapabilityDescriptor[];
+}
+
+export interface HostControlPlaneRecordInput {
+  hostId: string;
+  kind?: ExecutionHostKind;
+  connected?: boolean;
+  state?: ExecutionHostState;
+  isDefault?: boolean;
+  health?: {
+    status?: ExecutionHostHealthStatus;
+    checkedAt?: string;
+  };
+}
+
+export interface HostControlPlaneSnapshotInput {
+  defaultHostId?: string | null;
+  hosts?: HostControlPlaneRecordInput[];
 }
 
 interface CatalogEntryInput {
@@ -488,6 +510,119 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
 export const BUILTIN_CAPABILITIES: CapabilityDescriptor[] = Object.values(BUILTIN_CATALOG).flat();
 export const BUILTIN_EXPORT_HANDOFFS: CapabilityExportHandoff[] =
   descriptorsToCapabilityExportHandoffs(BUILTIN_CAPABILITIES);
+
+function normalizeExecutionHostRecord(input: HostControlPlaneRecordInput): ExecutionHostRecord {
+  const connected =
+    input.connected ?? (input.state === "connected" || input.state === "degraded");
+  const state = input.state ?? (connected ? "connected" : "disconnected");
+  const healthStatus =
+    input.health?.status
+    ?? (state === "connected" ? "healthy" : state === "degraded" ? "degraded" : "unknown");
+
+  return {
+    hostId: input.hostId,
+    kind: input.kind ?? "local",
+    connected,
+    state,
+    isDefault: input.isDefault === true,
+    health: {
+      status: healthStatus,
+      ...(input.health?.checkedAt ? { checkedAt: input.health.checkedAt } : {})
+    }
+  };
+}
+
+function finalizeHostControlPlaneSnapshot(
+  hosts: ExecutionHostRecord[],
+  defaultHostId: string | null
+): HostControlPlaneSnapshot {
+  if (defaultHostId && !hosts.some((host) => host.hostId === defaultHostId)) {
+    throw new CapabilityError("E_CAPABILITY_NOT_FOUND", `Unknown execution host: ${defaultHostId}`);
+  }
+
+  return {
+    defaultHostId,
+    hosts: hosts.map((host) => ({
+      ...host,
+      isDefault: defaultHostId != null && host.hostId === defaultHostId
+    }))
+  };
+}
+
+function mapExecutionHost(
+  snapshot: HostControlPlaneSnapshot,
+  hostId: string,
+  update: (host: ExecutionHostRecord) => ExecutionHostRecord,
+  defaultHostId = snapshot.defaultHostId
+): HostControlPlaneSnapshot {
+  const exists = snapshot.hosts.some((host) => host.hostId === hostId);
+  if (!exists) {
+    throw new CapabilityError("E_CAPABILITY_NOT_FOUND", `Unknown execution host: ${hostId}`);
+  }
+
+  return finalizeHostControlPlaneSnapshot(
+    snapshot.hosts.map((host) => (host.hostId === hostId ? update(host) : host)),
+    defaultHostId
+  );
+}
+
+export function createHostControlPlaneSnapshot(
+  input: HostControlPlaneSnapshotInput = {}
+): HostControlPlaneSnapshot {
+  const hosts = (input.hosts ?? []).map((host) => normalizeExecutionHostRecord(host));
+  const defaultHostId = input.defaultHostId ?? hosts.find((host) => host.isDefault)?.hostId ?? null;
+
+  return finalizeHostControlPlaneSnapshot(hosts, defaultHostId);
+}
+
+export function connectExecutionHost(
+  snapshot: HostControlPlaneSnapshot,
+  hostId: string,
+  health: {
+    status?: ExecutionHostHealthStatus;
+    checkedAt?: string;
+  } = {}
+): HostControlPlaneSnapshot {
+  const healthStatus = health.status ?? "healthy";
+
+  return mapExecutionHost(snapshot, hostId, (host) => ({
+    ...host,
+    connected: true,
+    state: healthStatus === "degraded" ? "degraded" : "connected",
+    health: {
+      status: healthStatus,
+      ...(health.checkedAt ? { checkedAt: health.checkedAt } : {})
+    }
+  }));
+}
+
+export function disconnectExecutionHost(
+  snapshot: HostControlPlaneSnapshot,
+  hostId: string,
+  health: {
+    status?: Extract<ExecutionHostHealthStatus, "unknown" | "degraded">;
+    checkedAt?: string;
+  } = {}
+): HostControlPlaneSnapshot {
+  const healthStatus = health.status ?? "unknown";
+
+  return mapExecutionHost(snapshot, hostId, (host) => ({
+    ...host,
+    connected: false,
+    state: "disconnected",
+    health: {
+      status: healthStatus,
+      ...(health.checkedAt ? { checkedAt: health.checkedAt } : {})
+    }
+  }));
+}
+
+export function setDefaultExecutionHost(
+  snapshot: HostControlPlaneSnapshot,
+  hostId: string
+): HostControlPlaneSnapshot {
+  return mapExecutionHost(snapshot, hostId, (host) => host, hostId);
+}
 
 export function createBootstrapSummary(input: BootstrapSummaryInput = {}): BootstrapSummary {
   const capabilityCatalog = input.capabilities ?? BUILTIN_CAPABILITIES;

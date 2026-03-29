@@ -7,6 +7,35 @@ export const BOOTSTRAP_RESOURCE_KEYS = ["runtime", "config", "skills", "hosts"] 
 export type BootstrapResourceKey = (typeof BOOTSTRAP_RESOURCE_KEYS)[number];
 
 export type BootstrapResourceBundle = Partial<Record<BootstrapResourceKey, Record<string, unknown>>>;
+export const HOST_CONTROL_PLANE_ACTIONS = [
+  "hosts.list",
+  "hosts.get",
+  "hosts.connect",
+  "hosts.disconnect",
+  "hosts.set_default",
+  "hosts.health"
+] as const;
+export type HostControlPlaneAction = (typeof HOST_CONTROL_PLANE_ACTIONS)[number];
+export type ExecutionHostKind = "local" | "remote";
+export type ExecutionHostState = "connected" | "disconnected" | "degraded";
+export type ExecutionHostHealthStatus = "healthy" | "degraded" | "unknown";
+
+export interface ExecutionHostRecord {
+  hostId: string;
+  kind: ExecutionHostKind;
+  connected: boolean;
+  state: ExecutionHostState;
+  isDefault: boolean;
+  health: {
+    status: ExecutionHostHealthStatus;
+    checkedAt?: string;
+  };
+}
+
+export interface HostControlPlaneSnapshot {
+  defaultHostId: string | null;
+  hosts: ExecutionHostRecord[];
+}
 
 export type CapabilityRisk = "low" | "medium" | "high";
 export type CapabilitySideEffects = "none" | "reads" | "writes" | "external";

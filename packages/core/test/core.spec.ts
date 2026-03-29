@@ -7,16 +7,21 @@ import {
   CapabilityRegistry,
   FamilyProviderRegistry,
   SkillInvocationService,
+  connectExecutionHost,
   createBootstrapSummary,
+  createHostControlPlaneSnapshot,
   createSkillRuntimeContext,
+  disconnectExecutionHost,
   getBuiltinsByNamespace,
   hasPublicNamespaceCoverage,
+  setDefaultExecutionHost,
   typedCapabilities,
   typedCapabilitiesForPermissions,
   type BuiltinCapabilityMap
 } from "@bbl-next/core";
 import { BrowserVfs } from "../../browser-vfs/src/index";
 import {
+  HOST_CONTROL_PLANE_ACTIONS,
   assertCapabilityDescriptor,
   CapabilityError,
   capabilityNamespace,
@@ -50,6 +55,26 @@ function descriptor(overrides: Partial<CapabilityDescriptor> = {}): CapabilityDe
 describe("core", () => {
   it("covers every public capability namespace in the builtin catalog", () => {
     expect(hasPublicNamespaceCoverage(BUILTIN_CAPABILITIES)).toBe(true);
+  });
+
+  it("keeps host substrate and hosts control plane as separate builtins", () => {
+    expect(HOST_CONTROL_PLANE_ACTIONS).toEqual([
+      "hosts.list",
+      "hosts.get",
+      "hosts.connect",
+      "hosts.disconnect",
+      "hosts.set_default",
+      "hosts.health"
+    ]);
+    expect(getBuiltinsByNamespace("hosts").map((entry) => entry.id)).toEqual([
+      "hosts.list",
+      "hosts.get",
+      "hosts.connect",
+      "hosts.disconnect",
+      "hosts.set_default",
+      "hosts.health"
+    ]);
+    expect(getBuiltinsByNamespace("host").map((entry) => entry.id)).toEqual(["host.exec"]);
   });
 
   it("projects tools from the registry", () => {
@@ -116,7 +141,7 @@ describe("core", () => {
             hostId: "local",
             kind: "local",
             connected: true,
-            state: "idle",
+            state: "connected",
             isDefault: true
           }
         ]
@@ -196,6 +221,112 @@ describe("core", () => {
         status: "degraded",
         connectedCount: 0
       }
+    });
+  });
+
+  it("updates host control plane snapshots without expanding host substrate actions", () => {
+    const seed = createHostControlPlaneSnapshot({
+      hosts: [
+        {
+          hostId: "local",
+          kind: "local"
+        },
+        {
+          hostId: "ssh-prod",
+          kind: "remote"
+        }
+      ]
+    });
+
+    expect(seed).toMatchObject({
+      defaultHostId: null,
+      hosts: [
+        {
+          hostId: "local",
+          connected: false,
+          state: "disconnected",
+          isDefault: false,
+          health: {
+            status: "unknown"
+          }
+        },
+        {
+          hostId: "ssh-prod",
+          connected: false,
+          state: "disconnected",
+          isDefault: false,
+          health: {
+            status: "unknown"
+          }
+        }
+      ]
+    });
+
+    const connected = connectExecutionHost(seed, "ssh-prod", {
+      checkedAt: "2026-03-29T00:00:00.000Z"
+    });
+    const defaulted = setDefaultExecutionHost(connected, "ssh-prod");
+    const disconnected = disconnectExecutionHost(defaulted, "ssh-prod", {
+      checkedAt: "2026-03-29T00:01:00.000Z"
+    });
+
+    expect(connected).toMatchObject({
+      defaultHostId: null,
+      hosts: [
+        {
+          hostId: "local",
+          kind: "local",
+          connected: false,
+          state: "disconnected",
+          isDefault: false,
+          health: {
+            status: "unknown"
+          }
+        },
+        {
+          hostId: "ssh-prod",
+          kind: "remote",
+          connected: true,
+          state: "connected",
+          isDefault: false,
+          health: {
+            status: "healthy",
+            checkedAt: "2026-03-29T00:00:00.000Z"
+          }
+        }
+      ]
+    });
+    expect(defaulted).toMatchObject({
+      defaultHostId: "ssh-prod",
+      hosts: [
+        {
+          hostId: "local",
+          isDefault: false
+        },
+        {
+          hostId: "ssh-prod",
+          isDefault: true
+        }
+      ]
+    });
+    expect(disconnected).toMatchObject({
+      defaultHostId: "ssh-prod",
+      hosts: [
+        {
+          hostId: "local",
+          isDefault: false
+        },
+        {
+          hostId: "ssh-prod",
+          connected: false,
+          state: "disconnected",
+          isDefault: true,
+          health: {
+            status: "unknown",
+            checkedAt: "2026-03-29T00:01:00.000Z"
+          }
+        }
+      ]
     });
   });
 

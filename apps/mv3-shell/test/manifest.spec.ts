@@ -843,9 +843,18 @@ describe("mv3-shell manifest", () => {
         },
         hosts: {
           status: "healthy",
-          defaultHostId: "local",
+          defaultHostId: null,
           totalCount: 1,
-          connectedCount: 1
+          connectedCount: 1,
+          items: [
+            {
+              hostId: "local",
+              kind: "local",
+              connected: true,
+              state: "connected",
+              isDefault: false
+            }
+          ]
         },
         config: {
           status: "placeholder"
@@ -921,7 +930,16 @@ describe("mv3-shell manifest", () => {
         hosts: {
           status: "degraded",
           totalCount: 1,
-          connectedCount: 1
+          connectedCount: 1,
+          defaultHostId: null,
+          items: [
+            {
+              hostId: "local",
+              connected: true,
+              state: "degraded",
+              isDefault: false
+            }
+          ]
         }
       }
     });
@@ -973,7 +991,18 @@ describe("mv3-shell manifest", () => {
         },
         hosts: {
           status: "empty",
-          totalCount: 0
+          defaultHostId: null,
+          totalCount: 1,
+          connectedCount: 0,
+          items: [
+            {
+              hostId: "local",
+              kind: "local",
+              connected: false,
+              state: "disconnected",
+              isDefault: false
+            }
+          ]
         },
         config: {
           status: "placeholder"
@@ -1102,10 +1131,10 @@ describe("mv3-shell manifest", () => {
           hostId: "local",
           kind: "local",
           connected: true,
-          state: "idle",
+          state: "connected",
           isDefault: true,
           health: {
-            status: "idle"
+            status: "healthy"
           }
         }
       }
@@ -1122,9 +1151,9 @@ describe("mv3-shell manifest", () => {
       data: {
         hostId: "local",
         connected: true,
-        state: "idle",
+        state: "connected",
         health: {
-          status: "idle"
+          status: "healthy"
         }
       }
     });
@@ -1160,7 +1189,10 @@ describe("mv3-shell manifest", () => {
           hostId: "local",
           connected: false,
           state: "disconnected",
-          isDefault: true
+          isDefault: true,
+          health: {
+            status: "unknown"
+          }
         }
       }
     });
