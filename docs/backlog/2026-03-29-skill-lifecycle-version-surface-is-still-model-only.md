@@ -1,11 +1,11 @@
 ---
 id: ISSUE-028
 title: "Review: skill lifecycle/version surface is still model-only"
-status: open
+status: in-progress
 priority: p1
 source: "next-batch review 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: copilot-gpt54
 tags:
   - review
   - skill-sdk
@@ -22,6 +22,7 @@ write_scope:
   - docs/
 acceptance_ref: project_plan.md
 check_cmd: "bun run check"
+claimed_at: 2026-03-29T11:05:45.938Z
 ---
 
 ## Goal

@@ -1,11 +1,11 @@
 ---
 id: ISSUE-026
 title: "Review: MV3 runtime wiring is still harness-bound"
-status: open
+status: in-progress
 priority: p1
 source: "next-batch review 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: codex
 tags:
   - review
   - mv3-shell
@@ -23,11 +23,12 @@ write_scope:
   - apps/mv3-shell/test/manifest.spec.ts
 acceptance_ref: project_plan.md
 check_cmd: "bun run check"
+claimed_at: 2026-03-29T11:04:36.320Z
 ---
 
 ## Goal
 
-把 MV3 runtime wiring is still harness-bound 收口到 locked decisions 和测试口径。
+把 MV3 runtime wiring 从“主要依赖 harness 证明”收口成与 locked decisions 一致、可被集成测试锁住的真实运行链路。
 
 ## Review Finding
 

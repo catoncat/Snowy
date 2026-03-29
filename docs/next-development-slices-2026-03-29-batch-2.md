@@ -1,12 +1,15 @@
 # Next Development Slices (2026-03-29)
 
-Auto-generated from the current open backlog issues.
+Auto-generated from the current backlog issues selected for Batch 2.
 
 ## Snapshot
 
-- open issues: 7
-- done issues: 15
+- open issues: 0
+- in-progress issues: 2
+- done issues: 20
 - recommended batch: Batch 2
+
+当前没有可直接领取的 open issue；等待现有 in-progress slice 完成或进入下一批规划。
 
 ## Recommended Batch 2
 
@@ -14,7 +17,8 @@ Auto-generated from the current open backlog issues.
 
 - ISSUE-016 Review: BrowserVFS IndexedDB migration strategy is still implicit
   - priority: p1
-  - ready_now: yes
+  - status: done
+  - ready_now: no (completed)
   - depends_on: (none)
   - write_scope: packages/browser-vfs/src/index.ts, packages/browser-vfs/test/browser-vfs.spec.ts
 
@@ -22,12 +26,14 @@ Auto-generated from the current open backlog issues.
 
 - ISSUE-023 Review: memfs capability catalog misses BrowserVFS public ops
   - priority: p0
-  - ready_now: yes
+  - status: done
+  - ready_now: no (completed)
   - depends_on: (none)
   - write_scope: packages/core/src/index.ts, packages/core/test/core.spec.ts, packages/skill-sdk/src/index.ts, packages/skill-sdk/test/skill-sdk.spec.ts
 - ISSUE-019 Review: bridge-side MCP export is still descriptor-only
   - priority: p1
-  - ready_now: yes
+  - status: done
+  - ready_now: no (completed)
   - depends_on: (none)
   - write_scope: packages/contracts/src/index.ts, packages/core/src/index.ts, packages/core/test/core.spec.ts, docs/
 
@@ -35,17 +41,20 @@ Auto-generated from the current open backlog issues.
 
 - ISSUE-021 Review: MV3 offscreen lifecycle is still optimistic
   - priority: p1
-  - ready_now: yes
+  - status: done
+  - ready_now: no (completed)
   - depends_on: (none)
   - write_scope: apps/mv3-shell/src/background.js, apps/mv3-shell/src/offscreen.js, apps/mv3-shell/test/manifest.spec.ts
 - ISSUE-025 Review: runtime diagnostics/debug surface is still missing
   - priority: p1
-  - ready_now: yes
+  - status: done
+  - ready_now: no (completed)
   - depends_on: (none)
   - write_scope: apps/mv3-shell/src/background.js, apps/mv3-shell/src/offscreen.js, apps/mv3-shell/test/manifest.spec.ts
 - ISSUE-026 Review: MV3 runtime wiring is still harness-bound
   - priority: p1
-  - ready_now: yes
+  - status: in-progress
+  - ready_now: no (already claimed)
   - depends_on: (none)
   - write_scope: packages/site-runtime/src/index.ts, packages/site-runtime/test/site-runtime.spec.ts, apps/mv3-shell/src/background.js, apps/mv3-shell/src/offscreen.js, apps/mv3-shell/test/manifest.spec.ts
 
@@ -53,6 +62,7 @@ Auto-generated from the current open backlog issues.
 
 - ISSUE-028 Review: skill lifecycle/version surface is still model-only
   - priority: p1
-  - ready_now: yes
+  - status: in-progress
+  - ready_now: no (already claimed)
   - depends_on: (none)
   - write_scope: packages/contracts/src/index.ts, packages/browser-vfs/src/index.ts, packages/skill-sdk/src/index.ts, docs/

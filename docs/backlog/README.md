@@ -19,7 +19,7 @@ status: open | in-progress | done
 priority: p0 | p1 | p2
 source: 需求来源
 created: YYYY-MM-DD
-assignee: agent | human | unassigned
+assignee: <agent-name> | human | unassigned
 claimed_at: ISO datetime
 tags: [tag1, tag2]
 kind: slice
@@ -60,9 +60,10 @@ check_cmd: bun run test -- <target> | bun run check
 1. 所有 agent 先读 `docs/start-here.md` 和 `docs/locked-decisions-2026-03-29.md`
 2. Agent 判断当前是继续已有 issue、claim 新 issue、还是规划下一批
 3. 需要真正 claim 时，只在 canonical workspace 执行
-4. 进入某个 issue 后，只在该 issue 的 `write_scope` 内推进
-5. 完成后先提交 code commit
-6. 再在 canonical workspace 把 issue 改为 `done`，并追加工作记录与 commit 记录
+4. 真正 claim 时，必须把 `assignee` 写成该 Agent 自己选定并持续复用的名字，不能写通用 `agent`
+5. 进入某个 issue 后，只在该 issue 的 `write_scope` 内推进
+6. 完成后先提交 code commit
+7. 再在 canonical workspace 把 issue 改为 `done`，并追加工作记录与 commit 记录
 
 ## 当当前 batch 做完时
 
@@ -87,14 +88,24 @@ check_cmd: bun run test -- <target> | bun run check
 ## Claim 命令
 
 ```bash
-bun run workflow:claim:preview
-bun run workflow:claim
-bun run workflow:claim:json
+BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview
+BBL_AGENT_NAME=<agent-name> bun run workflow:claim
+BBL_AGENT_NAME=<agent-name> bun run workflow:claim:json
+
+bun run workflow:claim:preview -- --name=<agent-name>
+bun run workflow:claim -- --name=<agent-name>
+bun run workflow:claim:json -- --name=<agent-name>
 bun run workflow:plan:preview
 bun run workflow:plan
 bun run workflow:plan:json
 bun run workflow:new-review-issue -- --title=... --group=... --epic=... --acceptance-ref=... --scope=... --accept=...
 ```
+
+命名规则：
+
+- 每个 Agent 自己选一个稳定名字，例如 `atlas`、`mercury`、`sable`
+- 同一轮上下文里持续复用这个名字
+- 别的 Agent 看到 backlog 中不同 `assignee`，就知道那是另一位 Agent 的 claim
 
 `preview` 的用途：
 
@@ -119,22 +130,22 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 ## 当前未完成项
 
-- `ISSUE-023` `Review: memfs capability catalog misses BrowserVFS public ops`
-- `ISSUE-016` `Review: BrowserVFS IndexedDB migration strategy is still implicit`
-- `ISSUE-019` `Review: bridge-side MCP export is still descriptor-only`
-- `ISSUE-021` `Review: MV3 offscreen lifecycle is still optimistic`
-- `ISSUE-025` `Review: runtime diagnostics/debug surface is still missing`
+### 已在推进
+
 - `ISSUE-026` `Review: MV3 runtime wiring is still harness-bound`
 - `ISSUE-028` `Review: skill lifecycle/version surface is still model-only`
 
+### 仍可领取
+
+- 当前没有可直接领取的 open issue
+
+### 边界说明
+
+- `ISSUE-019` 已完成 descriptor-derived MCP export handoff contract；真正 bridge-side MCP server/transport 仍属于 deferred 边界，不应继续算作当前可领取项。
+- 当前 batch 只剩 `ISSUE-026` 与 `ISSUE-028` 在推进；若 `claim:preview` 继续返回无可认领项，应等待现有 in-progress slice 完成，或在它们完成后进入下一批规划。
+
 ## 推荐领取顺序
 
-1. `ISSUE-023`
-2. `ISSUE-016`
-3. `ISSUE-019`
-4. `ISSUE-021`
-5. `ISSUE-025`
-6. `ISSUE-026`
-7. `ISSUE-028`
+当前无可直接领取的 open issue；等待 `ISSUE-026` / `ISSUE-028` 状态变化后再运行 preview 或进入下一批规划。
 
 当前批次文档：`docs/next-development-slices-2026-03-29-batch-2.md`
