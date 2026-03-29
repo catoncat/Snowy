@@ -454,6 +454,184 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("exposes a healthy runtime diagnostics snapshot through the background bridge", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0
+            }
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1
+          }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0
+      }))
+    };
+    const harness = createChromeHarness({ host });
+    const pageHookBridge = {
+      snapshotState: vi.fn(async ({ tabId, world }: { tabId: number; world: string }) => ({
+        tabId,
+        world,
+        installs: 1,
+        invocations: 2
+      }))
+    };
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await bridge.ensureHost();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.diagnostics",
+        tabId: 21,
+        world: "main"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "healthy",
+        bridge: {
+          hostReady: true,
+          offscreenPresent: true
+        },
+        runner: {
+          reachable: true,
+          health: {
+            status: "idle",
+            inflightCount: 0
+          }
+        },
+        site: {
+          status: "healthy",
+          tabId: 21,
+          world: "main",
+          snapshot: {
+            installs: 1,
+            invocations: 2
+          }
+        }
+      }
+    });
+
+    expect(pageHookBridge.snapshotState).toHaveBeenCalledWith({
+      tabId: 21,
+      world: "main"
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("exposes a degraded runtime diagnostics snapshot without recovering the host", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "degraded",
+              inflightCount: 0,
+              consecutiveFailures: 2
+            }
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1
+          }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "degraded",
+        inflightCount: 0,
+        consecutiveFailures: 2
+      }))
+    };
+    const harness = createChromeHarness({ host });
+    const pageHookBridge = {
+      snapshotState: vi.fn(async () => {
+        throw new Error("page hook unavailable");
+      })
+    };
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge
+    });
+
+    await bridge.ensureHost();
+    const offscreenCreatesBeforeDiagnostics = harness.offscreenApi.createDocument.mock.calls.length;
+    const offscreenClosesBeforeDiagnostics = harness.offscreenApi.closeDocument.mock.calls.length;
+
+    await expect(
+      bridge.diagnostics({
+        tabId: 21,
+        world: "main"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "degraded",
+        bridge: {
+          hostReady: true,
+          offscreenPresent: true
+        },
+        runner: {
+          reachable: true,
+          health: {
+            status: "degraded",
+            consecutiveFailures: 2
+          }
+        },
+        site: {
+          status: "degraded",
+          error: {
+            code: "E_RUNTIME",
+            message: "page hook unavailable"
+          }
+        }
+      }
+    });
+
+    expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(
+      offscreenCreatesBeforeDiagnostics
+    );
+    expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(
+      offscreenClosesBeforeDiagnostics
+    );
+    harness.cleanup();
+  });
+
   it("returns a timeout error when the offscreen bridge does not respond", async () => {
     const bridge = createBackgroundRunnerBridge({
       chromeApi: createChromeHarness({

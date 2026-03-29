@@ -73,7 +73,8 @@ export function createBackgroundRunnerBridge({
   timeoutMs = RUNNER_BRIDGE_TIMEOUT_MS,
   offscreenPath = RUNNER_OFFSCREEN_DOCUMENT_PATH,
   reasons = RUNNER_OFFSCREEN_REASONS,
-  justification = RUNNER_OFFSCREEN_JUSTIFICATION
+  justification = RUNNER_OFFSCREEN_JUSTIFICATION,
+  pageHookBridge = undefined
 } = {}) {
   let creating = null;
   let requestSequence = 0;
@@ -269,6 +270,87 @@ export function createBackgroundRunnerBridge({
     };
   }
 
+  async function diagnostics({
+    tabId,
+    world = "main"
+  } = {}) {
+    const capturedAt = isoNow();
+    const offscreenPresent = await hasOffscreenDocument();
+
+    const runnerResponse = offscreenPresent
+      ? await sendToOffscreen("runner.diagnostics")
+      : {
+          ok: false,
+          error: {
+            code: "E_RUNTIME",
+            message: "Offscreen document is not available"
+          }
+        };
+
+    const runner = runnerResponse.ok
+      ? {
+          reachable: true,
+          ready: runnerResponse.data?.ready === true,
+          health: runnerResponse.data?.health ?? null
+        }
+      : {
+          reachable: false,
+          error: runnerResponse.error ?? {
+            code: "E_RUNTIME",
+            message: "Runner diagnostics unavailable"
+          }
+        };
+
+    let site;
+    if (pageHookBridge && typeof tabId === "number") {
+      try {
+        site = {
+          status: "healthy",
+          tabId,
+          world,
+          snapshot: await pageHookBridge.snapshotState({ tabId, world })
+        };
+      } catch (error) {
+        site = {
+          status: "degraded",
+          tabId,
+          world,
+          error: toBridgeError(error)
+        };
+      }
+    } else if (typeof tabId === "number") {
+      site = {
+        status: "unavailable",
+        tabId,
+        world
+      };
+    } else {
+      site = {
+        status: "skipped"
+      };
+    }
+
+    const degraded =
+      !offscreenPresent
+      || !runner.reachable
+      || runner.health?.status === "degraded"
+      || site.status === "degraded";
+
+    return {
+      ok: true,
+      data: {
+        capturedAt,
+        status: degraded ? "degraded" : "healthy",
+        bridge: buildBridgeState({
+          offscreenPresent,
+          offscreenPath
+        }),
+        runner,
+        site
+      }
+    };
+  }
+
   async function route(message) {
     if (!message || message.target !== RUNNER_BACKGROUND_TARGET) {
       return undefined;
@@ -282,6 +364,11 @@ export function createBackgroundRunnerBridge({
         return cancel(message.targetRequestId);
       case "runner.health":
         return health();
+      case "runtime.diagnostics":
+        return diagnostics({
+          tabId: message.tabId,
+          world: message.world
+        });
       default:
         return {
           ok: false,
@@ -326,6 +413,7 @@ export function createBackgroundRunnerBridge({
     invoke,
     cancel,
     health,
+    diagnostics,
     route,
     registerRuntimeListener,
     getBridgeState

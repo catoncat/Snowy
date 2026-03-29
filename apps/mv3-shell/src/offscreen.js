@@ -42,6 +42,14 @@ export function createOffscreenRunnerBridge({
             health: typeof host.getHealth === "function" ? host.getHealth() : null
           }
         };
+      case "runner.diagnostics":
+        return {
+          ok: true,
+          data: {
+            ready: true,
+            health: typeof host.getHealth === "function" ? host.getHealth() : null
+          }
+        };
       case "runner.invoke":
         return {
           ok: true,
