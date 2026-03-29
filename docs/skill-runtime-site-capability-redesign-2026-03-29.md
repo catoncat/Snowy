@@ -2,6 +2,8 @@
 
 > 日期：2026-03-29
 > 目标：在不依赖 `@lifo-sh/core` 通用 shell 的前提下，保留 Browser Brain Loop 的浏览器侧大脑架构，重建可执行 Skill、`mem://` 文件系统、站点能力包装层，并收敛 `Skill / Plugin / MCP / Site Adapter` 的概念洪水。
+>
+> 注：本文件写于 Host 仍被去中心化的阶段。当前关于 `AI Surface`、`Execution Host` 一等化、产品自我能力暴露的方向，以 `docs/ai-native-capability-surface-design.md` 和 `docs/locked-decisions-2026-03-29.md` 为准。
 
 ---
 

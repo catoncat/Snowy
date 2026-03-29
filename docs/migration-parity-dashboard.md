@@ -20,6 +20,7 @@
 | JS Runner host | `green` | host / cancel / timeout / health / offscreen bridge 已测 |
 | MV3 shell substrate | `green` | offscreen bridge 与显式 page-hook bridge 已测 |
 | site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
+| AI-native product control plane | `red` | `runtime/config/skills/hosts/audit` 统一资源/动作面尚未实现 |
 | old browser automation parity | `red` | 旧 background/focus/CDP 体系尚未正式迁入 |
 | old visual/download/intervention parity | `red` | 旧产品能力未在新仓形成主链 |
 | skill SDK / authoring | `yellow` | typed facade 与文档已起步，完整 authoring/studio 不足 |
@@ -42,6 +43,7 @@
 
 ### 仍不能宣称“已完成迁移”的关键层
 
+- AI-native product control plane
 - 完整 browser automation 能力
 - diagnostics / observability
 - provider/profile 层

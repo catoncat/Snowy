@@ -6,14 +6,14 @@
 
 核心目标不是“替一个沙盒库”，而是：
 
-> 去掉 `LIFO/browser_bash` 之后，仍然让 Browser Brain Loop 拥有可执行、可扩展、可分享、可自举的网站能力与运行时能力。
+> 去掉 `LIFO/browser_bash` 之后，仍然让 Browser Brain Loop 拥有可执行、可扩展、可分享、可自举的网站能力、产品能力与运行时能力。
 
 ## 你必须先知道的 5 件事
 
 1. 用户概念只保留 `Skill`
-2. 公共能力面只保留 `Capability API`
-3. `CapabilityDescriptor` 是唯一 canonical model
-4. 网站能力默认建立在浏览器自身能力上，不把 host 当默认前提
+2. 产品必须有统一 `AI Surface`
+3. invokable actions 继续通过 public `Capability API`
+4. 浏览器是控制中枢，Host 是一等执行面
 5. 旧仓是参考对象，不是兼容对象
 
 ## 新仓要替换什么
@@ -27,6 +27,7 @@
 - 浏览器侧大脑
 - `mem://` 文件抽象
 - CDP / DOM / 页面登录态复用
+- Host 执行面（本地 / 远程）
 - Skill 作为安装和分享单位
 - MCP 作为外部能力的接入与导出通道
 
@@ -35,6 +36,7 @@
 - 不要把 `Plugin` 重新扶正成主概念
 - 不要把 `ToolContract` 再变回真相源
 - 不要把 shell 命令重新塞回 VFS/skill discovery
+- 不要把所有产品能力直接摊平成工具列表
 - 不要因为旧仓有现成实现，就原样搬回新仓
 
 ## 当前已实现到哪里
@@ -57,13 +59,14 @@
 2. `docs/source-of-truth-map.md`
 3. `docs/start-here.md`
 4. `docs/locked-decisions-2026-03-29.md`
-5. `docs/v0-slice.md`
-6. `docs/legacy-reference-map.md`
-7. `docs/legacy-to-vnext-migration-matrix.md`
-8. `docs/migration-parity-dashboard.md`
-9. `docs/cutover-readiness-criteria.md`
-10. 当前 backlog issue
-11. 当前 batch / planning 文档
+5. `docs/ai-native-capability-surface-design.md`
+6. `docs/v0-slice.md`
+7. `docs/legacy-reference-map.md`
+8. `docs/legacy-to-vnext-migration-matrix.md`
+9. `docs/migration-parity-dashboard.md`
+10. `docs/cutover-readiness-criteria.md`
+11. 当前 backlog issue
+12. 当前 batch / planning 文档
 
 ## 如果你要判断“旧仓是不是已经迁完”
 
@@ -91,6 +94,10 @@
 - `~/work/repos/_research/opencli/`
 - `~/work/repos/_research/bb-browser/`
 - `~/work/repos/_research/bb-browser/bb-sites/`
+
+最后回来看：
+
+- `docs/ai-native-capability-surface-design.md`
 
 ## 如果你只处理某个 lane
 

@@ -3,9 +3,9 @@
 ## 1. Repo Mission
 
 - 本仓是 Browser Brain Loop 的 vNext 主线实验仓。
-- 目标：去掉 `LIFO/browser_bash`，重建 `Skill + Capability API + BrowserVFS + JS Runner + Site Runtime`。
+- 目标：去掉 `LIFO/browser_bash`，重建 `Skill + AI Surface + BrowserVFS + JS Runner + Site Runtime + Execution Host`。
 - 产品面只保留一个概念：`Skill`。
-- 内核面只保留一个公共能力面：`Capability API`。
+- 产品对 AI 暴露统一 `AI Surface`；其中 invokable actions 继续通过 `Capability API` 暴露。
 - 默认不做 legacy/fallback 设计；旧仓只作行为和概念参考，不作兼容前提。
 
 ## 1.1 Mandatory Onboarding
@@ -14,25 +14,30 @@
   1. `docs/start-here.md`
   2. `docs/source-of-truth-map.md`
   3. `docs/locked-decisions-2026-03-29.md`
-  4. `docs/v0-slice.md`
-  5. `docs/legacy-reference-map.md`
+  4. `docs/ai-native-capability-surface-design.md`
+  5. `docs/v0-slice.md`
+  6. `docs/legacy-reference-map.md`
 - 如果要改 architecture-level 代码，再去读旧仓：
   - `/Users/envvar/work/repos/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
   - `/Users/envvar/work/repos/browser-brain-loop/docs/kernel-architecture.md`
 
 ## 2. Architecture North Star
 
-- `CapabilityDescriptor` 是唯一 canonical model。
-- `ToolContract / Skill SDK / MCP export` 都是 descriptor 的投影。
+- `CapabilityDescriptor` 是 action canonical model。
+- `ToolContract` 是 action projection，不是完整 AI Surface 本体。
+- 产品 AI Surface 同时包含 actions、resources、events/audit、skills/workflows。
 - `BrowserVFS` 负责 `mem://` 与持久化，不再依赖 shell。
 - `JS Runner Host` 负责执行用户/skill 代码，不在 SW 直接跑动态模块。
 - `Site Runtime` 负责 active-tab match、按需注入、action、verifier。
+- 浏览器是控制中枢；`Execution Host` 是一等执行面，可本地也可远程。
+- `host.*` 保持粗粒度原语，不要按产品功能无限细分。
 - `Skill` 通过 `ctx.call()` / `ctx.capabilities.*` 使用能力，不直连私有内核实现。
 
 ## 3. Working Rules
 
 - 先写测试，再补实现；默认 TDD。
 - 新能力先进入 public capability namespace，不要新增私有平行入口。
+- 少量强原语 + 足够上下文，优先于细碎 capability 设计。
 - 不要重新引入 `Plugin` 作为主概念；统一收敛为 executable skill。
 - 不要重新引入 `bash.exec`/`find` 这类 shell 依赖去完成 VFS/skill discovery。
 - 变更优先从 `packages/contracts` 开始推导，再改 `core` 和 substrate。

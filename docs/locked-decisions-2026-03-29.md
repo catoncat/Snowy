@@ -12,10 +12,25 @@
 ## Core Model
 
 - full public migration
-- public capability id 是唯一公开 API
+- public capability id 是 invokable action 的唯一公开 API
 - provider registry / policy / routing 全部基于 public capability
-- `CapabilityDescriptor` 是唯一真相源
-- `ToolContract` 只是投影
+- `CapabilityDescriptor` 是 action canonical model
+- `ToolContract` 只是 action 投影
+
+## AI Surface
+
+- 产品对 AI 暴露统一 AI Surface，而不只是 tools
+- AI Surface 至少包含：actions、resources、events/audit、skills/workflows
+- UI、聊天 Agent、Skill、外部接入应尽量共用同一套 AI Surface
+- v1 优先少量强原语 + 足够上下文，不做细碎 capability 爆炸
+
+## Execution Surfaces
+
+- 浏览器仍是控制中枢
+- `Execution Host` 是一等执行面，不再去中心化
+- `Execution Host` 可以是本地，也可以是远程
+- `host.*` 保持粗粒度原语，默认围绕 `read/write/edit/exec`
+- `page.*` / `tabs.*` / `site.*` 仍然是浏览器本地能力
 
 ## BrowserVFS
 
@@ -55,4 +70,3 @@
 
 - 若发现某个 slice 需要推翻这些决定，先更新设计文档和 backlog，再改代码
 - 不要在单个 PR/单个 slice 里顺手改 architecture contract
-

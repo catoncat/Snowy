@@ -57,6 +57,12 @@
 - 新仓至少有最小 diagnostics / debug / audit 面
 - 出故障时，不必回到旧仓才能定位核心 runtime 问题
 
+### Gate G: Product Self-Awareness Surface
+
+- Agent 至少能读取最小 `runtime/config/skills/hosts` 摘要
+- 关键产品变更至少有一套统一 action 面，而不是分散在私有 UI 改写里
+- audit 至少能覆盖配置变更、skill 生命周期、host 连接变化
+
 ## Soft Gates
 
 ### Soft Gate 1: Skill Studio / Lifecycle Product Surface
@@ -91,8 +97,9 @@
 主要原因：
 
 1. 迁移控制面刚建立，还未长期维护
-2. browser automation / screenshot / download / intervention 仍未迁入主线
-3. diagnostics / provider / studio / automation parity 仍未成体系
+2. AI-native product control plane 仍是设计口径，未形成最小实现
+3. browser automation / screenshot / download / intervention 仍未迁入主线
+4. diagnostics / provider / studio / automation parity 仍未成体系
 
 ## Maintenance Rule
 
