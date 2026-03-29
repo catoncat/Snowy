@@ -7,6 +7,7 @@ export const RUNNER_OFFSCREEN_JUSTIFICATION =
 export const RUNNER_BRIDGE_TIMEOUT_MS = 5_000;
 export const PAGE_HOOK_GLOBAL_KEY = "__BBL_NEXT_PAGE_HOOK__";
 export const PAGE_HOOK_DEFAULT_FILE = "src/page-hook.js";
+export const BOOTSTRAP_RESOURCE_KEYS = ["runtime", "config", "skills", "hosts"];
 
 function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   if (error && typeof error === "object" && "code" in error && "message" in error) {
@@ -56,6 +57,7 @@ function invalidSiteRuntimeInvoke(message) {
 
 function defaultBootstrapSummaryBuilder({
   generatedAt,
+  resourceKeys,
   runtime,
   skills,
   hosts,
@@ -69,6 +71,7 @@ function defaultBootstrapSummaryBuilder({
           ? "empty"
           : "healthy",
     generatedAt,
+    resourceKeys,
     runtime,
     skills,
     hosts,
@@ -82,6 +85,40 @@ function toCanonicalTab(activeTab) {
     tabId: activeTab.id,
     url: activeTab.url,
     active: activeTab.active === true
+  };
+}
+
+function toBootstrapActiveTab(activeTab, world = "main") {
+  return {
+    tabId: activeTab.id,
+    url: activeTab.url,
+    title: typeof activeTab.title === "string" ? activeTab.title : undefined,
+    world
+  };
+}
+
+function normalizeSkillSummaryInput(entry) {
+  if (typeof entry === "string") {
+    return {
+      id: entry,
+      enabled: false,
+      trusted: false,
+      recentChange: null
+    };
+  }
+  if (!entry || typeof entry !== "object" || typeof entry.id !== "string") {
+    return null;
+  }
+  return {
+    id: entry.id,
+    enabled: entry.enabled === true || entry.state === "enabled",
+    trusted: entry.trusted === true,
+    recentChange:
+      typeof entry.recentChange === "string"
+        ? entry.recentChange
+        : typeof entry.lastChangedAt === "string"
+          ? entry.lastChangedAt
+          : null
   };
 }
 
@@ -116,7 +153,11 @@ export function createBackgroundRunnerBridge({
   reasons = RUNNER_OFFSCREEN_REASONS,
   justification = RUNNER_OFFSCREEN_JUSTIFICATION,
   pageHookBridge = undefined,
-  bootstrapSummaryBuilder = defaultBootstrapSummaryBuilder
+  bootstrapSummaryBuilder = defaultBootstrapSummaryBuilder,
+  sessionId = null,
+  currentMode = "active-tab-only",
+  listSkills = undefined,
+  configSummary = undefined
 } = {}) {
   let creating = null;
   let requestSequence = 0;
@@ -180,6 +221,28 @@ export function createBackgroundRunnerBridge({
     };
   }
 
+  async function queryActiveTab() {
+    if (!chromeApi?.tabs?.query) {
+      return null;
+    }
+    const activeTabs = await chromeApi.tabs.query({
+      active: true,
+      lastFocusedWindow: true
+    });
+    const activeTab = Array.isArray(activeTabs) ? activeTabs[0] : undefined;
+    if (!activeTab || typeof activeTab.id !== "number" || typeof activeTab.url !== "string") {
+      return null;
+    }
+    return activeTab;
+  }
+
+  async function resolveMaybe(value) {
+    if (typeof value === "function") {
+      return value();
+    }
+    return value;
+  }
+
   async function resolveActiveTabMetadata(requestedTab) {
     if (!requestedTab || typeof requestedTab.tabId !== "number") {
       return invalidSiteRuntimeInvoke("Site runtime invoke requires tab metadata");
@@ -194,13 +257,8 @@ export function createBackgroundRunnerBridge({
       };
     }
 
-    const activeTabs = await chromeApi.tabs.query({
-      active: true,
-      lastFocusedWindow: true
-    });
-    const activeTab = Array.isArray(activeTabs) ? activeTabs[0] : undefined;
-
-    if (!activeTab || typeof activeTab.id !== "number") {
+    const activeTab = await queryActiveTab();
+    if (!activeTab) {
       return invalidSiteRuntimeInvoke("Site runtime invoke requires an active tab");
     }
     if (activeTab.id !== requestedTab.tabId) {
@@ -551,14 +609,12 @@ export function createBackgroundRunnerBridge({
   }
 
   async function bootstrap({
-    tab,
-    world = "main",
-    skillsSummary,
-    configSummary
+    world = "main"
   } = {}) {
     const generatedAt = isoNow();
+    const activeTab = await queryActiveTab();
     const diagnosticsResult = await diagnostics({
-      tabId: typeof tab?.tabId === "number" ? tab.tabId : undefined,
+      tabId: activeTab?.id,
       world
     });
     if (!diagnosticsResult.ok) {
@@ -567,13 +623,13 @@ export function createBackgroundRunnerBridge({
 
     const runtimeDiagnostics = diagnosticsResult.data;
     const runnerHealth = runtimeDiagnostics.runner?.health;
-    const hasActiveTab = tab?.active === true && typeof tab?.tabId === "number" && typeof tab?.url === "string";
+    const activeTabSummary = activeTab ? toBootstrapActiveTab(activeTab, world) : null;
     const runtimeStatus =
       runtimeDiagnostics.status === "degraded"
-        ? hasActiveTab || runtimeDiagnostics.bridge.offscreenPresent
+        ? activeTabSummary || runtimeDiagnostics.bridge.offscreenPresent
           ? "degraded"
           : "empty"
-        : hasActiveTab
+        : activeTabSummary
           ? "healthy"
           : "empty";
     const runtimeError = runtimeDiagnostics.runner?.error ?? runtimeDiagnostics.site?.error ?? null;
@@ -584,27 +640,33 @@ export function createBackgroundRunnerBridge({
             hostId: "local",
             kind: "local",
             connected: Boolean(runtimeDiagnostics.runner?.reachable),
-            state: runnerHealth?.status ?? (runtimeDiagnostics.runner?.reachable ? "idle" : "unavailable"),
+            state:
+              runnerHealth?.status
+              ?? (runtimeDiagnostics.runner?.reachable ? "idle" : "unavailable"),
             isDefault: true
           }
         ]
       : [];
 
+    const rawSkillsSummary = await resolveMaybe(listSkills);
+    const skillEntries = Array.isArray(rawSkillsSummary)
+      ? rawSkillsSummary
+          .map((entry) => normalizeSkillSummaryInput(entry))
+          .filter(Boolean)
+      : [];
+    const resolvedConfigSummary = (await resolveMaybe(configSummary)) ?? {};
+
     return {
       ok: true,
       data: bootstrapSummaryBuilder({
         generatedAt,
+        resourceKeys: BOOTSTRAP_RESOURCE_KEYS,
         runtime: {
           status: runtimeStatus,
-          mode: "active-tab-only",
-          activeTab: hasActiveTab
-            ? {
-                tabId: tab.tabId,
-                url: tab.url,
-                title: tab.title,
-                world
-              }
-            : null,
+          mode: currentMode,
+          sessionId,
+          activeTab: activeTabSummary,
+          loopState: runnerHealth?.status ?? (activeTabSummary ? "idle" : null),
           lastError: runtimeError
             ? {
                 code: runtimeError.code,
@@ -617,11 +679,11 @@ export function createBackgroundRunnerBridge({
           }
         },
         skills: {
-          status: (skillsSummary?.installedCount ?? 0) > 0 ? "healthy" : "empty",
-          installedCount: skillsSummary?.installedCount ?? 0,
-          enabledCount: skillsSummary?.enabledCount ?? 0,
-          trustedCount: skillsSummary?.trustedCount ?? 0,
-          recentChange: skillsSummary?.recentChange ?? null
+          status: skillEntries.length > 0 ? "healthy" : "empty",
+          installedCount: skillEntries.length,
+          enabledCount: skillEntries.filter((entry) => entry.enabled).length,
+          trustedCount: skillEntries.filter((entry) => entry.trusted).length,
+          recentChange: skillEntries.find((entry) => entry.recentChange)?.recentChange ?? null
         },
         hosts: {
           status:
@@ -636,9 +698,12 @@ export function createBackgroundRunnerBridge({
           items: hostItems
         },
         config: {
-          status: configSummary?.status ?? "placeholder",
-          fields: configSummary?.fields ?? ["model", "automation", "permissions", "preferences"],
-          note: configSummary?.note ?? "Config control plane is not implemented yet."
+          status: resolvedConfigSummary.status ?? "placeholder",
+          fields:
+            resolvedConfigSummary.fields
+            ?? ["model", "automation", "permissions", "preferences"],
+          note:
+            resolvedConfigSummary.note ?? "Config control plane is not implemented yet."
         }
       })
     };
@@ -666,10 +731,7 @@ export function createBackgroundRunnerBridge({
         });
       case "runtime.bootstrap":
         return bootstrap({
-          tab: message.tab,
-          world: message.world,
-          skillsSummary: message.skillsSummary,
-          configSummary: message.configSummary
+          world: message.world
         });
       default:
         return {

@@ -87,6 +87,7 @@ function createChromeHarness({
     id: number;
     url: string;
     active?: boolean;
+    title?: string;
   } | null;
 }) {
   const messageBus = createMessageBus();
@@ -245,6 +246,7 @@ function createIntegratedChromeHarness(options: {
     id: number;
     url: string;
     active?: boolean;
+    title?: string;
   } | null;
 } = {}) {
   const runtimeHarness = createChromeHarness(options);
@@ -780,10 +782,31 @@ describe("mv3-shell manifest", () => {
         consecutiveFailures: 0
       }))
     };
-    const harness = createChromeHarness({ host });
+    const harness = createChromeHarness({
+      host,
+      activeTab: {
+        id: 21,
+        url: "https://x.com/home",
+        title: "Home"
+      }
+    });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
+      sessionId: "session-1",
+      listSkills: async () => [
+        {
+          id: "skill.twitter",
+          state: "enabled",
+          trusted: true,
+          recentChange: "skill.twitter enabled"
+        },
+        {
+          id: "skill.notes",
+          state: "disabled",
+          trusted: false
+        }
+      ]
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -794,32 +817,23 @@ describe("mv3-shell manifest", () => {
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "runtime.bootstrap",
-        tab: {
-          tabId: 21,
-          url: "https://x.com/home",
-          active: true,
-          title: "Home"
-        },
-        world: "main",
-        skillsSummary: {
-          installedCount: 2,
-          enabledCount: 1,
-          trustedCount: 1,
-          recentChange: "skill.twitter enabled"
-        }
+        world: "main"
       })
     ).resolves.toMatchObject({
       ok: true,
       data: {
         status: "healthy",
+        resourceKeys: ["runtime", "config", "skills", "hosts"],
         runtime: {
           status: "healthy",
           mode: "active-tab-only",
+          sessionId: "session-1",
           activeTab: {
             tabId: 21,
             url: "https://x.com/home",
             world: "main"
-          }
+          },
+          loopState: "idle"
         },
         skills: {
           status: "healthy",
@@ -839,6 +853,10 @@ describe("mv3-shell manifest", () => {
       }
     });
 
+    expect(harness.tabsApi.query).toHaveBeenCalledWith({
+      active: true,
+      lastFocusedWindow: true
+    });
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(
       offscreenCreatesBeforeBootstrap
     );
@@ -897,6 +915,7 @@ describe("mv3-shell manifest", () => {
         status: "degraded",
         runtime: {
           status: "degraded",
+          loopState: "degraded",
           lastError: null
         },
         hosts: {
@@ -907,6 +926,10 @@ describe("mv3-shell manifest", () => {
       }
     });
 
+    expect(harness.tabsApi.query).toHaveBeenCalledWith({
+      active: true,
+      lastFocusedWindow: true
+    });
     dispose();
     harness.cleanup();
   });
@@ -937,8 +960,11 @@ describe("mv3-shell manifest", () => {
       ok: true,
       data: {
         status: "empty",
+        resourceKeys: ["runtime", "config", "skills", "hosts"],
         runtime: {
           status: "empty",
+          sessionId: null,
+          loopState: null,
           activeTab: null
         },
         skills: {
@@ -955,6 +981,10 @@ describe("mv3-shell manifest", () => {
       }
     });
 
+    expect(harness.tabsApi.query).toHaveBeenCalledWith({
+      active: true,
+      lastFocusedWindow: true
+    });
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
     dispose();
     harness.cleanup();
