@@ -9,6 +9,14 @@
 - 哪些旧实现值得参考
 - 哪些旧实现只是迁移对象
 
+如果要判断“旧仓能力是否已经被新仓覆盖”，不要只看本文件。
+
+继续看：
+
+- `docs/legacy-to-vnext-migration-matrix.md`
+- `docs/migration-parity-dashboard.md`
+- `docs/cutover-readiness-criteria.md`
+
 ## Top-Level Mapping
 
 | 旧概念 | 新概念 | 说明 |
@@ -86,4 +94,3 @@
 
 - 先看 `opencli`
 - 再回来看旧仓 bridge 设计
-

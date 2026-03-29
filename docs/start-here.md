@@ -59,8 +59,23 @@
 4. `docs/locked-decisions-2026-03-29.md`
 5. `docs/v0-slice.md`
 6. `docs/legacy-reference-map.md`
-7. 当前 backlog issue
-8. 当前 batch / planning 文档
+7. `docs/legacy-to-vnext-migration-matrix.md`
+8. `docs/migration-parity-dashboard.md`
+9. `docs/cutover-readiness-criteria.md`
+10. 当前 backlog issue
+11. 当前 batch / planning 文档
+
+## 如果你要判断“旧仓是不是已经迁完”
+
+不要只看 backlog。
+
+这 3 份文档共同构成迁移控制面，不是普通参考资料。
+
+至少同时看：
+
+1. `docs/legacy-to-vnext-migration-matrix.md`
+2. `docs/migration-parity-dashboard.md`
+3. `docs/cutover-readiness-criteria.md`
 
 ## 如果你要改架构层
 

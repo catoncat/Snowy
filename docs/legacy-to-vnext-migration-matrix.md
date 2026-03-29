@@ -1,0 +1,76 @@
+# Legacy To vNext Migration Matrix
+
+本文件解决两个问题：
+
+1. 旧仓到底有哪些能力面需要迁到新仓
+2. 每一块在新仓里现在处于什么状态
+
+它是迁移控制面文档，不是 backlog，也不是 planning。
+
+## 状态图例
+
+- `v0-shipped`
+- `partial`
+- `review-gap`
+- `not-started`
+- `intentionally-dropped`
+
+## 迁移原则
+
+- 文档定义 intent，不单独定义行为
+- 行为真相仍以代码 + 测试为准
+- 迁移优先看“用户能力是否保留”，不是旧接口是否逐字照搬
+
+## Matrix
+
+| Legacy Area | Old Repo Source | vNext Target | Disposition | Current Status | Proof / Gap |
+|---|---|---|---|---|---|
+| canonical tool / capability model | `tool-contract-registry.ts`, `tool-provider-registry.ts`, `loop-tool-dispatch.ts` | `packages/contracts`, `packages/core` | replace-with-descriptor | `v0-shipped` | descriptor / projection / registry / ctx / invoke 已有测试 |
+| skill permission / trace / nested invoke | orchestrator + skill runtime | `packages/core` | keep-and-tighten | `review-gap` | 基础闭环已做；仍有 `ISSUE-011` |
+| skill package install / metadata / content injection | `skill-registry.ts`, `skill-content-resolver.ts`, `skill-create.ts` | `packages/skill-sdk`, BrowserVFS, future Studio | replace-and-simplify | `partial` | SDK 和 authoring 有基础，完整管理面未完成 |
+| plugin runtime as extension model | `plugin-runtime.ts`, `plugin-sandbox.ts` | executable Skill + JS Runner | hard-cutover | `partial` | 方向已锁，完整收拢未完成 |
+| Plugin Studio UI | `plugin-studio-main.ts` | future Skill Studio | replace | `not-started` | 只有方向，没有产品主链 |
+| browser sandbox shell / `browser_bash` | `lifo-adapter.ts`, prompt policy | BrowserVFS + JS Runner + capabilities | intentionally-drop-old-center | `intentionally-dropped` | 不再把 shell 当中心能力 |
+| host shell / `host_bash` | bridge + old tool contracts | optional host capability / export layer | de-center | `partial` | `host.*` namespace 有占位，真实主链未做 |
+| `mem://` virtual FS | `virtual-fs.browser.ts`, `lifo-adapter.ts` | `packages/browser-vfs` | keep-and-rebuild | `v0-shipped` | read/write/snapshot/quota/package discovery 已测 |
+| canonical skill package URI | old `mem://skills/...` path semantics | `packages/browser-vfs` | keep-and-tighten | `review-gap` | 仍有 `ISSUE-014` |
+| JS plugin sandbox / dynamic code execution | `plugin-sandbox.ts` | `packages/js-runner` + `apps/mv3-shell` | replace | `v0-shipped` | runner + health + cancel + offscreen bridge 已测 |
+| MV3 shell / offscreen host container | extension SW + sandbox page | `apps/mv3-shell` | keep-and-rebuild | `partial` | 最小壳已成，真实注入链未收口 |
+| site activation / page hook / verifier | `dom-snapshot-collector.ts`, `dom-locator.ts`, runtime loop | `packages/site-runtime` + `apps/mv3-shell` | keep-and-rebuild | `review-gap` | fixture 链路已成；仍有 `ISSUE-012/013` |
+| browser automation / background mode | `automation-mode.ts`, `stealth-tab.ts`, `background-failure-tracker.ts` | future `page.*` / `site.*` substrate | keep-core-ability | `not-started` | 新仓最小 site runtime 不等于旧自动化已迁完 |
+| screenshot / visual / download utilities | old builtin tools | future capability families | keep-by-capability | `not-started` | 旧产品能力未成体系迁入 |
+| interventions / human handoff | intervention tools + panel UI | future runtime / studio layer | decide-product-need | `not-started` | 还未在新仓决定主链位置 |
+| tab / page interaction tools | old builtin page/tab tools | public namespaces `page.*`, `tabs.*` | replace-with-public-api | `partial` | namespace 有了，完整覆盖未完成 |
+| LLM provider registry / profile routing | `llm-provider-registry.ts`, profile resolver | future provider layer | keep-core-idea | `not-started` | 新仓尚未迁旧 provider/profile 层 |
+| orchestration/session/run queue/compaction | `BrainOrchestrator`, session manager, loop | future mainline brain layer | keep-product-capability | `not-started` | 当前新仓只是 runtime substrate |
+| hooks system / extension points | `hook-runner.ts`, plugin hooks | future executable Skill setup hooks | replace-and-simplify | `not-started` | 方向存在，主链未实现 |
+| diagnostics / runtime debug / audit | debug snapshot + diagnostics HTTP | future observability layer | keep-and-rebuild | `not-started` | 新仓没有等价 debug 面 |
+| MCP export / external capability bridge | bridge + export plan | bridge-side MCP export | defer-but-required | `not-started` | locked decision 已定，主链未实现 |
+| Skill Studio / versions / lifecycle UI | old panel skills/plugins UI | future Skill Studio | keep-product-need | `not-started` | 生命周期模型有，产品 UI 没有 |
+
+## 明确不按旧仓原样迁的东西
+
+| Legacy Thing | Why Not Preserve As-Is | vNext Replacement |
+|---|---|---|
+| `browser_bash` 作为浏览器内通用执行中心 | 把 shell 误当主能力面 | `BrowserVFS + JS Runner + Capability API` |
+| `Plugin` 作为主产品概念 | 与 `Skill` 重叠 | executable `Skill` |
+| `ToolContract` 作为唯一真相源 | 不能统一投影到 SDK / MCP / runtime | `CapabilityDescriptor` |
+| `<all_urls>` + 宽松站点权限默认 | 与 active-tab-only 北极星冲突 | active-tab metadata only + explicit invoke |
+| 旧工具名全集直接平移 | 新仓优先收敛 public capability namespace | `page.*`, `tabs.*`, `site.*`, `memfs.*`, `skills.*`, `runtime.*` |
+
+## 对完整迁移最关键的未收口区域
+
+1. `ctx / permissions / trace` 合同收口
+2. `mem://skills/...` canonical public URI 收口
+3. active-tab-only + real injection chain 收口
+4. browser automation / screenshot / download / intervention 是否纳入 cutover 前必需
+5. provider / profile / diagnostics / observability 主链
+6. Skill Studio / lifecycle / versioning 产品面
+
+## 如何使用本文件
+
+- 判断某块旧功能是否已迁：先查本表，再去代码/测试验证
+- 新开迁移 issue：先判断该 area 是 `partial`、`review-gap` 还是 `not-started`
+- 判断能否切主线：继续看
+  - `docs/migration-parity-dashboard.md`
+  - `docs/cutover-readiness-criteria.md`

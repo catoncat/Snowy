@@ -34,10 +34,16 @@
 6. `project_plan.md`
    - phase 级推进蓝图
    - 用来指导下一批 issue 拆分
-7. `docs/legacy-reference-map.md`
+7. `docs/legacy-to-vnext-migration-matrix.md`
+   - 旧仓能力面到新仓目标面的覆盖矩阵
+8. `docs/migration-parity-dashboard.md`
+   - 迁移状态总览
+9. `docs/cutover-readiness-criteria.md`
+   - 切主线门槛
+10. `docs/legacy-reference-map.md`
    - 旧仓 / 研究仓的参考地图
    - 只负责告诉你去哪里看，不直接决定新仓实现
-8. 旧仓 `docs/skill-runtime-site-capability-redesign-2026-03-29.md`
+11. 旧仓 `docs/skill-runtime-site-capability-redesign-2026-03-29.md`
    - 顶层设计来源
    - 仅作上游设计依据，不覆盖新仓 locked decisions
 
@@ -73,6 +79,10 @@
 5. `docs/v0-slice.md`
 6. `docs/legacy-reference-map.md`
 7. 你要做的那个 `docs/backlog/<issue>.md`
+8. 如涉及旧仓迁移，再读：
+   - `docs/legacy-to-vnext-migration-matrix.md`
+   - `docs/migration-parity-dashboard.md`
+   - `docs/cutover-readiness-criteria.md`
 
 ### 只想知道“现在该做什么”
 
@@ -103,7 +113,7 @@
 
 ## 6. 当前推荐的“主依赖文档”集合
 
-如果只保留最核心的 6 份，优先看这 6 个：
+如果只保留最核心的 8 份，优先看这 8 个：
 
 1. `AGENTS.md`
 2. `docs/source-of-truth-map.md`
@@ -111,9 +121,46 @@
 4. `docs/backlog/*.md`
 5. `docs/v0-slice.md`
 6. `project_plan.md`
+7. `docs/legacy-to-vnext-migration-matrix.md`
+8. `docs/migration-parity-dashboard.md`
 
 ## 7. 现在该怎么继续规划
 
 - 第一批功能 slice 基本完成后，下一批应主要从 `docs/backlog` 里的 review issues 继续拆
 - `docs/next-development-slices-2026-03-29.md` 可以保留为 batch 1 历史记录
 - 下一批建议新建单独批次文档，而不是继续往旧 batch 文件里叠
+
+## 8. 文档为什么会过期
+
+会。主要有 3 种过期方式：
+
+1. code/test 已变，但 migration matrix / parity dashboard 没同步
+2. backlog issue 已关闭，但 cutover 判断仍沿用旧结论
+3. 旧仓又被拿来当“默认真相源”，覆盖了新仓已锁定决策
+
+所以这些文档不是“单独定义行为”，而是迁移治理控制面。
+
+行为真相仍然以：
+
+1. 当前 backlog issue
+2. `packages/*/src/index.ts`
+3. `packages/*/test/*.spec.ts`
+
+为准。
+
+## 9. 防过期同步规则
+
+以下动作发生时，必须同步更新控制面文档：
+
+1. 某个 `review-gap` / `partial` / `not-started` 的迁移 issue 被关闭
+2. 某个 capability family 或 package 的 public contract 发生变化
+3. 某个 area 被明确判定为 `intentionally-dropped`
+4. 团队要判断“能不能切主线”
+
+最少同步动作：
+
+1. 更新 `docs/legacy-to-vnext-migration-matrix.md`
+2. 更新 `docs/migration-parity-dashboard.md`
+3. 如 gate 判定变了，再更新 `docs/cutover-readiness-criteria.md`
+
+如果代码已经改了，但这三份文档没更新，默认视为迁移控制面过期。

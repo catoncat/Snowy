@@ -9,6 +9,9 @@ Future mainline for the post-LIFO Browser Brain Loop runtime.
 - [Locked Decisions](docs/locked-decisions-2026-03-29.md) - architecture constraints that should not drift
 - [V0 Slice](docs/v0-slice.md) - what has already been implemented
 - [Legacy Reference Map](docs/legacy-reference-map.md) - old repo and research repo lookup
+- [Migration Matrix](docs/legacy-to-vnext-migration-matrix.md) - old repo feature areas to vNext targets
+- [Parity Dashboard](docs/migration-parity-dashboard.md) - quick migration status view
+- [Cutover Readiness](docs/cutover-readiness-criteria.md) - objective criteria for switching mainline
 
 ## Packages
 
