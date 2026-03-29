@@ -1,21 +1,25 @@
 ---
 id: ISSUE-010
-title: Authoring docs and package template
-status: open
+title: "Authoring docs and package template"
+status: done
 priority: p1
-source: v0 follow-up
+source: "v0 follow-up"
 created: 2026-03-29
-assignee: unassigned
-tags: [docs, skill-sdk]
+assignee: agent
+tags:
+  - docs
+  - skill-sdk
 kind: slice
 epic: EPIC-skill-sdk
 parallel_group: sdk-docs
-depends_on: [ISSUE-009]
+depends_on:
+  - ISSUE-009
 write_scope:
   - docs/
   - README.md
 acceptance_ref: docs/next-development-slices-2026-03-29.md
-check_cmd: bun run check
+check_cmd: "bun run check"
+claimed_at: 2026-03-29T09:12:26.452Z
 ---
 
 ## Goal
