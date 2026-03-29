@@ -32,6 +32,10 @@ resolved: 2026-03-29
 - 有 host health 状态
 - 有 cancel/timeout 组合测试
 
+## Sub Issues
+
+- `ISSUE-031` `Review: execution host control plane is still missing`
+
 ## 工作总结
 
 ### 2026-03-29 16:50 CST

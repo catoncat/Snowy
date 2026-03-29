@@ -33,6 +33,10 @@ check_cmd: "bun run check"
 - namespace coverage 有明确测试
 - projection / descriptor 校验继续保持单一真相源
 
+## Sub Issues
+
+- `ISSUE-029` `Review: action capability model still conflates full AI surface`
+
 ## 工作总结
 
 ### 2026-03-29 补记
