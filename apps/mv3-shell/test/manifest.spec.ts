@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import manifest from "../manifest.json";
 // @ts-ignore source JS module has no declaration file yet
-import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCREEN_REASONS, createBackgroundRunnerBridge } from "../src/background.js";
+import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCREEN_REASONS, createBackgroundRunnerBridge, createPageHookBridge } from "../src/background.js";
 // @ts-ignore source JS module has no declaration file yet
 import { createOffscreenRunnerBridge } from "../src/offscreen.js";
 import { describe, expect, it, vi } from "vitest";
@@ -132,6 +133,63 @@ function createChromeHarness({
     offscreenApi,
     cleanup() {
       disposeOffscreen?.();
+    }
+  };
+}
+
+function createScriptingHarness() {
+  const worlds = new Map<string, Record<string, unknown>>();
+
+  function getContext(tabId: number, world: string): Record<string, unknown> {
+    const key = `${tabId}:${world}`;
+    const existing = worlds.get(key);
+    if (existing) {
+      return existing;
+    }
+    const sandbox: Record<string, unknown> = {
+      console
+    };
+    sandbox.globalThis = sandbox;
+    worlds.set(key, sandbox);
+    return sandbox;
+  }
+
+  return {
+    chromeApi: {
+      scripting: {
+        executeScript: vi.fn(async (request: {
+          target: { tabId: number };
+          world?: string;
+          files?: string[];
+          func?: (...args: unknown[]) => unknown;
+          args?: unknown[];
+        }) => {
+          const world = request.world ?? "ISOLATED";
+          const context = getContext(request.target.tabId, world);
+
+          if (request.files) {
+            for (const file of request.files) {
+              const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+              runInNewContext(source, context, {
+                filename: file
+              });
+            }
+          }
+
+          if (request.func) {
+            context.__bblArgs = request.args ?? [];
+            const result = await Promise.resolve(
+              runInNewContext(`(${request.func.toString()})(...globalThis.__bblArgs)`, context, {
+                filename: "executeScript.js"
+              })
+            );
+            delete context.__bblArgs;
+            return [{ result }];
+          }
+
+          return [];
+        })
+      }
     }
   };
 }
@@ -404,5 +462,97 @@ describe("mv3-shell manifest", () => {
         code: "E_TIMEOUT"
       }
     });
+  });
+
+  it("injects, invokes, and verifies the page hook through chrome.scripting", async () => {
+    const harness = createScriptingHarness();
+    const bridge = createPageHookBridge({
+      chromeApi: harness.chromeApi
+    });
+    const step = {
+      world: "main" as const,
+      scriptId: "bbl-next.page-hook.fixture",
+      jsPath: "src/page-hook.js",
+      runAt: "document_idle" as const
+    };
+    const activeTab = {
+      tabId: 21,
+      url: "https://fixture.test/demo",
+      active: true
+    };
+
+    const installation = await bridge.install(step, activeTab);
+    const result = await bridge.invoke({
+      installation: {
+        step,
+        result: installation
+      },
+      action: "execute_fixture",
+      input: {
+        query: "bridge"
+      },
+      tab: activeTab,
+      ctx: {
+        tab: activeTab
+      }
+    });
+    const verified = await bridge.verify({
+      installation: {
+        step,
+        result: installation
+      },
+      action: "execute_fixture",
+      result,
+      tab: activeTab
+    });
+    const state = await bridge.snapshotState({
+      tabId: activeTab.tabId,
+      world: "main"
+    });
+
+    expect((installation as { run?: unknown }).run).toBeUndefined();
+    expect(installation).toEqual({
+      installationId: "bbl-next.page-hook.fixture:1",
+      installed: {
+        installationId: "bbl-next.page-hook.fixture:1",
+        world: "main",
+        scriptId: "bbl-next.page-hook.fixture",
+        jsPath: "src/page-hook.js",
+        runAt: "document_idle",
+        tabId: 21,
+        url: "https://fixture.test/demo"
+      }
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      action: "execute_fixture",
+      installationId: "bbl-next.page-hook.fixture:1",
+      installedScriptId: "bbl-next.page-hook.fixture",
+      input: {
+        query: "bridge"
+      }
+    });
+    expect(verified).toBe(true);
+    expect(state).toMatchObject({
+      installs: [
+        expect.objectContaining({
+          installationId: "bbl-next.page-hook.fixture:1",
+          scriptId: "bbl-next.page-hook.fixture"
+        })
+      ],
+      invocations: [
+        expect.objectContaining({
+          installationId: "bbl-next.page-hook.fixture:1",
+          action: "execute_fixture"
+        })
+      ],
+      verifications: [
+        {
+          action: "execute_fixture",
+          verified: true
+        }
+      ]
+    });
+    expect(harness.chromeApi.scripting.executeScript).toHaveBeenCalled();
   });
 });

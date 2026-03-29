@@ -13,6 +13,7 @@ export interface ActiveTabMetadata {
 export interface InjectionStep {
   world: SiteWorld;
   scriptId: string;
+  jsPath?: string;
   runAt?: "document_start" | "document_idle" | "document_end";
 }
 
@@ -48,6 +49,24 @@ export interface SiteSkillDefinition {
 
 export interface SiteScriptInstaller {
   install(step: InjectionStep, tab: ActiveTabMetadata): Promise<unknown>;
+  invoke?(request: SiteScriptInvocationRequest): Promise<unknown>;
+  verify?(request: SiteScriptVerificationRequest): Promise<boolean>;
+}
+
+export interface SiteScriptInvocationRequest {
+  installation: SiteInstallation;
+  action: string;
+  input: unknown;
+  tab: ActiveTabMetadata;
+  ctx: Record<string, unknown>;
+}
+
+export interface SiteScriptVerificationRequest {
+  installation: SiteInstallation;
+  action: string;
+  verifier: string;
+  result: unknown;
+  tab: ActiveTabMetadata;
 }
 
 export interface SiteActionVerifier {
@@ -67,6 +86,7 @@ export function buildInjectionPlan(skillId: string, action: SiteSkillAction): In
       action: action.name,
       steps: action.injectionSteps.map((s) => {
         const step: InjectionStep = { world: s.world, scriptId: s.scriptId };
+        if (s.jsPath) step.jsPath = s.jsPath;
         if (s.runAt) step.runAt = s.runAt;
         return step;
       })
@@ -181,27 +201,49 @@ export class SiteSkillRuntime {
     }
 
     // Phase 3: Run
+    const runnerContext = {
+      ...(request.ctx ?? {}),
+      tab: request.tab,
+      site
+    };
     const invocation = await this.#runnerHost.invoke({
       module: action.module,
       input: request.input ?? {},
-      ctx: {
-        ...(request.ctx ?? {}),
-        tab: request.tab,
-        site
-      }
+      ctx: runnerContext
     });
+    let result = invocation.result;
+    const targetInstallation = site.installations[site.installations.length - 1];
+    if (targetInstallation && this.#installer?.invoke) {
+      result = await this.#installer.invoke({
+        installation: targetInstallation,
+        action: request.action,
+        input: invocation.result,
+        tab: request.tab,
+        ctx: runnerContext
+      });
+    }
     trace.push(`invoke:${request.action}`);
 
     // Phase 4: Verify
     let verified = true;
-    if (action.verifier && this.#verifier) {
-      verified = await this.#verifier.verify({
-        skillId: request.skillId,
-        action: request.action,
-        tab: request.tab,
-        result: invocation.result,
-        site
-      });
+    if (action.verifier && (this.#verifier || (targetInstallation && this.#installer?.verify))) {
+      if (targetInstallation && this.#installer?.verify) {
+        verified = await this.#installer.verify({
+          installation: targetInstallation,
+          action: request.action,
+          verifier: action.verifier,
+          result,
+          tab: request.tab
+        });
+      } else if (this.#verifier) {
+        verified = await this.#verifier.verify({
+          skillId: request.skillId,
+          action: request.action,
+          tab: request.tab,
+          result,
+          site
+        });
+      }
       trace.push(`verify:${action.verifier}`);
       if (!verified) {
         throw new CapabilityError(
@@ -212,7 +254,7 @@ export class SiteSkillRuntime {
     }
 
     return {
-      result: invocation.result,
+      result,
       verified,
       trace
     };

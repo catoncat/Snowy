@@ -3,6 +3,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { JsRunnerHost } from "@bbl-next/js-runner";
+// @ts-ignore source JS module has no declaration file yet
+import { createPageHookBridge } from "../../../apps/mv3-shell/src/background.js";
 import {
   SiteSkillRegistry,
   SiteSkillRuntime,
@@ -23,46 +25,81 @@ const tab: ActiveTabMetadata = {
   title: "Home"
 };
 
-interface PageHookFixtureHandle {
-  installed: {
-    world: string;
-    scriptId: string;
-    runAt: string | null;
-    tabId: number | null;
-    url: string;
-  };
-  run(action: string, input: unknown, ctx: Record<string, unknown>): unknown;
-  verify(action: string, result: unknown): boolean;
-}
-
-interface PageHookFixtureApi {
-  version: string;
+interface PageHookBridgeState {
   state: {
-    installs: Array<PageHookFixtureHandle["installed"]>;
+    installs: Array<{
+      installationId: string;
+      world: string;
+      scriptId: string;
+      jsPath: string | null;
+      runAt: string | null;
+      tabId: number | null;
+      url: string;
+    }>;
     invocations: Array<Record<string, unknown>>;
     verifications: Array<{ action: string; verified: boolean }>;
   };
-  install(step: InjectionStep, tab: ActiveTabMetadata): PageHookFixtureHandle;
 }
 
-function loadPageHookFixture(): PageHookFixtureApi {
+function createScriptingChromeHarness() {
   const testDir = dirname(fileURLToPath(import.meta.url));
-  const source = readFileSync(resolve(testDir, "../../../apps/mv3-shell/src/page-hook.js"), "utf8");
-  const sandbox: {
-    console: Console;
-    globalThis?: unknown;
-    __BBL_NEXT_PAGE_HOOK__?: PageHookFixtureApi;
-  } = {
-    console
-  };
-  sandbox.globalThis = sandbox;
-  runInNewContext(source, sandbox, {
-    filename: "page-hook.js"
-  });
-  if (!sandbox.__BBL_NEXT_PAGE_HOOK__) {
-    throw new Error("page hook fixture did not register");
+  const worlds = new Map<string, Record<string, unknown>>();
+
+  function getContext(tabId: number, world: string): Record<string, unknown> {
+    const key = `${tabId}:${world}`;
+    const existing = worlds.get(key);
+    if (existing) {
+      return existing;
+    }
+    const sandbox: Record<string, unknown> = {
+      console
+    };
+    sandbox.globalThis = sandbox;
+    worlds.set(key, sandbox);
+    return sandbox;
   }
-  return sandbox.__BBL_NEXT_PAGE_HOOK__;
+
+  return {
+    chromeApi: {
+      scripting: {
+        executeScript: vi.fn(async (request: {
+          target: { tabId: number };
+          world?: string;
+          files?: string[];
+          func?: (...args: unknown[]) => unknown;
+          args?: unknown[];
+        }) => {
+          const world = request.world ?? "ISOLATED";
+          const context = getContext(request.target.tabId, world);
+
+          if (request.files) {
+            for (const file of request.files) {
+              const source = readFileSync(
+                resolve(testDir, "../../../apps/mv3-shell", file),
+                "utf8"
+              );
+              runInNewContext(source, context, {
+                filename: file
+              });
+            }
+          }
+
+          if (request.func) {
+            context.__bblArgs = request.args ?? [];
+            const result = await Promise.resolve(
+              runInNewContext(`(${request.func.toString()})(...globalThis.__bblArgs)`, context, {
+                filename: "executeScript.js"
+              })
+            );
+            delete context.__bblArgs;
+            return [{ result }];
+          }
+
+          return [];
+        })
+      }
+    }
+  };
 }
 
 describe("site-runtime", () => {
@@ -264,8 +301,11 @@ describe("site-runtime", () => {
     expect(installer.install).not.toHaveBeenCalled();
   });
 
-  it("runs a real page-hook fixture from action to verifier", async () => {
-    const pageHook = loadPageHookFixture();
+  it("runs a real page-hook file through the explicit injection bridge", async () => {
+    const scriptingHarness = createScriptingChromeHarness();
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: scriptingHarness.chromeApi
+    });
     const registry = new SiteSkillRegistry([
       {
         skillId: "fixture.page",
@@ -274,7 +314,12 @@ describe("site-runtime", () => {
           {
             name: "execute_fixture",
             injectionSteps: [
-              { world: "main", scriptId: "bbl-next.page-hook.fixture", runAt: "document_idle" }
+              {
+                world: "main",
+                scriptId: "bbl-next.page-hook.fixture",
+                jsPath: "src/page-hook.js",
+                runAt: "document_idle"
+              }
             ],
             verifier: "page_hook_ok",
             module: {
@@ -287,7 +332,13 @@ describe("site-runtime", () => {
                   if (!installation || !installation.result) {
                     throw new Error("fixture install missing");
                   }
-                  return installation.result.run("execute_fixture", input, ctx);
+                  return {
+                    query: input.query,
+                    installationId: installation.result.installationId,
+                    canRun: typeof installation.result.run,
+                    canVerify: typeof installation.result.verify,
+                    canInvoke: typeof installation.result.invoke
+                  };
                 };
               `
             }
@@ -299,23 +350,22 @@ describe("site-runtime", () => {
       registry,
       runnerHost: new JsRunnerHost(),
       installer: {
-        install: async (step, currentTab) => {
-          if (step.scriptId === "bbl-next.page-hook.fixture") {
-            return pageHook.install(step, currentTab);
-          }
-          return undefined;
-        }
-      },
-      verifier: {
-        verify: async ({ action, result, site }) => {
-          const installation = site.installations.find(
-            (entry) => entry.step.scriptId === "bbl-next.page-hook.fixture"
-          );
-          if (!installation || !installation.result) {
-            return false;
-          }
-          return (installation.result as PageHookFixtureHandle).verify(action, result);
-        }
+        install: async (step, currentTab) => pageHookBridge.install(step, currentTab),
+        invoke: async ({ installation, action, input, tab: currentTab, ctx }) =>
+          pageHookBridge.invoke({
+            installation,
+            action,
+            input,
+            tab: currentTab,
+            ctx
+          }),
+        verify: async ({ installation, action, result, tab: currentTab }) =>
+          pageHookBridge.verify({
+            installation,
+            action,
+            result,
+            tab: currentTab
+          })
       }
     });
 
@@ -332,26 +382,33 @@ describe("site-runtime", () => {
       }
     });
 
-    expect(pageHook.version).toBe("fixture-v1");
-    expect(pageHook.state.installs).toEqual([
+    const snapshot = await pageHookBridge.snapshotState({
+      tabId: 11,
+      world: "main"
+    }) as PageHookBridgeState["state"] | null;
+
+    expect(snapshot?.installs).toEqual([
       {
+        installationId: "bbl-next.page-hook.fixture:1",
         world: "main",
         scriptId: "bbl-next.page-hook.fixture",
+        jsPath: "src/page-hook.js",
         runAt: "document_idle",
         tabId: 11,
         url: "https://fixture.test/demo"
       }
     ]);
-    expect(pageHook.state.invocations).toEqual([
+    expect(snapshot?.invocations).toEqual([
       expect.objectContaining({
         ok: true,
         action: "execute_fixture",
+        installationId: "bbl-next.page-hook.fixture:1",
         installedScriptId: "bbl-next.page-hook.fixture",
         tabUrl: "https://fixture.test/demo",
         installCount: 1
       })
     ]);
-    expect(pageHook.state.verifications).toEqual([
+    expect(snapshot?.verifications).toEqual([
       {
         action: "execute_fixture",
         verified: true
@@ -363,8 +420,13 @@ describe("site-runtime", () => {
         ok: true,
         action: "execute_fixture",
         input: {
-          query: "hello fixture"
+          query: "hello fixture",
+          installationId: "bbl-next.page-hook.fixture:1",
+          canRun: "undefined",
+          canVerify: "undefined",
+          canInvoke: "undefined"
         },
+        installationId: "bbl-next.page-hook.fixture:1",
         installedScriptId: "bbl-next.page-hook.fixture",
         tabUrl: "https://fixture.test/demo",
         installCount: 1
@@ -389,7 +451,7 @@ describe("site-runtime", () => {
     const actionWithScripts: SiteSkillAction = {
       name: "like_post",
       injectionSteps: [
-        { world: "content", scriptId: "twitter.dom-helper" },
+        { world: "content", scriptId: "twitter.dom-helper", jsPath: "src/page-hook.js" },
         { world: "main", scriptId: "twitter.api-bridge", runAt: "document_idle" }
       ],
       module: { id: "twitter.like", source: "exports.default = async () => ({});" }
@@ -406,7 +468,7 @@ describe("site-runtime", () => {
         skillId: "twitter.like",
         action: "like_post",
         steps: [
-          { world: "content", scriptId: "twitter.dom-helper" },
+          { world: "content", scriptId: "twitter.dom-helper", jsPath: "src/page-hook.js" },
           { world: "main", scriptId: "twitter.api-bridge", runAt: "document_idle" }
         ]
       });
@@ -445,7 +507,7 @@ describe("site-runtime", () => {
             {
               name: "merge",
               injectionSteps: [
-                { world: "content", scriptId: "gh.dom-helper" },
+                { world: "content", scriptId: "gh.dom-helper", jsPath: "src/page-hook.js" },
                 { world: "main", scriptId: "gh.api-hook", runAt: "document_idle" }
               ],
               module: {
@@ -474,7 +536,7 @@ describe("site-runtime", () => {
       });
 
       expect(installedSteps).toEqual([
-        { world: "content", scriptId: "gh.dom-helper" },
+        { world: "content", scriptId: "gh.dom-helper", jsPath: "src/page-hook.js" },
         { world: "main", scriptId: "gh.api-hook", runAt: "document_idle" }
       ]);
     });
