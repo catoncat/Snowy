@@ -1,7 +1,7 @@
 ---
 id: ISSUE-008
 title: "Site skill fixture invoke path"
-status: in-progress
+status: done
 priority: p1
 source: "v0 follow-up"
 created: 2026-03-29

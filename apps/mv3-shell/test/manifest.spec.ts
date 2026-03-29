@@ -156,6 +156,16 @@ describe("mv3-shell manifest", () => {
     expect(source).not.toMatch(/\.ts["']/);
   });
 
+  it("keeps the offscreen runner core synced with packages/js-runner", () => {
+    const packageCore = readFileSync(
+      new URL("../../../packages/js-runner/src/runner-host-core.js", import.meta.url),
+      "utf8"
+    );
+    const appCore = readFileSync(new URL("../src/runner-host-core.js", import.meta.url), "utf8");
+
+    expect(appCore).toBe(packageCore);
+  });
+
   it("creates the offscreen document once and uses the WORKERS reason", async () => {
     const host = {
       dispatch: vi.fn(async (request) => {
