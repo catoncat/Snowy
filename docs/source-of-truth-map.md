@@ -1,122 +1,178 @@
 # Source Of Truth Map
 
-本文件回答两个问题：
+本文件回答 3 个问题：
 
-1. 这次重构到底以哪些文档为主依赖
-2. 当多个文档/代码/计划看起来冲突时，以谁为准
+1. 现在这仓库到底以什么为主线
+2. 我现在该看哪类文档来判断下一步
+3. 多份文档互相打架时，到底谁说了算
 
-## 1. 一句话结论
+## 1. 核心结论
 
-- `docs/backlog/*.md` 是当前任务真相源
-- `docs/locked-decisions-2026-03-29.md` 是架构边界真相源
-- `packages/*/src/index.ts` + `packages/*/test/*.spec.ts` 是已落地行为真相源
-- 旧仓设计文档是上游来源，不是新仓实现期的覆盖源
+当前仓库的真实状态是：
 
-## 2. 文档优先级
+- `v0` 已完成的是 `substrate foundation`
+- 当前主线不是继续横向补 substrate
+- 当前主线是补回 `browser-side kernel`
 
-按优先级从高到低看：
+因此要这样理解真相源：
+
+- `AGENTS.md` + `docs/locked-decisions-2026-03-29.md`
+  - 定义不能改口的仓库边界
+- `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+  - 定义“为什么 repo 主线已切回 browser-side kernel”
+- `docs/kernel-skeleton-design.md`
+  - 定义 `packages/kernel` 的当前主线骨架与切片
+- `docs/backlog/*.md` + `bun run workflow:claim:preview`
+  - 定义现在该做什么
+- `packages/*/src/` + `packages/*/test/*.spec.ts`
+  - 定义已经真正落地的行为
+
+补充判断：
+
+- `docs/reviews/2026-03-29-comprehensive-review-summary.md` 及其维度 review 文档
+  - 是 gap inventory / follow-up 来源
+  - 不是当前 roadmap 主线真相源
+- 旧仓文档与研究仓
+  - 是参考来源
+  - 不覆盖新仓已锁定的主线判断
+
+## 2. 按问题类型找真相
+
+| 你要回答的问题 | 先看哪里 |
+|---|---|
+| 这仓库现在到底想成为什么 | `AGENTS.md` → `docs/start-here.md` → `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
+| 哪些原则不能变 | `AGENTS.md` → `docs/locked-decisions-2026-03-29.md` |
+| 当前主线为什么是 kernel | `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
+| `packages/kernel` 该怎么做 | `docs/kernel-skeleton-design.md` |
+| 我现在该 claim 什么 | `docs/backlog/README.md` → live `docs/backlog/*.md` → `BBL_AGENT_NAME=<name> bun run workflow:claim:preview` |
+| 当前批次是什么 | `docs/next-development-slices-2026-03-29-batch-7.md` |
+| 某个能力是否已经真正落地 | 对应 `packages/*/src/` + `packages/*/test/*.spec.ts` |
+| v0 已经做到哪 | `docs/v0-slice.md` |
+| 与旧仓的迁移差距还有哪些 | `docs/legacy-to-vnext-migration-matrix.md` → `docs/migration-parity-dashboard.md` → `docs/cutover-readiness-criteria.md` |
+| 旧仓或研究仓去哪里查 | `docs/legacy-reference-map.md` |
+| 还有哪些 review follow-up 可做 | `docs/reviews/*.md`，但必须落成新的 backlog issue 才进入派工真相源 |
+
+## 3. 冲突时怎么裁决
+
+### 场景 A：主线判断冲突
+
+如果出现：
+
+- `comprehensive review` 说继续补 review follow-ups
+- recovery report 说先补 browser-side kernel
+
+以这条为准：
 
 1. `AGENTS.md`
-   - 仓库级工作规则
-   - onboarding、north star、repo index
 2. `docs/locked-decisions-2026-03-29.md`
-   - 已拍板约束
-   - 实现不能偷偷偏离
-3. `docs/document-system-contract.md`
-   - 文档系统分层
-   - Doc Freshness Gate / Definition Of Done
-4. `docs/agent-bootstrap-context-pack.md`
-   - 新 agent 的最短高信号上下文包
-5. `docs/ai-native-capability-surface-design.md`
-   - 产品如何把自己暴露给 AI
-   - capability / resource / workflow / host 的当前主轴
-6. `docs/ai-surface-index.md`
-   - 当前 AI surface 的简明地图
-7. 当前正在处理的 `docs/backlog/<issue>.md`
-   - 当前 slice 的 `Goal` / `Acceptance` / `write_scope` / `depends_on`
-   - 任务状态唯一以这里为准
-8. `packages/*/src/index.ts` + `packages/*/test/*.spec.ts`
-   - 当前仓已经实现出来的行为口径
-   - 若实现与旧设计冲突，先记 backlog/review，再改实现，不要口头覆盖
-9. `docs/v0-slice.md`
-   - 当前 v0 已完成范围
-   - 用来判断“这是不是已经做过”
-10. `project_plan.md`
-   - phase 级推进蓝图
-   - 用来指导下一批 issue 拆分
-11. `docs/legacy-to-vnext-migration-matrix.md`
-   - 旧仓能力面到新仓目标面的覆盖矩阵
-12. `docs/migration-parity-dashboard.md`
-   - 迁移状态总览
-13. `docs/cutover-readiness-criteria.md`
-   - 切主线门槛
-14. `docs/legacy-reference-map.md`
-   - 旧仓 / 研究仓的参考地图
-   - 只负责告诉你去哪里看，不直接决定新仓实现
-15. 旧仓 `docs/skill-runtime-site-capability-redesign-2026-03-29.md`
-   - 顶层设计来源
-   - 仅作上游设计依据，不覆盖新仓 locked decisions
+3. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+4. `docs/kernel-skeleton-design.md`
 
-## 3. 冲突时怎么判
+也就是说：
 
-### 场景 A：backlog 和旧设计冲突
+- `recovery report + kernel skeleton` 优先级高于 `comprehensive review`
+- `comprehensive review` 只能提供后续 gap，不负责重排 repo 主线
 
-- 以 `backlog issue + locked decisions` 为准
-- 旧设计只能作为“为什么最初这么想”的解释
+### 场景 B：派工顺序冲突
 
-### 场景 B：代码/测试和文档冲突
+如果出现：
 
-- 如果是已完成 slice：
-  - 先以测试和实现为当前行为真相
-  - 再新开 review/backlog 修正文档或实现
-- 如果是正在做的 slice：
-  - 先回到当前 issue 的 acceptance
-  - 不要在一个 slice 里顺手改 architecture contract
+- batch 文档写的是一个顺序
+- backlog frontmatter / claim preview 显示的是另一个顺序
 
-### 场景 C：`next-development-slices` 和 backlog 状态冲突
+以这条为准：
 
-- 以 `docs/backlog/*.md` 为准
-- `docs/next-development-slices-2026-03-29.md` 目前主要是第一批 batch 快照，不再是唯一排期源
+1. live `docs/backlog/*.md`
+2. `bun run workflow:claim:preview`
+3. batch / planning 文档
 
-## 4. 进入项目的最短阅读路径
+也就是说：
 
-### 新 agent 第一次进入仓库
+- planning 文档是快照
+- backlog frontmatter 才是 live queue
+
+### 场景 C：设计文档和代码/测试冲突
+
+如果出现：
+
+- 设计文档说某能力已支持
+- 但 `src/` + `test/` 没有落地
+
+则：
+
+- “当前行为真相”以代码和测试为准
+- 设计文档只能说明目标态，不代表已经落地
+
+### 场景 D：设计文档写了“已交付”，但 backlog 仍是 open
+
+按下面理解：
+
+- 对“是否已经 landed”：
+  - 看 committed code + test
+- 对“是否还在 claim queue / ownership queue”：
+  - 看 live backlog frontmatter
+
+也就是说：
+
+- 没有 `status: done` 的 backlog issue，不因为某份设计文档写了“已交付”就自动视为收口
+- 设计文档里的交付状态只能作为提示，不能替代派工真相源
+
+### 场景 E：旧仓设计和新仓当前文档冲突
+
+默认以新仓为准：
 
 1. `AGENTS.md`
-2. `docs/source-of-truth-map.md`
-3. `docs/agent-bootstrap-context-pack.md`
-4. `docs/start-here.md`
+2. `docs/locked-decisions-2026-03-29.md`
+3. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+4. `docs/kernel-skeleton-design.md`
+
+旧仓只回答：
+
+- 旧系统原本如何工作
+- 为什么需要这个能力
+
+旧仓不直接决定：
+
+- 新仓当前主线
+- 新仓当前派工顺序
+- 新仓 public surface 如何命名
+
+## 4. 新 Agent 第一次进入仓库的阅读顺序
+
+1. `AGENTS.md`
+2. `docs/start-here.md`
+3. `docs/source-of-truth-map.md`
+4. `docs/agent-bootstrap-context-pack.md`
 5. `docs/locked-decisions-2026-03-29.md`
-6. `docs/ai-native-capability-surface-design.md`
-7. `docs/ai-surface-index.md`
-8. `docs/v0-slice.md`
-9. `docs/legacy-reference-map.md`
-10. 你要做的那个 `docs/backlog/<issue>.md`
-11. 如涉及旧仓迁移，再读：
-   - `docs/legacy-to-vnext-migration-matrix.md`
-   - `docs/migration-parity-dashboard.md`
-   - `docs/cutover-readiness-criteria.md`
+6. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+7. `docs/kernel-skeleton-design.md`
+8. `docs/backlog/README.md`
+9. `docs/multi-agent-workflow.md`
+10. `docs/next-development-slices-2026-03-29-batch-7.md`
+11. 你要做的那个 `docs/backlog/<issue>.md`
+12. 相关 lane 的 `packages/*/src/` + `packages/*/test/*.spec.ts`
+13. 如需要旧仓对照，再读 `docs/legacy-reference-map.md`
 
-### 只想知道“现在该做什么”
+## 5. 这套架构到底想成为什么
 
-1. `docs/backlog/*.md`
-2. 找 `status: open` 或你已 claim 的 `status: in-progress`
-3. 再看对应 lane 的代码入口
-
-### 只想知道“这套架构到底想成为什么”
+如果你只想快速建立这件事的顶层心智，按这个顺序：
 
 1. `docs/start-here.md`
-2. `docs/agent-bootstrap-context-pack.md`
-3. `docs/locked-decisions-2026-03-29.md`
-4. `docs/ai-native-capability-surface-design.md`
-5. `docs/ai-surface-index.md`
-6. `project_plan.md`
-7. 旧仓 redesign doc
+2. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+3. `docs/kernel-skeleton-design.md`
+4. `docs/locked-decisions-2026-03-29.md`
+5. `docs/ai-native-capability-surface-design.md`
+6. `docs/ai-surface-index.md`
 
-## 5. 包级真相入口
+一句话版本：
+
+> 目标不是做一个 substrate 工具箱，而是做一个“以浏览器侧 kernel 为中枢、以 AI Surface 为统一产品面、以 Skill 为唯一扩展单位、Browser/Host 为执行基座”的 agent system。
+
+## 6. 包级真相入口
 
 | 关注点 | 先看哪里 |
 |---|---|
+| kernel mainline | `docs/kernel-skeleton-design.md` → `packages/kernel/src/index.ts` → `packages/kernel/test/*.spec.ts` |
 | canonical descriptor / contract | `packages/contracts/src/index.ts` |
 | capability routing / ctx / invoke | `packages/core/src/index.ts` |
 | BrowserVFS | `packages/browser-vfs/src/index.ts` |
@@ -125,60 +181,86 @@
 | Skill SDK | `packages/skill-sdk/src/index.ts` |
 | MV3 shell | `apps/mv3-shell/` |
 
-测试入口对应看各包 `test/*.spec.ts`。
+测试入口默认看各包 `test/*.spec.ts`。
 
-## 6. 当前推荐的“主依赖文档”集合
+## 7. Review 文档的正确用法
 
-如果只保留最核心的 10 份，优先看这 10 个：
+`docs/reviews/` 下面的文档有两类，不要混用：
 
-1. `AGENTS.md`
-2. `docs/source-of-truth-map.md`
-3. `docs/document-system-contract.md`
-4. `docs/agent-bootstrap-context-pack.md`
-5. `docs/locked-decisions-2026-03-29.md`
-6. `docs/ai-native-capability-surface-design.md`
-7. `docs/backlog/*.md`
-8. `docs/v0-slice.md`
-9. `project_plan.md`
-10. `docs/legacy-to-vnext-migration-matrix.md`
+### 类别 A：当前主线纠偏文档
 
-## 7. 现在该怎么继续规划
+- `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
 
-- 第一批功能 slice 基本完成后，下一批应主要从 `docs/backlog` 里的 review issues 继续拆
-- `docs/next-development-slices-2026-03-29.md` 可以保留为 batch 1 历史记录
-- 下一批建议新建单独批次文档，而不是继续往旧 batch 文件里叠
+它虽然放在 `reviews/` 目录下，但它不是普通 review。
 
-## 8. 文档为什么会过期
+它是：
 
-会。主要有 3 种过期方式：
+- repo 当前重新定性的正式文档
+- kernel 主线回归的依据
+- backlog / workflow / planning 应该对齐的上游判断
 
-1. code/test 已变，但 migration matrix / parity dashboard 没同步
-2. backlog issue 已关闭，但 cutover 判断仍沿用旧结论
-3. 旧仓又被拿来当“默认真相源”，覆盖了新仓已锁定决策
+### 类别 B：gap inventory / follow-up 来源
 
-所以这些文档不是“单独定义行为”，而是迁移治理控制面。
+- `docs/reviews/2026-03-29-comprehensive-review-summary.md`
+- `docs/reviews/2026-03-29-architecture-quality-review.md`
+- `docs/reviews/2026-03-29-code-engineering-quality-review.md`
+- `docs/reviews/2026-03-29-docs-dx-review.md`
 
-行为真相仍然以：
+这些文档的用途是：
 
-1. 当前 backlog issue
-2. `packages/*/src/index.ts`
-3. `packages/*/test/*.spec.ts`
+- 找缺口
+- 产出 follow-up issue
+- 辅助第二批、第三批 backlog 规划
 
-为准。
+这些文档不负责：
 
-## 9. 防过期同步规则
+- 决定 repo 当前主线
+- 覆盖 recovery report 的重定性结论
+- 把 claim 顺序从 kernel 再拉回 review-first
 
-以下动作发生时，必须同步更新控制面文档：
+## 8. 现在该怎么继续规划
 
-1. 某个 `review-gap` / `partial` / `not-started` 的迁移 issue 被关闭
-2. 某个 capability family 或 package 的 public contract 发生变化
-3. 某个 area 被明确判定为 `intentionally-dropped`
-4. 团队要判断“能不能切主线”
+默认规划顺序是：
 
-最少同步动作：
+1. 先看 live backlog 是否还有 kernel 主线 issue
+2. 若还有，先按 kernel 主线推进
+3. kernel 主线收口后，再回到 operability / diagnostics / site-runtime / host / DX 次级队列
+4. 当 live backlog 没有可 claim issue 时，再进入 next-batch planning
 
-1. 更新 `docs/legacy-to-vnext-migration-matrix.md`
-2. 更新 `docs/migration-parity-dashboard.md`
-3. 如 gate 判定变了，再更新 `docs/cutover-readiness-criteria.md`
+当前默认 planning 快照是：
 
-如果代码已经改了，但这三份文档没更新，默认视为迁移控制面过期。
+- `docs/next-development-slices-2026-03-29-batch-7.md`
+
+当前默认主线排序是：
+
+1. `ISSUE-051`
+2. `ISSUE-052`
+3. `ISSUE-053`
+4. 再看 `ISSUE-033` / `ISSUE-042` / `ISSUE-043`
+5. 再看 `ISSUE-036` / `ISSUE-045` / `ISSUE-038`
+
+## 9. 文档为什么会过期
+
+会。最常见的 4 种过期方式：
+
+1. 主线已经重定性，但入口文档还按旧顺序带人
+2. backlog queue 已变化，但 batch 文档还是旧快照
+3. 代码/测试已变化，但迁移治理文档没同步
+4. 某份 review 文档被错误提升成主线裁决文档
+
+所以默认同步规则是：
+
+1. 改主线判断时，更新：
+   - `AGENTS.md`
+   - `docs/start-here.md`
+   - `docs/source-of-truth-map.md`
+   - `docs/agent-bootstrap-context-pack.md`
+2. 改 queue 时，更新：
+   - `docs/backlog/*.md`
+   - 对应 batch 文档
+3. 改 landed behavior 时，更新：
+   - `packages/*/src/`
+   - `packages/*/test/*.spec.ts`
+   - 必要时同步 `docs/v0-slice.md` / migration docs
+
+如果这些没有同步，就把旧文档当参考，不要当 live truth。

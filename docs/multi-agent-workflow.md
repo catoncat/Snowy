@@ -9,6 +9,12 @@
 - 在并行开发下不抢同一片写域
 - 把 backlog、实现、集成、review 组织成一个统一循环
 
+当前 repo phase：
+
+- substrate foundation 已完成
+- browser-side kernel reconstruction 是当前主线
+- 所以 workflow 的目标不是平均派工，而是先把 claim 拉回 kernel mainline
+
 这里没有固定角色前提。
 
 - 所有 Agent 默认能力相同
@@ -40,9 +46,11 @@
 4. `docs/document-system-contract.md`
 5. `docs/start-here.md`
 6. `docs/locked-decisions-2026-03-29.md`
-7. `docs/ai-surface-index.md`
-8. `docs/v0-slice.md`
-9. `docs/legacy-reference-map.md`
+7. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+8. `docs/kernel-skeleton-design.md`
+9. `docs/ai-surface-index.md`
+10. `docs/v0-slice.md`
+11. `docs/legacy-reference-map.md`
 
 ### Workflow Skills
 
@@ -133,6 +141,11 @@
 - 使用 `auto-claim-issues-next`
 - 在 canonical workspace 中执行真正 claim
 - 再进入实现 loop
+- 若同时存在多个 claimable issue：
+  - 先看当前主线 batch
+  - 默认优先 `kernel p0`
+  - 再看 operability / browser automation
+  - 最后才是 DX / doc-debt / 测试补洞
 
 #### State D: 没有 open issue，但还有 `in-progress`
 
@@ -190,6 +203,8 @@
 1. 临时叠加 `coordinator` stance
 2. 使用 `next-batch-planner` skill
 3. 先做一轮 drift review：
+   - recovery report drift
+   - kernel skeleton drift
    - locked decisions drift
    - AI surface drift
    - doc freshness drift

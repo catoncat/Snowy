@@ -8,6 +8,24 @@
 
 > 去掉 `LIFO/browser_bash` 之后，仍然让 Browser Brain Loop 拥有可执行、可扩展、可分享、可自举的网站能力、产品能力与运行时能力。
 
+## 当前阶段
+
+先不要误判当前仓库状态。
+
+当前已经完成的是：
+
+- capability / AI surface / host / site / vfs / runner 的底座重构
+
+当前还没有完成的是：
+
+- browser-side kernel 主层
+- session / run queue / compaction 主链
+- 完整 diagnostics / intervention / browser automation 主线
+
+所以现在的主线不是“继续把 substrate 做得更满”，而是：
+
+> 把 browser-side brain 补回来。
+
 ## 你必须先知道的 5 件事
 
 1. 用户概念只保留 `Skill`
@@ -53,6 +71,14 @@
 
 详情见 `docs/v0-slice.md`
 
+注意：
+
+- `v0` = substrate foundation
+- `v0` 不等于 kernel parity
+- 当前 architecture mainline 见：
+  - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+  - `docs/kernel-skeleton-design.md`
+
 ## 进入代码前的强制阅读顺序
 
 1. `AGENTS.md`
@@ -61,15 +87,17 @@
 4. `docs/document-system-contract.md`
 5. `docs/start-here.md`
 6. `docs/locked-decisions-2026-03-29.md`
-7. `docs/ai-native-capability-surface-design.md`
-8. `docs/ai-surface-index.md`
-9. `docs/v0-slice.md`
-10. `docs/legacy-reference-map.md`
-11. `docs/legacy-to-vnext-migration-matrix.md`
-12. `docs/migration-parity-dashboard.md`
-13. `docs/cutover-readiness-criteria.md`
-14. 当前 backlog issue
-15. 当前 batch / planning 文档
+7. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+8. `docs/kernel-skeleton-design.md`
+9. `docs/ai-native-capability-surface-design.md`
+10. `docs/ai-surface-index.md`
+11. `docs/v0-slice.md`
+12. `docs/legacy-reference-map.md`
+13. `docs/legacy-to-vnext-migration-matrix.md`
+14. `docs/migration-parity-dashboard.md`
+15. `docs/cutover-readiness-criteria.md`
+16. 当前 backlog issue
+17. 当前 batch / planning 文档
 
 ## 如果你要判断“旧仓是不是已经迁完”
 
@@ -85,7 +113,12 @@
 
 ## 如果你要改架构层
 
-先看旧仓：
+先看新仓当前纠偏结论：
+
+- `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+- `docs/kernel-skeleton-design.md`
+
+再看旧仓：
 
 - `/Users/envvar/work/repos/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
 - `/Users/envvar/work/repos/browser-brain-loop/docs/kernel-architecture.md`
@@ -105,6 +138,7 @@
 ## 如果你只处理某个 lane
 
 - `contracts-core`: 先读 `packages/contracts/src/index.ts`、`packages/core/src/index.ts`
+- `kernel`: 先读 `docs/kernel-skeleton-design.md`、`packages/kernel/src/`
 - `browser-vfs`: 先读 `packages/browser-vfs/src/index.ts`
 - `js-runner`: 先读 `packages/js-runner/src/index.ts`
 - `site-runtime`: 先读 `packages/site-runtime/src/index.ts`

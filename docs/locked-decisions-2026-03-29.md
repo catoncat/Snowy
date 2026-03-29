@@ -54,6 +54,8 @@
 - 只有显式 action invoke 时才注入
 - MAIN world hook 按需安装
 - 同域名多个 skill 可以共存
+- 当前阶段 `SiteSkillRuntime.invoke()` 保持独立编排路径，不直接桥接 `FamilyProviderRegistry`（见 `docs/reviews/2026-03-29-site-runtime-capability-routing-decision.md`）
+- `page.* / site.*` 继续保留为 public capability namespace；桥接到 family provider 作为后续收口议题，不在本批次强行折叠
 
 ## Lifecycle
 

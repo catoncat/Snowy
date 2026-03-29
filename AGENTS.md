@@ -3,10 +3,11 @@
 ## 1. Repo Mission
 
 - 本仓是 Browser Brain Loop 的 vNext 主线实验仓。
-- 目标：去掉 `LIFO/browser_bash`，重建 `Skill + AI Surface + BrowserVFS + JS Runner + Site Runtime + Execution Host`。
+- 目标：去掉 `LIFO/browser_bash`，重建 `AI Surface + Browser-side Kernel + BrowserVFS + JS Runner + Site Runtime + Execution Host`。
 - 产品面只保留一个概念：`Skill`。
 - 产品对 AI 暴露统一 `AI Surface`；其中 invokable actions 继续通过 `Capability API` 暴露。
 - 默认不做 legacy/fallback 设计；旧仓只作行为和概念参考，不作兼容前提。
+- 当前阶段判断：v0 已完成的是 substrate foundation；当前主线是补回 browser-side kernel。
 
 ## 1.1 Mandatory Onboarding
 
@@ -15,10 +16,12 @@
   2. `docs/source-of-truth-map.md`
   3. `docs/agent-bootstrap-context-pack.md`
   4. `docs/locked-decisions-2026-03-29.md`
-  5. `docs/ai-native-capability-surface-design.md`
-  6. `docs/ai-surface-index.md`
-  7. `docs/v0-slice.md`
-  8. `docs/legacy-reference-map.md`
+  5. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+  6. `docs/kernel-skeleton-design.md`
+  7. `docs/ai-native-capability-surface-design.md`
+  8. `docs/ai-surface-index.md`
+  9. `docs/v0-slice.md`
+  10. `docs/legacy-reference-map.md`
 - 如果要改 architecture-level 代码，再去读旧仓：
   - `/Users/envvar/work/repos/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
   - `/Users/envvar/work/repos/browser-brain-loop/docs/kernel-architecture.md`
@@ -33,6 +36,8 @@
 - `JS Runner Host` 负责执行用户/skill 代码，不在 SW 直接跑动态模块。
 - `Site Runtime` 负责 active-tab match、按需注入、action、verifier。
 - 浏览器是控制中枢；`Execution Host` 是一等执行面，可本地也可远程。
+- 当前主线不是继续横向扩 substrate，而是补回 `packages/kernel` 这一层 browser-side brain。
+- `packages/kernel` 负责 session / run / compaction / diagnostics / intervention 主层。
 - `host.*` 保持粗粒度原语，不要按产品功能无限细分。
 - `Skill` 通过 `ctx.call()` / `ctx.capabilities.*` 使用能力，不直连私有内核实现。
 
@@ -61,6 +66,8 @@
   - descriptor 合法性
   - tool projection
   - lifecycle / trusted flag
+  - session / run state / loop turn / compaction type validity
+  - kernel adapter interface shapes
 
 ### 4.2 Core / Capability API
 
@@ -76,6 +83,16 @@
   - `ctx.call()`
   - `ctx.capabilities.*`
   - recursion blocking
+
+### 4.2.1 Kernel / Browser Brain Mainline
+
+- `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+  - 当前为什么要把主线切回 browser-side kernel
+- `docs/kernel-skeleton-design.md`
+  - `packages/kernel` 的骨架、切片和边界
+- `packages/kernel/src/`
+  - 当前 kernel 相关实现入口
+  - 重点关注 `session-store.ts`、`in-memory-session-storage.ts`
 
 ### 4.3 BrowserVFS
 
@@ -115,13 +132,67 @@
   - content/main install order
   - action + verifier trace
 
-### 4.6 Skill SDK
+### 4.6 Kernel
+
+- `packages/kernel/src/index.ts`
+  - `SessionStore`
+  - `InMemorySessionStorage`
+  - `RunController` / `RunEvent`
+  - `LoopEngine` / `StepRequest` / `StepResult` / `LoopEngineOptions`
+  - `CompactionManager` / `CompactionOptions` / `CompactionPreparation`
+  - `createKernel` / `Kernel` / `KernelOptions`
+- `packages/kernel/src/session-store.ts`
+  - session lifecycle
+  - compaction-aware context rebuild
+- `packages/kernel/src/in-memory-session-storage.ts`
+  - `SessionStorage` 接口的内存实现（测试用）
+- `packages/kernel/src/run-controller.ts`
+  - `RunState` state machine (idle → running → paused/stopped/compacting)
+  - prompt queue (steer/followUp)
+  - retry strategy with max attempts
+- `packages/kernel/src/loop-engine.ts`
+  - turn scheduling / step counting
+  - terminal condition detection (maxSteps / failed / verified / user_stop)
+  - no-progress detection (repeat_signature / ping_pong) with budget
+- `packages/kernel/src/compaction-manager.ts`
+  - threshold-based compaction trigger
+  - prepare → execute (LLM call) → apply cycle
+  - iterative compaction with previous summary (pi-mono pattern)
+- `packages/kernel/src/kernel-facade.ts`
+  - `createKernel()` unified API facade
+  - session / run / queue / loop / compaction 统一入口
+  - 子系统直接访问 (`sessions`, `runs`, `loop`, `compaction`)
+- `packages/kernel/test/session-store.spec.ts`
+  - session CRUD
+  - entry parentId chain
+  - context build (with/without compaction)
+  - multiple compaction handling
+- `packages/kernel/test/run-controller.spec.ts`
+  - phase transitions / illegal transitions
+  - queue steer/followUp
+  - retry management
+- `packages/kernel/test/loop-engine.spec.ts`
+  - turn creation / result recording
+  - terminal conditions
+  - no-progress detection / session reset
+- `packages/kernel/test/compaction-manager.spec.ts`
+  - shouldCompact threshold
+  - full compaction cycle (prepare → execute → apply)
+  - iterative compaction with previous summary
+- `packages/kernel/test/kernel-facade.spec.ts`
+  - session lifecycle integration
+  - run lifecycle integration
+  - queue integration
+  - loop turn integration
+  - triggerCompaction end-to-end
+
+### 4.7 Skill SDK
 
 - `packages/skill-sdk/src/index.ts`
   - 当前是 thin facade
   - 未来放 `defineSkill()`、skill author helpers、typed namespaces
 
-### 4.7 MV3 Shell
+### 4.8 MV3 Shell
 
 - `apps/mv3-shell/manifest.json`
   - 最小 MV3 壳
@@ -152,6 +223,15 @@
 | runner isolation / timeout | `packages/js-runner/src/index.ts` |
 | active-tab site activation | `packages/site-runtime/src/index.ts` |
 | verifier contract | `packages/site-runtime/src/index.ts` |
+| session model / run state / loop turn | `packages/contracts/src/index.ts` |
+| session store / context build | `packages/kernel/src/session-store.ts` |
+| run state machine / retry | `packages/kernel/src/run-controller.ts` |
+| loop turn scheduling / no-progress | `packages/kernel/src/loop-engine.ts` |
+| compaction trigger / LLM summarization | `packages/kernel/src/compaction-manager.ts` |
+| kernel unified API facade | `packages/kernel/src/kernel-facade.ts` |
+| compaction contract | `packages/contracts/src/index.ts` |
+| kernel LLM adapter / session storage interface | `packages/contracts/src/index.ts` |
+| kernel skeleton design | `docs/kernel-skeleton-design.md` |
 | MV3/offscreen shell | `apps/mv3-shell/` |
 
 ## 6. Old Repo Lookup Index
@@ -222,16 +302,24 @@
 ## 8. Current Status
 
 - 当前 v0 已完成的范围见 `docs/v0-slice.md`。
-- 当前还没做：
-  - 完整 builtin descriptor catalog
-  - 真正的 Chrome 注入/RPC/offscreen 生命周期
-  - Skill Studio UI
-  - Bridge-side MCP export
+- v0 的准确定位：
+  - 已完成 substrate / control-plane primitive foundation
+  - 还没有达到 browser-side kernel parity
+- 当前主线：
+  - `packages/kernel`
+  - session / run / compaction 骨架
+  - diagnostics / intervention / browser automation 后续收口
+- 当前次级 open queue：
+  - operability
+  - site-runtime automation
+  - js-runner real local host adapter
+  - DX / 测试补洞
 
 ## 9. Workflow
 
 - backlog 派工入口：`docs/backlog/README.md`
-- slice 总图：`docs/next-development-slices-2026-03-29.md`
+- 当前 batch 指针：`docs/next-development-slices-2026-03-29-batch-7.md`
+- 历史批次索引：`docs/next-development-slices-2026-03-29.md`
 - Agent 工作流说明：`docs/multi-agent-workflow.md`
 - 统一 workflow skill：`.agents/skills/agent-workflow-next/`
 - claim skill：`.agents/skills/auto-claim-issues-next/`
@@ -262,8 +350,10 @@
 1. `docs/start-here.md`
 2. `docs/source-of-truth-map.md`
 3. `docs/locked-decisions-2026-03-29.md`
-4. `docs/v0-slice.md`
-5. `docs/legacy-reference-map.md`
-6. `docs/backlog/README.md`
-7. `docs/multi-agent-workflow.md`
-8. 对应 issue / 对应 package 的 `src/` 和 `test/`
+4. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+5. `docs/kernel-skeleton-design.md`
+6. `docs/v0-slice.md`
+7. `docs/legacy-reference-map.md`
+8. `docs/backlog/README.md`
+9. `docs/multi-agent-workflow.md`
+10. 对应 issue / 对应 package 的 `src/` 和 `test/`

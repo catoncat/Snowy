@@ -1,5 +1,7 @@
 # V0 Slice
 
+> 注意：v0 的准确定位是 substrate foundation，不是 browser-side kernel parity。
+
 ## Implemented
 
 - canonical `CapabilityDescriptor` model and `ToolContract` projection
@@ -18,6 +20,9 @@
 
 ## Deferred
 
+- browser-side kernel mainline (`packages/kernel`)
+- session / run queue / compaction 主链
+- diagnostics / audit / intervention 主层
 - real IndexedDB migration/versioning strategy
 - descriptor-driven full builtin catalog beyond the v0 namespace baseline
 - real local/remote execution host adapters behind the `host.*` substrate

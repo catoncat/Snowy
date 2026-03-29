@@ -24,7 +24,7 @@ claimed_at: ISO datetime
 tags: [tag1, tag2]
 kind: slice
 epic: EPIC-<标识>
-parallel_group: contracts-core | browser-vfs | js-runner | site-runtime | mv3-shell | sdk-docs
+parallel_group: contracts-core | browser-vfs | js-runner | site-runtime | mv3-shell | sdk-docs | kernel
 depends_on: [ISSUE-xxx]
 write_scope:
   - packages/...
@@ -54,6 +54,20 @@ check_cmd: bun run test -- <target> | bun run check
   - integration
 - 建议先触发 `agent-workflow-next`，再按状态进入 `auto-claim-issues-next` 或 `next-batch-planner`
 - `.agents/prompts/*.md` 是可选 stance overlay，不是固定角色绑定
+
+## 当前主线优先级
+
+当前派工优先级不是平均分配。
+
+默认按下面顺序看：
+
+1. `packages/kernel` 主线
+2. operability / diagnostics / error lifecycle
+3. browser automation / site-runtime 主线
+4. substrate follow-up
+5. DX / README / lint / CI / 测试补洞
+
+若 live backlog 中同时存在 kernel `p0` 和 DX `p1/p2`，默认先 claim kernel。
 
 ## 工作流
 
@@ -136,18 +150,30 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 ### 队列提示
 
-- `ISSUE-035` 已完成：shared runner host path 现在有显式 host-adapter contract，默认 offscreen/local path 会返回结构化 `adapter_missing` error。
-- host adapter 的剩余实现已拆成 `ISSUE-038`。
-- 当前 `workflow:claim:preview` 应返回 `ISSUE-033`。
-- 其余 open issue 与推荐领取顺序以 live backlog frontmatter 和 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview` 为准。
+- 当前主线 batch 已切到 `docs/next-development-slices-2026-03-29-batch-7.md`
+- `ISSUE-051` / `ISSUE-052` / `ISSUE-053` 是当前 kernel mainline 队列
+- batch 6 中的 operability / site-runtime / host follow-up 仍有效，但现在是 kernel 次级队列
+- claim 真相仍以 live backlog frontmatter 与 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview` 为准。
 
 ### 边界说明
 
 - `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030`、`ISSUE-031`、`ISSUE-032`、`ISSUE-034`、`ISSUE-035` 已完成。
-- host substrate 仍未收口的主缺口是 `ISSUE-038` 对真实 local adapter 的跟进；更广的 operability 队列继续由 live backlog 管理。
+- host substrate 仍未收口的主缺口是 `ISSUE-038` 对真实 local adapter 的跟进。
+- 但 repo 当前最大的产品级缺口已经从 host substrate 切回 browser-side kernel。
 
 ## 推荐领取顺序
 
-- 先运行 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview`
+建议先按依赖顺序推进：
 
-当前批次文档：`docs/next-development-slices-2026-03-29-batch-6.md`
+1. `ISSUE-051` kernel B-1 contracts + session store skeleton
+2. `ISSUE-052` kernel B-2 run controller + loop engine skeleton
+3. `ISSUE-053` kernel B-3 compaction manager + kernel facade
+4. `ISSUE-033` runtime diagnostics public control-plane entry
+5. `ISSUE-042` host control-plane audit tail
+6. `ISSUE-043` runtime clear-error closure
+7. `ISSUE-036` browser automation cutover boundary
+8. `ISSUE-038` real local execution host adapter follow-up
+
+最终领取顺序仍以 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview` 为准。
+
+当前批次文档：`docs/next-development-slices-2026-03-29-batch-7.md`

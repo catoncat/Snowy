@@ -12,7 +12,7 @@
 
 - 仓库：`browser-brain-loop-next`
 - 性质：Browser Brain Loop 的 vNext 主线实验仓
-- 主轴：`Skill + AI Surface + BrowserVFS + JS Runner + Site Runtime + Execution Host`
+- 主轴：`Skill + AI Surface + Browser-side Kernel + BrowserVFS + JS Runner + Site Runtime + Execution Host`
 
 ## 2. 不能变的原则
 
@@ -45,19 +45,26 @@
 - Site Runtime baseline
 - MV3 shell baseline
 
+注意：
+
+- 这些是 foundation
+- 不是完整 kernel parity
+
 ## 5. 当前最重要的未收口区
 
-1. AI-native product control plane
-2. bootstrap self-awareness surface
-3. execution host control plane
-4. diagnostics / debug / audit
-5. browser automation parity
+1. browser-side kernel（session / run / compaction）
+2. diagnostics / debug / audit 主面
+3. intervention / human handoff
+4. browser automation parity
+5. provider / profile / routing 主层
 
 ## 6. 新 Agent 默认 operating loop
 
 1. 先读：
    - `AGENTS.md`
    - `docs/source-of-truth-map.md`
+   - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+   - `docs/kernel-skeleton-design.md`
    - 本文件
 2. 再判断：
    - 用户是否指定了 issue
@@ -75,6 +82,8 @@
 - 仓库工作规则：`AGENTS.md`
 - 真相源排序：`docs/source-of-truth-map.md`
 - 架构铁律：`docs/locked-decisions-2026-03-29.md`
+- 当前纠偏结论：`docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+- kernel 主线设计：`docs/kernel-skeleton-design.md`
 - AI surface 主轴：`docs/ai-native-capability-surface-design.md`
 - AI surface 当前地图：`docs/ai-surface-index.md`
 - 工作流：`docs/multi-agent-workflow.md`
