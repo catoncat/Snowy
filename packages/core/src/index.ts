@@ -177,6 +177,18 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       inputSchema: { type: "object", properties: { uri: { type: "string" }, content: { type: "string" } }, required: ["uri", "content"] }
     }),
     catalogEntry({
+      id: "memfs.edit", family: "memfs", operation: "edit",
+      risk: "medium", sideEffects: "writes", permissions: ["memfs.edit"],
+      description: "Apply an edit patch to a file in the virtual filesystem",
+      inputSchema: { type: "object", properties: { uri: { type: "string" }, patch: { type: "string" } }, required: ["uri", "patch"] }
+    }),
+    catalogEntry({
+      id: "memfs.stat", family: "memfs", operation: "stat",
+      risk: "low", sideEffects: "reads", permissions: ["memfs.stat"],
+      description: "Read metadata for a virtual filesystem path",
+      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] }
+    }),
+    catalogEntry({
       id: "memfs.list", family: "memfs", operation: "list",
       risk: "low", sideEffects: "reads", permissions: ["memfs.list"],
       description: "List entries in a virtual filesystem directory",
@@ -205,6 +217,28 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       risk: "medium", sideEffects: "writes", permissions: ["memfs.copy"],
       description: "Copy a file or directory in the virtual filesystem",
       inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" } }, required: ["from", "to"] }
+    }),
+    catalogEntry({
+      id: "memfs.stage", family: "memfs", operation: "stage",
+      risk: "medium", sideEffects: "writes", permissions: ["memfs.stage"],
+      description: "Stage multiple file writes in the virtual filesystem",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entries: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                uri: { type: "string" },
+                content: { type: "string" }
+              },
+              required: ["uri", "content"]
+            }
+          }
+        },
+        required: ["entries"]
+      }
     }),
     catalogEntry({
       id: "memfs.snapshot", family: "memfs", operation: "snapshot",
@@ -660,11 +694,14 @@ export interface BuiltinCapabilityMap {
   memfs: {
     read: CapabilityFn;
     write: CapabilityFn;
+    edit: CapabilityFn;
+    stat: CapabilityFn;
     list: CapabilityFn;
     mkdir: CapabilityFn;
     rm: CapabilityFn;
     mv: CapabilityFn;
     copy: CapabilityFn;
+    stage: CapabilityFn;
     snapshot: CapabilityFn;
     rehydrate: CapabilityFn;
   };

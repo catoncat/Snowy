@@ -11,6 +11,7 @@ import {
   typedCapabilitiesForPermissions,
   type BuiltinCapabilityMap
 } from "@bbl-next/core";
+import { BrowserVfs } from "../../browser-vfs/src/index";
 import {
   assertCapabilityDescriptor,
   CapabilityError,
@@ -228,6 +229,35 @@ describe("core", () => {
   });
 
   describe("builtin catalog structure", () => {
+    it("keeps memfs builtin surface aligned with the BrowserVfs public API", () => {
+      const memfsOperations = BUILTIN_CATALOG.memfs
+        .map((descriptor) => descriptor.id.replace("memfs.", ""))
+        .sort();
+      const browserVfsPublicMethods = Object.getOwnPropertyNames(BrowserVfs.prototype)
+        .filter((name) => !name.startsWith("#") && name !== "constructor");
+
+      expect(memfsOperations).toEqual(
+        browserVfsPublicMethods
+          .filter((name) =>
+            [
+              "read",
+              "write",
+              "edit",
+              "stat",
+              "list",
+              "mkdir",
+              "rm",
+              "mv",
+              "copy",
+              "stage",
+              "snapshot",
+              "rehydrate"
+            ].includes(name)
+          )
+          .sort()
+      );
+    });
+
     it("has an entry for every public namespace", () => {
       for (const ns of PUBLIC_CAPABILITY_NAMESPACES) {
         expect(BUILTIN_CATALOG[ns], `missing namespace: ${ns}`).toBeDefined();
@@ -273,8 +303,11 @@ describe("core", () => {
 
     it("getBuiltinsByNamespace returns correct descriptors", () => {
       const memfs = getBuiltinsByNamespace("memfs");
-      expect(memfs.length).toBe(9);
+      expect(memfs.length).toBe(12);
       expect(memfs.every((d) => d.id.startsWith("memfs."))).toBe(true);
+      expect(memfs.map((d) => d.id)).toEqual(
+        expect.arrayContaining(["memfs.edit", "memfs.stat", "memfs.stage"])
+      );
 
       expect(getBuiltinsByNamespace("nonexistent")).toEqual([]);
     });
@@ -588,6 +621,9 @@ describe("core", () => {
       expect(caps.memfs).toBeDefined();
       expect(typeof caps.memfs?.read).toBe("function");
       expect(typeof caps.memfs?.write).toBe("function");
+      expect(typeof caps.memfs?.edit).toBe("function");
+      expect(typeof caps.memfs?.stat).toBe("function");
+      expect(typeof caps.memfs?.stage).toBe("function");
 
       // page namespace should have query, click, fill
       expect(caps.page).toBeDefined();
@@ -645,6 +681,44 @@ describe("core", () => {
       expect(result).toEqual({
         operation: "read",
         input: { uri: "mem://narrowed" }
+      });
+    });
+
+    it("narrowed memfs facade exposes edit/stat/stage when declared", async () => {
+      const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+      const providers = new FamilyProviderRegistry();
+      providers.register({
+        family: "memfs",
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+      });
+
+      const permissions = ["memfs.edit", "memfs.stat", "memfs.stage"] as const;
+      const ctx = createSkillRuntimeContext({
+        registry,
+        providers,
+        sessionId: "s1",
+        skillId: "skill.memfs",
+        permissions: [...permissions]
+      });
+
+      const caps = typedCapabilitiesForPermissions(ctx, permissions);
+      const edit: BuiltinCapabilityMap["memfs"]["edit"] = caps.memfs.edit;
+      const stat: BuiltinCapabilityMap["memfs"]["stat"] = caps.memfs.stat;
+      const stage: BuiltinCapabilityMap["memfs"]["stage"] = caps.memfs.stage;
+
+      await expect(edit({ uri: "mem://workspace/file.txt", patch: "next" })).resolves.toEqual({
+        operation: "edit",
+        input: { uri: "mem://workspace/file.txt", patch: "next" }
+      });
+      await expect(stat({ uri: "mem://workspace/file.txt" })).resolves.toEqual({
+        operation: "stat",
+        input: { uri: "mem://workspace/file.txt" }
+      });
+      await expect(
+        stage({ entries: [{ uri: "mem://workspace/file.txt", content: "next" }] })
+      ).resolves.toEqual({
+        operation: "stage",
+        input: { entries: [{ uri: "mem://workspace/file.txt", content: "next" }] }
       });
     });
   });

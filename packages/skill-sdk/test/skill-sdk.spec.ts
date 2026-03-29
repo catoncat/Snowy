@@ -112,5 +112,72 @@ describe("skill-sdk", () => {
         }
       });
     });
+
+    it("exposes memfs edit/stat/stage through the typed facade", async () => {
+      const {
+        SkillInvocationService,
+        CapabilityRegistry,
+        FamilyProviderRegistry,
+        BUILTIN_CAPABILITIES
+      } = await import("@bbl-next/core");
+
+      const skill = defineSkill({
+        id: "skill.memfs.extra",
+        permissions: ["memfs.edit", "memfs.stat", "memfs.stage"],
+        handler: async (ctx) => {
+          const edit: (input: unknown) => Promise<unknown> = ctx.capabilities.memfs.edit;
+          const stat: (input: unknown) => Promise<unknown> = ctx.capabilities.memfs.stat;
+          const stage: (input: unknown) => Promise<unknown> = ctx.capabilities.memfs.stage;
+
+          return {
+            edit: await edit({ uri: "mem://workspace/demo.txt", patch: "next" }),
+            stat: await stat({ uri: "mem://workspace/demo.txt" }),
+            stage: await stage({
+              entries: [{ uri: "mem://workspace/demo.txt", content: "next" }]
+            })
+          };
+        }
+      });
+
+      const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+      const providers = new FamilyProviderRegistry();
+      providers.register({
+        family: "memfs",
+        invoke: ({ binding, input }) => ({
+          family: binding.family,
+          operation: binding.operation,
+          input
+        })
+      });
+      const service = new SkillInvocationService({ registry, providers });
+      service.register(skill);
+
+      const result = await service.invoke({
+        sessionId: "s1",
+        skillId: "skill.memfs.extra",
+        action: "run",
+        args: {}
+      });
+
+      expect(result.result).toEqual({
+        edit: {
+          family: "memfs",
+          operation: "edit",
+          input: { uri: "mem://workspace/demo.txt", patch: "next" }
+        },
+        stat: {
+          family: "memfs",
+          operation: "stat",
+          input: { uri: "mem://workspace/demo.txt" }
+        },
+        stage: {
+          family: "memfs",
+          operation: "stage",
+          input: {
+            entries: [{ uri: "mem://workspace/demo.txt", content: "next" }]
+          }
+        }
+      });
+    });
   });
 });
