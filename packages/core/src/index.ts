@@ -444,3 +444,91 @@ export function createSkillRuntimeContext(
 
   return ctx;
 }
+
+// ── Skill Invocation Service ──────────────────────────────────────
+
+export interface SkillDefinition {
+  id: string;
+  permissions: string[];
+  handler: (ctx: SkillRuntimeContext, action: string, args: unknown) => Promise<unknown>;
+}
+
+export interface SkillInvocationServiceOptions {
+  registry: CapabilityRegistry;
+  providers: FamilyProviderRegistry;
+  confirm?: (descriptor: CapabilityDescriptor, input: unknown) => boolean | Promise<boolean>;
+}
+
+export interface SkillInvocationResult {
+  result: unknown;
+  trace: CapabilityTraceEntry[];
+  depth: number;
+}
+
+export class SkillInvocationService {
+  readonly #skills = new Map<string, SkillDefinition>();
+  readonly #options: SkillInvocationServiceOptions;
+
+  constructor(options: SkillInvocationServiceOptions) {
+    this.#options = options;
+  }
+
+  register(skill: SkillDefinition): void {
+    this.#skills.set(skill.id, skill);
+  }
+
+  get(skillId: string): SkillDefinition | undefined {
+    return this.#skills.get(skillId);
+  }
+
+  list(): SkillDefinition[] {
+    return [...this.#skills.values()];
+  }
+
+  async invoke(request: {
+    sessionId: string;
+    skillId: string;
+    action: string;
+    args: unknown;
+    parentContext?: SkillRuntimeContext;
+  }): Promise<SkillInvocationResult> {
+    const skill = this.#skills.get(request.skillId);
+    if (!skill) {
+      throw new CapabilityError(
+        "E_CAPABILITY_NOT_FOUND",
+        `Unknown skill: ${request.skillId}`
+      );
+    }
+
+    const depth = request.parentContext ? request.parentContext.depth + 1 : 1;
+    if (depth > MAX_SKILL_CALL_DEPTH) {
+      throw new CapabilityError(
+        "E_REENTRANCY_BLOCKED",
+        `Skill depth limit exceeded at ${request.skillId}.${request.action}`
+      );
+    }
+
+    const trace: CapabilityTraceEntry[] = [];
+    const ctx = createSkillRuntimeContext({
+      registry: this.#options.registry,
+      providers: this.#options.providers,
+      sessionId: request.sessionId,
+      skillId: request.skillId,
+      permissions: skill.permissions,
+      depth,
+      trace,
+      confirm: this.#options.confirm,
+      invokeSkill: (childRequest) =>
+        this.invoke({
+          sessionId: request.sessionId,
+          skillId: childRequest.skillId,
+          action: childRequest.action,
+          args: childRequest.args,
+          parentContext: ctx
+        }).then((r) => r.result)
+    });
+
+    const result = await skill.handler(ctx, request.action, request.args);
+    return { result, trace, depth };
+  }
+}

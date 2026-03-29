@@ -10,10 +10,23 @@ export interface ActiveTabMetadata {
   title?: string;
 }
 
+export interface InjectionStep {
+  world: SiteWorld;
+  scriptId: string;
+  runAt?: "document_start" | "document_idle" | "document_end";
+}
+
+export interface InjectionPlan {
+  skillId: string;
+  action: string;
+  steps: InjectionStep[];
+}
+
 export interface SiteSkillAction {
   name: string;
   module: RunnerModule;
   worlds?: SiteWorld[];
+  injectionSteps?: InjectionStep[];
   verifier?: string;
 }
 
@@ -25,7 +38,7 @@ export interface SiteSkillDefinition {
 }
 
 export interface SiteScriptInstaller {
-  install(skillId: string, world: SiteWorld, tab: ActiveTabMetadata): Promise<void>;
+  install(step: InjectionStep, tab: ActiveTabMetadata): Promise<void>;
 }
 
 export interface SiteActionVerifier {
@@ -35,6 +48,31 @@ export interface SiteActionVerifier {
     tab: ActiveTabMetadata;
     result: unknown;
   }): Promise<boolean>;
+}
+
+export function buildInjectionPlan(skillId: string, action: SiteSkillAction): InjectionPlan {
+  if (action.injectionSteps && action.injectionSteps.length > 0) {
+    return {
+      skillId,
+      action: action.name,
+      steps: action.injectionSteps.map((s) => {
+        const step: InjectionStep = { world: s.world, scriptId: s.scriptId };
+        if (s.runAt) step.runAt = s.runAt;
+        return step;
+      })
+    };
+  }
+  if (action.worlds && action.worlds.length > 0) {
+    return {
+      skillId,
+      action: action.name,
+      steps: action.worlds.map((world) => ({
+        world,
+        scriptId: `${skillId}:${action.name}:${world}`
+      }))
+    };
+  }
+  return { skillId, action: action.name, steps: [] };
 }
 
 function patternToRegExp(pattern: string): RegExp {
@@ -109,11 +147,20 @@ export class SiteSkillRuntime {
     }
 
     const trace = [`match:${request.skillId}`];
-    for (const world of action.worlds ?? []) {
-      await this.#installer?.install(request.skillId, world, request.tab);
-      trace.push(`install:${world}`);
+
+    // Phase 2: Plan & Install
+    const plan = buildInjectionPlan(request.skillId, action);
+    if (plan.steps.length > 0) {
+      trace.push(`plan:${plan.steps.length}_steps`);
+      for (const step of plan.steps) {
+        if (this.#installer) {
+          await this.#installer.install(step, request.tab);
+        }
+        trace.push(`install:${step.world}:${step.scriptId}`);
+      }
     }
 
+    // Phase 3: Run
     const invocation = await this.#runnerHost.invoke({
       module: action.module,
       input: request.input ?? {},
@@ -124,6 +171,7 @@ export class SiteSkillRuntime {
     });
     trace.push(`invoke:${request.action}`);
 
+    // Phase 4: Verify
     let verified = true;
     if (action.verifier && this.#verifier) {
       verified = await this.#verifier.verify({

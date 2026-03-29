@@ -1,12 +1,14 @@
 ---
 id: ISSUE-007
-title: Site runtime injection plan and installer split
-status: open
+title: "Site runtime injection plan and installer split"
+status: in-progress
 priority: p0
-source: v0 follow-up
+source: "v0 follow-up"
 created: 2026-03-29
-assignee: unassigned
-tags: [site-runtime, injection]
+assignee: agent
+tags:
+  - site-runtime
+  - injection
 kind: slice
 epic: EPIC-site-runtime
 parallel_group: site-runtime
@@ -15,7 +17,8 @@ write_scope:
   - packages/site-runtime/src/index.ts
   - packages/site-runtime/test/site-runtime.spec.ts
 acceptance_ref: docs/next-development-slices-2026-03-29.md
-check_cmd: bun run check
+check_cmd: "bun run check"
+claimed_at: 2026-03-29T08:54:59.844Z
 ---
 
 ## Goal

@@ -1,11 +1,11 @@
 ---
 id: ISSUE-002
 title: Executable skill invocation service
-status: open
+status: done
 priority: p0
 source: v0 follow-up
 created: 2026-03-29
-assignee: unassigned
+assignee: agent
 tags: [core, skills]
 kind: slice
 epic: EPIC-runtime-core

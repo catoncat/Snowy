@@ -34,3 +34,16 @@ claimed_at: 2026-03-29T08:53:00.551Z
 - background 能管理 offscreen host 生命周期
 - bridge contract 被测试约束
 
+## 工作总结
+
+### 2026-03-29 17:00 CST
+
+- 已实现 background -> offscreen 的最小 runner bridge
+- 已补 `runner.ensure_host` / `runner.invoke` / `runner.cancel` / `runner.health` 协议
+- 已让 background 管理 offscreen document 创建、host 就绪态和 bridge timeout
+- 已补 `mv3-shell` 侧桥接测试，当前 `apps/mv3-shell/test/manifest.spec.ts` 共 5 项通过
+- 当前未改 `status` 为 `done`，因为仓库级 `bun run typecheck` 被并行中的 `packages/site-runtime/test/site-runtime.spec.ts` 变更阻塞；该测试要求的新导出尚未在 `packages/site-runtime/src/index.ts` 实现
+
+## 相关 commits
+
+- 未提交

@@ -4,6 +4,13 @@ import { CapabilityError } from "@bbl-next/contracts";
 export type VfsScope = "ephemeral" | "workspace" | "library";
 export type VfsNodeKind = "file" | "dir";
 
+export interface VfsSnapshotMetadata {
+  versionId: string;
+  createdAt: string;
+  trusted: boolean;
+  sourceUri: string;
+}
+
 export interface VfsNodeRecord {
   key: string;
   scope: VfsScope;
@@ -13,6 +20,7 @@ export interface VfsNodeRecord {
   content?: string;
   size: number;
   updatedAt: string;
+  snapshot?: VfsSnapshotMetadata;
 }
 
 export interface VfsEntry {
@@ -27,6 +35,19 @@ export interface VfsStat {
   kind: VfsNodeKind;
   size: number;
   updatedAt: string;
+}
+
+export interface VfsSnapshotInfo extends VfsSnapshotMetadata {
+  uri: string;
+}
+
+export interface VfsSnapshotOptions {
+  retention?: number;
+  trusted?: boolean;
+}
+
+export interface VfsRollbackTargetOptions {
+  allowUntrustedFallback?: boolean;
 }
 
 export interface PersistentVfsStore {
@@ -131,6 +152,57 @@ function parentPaths(path: string): string[] {
     parents.push(`/${segments.slice(0, index + 1).join("/")}`);
   }
   return [...new Set(parents)];
+}
+
+function isSameOrDescendant(path: string, rootPath: string): boolean {
+  if (rootPath === "/") {
+    return path.startsWith("/");
+  }
+  return path === rootPath || path.startsWith(`${rootPath}/`);
+}
+
+function versionDirectoryPath(sourcePath: string): string {
+  return sourcePath === "/" ? "/@versions" : `${sourcePath}/@versions`;
+}
+
+function parseSnapshotRootPath(path: string): { livePath: string; versionId: string } | null {
+  const segments = splitPath(path);
+  const versionsIndex = segments.lastIndexOf("@versions");
+  if (versionsIndex < 0 || versionsIndex !== segments.length - 2) {
+    return null;
+  }
+  const liveSegments = segments.slice(0, versionsIndex);
+  return {
+    livePath: liveSegments.length === 0 ? "/" : `/${liveSegments.join("/")}`,
+    versionId: segments[versionsIndex + 1]
+  };
+}
+
+function isIsoTimestamp(value: string): boolean {
+  try {
+    return new Date(value).toISOString() === value;
+  } catch {
+    return false;
+  }
+}
+
+function sortSnapshotsDesc(left: VfsSnapshotInfo, right: VfsSnapshotInfo): number {
+  const createdAt = right.createdAt.localeCompare(left.createdAt);
+  if (createdAt !== 0) {
+    return createdAt;
+  }
+  return right.versionId.localeCompare(left.versionId);
+}
+
+function normalizeSnapshotRetention(value?: number): number {
+  if (value == null) {
+    return 3;
+  }
+  const normalized = Math.floor(value);
+  if (normalized < 1) {
+    throw new CapabilityError("E_BAD_INPUT", `Snapshot retention must be >= 1: ${value}`);
+  }
+  return normalized;
 }
 
 export function resolveMemUri(uri: string): {
@@ -276,14 +348,7 @@ export class BrowserVfs {
     const to = resolveMemUri(toUriValue);
     const records = this.#collectTree(from.scope, from.path);
     await this.#mutateScope(to.scope, (draft) => {
-      for (const record of records) {
-        const nextPath = record.path.replace(from.path, to.path);
-        this.#ensureParents(to.scope, draft, nextPath);
-        draft.set(
-          nextPath,
-          this.#createRecord(to.scope, nextPath, record.kind, record.content)
-        );
-      }
+      this.#writeTree(draft, to.scope, records, from.path, to.path);
     });
   }
 
@@ -292,12 +357,68 @@ export class BrowserVfs {
     await this.rm(fromUri);
   }
 
-  async snapshot(sourceUri: string, targetUri: string): Promise<void> {
-    await this.copy(sourceUri, targetUri);
+  async snapshot(
+    sourceUri: string,
+    targetUri: string,
+    options: VfsSnapshotOptions = {}
+  ): Promise<void> {
+    const source = resolveMemUri(sourceUri);
+    const target = resolveMemUri(targetUri);
+    const targetSnapshot = parseSnapshotRootPath(target.path);
+    const records = this.#collectTree(source.scope, source.path, {
+      excludePaths: [versionDirectoryPath(source.path)]
+    });
+    const retention = normalizeSnapshotRetention(options.retention);
+    const metadata =
+      targetSnapshot == null
+        ? undefined
+        : {
+            versionId: targetSnapshot.versionId,
+            createdAt: isIsoTimestamp(targetSnapshot.versionId)
+              ? targetSnapshot.versionId
+              : new Date().toISOString(),
+            trusted: options.trusted ?? false,
+            sourceUri: toUri(source.scope, source.path)
+          };
+
+    await this.#mutateScope(target.scope, (draft) => {
+      this.#removeTree(draft, target.path);
+      this.#writeTree(draft, target.scope, records, source.path, target.path, {
+        rootSnapshot: metadata
+      });
+      if (targetSnapshot) {
+        this.#trimSnapshots(draft, target.scope, targetSnapshot.livePath, retention);
+      }
+    });
   }
 
   async rehydrate(snapshotUri: string, targetUri: string): Promise<void> {
-    await this.copy(snapshotUri, targetUri);
+    const snapshot = resolveMemUri(snapshotUri);
+    const target = resolveMemUri(targetUri);
+    const records = this.#collectTree(snapshot.scope, snapshot.path);
+    await this.#mutateScope(target.scope, (draft) => {
+      this.#removeTree(draft, target.path, [versionDirectoryPath(target.path)]);
+      this.#writeTree(draft, target.scope, records, snapshot.path, target.path, {
+        clearRootSnapshot: true
+      });
+    });
+  }
+
+  async listSnapshots(sourceUri: string): Promise<VfsSnapshotInfo[]> {
+    const source = resolveMemUri(sourceUri);
+    return this.#listSnapshotsFromMap(this.#maps[source.scope], source.scope, source.path);
+  }
+
+  async selectRollbackTarget(
+    sourceUri: string,
+    options: VfsRollbackTargetOptions = {}
+  ): Promise<VfsSnapshotInfo | null> {
+    const snapshots = await this.listSnapshots(sourceUri);
+    const trusted = snapshots.find((snapshot) => snapshot.trusted);
+    if (trusted) {
+      return trusted;
+    }
+    return options.allowUntrustedFallback ? snapshots[0] ?? null : null;
   }
 
   async stage(entries: Array<{ uri: string; content: string }>): Promise<void> {
@@ -310,10 +431,20 @@ export class BrowserVfs {
     return this.#createRecord(scope, path, "dir");
   }
 
-  #collectTree(scope: VfsScope, rootPath: string): VfsNodeRecord[] {
+  #collectTree(
+    scope: VfsScope,
+    rootPath: string,
+    options: {
+      excludePaths?: string[];
+    } = {}
+  ): VfsNodeRecord[] {
     const map = this.#maps[scope];
     const records = [...map.values()].filter(
-      (record) => record.path === rootPath || record.path.startsWith(`${rootPath}/`)
+      (record) =>
+        isSameOrDescendant(record.path, rootPath) &&
+        !(options.excludePaths ?? []).some((excludedPath) =>
+          isSameOrDescendant(record.path, excludedPath)
+        )
     );
     if (records.length === 0) {
       throw new CapabilityError("E_BAD_INPUT", `Path not found: ${toUri(scope, rootPath)}`);
@@ -345,7 +476,8 @@ export class BrowserVfs {
     scope: VfsScope,
     path: string,
     kind: VfsNodeKind,
-    content = ""
+    content = "",
+    snapshot?: VfsSnapshotMetadata
   ): VfsNodeRecord {
     return {
       key: encodeKey(scope, path, this.#workspaceId),
@@ -355,8 +487,116 @@ export class BrowserVfs {
       kind,
       content: kind === "file" ? content : undefined,
       size: kind === "file" ? new TextEncoder().encode(content).byteLength : 0,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      snapshot
     };
+  }
+
+  #writeTree(
+    draft: Map<string, VfsNodeRecord>,
+    scope: VfsScope,
+    records: VfsNodeRecord[],
+    fromPath: string,
+    toPath: string,
+    options: {
+      rootSnapshot?: VfsSnapshotMetadata;
+      clearRootSnapshot?: boolean;
+    } = {}
+  ): void {
+    for (const record of records) {
+      const nextPath =
+        record.path === fromPath ? toPath : `${toPath}${record.path.slice(fromPath.length)}`;
+      const snapshot =
+        record.path === fromPath
+          ? options.clearRootSnapshot
+            ? undefined
+            : options.rootSnapshot ?? record.snapshot
+          : record.snapshot;
+      this.#ensureParents(scope, draft, nextPath);
+      draft.set(
+        nextPath,
+        this.#createRecord(scope, nextPath, record.kind, record.content, snapshot)
+      );
+    }
+  }
+
+  #removeTree(
+    draft: Map<string, VfsNodeRecord>,
+    rootPath: string,
+    keepRoots: string[] = []
+  ): void {
+    for (const key of [...draft.keys()]) {
+      if (!isSameOrDescendant(key, rootPath)) {
+        continue;
+      }
+      if (keepRoots.some((keepRoot) => isSameOrDescendant(key, keepRoot))) {
+        continue;
+      }
+      draft.delete(key);
+    }
+  }
+
+  #listSnapshotsFromMap(
+    map: Map<string, VfsNodeRecord>,
+    scope: VfsScope,
+    sourcePath: string
+  ): VfsSnapshotInfo[] {
+    const versionsPath = versionDirectoryPath(sourcePath);
+    const roots = new Map<string, VfsNodeRecord>();
+    const prefix = versionsPath === "/" ? "/" : `${versionsPath}/`;
+
+    for (const record of map.values()) {
+      if (record.path === versionsPath || !isSameOrDescendant(record.path, versionsPath)) {
+        continue;
+      }
+      const rest = record.path.slice(prefix.length);
+      const [versionId] = rest.split("/");
+      if (!versionId) {
+        continue;
+      }
+      const rootPath = versionsPath === "/" ? `/${versionId}` : `${versionsPath}/${versionId}`;
+      if (!roots.has(rootPath)) {
+        roots.set(rootPath, map.get(rootPath) ?? this.#syntheticDir(scope, rootPath));
+      }
+    }
+
+    return [...roots.entries()]
+      .map(([rootPath, record]) => this.#toSnapshotInfo(scope, sourcePath, rootPath, record))
+      .sort(sortSnapshotsDesc);
+  }
+
+  #toSnapshotInfo(
+    scope: VfsScope,
+    sourcePath: string,
+    snapshotPath: string,
+    record: VfsNodeRecord
+  ): VfsSnapshotInfo {
+    const parsed = parseSnapshotRootPath(snapshotPath);
+    if (!parsed) {
+      throw new CapabilityError("E_BAD_INPUT", `Invalid snapshot path: ${toUri(scope, snapshotPath)}`);
+    }
+    return {
+      uri: toUri(scope, snapshotPath),
+      versionId: parsed.versionId,
+      createdAt:
+        record.snapshot?.createdAt ??
+        (isIsoTimestamp(parsed.versionId) ? parsed.versionId : record.updatedAt),
+      trusted: record.snapshot?.trusted ?? false,
+      sourceUri: record.snapshot?.sourceUri ?? toUri(scope, sourcePath)
+    };
+  }
+
+  #trimSnapshots(
+    draft: Map<string, VfsNodeRecord>,
+    scope: VfsScope,
+    sourcePath: string,
+    retention: number
+  ): void {
+    const snapshots = this.#listSnapshotsFromMap(draft, scope, sourcePath);
+    for (const snapshot of snapshots.slice(retention)) {
+      const { path } = resolveMemUri(snapshot.uri);
+      this.#removeTree(draft, path);
+    }
   }
 
   async #mutateScope(

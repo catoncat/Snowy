@@ -3,6 +3,7 @@ import {
   BUILTIN_CATALOG,
   CapabilityRegistry,
   FamilyProviderRegistry,
+  SkillInvocationService,
   createSkillRuntimeContext,
   getBuiltinsByNamespace,
   hasPublicNamespaceCoverage
@@ -11,6 +12,7 @@ import {
   assertCapabilityDescriptor,
   CapabilityError,
   capabilityNamespace,
+  MAX_SKILL_CALL_DEPTH,
   PUBLIC_CAPABILITY_NAMESPACES,
   type CapabilityDescriptor
 } from "@bbl-next/contracts";
@@ -221,6 +223,201 @@ describe("core", () => {
     it("BUILTIN_CAPABILITIES is derived from BUILTIN_CATALOG", () => {
       const fromCatalog = Object.values(BUILTIN_CATALOG).flat();
       expect(BUILTIN_CAPABILITIES).toEqual(fromCatalog);
+    });
+  });
+
+  describe("SkillInvocationService", () => {
+    function buildService() {
+      const registry = new CapabilityRegistry([
+        descriptor(),
+        descriptor({
+          id: "memfs.read",
+          risk: "low",
+          sideEffects: "reads",
+          permissions: ["memfs.read"],
+          executionBinding: { family: "memfs", operation: "read" }
+        })
+      ]);
+      const providers = new FamilyProviderRegistry();
+      providers.register({
+        family: "page",
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+      });
+      providers.register({
+        family: "memfs",
+        invoke: ({ input }) => ({ content: "hello", input })
+      });
+      const service = new SkillInvocationService({ registry, providers });
+      return { registry, providers, service };
+    }
+
+    it("invokes a registered skill and returns result with trace", async () => {
+      const { service } = buildService();
+      service.register({
+        id: "skill.greet",
+        permissions: ["page.*"],
+        handler: async (ctx, action, args) => {
+          const clicked = await ctx.call("page.click", { uid: "btn1" });
+          return { action, args, clicked };
+        }
+      });
+
+      const result = await service.invoke({
+        sessionId: "s1",
+        skillId: "skill.greet",
+        action: "run",
+        args: { name: "world" }
+      });
+
+      expect(result.result).toMatchObject({
+        action: "run",
+        args: { name: "world" },
+        clicked: { operation: "click", input: { uid: "btn1" } }
+      });
+      expect(result.trace).toHaveLength(1);
+      expect(result.trace[0]).toMatchObject({
+        capabilityId: "page.click",
+        status: "succeeded"
+      });
+      expect(result.depth).toBe(1);
+    });
+
+    it("throws on unknown skill", async () => {
+      const { service } = buildService();
+
+      await expect(
+        service.invoke({
+          sessionId: "s1",
+          skillId: "skill.nonexistent",
+          action: "run",
+          args: {}
+        })
+      ).rejects.toMatchObject({ code: "E_CAPABILITY_NOT_FOUND" });
+    });
+
+    it("enforces skill permission isolation", async () => {
+      const { service } = buildService();
+      service.register({
+        id: "skill.readonly",
+        permissions: ["memfs.read"],
+        handler: async (ctx) => {
+          await ctx.call("page.click", { uid: "u1" });
+          return "should not reach";
+        }
+      });
+
+      await expect(
+        service.invoke({
+          sessionId: "s1",
+          skillId: "skill.readonly",
+          action: "run",
+          args: {}
+        })
+      ).rejects.toMatchObject({ code: "E_PERMISSION_DENIED" });
+    });
+
+    it("supports nested skill invocation with depth tracking", async () => {
+      const { service } = buildService();
+      service.register({
+        id: "skill.outer",
+        permissions: ["page.*", "skills.*"],
+        handler: async (ctx) => {
+          const inner = await ctx.skills.invoke("skill.inner", "run", {});
+          return { inner };
+        }
+      });
+      service.register({
+        id: "skill.inner",
+        permissions: ["page.*"],
+        handler: async (ctx, action) => {
+          return { action, depth: ctx.depth };
+        }
+      });
+
+      const result = await service.invoke({
+        sessionId: "s1",
+        skillId: "skill.outer",
+        action: "run",
+        args: {}
+      });
+
+      expect(result.result).toMatchObject({
+        inner: { action: "run", depth: 2 }
+      });
+      expect(result.depth).toBe(1);
+    });
+
+    it("blocks skill invocation beyond MAX_SKILL_CALL_DEPTH", async () => {
+      const { service } = buildService();
+      service.register({
+        id: "skill.recursive",
+        permissions: ["skills.*"],
+        handler: async (ctx) => {
+          return ctx.skills.invoke("skill.recursive", "run", {});
+        }
+      });
+
+      await expect(
+        service.invoke({
+          sessionId: "s1",
+          skillId: "skill.recursive",
+          action: "run",
+          args: {}
+        })
+      ).rejects.toMatchObject({ code: "E_REENTRANCY_BLOCKED" });
+    });
+
+    it("registers, gets, and lists skills", () => {
+      const { service } = buildService();
+      service.register({
+        id: "skill.a",
+        permissions: [],
+        handler: async () => null
+      });
+      service.register({
+        id: "skill.b",
+        permissions: [],
+        handler: async () => null
+      });
+
+      expect(service.get("skill.a")).toBeDefined();
+      expect(service.get("skill.a")!.id).toBe("skill.a");
+      expect(service.get("skill.nonexistent")).toBeUndefined();
+      expect(service.list()).toHaveLength(2);
+    });
+
+    it("each skill invocation gets its own isolated trace", async () => {
+      const { service } = buildService();
+      service.register({
+        id: "skill.parent",
+        permissions: ["page.*", "skills.*"],
+        handler: async (ctx) => {
+          await ctx.call("page.click", { uid: "p1" });
+          await ctx.skills.invoke("skill.child", "run", {});
+          return "done";
+        }
+      });
+      service.register({
+        id: "skill.child",
+        permissions: ["page.*"],
+        handler: async (ctx) => {
+          await ctx.call("page.click", { uid: "c1" });
+          return "child done";
+        }
+      });
+
+      const result = await service.invoke({
+        sessionId: "s1",
+        skillId: "skill.parent",
+        action: "run",
+        args: {}
+      });
+
+      expect(result.trace).toHaveLength(1);
+      expect(result.trace[0]).toMatchObject({
+        capabilityId: "page.click",
+        input: { uid: "p1" }
+      });
     });
   });
 });
