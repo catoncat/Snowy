@@ -1,11 +1,11 @@
 ---
 id: ISSUE-023
 title: "Review: memfs capability catalog misses BrowserVFS public ops"
-status: open
+status: in-progress
 priority: p0
 source: "next batch review 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: agent
 tags:
   - review
   - core
@@ -21,6 +21,7 @@ write_scope:
   - packages/skill-sdk/test/skill-sdk.spec.ts
 acceptance_ref: project_plan.md
 check_cmd: "bun run check"
+claimed_at: 2026-03-29T10:43:04.947Z
 ---
 
 ## Goal
