@@ -90,6 +90,9 @@ check_cmd: bun run check
     });
 
     expect(result.kind).toBe("preview");
+    if (result.kind !== "preview") {
+      throw new Error(`expected preview result, got ${result.kind}`);
+    }
     expect(result.issueCount).toBe(2);
     expect(result.outputPath).toBe("docs/next-development-slices-2026-03-30.md");
     expect(result.markdown).toContain("Batch 1");
@@ -131,6 +134,9 @@ check_cmd: bun run check
     });
 
     expect(result.kind).toBe("blocked");
+    if (result.kind !== "blocked") {
+      throw new Error(`expected blocked result, got ${result.kind}`);
+    }
     expect(result.reason).toContain("in-progress");
     expect(result.inProgress.map((item) => item.id)).toEqual(["ISSUE-012"]);
   });
@@ -169,6 +175,9 @@ check_cmd: bun run check
     });
 
     expect(result.kind).toBe("planned");
+    if (result.kind !== "planned") {
+      throw new Error(`expected planned result, got ${result.kind}`);
+    }
     const outputFile = path.join(repoRoot, "docs", "next-development-slices-2026-03-30.md");
     expect(readFileSync(outputFile, "utf8")).toContain("ISSUE-013");
   });
