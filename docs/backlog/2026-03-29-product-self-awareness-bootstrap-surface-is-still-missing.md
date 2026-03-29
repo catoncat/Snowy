@@ -54,6 +54,7 @@ claimed_at: 2026-03-29T11:48:21.132Z
 
 - 在 `packages/core` 增加 bootstrap summary contract 与 builder，统一产出 `runtime/config/skills/hosts` 摘要包，并为 config 明确 placeholder contract。
 - 在 `apps/mv3-shell/src/background.js` 增加单一只读入口 `runtime.bootstrap`，把 background 现有 runtime/host 状态汇总成最小自我认知 bundle，不额外引入新的 tool family。
+- 补了一次 bridge-side hardening：`runtime.bootstrap` 现在直接读取 active tab、offscreen/runner 状态和 bridge 提供的 skills/config inventory，不再信任消息体塞进来的摘要，从而更接近真正的 self-awareness read path。
 - 在 core 和 MV3 integration tests 中补齐 healthy / degraded / empty-state 覆盖，并同步 AI surface 设计文档、v0 slice、migration matrix、parity dashboard。
 - 已运行 `bun run check`。
 - 残留风险：当前 bootstrap bundle 仍以摘要和 placeholder 为主，真正的 config/skills/hosts control plane actions 与 audit tail 仍由后续 issue 承接。
@@ -61,3 +62,4 @@ claimed_at: 2026-03-29T11:48:21.132Z
 ## 相关 commits
 
 - `8a75848` `core/mv3: add bootstrap self-awareness bundle`
+- `51e838e` `mv3-shell: source bootstrap summaries from runtime state`
