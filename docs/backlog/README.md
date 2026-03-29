@@ -119,20 +119,22 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 ## 当前未完成项
 
-当前没有可直接认领的 open issue。
-
-如果 `bun run workflow:claim:preview` 返回 blocked：
-
-1. 先确认是否还有 `status: in-progress`
-2. 若没有，进入下一批规划
-3. 对照 `docs/locked-decisions-2026-03-29.md`、`project_plan.md`、代码和测试补新的 review / planning issue
+- `ISSUE-023` `Review: memfs capability catalog misses BrowserVFS public ops`
+- `ISSUE-016` `Review: BrowserVFS IndexedDB migration strategy is still implicit`
+- `ISSUE-019` `Review: bridge-side MCP export is still descriptor-only`
+- `ISSUE-021` `Review: MV3 offscreen lifecycle is still optimistic`
+- `ISSUE-025` `Review: runtime diagnostics/debug surface is still missing`
+- `ISSUE-026` `Review: MV3 runtime wiring is still harness-bound`
+- `ISSUE-028` `Review: skill lifecycle/version surface is still model-only`
 
 ## 推荐领取顺序
 
-当前没有推荐领取顺序。
+1. `ISSUE-023`
+2. `ISSUE-016`
+3. `ISSUE-019`
+4. `ISSUE-021`
+5. `ISSUE-025`
+6. `ISSUE-026`
+7. `ISSUE-028`
 
-下一步建议：
-
-1. `bun run workflow:plan:preview`
-2. 若需要，补新的 `Review:` issue
-3. 再回到 claim 流程
+当前批次文档：`docs/next-development-slices-2026-03-29-batch-2.md`
