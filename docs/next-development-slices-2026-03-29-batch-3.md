@@ -1,15 +1,15 @@
 # Next Development Slices (2026-03-29 Batch 3)
 
-Manual planning snapshot for the next claimable queue.
+Manual planning snapshot for the Batch 3 queue.
 
-`workflow:claim:preview` now resolves to the remaining Batch 3 slice directly.
+Batch 3 is closed; keep this file as the historical snapshot for `ISSUE-026` through `ISSUE-031`.
 
 ## Snapshot
 
-- open issues: 1
+- open issues: 0
 - in-progress issues: 0
 - done issues: 25
-- claim preview: ISSUE-032
+- claim preview: none
 - batch theme: AI surface / product control plane
 
 ## Completed Gates
@@ -25,24 +25,11 @@ Manual planning snapshot for the next claimable queue.
 - ISSUE-031 Review: execution host control plane is still missing
   - status: done
 
-## Batch 3 Queue
+## Batch 3 Outcome
 
-### Step 1: promote host control plane
-
-- ISSUE-031 Review: execution host control plane is still missing
-  - status: done
-  - outcome: minimal local `hosts.*` control plane is now implemented and tested
-
-### Step 2: close the remaining host substrate gap
-
-- ISSUE-032 Review: host substrate still lacks default routing and file primitives
-  - lane: mv3-shell
-  - ready_now: yes
-  - acceptance_ref: docs/ai-native-capability-surface-design.md
-  - why now: `hosts.*` control plane 已落地，但 `host.*` 仍是 `exec`-only，默认 host 也还没进入 substrate 路由
+- `ISSUE-031` delivered the minimal local `hosts.*` control plane and closed the remaining Batch 3 host control-plane gap.
 
 ## Sequencing Notes
 
-- Current next claim is:
-  - ISSUE-032
-- `ISSUE-032` 是关闭 `ISSUE-031` 时拆出的直接 follow-up。
+- Batch 3 no longer has a claimable queue.
+- Host follow-up work continued in `ISSUE-032`, and the current next claim is now `ISSUE-033` in `docs/next-development-slices-2026-03-29.md`.

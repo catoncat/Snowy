@@ -136,18 +136,18 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 ### 仍可领取
 
-- `ISSUE-032` `Review: host substrate still lacks default routing and file primitives`
-  - 当前 `claim:preview` 会直接返回该 issue
+- `ISSUE-035` `Review: offscreen execution host is still contract-only`
+  - 当前 `claim:preview` 在 docs sync 收口后应返回该 issue
 
 ### 边界说明
 
-- `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030`、`ISSUE-031` 已完成；当前主缺口已转为 `ISSUE-032`
-- 当前 `workflow:claim:preview` 应指向 `ISSUE-032`
+- `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030`、`ISSUE-031`、`ISSUE-032` 已完成；当前主缺口已拆成 docs sync `ISSUE-034` 与 host adapter `ISSUE-035`
+- `ISSUE-034` 收口后，`workflow:claim:preview` 应指向 `ISSUE-035`
 
 ## 推荐领取顺序
 
 当前推荐领取顺序：
 
-1. `ISSUE-032`
+1. `ISSUE-035`
 
-当前批次文档：`docs/next-development-slices-2026-03-29-batch-3.md`
+当前批次文档：`docs/next-development-slices-2026-03-29.md`
