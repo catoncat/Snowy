@@ -1,16 +1,19 @@
 ---
 id: ISSUE-006
-title: MV3 offscreen runner bridge
-status: open
+title: "MV3 offscreen runner bridge"
+status: in-progress
 priority: p0
-source: v0 follow-up
+source: "v0 follow-up"
 created: 2026-03-29
-assignee: unassigned
-tags: [mv3-shell, js-runner]
+assignee: agent
+tags:
+  - mv3-shell
+  - js-runner
 kind: slice
 epic: EPIC-js-runner
 parallel_group: mv3-shell
-depends_on: [ISSUE-005]
+depends_on:
+  - ISSUE-005
 write_scope:
   - apps/mv3-shell/manifest.json
   - apps/mv3-shell/src/background.js
@@ -18,7 +21,8 @@ write_scope:
   - apps/mv3-shell/src/offscreen.js
   - apps/mv3-shell/test/manifest.spec.ts
 acceptance_ref: docs/next-development-slices-2026-03-29.md
-check_cmd: bun run check
+check_cmd: "bun run check"
+claimed_at: 2026-03-29T08:53:00.551Z
 ---
 
 ## Goal
