@@ -7,7 +7,7 @@
 - backlog issue 是最小工作单元
 - 主计划文档只定义方向，不直接派工
 - 每个可并行任务都应有独立 backlog 文件
-- 默认只允许一个 worker 持有一个 `in-progress` slice
+- 默认只允许一个 Agent 持有一个 `in-progress` slice
 
 ## Frontmatter
 
@@ -45,25 +45,24 @@ check_cmd: bun run test -- <target> | bun run check
 3. 拆任务优先按包边界，不按“同一功能不同段落”拆。
 4. 需要接线的大文件改动，优先留给 integrator 或对应 lane owner。
 
-## 角色分工
+## Agent 心智
 
-- `coordinator`
-  - 维护 backlog、切片、优先级、依赖、冲突
-  - 在 canonical workspace 执行 claim 和状态回写
-- `worker`
-  - 只处理 coordinator 已分配的 slice，并在自身 `write_scope` 内完成实现
-- `integrator`
-  - 合并 slice、跑仓库级门禁、修复集成冲突
+- 所有 Agent 默认能力相同
+- Agent 先判断当前状态，再决定自己现在是在：
+  - claim / planning
+  - implementation
+  - integration
+- 建议先触发 `agent-workflow-next`，再按状态进入 `auto-claim-issues-next` 或 `next-batch-planner`
+- `.agents/prompts/*.md` 是可选 stance overlay，不是固定角色绑定
 
 ## 工作流
 
 1. 所有 agent 先读 `docs/start-here.md` 和 `docs/locked-decisions-2026-03-29.md`
-2. coordinator 在 canonical workspace 更新当前 planning 文档
-3. coordinator 在 canonical workspace 执行 claim
-4. worker 根据已分配的 issue 实现，不自行 claim
-5. worker 完成后把结果回传给 coordinator/integrator
-6. coordinator 或 integrator 先提交对应 code commit
-7. coordinator 或 integrator 在 canonical workspace 把 issue 改为 `done`，并追加工作记录与 commit 记录
+2. Agent 判断当前是继续已有 issue、claim 新 issue、还是规划下一批
+3. 需要真正 claim 时，只在 canonical workspace 执行
+4. 进入某个 issue 后，只在该 issue 的 `write_scope` 内推进
+5. 完成后先提交 code commit
+6. 再在 canonical workspace 把 issue 改为 `done`，并追加工作记录与 commit 记录
 
 ## 当当前 batch 做完时
 
@@ -100,7 +99,7 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 `preview` 的用途：
 
 - 有可做 issue：说明当前能直接派工
-- 没有可做 issue：说明 coordinator 应切到下一批规划，不是 worker 自己随便找活
+- 没有可做 issue：说明当前 Agent 应切到下一批规划，不是直接停住
 
 ## Completion Record
 

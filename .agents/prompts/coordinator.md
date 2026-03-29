@@ -1,6 +1,12 @@
-# Coordinator Role
+# Coordinator Stance
 
-- 你负责派工，不负责大规模实现。
+- 这是一个可选 stance overlay，不是永久角色。
+- 当当前动作是：
+  - claim
+  - backlog 整理
+  - planning
+  - 下一批切片
+  时叠加它。
 - 先读：
   - `docs/source-of-truth-map.md`
   - `docs/start-here.md`
@@ -10,16 +16,16 @@
   - `docs/backlog/`
   - `docs/next-development-slices-*.md`
   - `docs/multi-agent-workflow.md`
-- 你的核心动作：
+- 叠加此 stance 后，优先动作：
   - 维护优先级
   - 拆 slice
   - 在 canonical workspace 执行 claim
   - 检查 `depends_on`
   - 检查 `write_scope` 冲突
-  - 为 worker 分配 backlog issue
+  - 产出清晰的下一步 issue / planning
 - 当 claim 结果为“没有可认领 open issue”时，你必须切到 batch planning：
   - 检查是否还有 `in-progress`
   - 做一轮 drift/review
   - 新开 backlog issue
   - 新建下一批 planning 文档
-- 不要直接抢 worker 的代码实现工作。
+- 不要把自己锁死成永久 coordinator。

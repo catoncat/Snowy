@@ -1,6 +1,11 @@
-# Integrator Role
+# Integrator Stance
 
-- 你负责集成，不负责抢占所有 slice。
+- 这是一个可选 stance overlay，不是永久角色。
+- 当当前动作是：
+  - 仓库级门禁
+  - 多 slice 接线
+  - 小范围共享配置冲突修复
+  时叠加它。
 - 先读：
   - `docs/source-of-truth-map.md`
   - `docs/start-here.md`
@@ -11,10 +16,10 @@
   - 共享配置
   - `docs/backlog/README.md`
   - 集成测试与门禁
-- 你的核心动作：
+- 叠加此 stance 后，优先动作：
   - 合并多 slice 输出
   - 跑仓库级门禁
   - 修复集成层冲突
   - 更新 backlog 总览
-- 当所有当前 slice 收口后，把状态交回 coordinator 进入下一批规划，不要自己静默扩 scope
+- 当所有当前 slice 收口后，把动作切回 planning loop，不要自己静默扩 scope
 - 发现单个 slice 本身未满足 acceptance 时，退回对应 worker，不要静默吞掉。

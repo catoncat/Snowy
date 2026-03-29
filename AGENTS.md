@@ -222,12 +222,14 @@
 
 - backlog 派工入口：`docs/backlog/README.md`
 - slice 总图：`docs/next-development-slices-2026-03-29.md`
-- 多 agent 协作说明：`docs/multi-agent-workflow.md`
+- Agent 工作流说明：`docs/multi-agent-workflow.md`
+- 统一 workflow skill：`.agents/skills/agent-workflow-next/`
 - claim skill：`.agents/skills/auto-claim-issues-next/`
 - batch planning skill：`.agents/skills/next-batch-planner/`
-- claim 只能由 coordinator 在 canonical workspace 执行
-- forked worker 不得自行 claim
-- 若 claim 预览返回无可认领 issue，coordinator 必须进入下一批规划，而不是默认停工
+- 所有 Agent 默认能力相同；差异来自当前状态和当前上下文
+- role prompt 只作为可选 stance overlay，不是系统前提
+- claim / done 回写只在 canonical workspace 可靠
+- 若 claim 预览返回无可认领 issue，当前 Agent 必须进入下一批规划，而不是默认停工
 
 ## 10. Commands
 
@@ -246,8 +248,10 @@
 ## 11. First Places To Read Before Changing Code
 
 1. `docs/start-here.md`
-2. `docs/locked-decisions-2026-03-29.md`
-3. `docs/v0-slice.md`
-4. `docs/legacy-reference-map.md`
-5. 当前 issue / `docs/backlog/README.md`
-6. 对应 package 的 `src/` 和 `test/`
+2. `docs/source-of-truth-map.md`
+3. `docs/locked-decisions-2026-03-29.md`
+4. `docs/v0-slice.md`
+5. `docs/legacy-reference-map.md`
+6. `docs/backlog/README.md`
+7. `docs/multi-agent-workflow.md`
+8. 对应 issue / 对应 package 的 `src/` 和 `test/`

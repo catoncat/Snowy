@@ -1,0 +1,3 @@
+skills:
+  display_name: "Agent Workflow Next"
+  default_prompt: "Use $agent-workflow-next to decide what the agent should do now in browser-brain-loop-next: continue an in-progress issue, claim the next open issue, or enter next-batch planning."
