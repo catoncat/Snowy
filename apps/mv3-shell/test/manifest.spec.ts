@@ -990,6 +990,187 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("lists and gets the local host without auto-connecting it", async () => {
+    const harness = createChromeHarness({
+      host: {
+        dispatch: vi.fn(),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0
+        }))
+      }
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.list"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: null,
+        items: [
+          {
+            hostId: "local",
+            kind: "local",
+            connected: false,
+            state: "disconnected",
+            isDefault: false
+          }
+        ]
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.get",
+        hostId: "local"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "local",
+        kind: "local",
+        connected: false,
+        state: "disconnected",
+        isDefault: false
+      }
+    });
+
+    expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
+    dispose();
+    harness.cleanup();
+  });
+
+  it("connects, checks health, sets default, and disconnects the local host", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0
+            }
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1
+          }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0
+      }))
+    };
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.connect",
+        hostId: "local"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "local",
+        host: {
+          hostId: "local",
+          kind: "local",
+          connected: true,
+          state: "idle",
+          isDefault: true,
+          health: {
+            status: "idle"
+          }
+        }
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.health",
+        hostId: "local"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "local",
+        connected: true,
+        state: "idle",
+        health: {
+          status: "idle"
+        }
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.set_default",
+        hostId: "local"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "local",
+        host: {
+          hostId: "local",
+          isDefault: true
+        }
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.disconnect",
+        hostId: "local"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "local",
+        host: {
+          hostId: "local",
+          connected: false,
+          state: "disconnected",
+          isDefault: true
+        }
+      }
+    });
+
+    expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(1);
+    expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(1);
+    dispose();
+    harness.cleanup();
+  });
+
   it("routes site runtime invoke through the background, offscreen host, and page hook bridge", async () => {
     const harness = createIntegratedChromeHarness({
       activeTab: {

@@ -437,6 +437,44 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       inputSchema: { type: "object", properties: { capabilityId: { type: "string" } }, required: ["capabilityId"] }
     }),
   ],
+  hosts: [
+    catalogEntry({
+      id: "hosts.list", family: "hosts", operation: "list",
+      risk: "low", sideEffects: "reads", permissions: ["hosts.list"],
+      description: "List execution hosts managed by the product control plane",
+      inputSchema: { type: "object" }
+    }),
+    catalogEntry({
+      id: "hosts.get", family: "hosts", operation: "get",
+      risk: "low", sideEffects: "reads", permissions: ["hosts.get"],
+      description: "Get execution host control plane state by host id",
+      inputSchema: { type: "object", properties: { hostId: { type: "string" } }, required: ["hostId"] }
+    }),
+    catalogEntry({
+      id: "hosts.connect", family: "hosts", operation: "connect",
+      risk: "medium", sideEffects: "writes", permissions: ["hosts.connect"],
+      description: "Connect an execution host through the product control plane",
+      inputSchema: { type: "object", properties: { hostId: { type: "string" } }, required: ["hostId"] }
+    }),
+    catalogEntry({
+      id: "hosts.disconnect", family: "hosts", operation: "disconnect",
+      risk: "medium", sideEffects: "writes", permissions: ["hosts.disconnect"],
+      description: "Disconnect an execution host through the product control plane",
+      inputSchema: { type: "object", properties: { hostId: { type: "string" } }, required: ["hostId"] }
+    }),
+    catalogEntry({
+      id: "hosts.set_default", family: "hosts", operation: "set_default",
+      risk: "medium", sideEffects: "writes", permissions: ["hosts.set_default"],
+      description: "Set the default execution host for future host substrate actions",
+      inputSchema: { type: "object", properties: { hostId: { type: "string" } }, required: ["hostId"] }
+    }),
+    catalogEntry({
+      id: "hosts.health", family: "hosts", operation: "health",
+      risk: "low", sideEffects: "reads", permissions: ["hosts.health"],
+      description: "Read execution host health through the product control plane",
+      inputSchema: { type: "object", properties: { hostId: { type: "string" } }, required: ["hostId"] }
+    }),
+  ],
   host: [
     catalogEntry({
       id: "host.exec", family: "host", operation: "exec",
@@ -912,6 +950,15 @@ export interface BuiltinCapabilityMap {
     getCapability: CapabilityFn;
     get_capability: CapabilityFn;
   };
+  hosts: {
+    list: CapabilityFn;
+    get: CapabilityFn;
+    connect: CapabilityFn;
+    disconnect: CapabilityFn;
+    setDefault: CapabilityFn;
+    set_default: CapabilityFn;
+    health: CapabilityFn;
+  };
   host: {
     exec: CapabilityFn;
   };
@@ -952,6 +999,7 @@ export type CapabilityMapForPermissions<Permissions extends readonly string[]> =
   & NamespaceCapability<"runner", Permissions>
   & NamespaceCapability<"skills", Permissions>
   & NamespaceCapability<"runtime", Permissions>
+  & NamespaceCapability<"hosts", Permissions>
   & NamespaceCapability<"host", Permissions>;
 
 type NamespaceCapability<

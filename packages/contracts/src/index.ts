@@ -175,7 +175,8 @@ export const PUBLIC_CAPABILITY_NAMESPACES = [
   "runner",
   "skills",
   "runtime",
-  "host"
+  "host",
+  "hosts"
 ] as const;
 
 export type CapabilityNamespace = (typeof PUBLIC_CAPABILITY_NAMESPACES)[number];

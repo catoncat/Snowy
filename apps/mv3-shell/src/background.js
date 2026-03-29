@@ -8,6 +8,7 @@ export const RUNNER_BRIDGE_TIMEOUT_MS = 5_000;
 export const PAGE_HOOK_GLOBAL_KEY = "__BBL_NEXT_PAGE_HOOK__";
 export const PAGE_HOOK_DEFAULT_FILE = "src/page-hook.js";
 export const BOOTSTRAP_RESOURCE_KEYS = ["runtime", "config", "skills", "hosts"];
+const LOCAL_HOST_ID = "local";
 
 function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   if (error && typeof error === "object" && "code" in error && "message" in error) {
@@ -46,6 +47,16 @@ function unwrapExecuteScriptResult(result) {
 }
 
 function invalidSiteRuntimeInvoke(message) {
+  return {
+    ok: false,
+    error: {
+      code: "E_BAD_INPUT",
+      message
+    }
+  };
+}
+
+function invalidHostControlPlane(message) {
   return {
     ok: false,
     error: {
@@ -162,6 +173,7 @@ export function createBackgroundRunnerBridge({
   let creating = null;
   let requestSequence = 0;
   const state = {
+    defaultHostId: null,
     hostReady: false,
     hostLastSeenAt: undefined,
     hostRecoveredAt: undefined,
@@ -241,6 +253,174 @@ export function createBackgroundRunnerBridge({
       return value();
     }
     return value;
+  }
+
+  function resolveHostId(hostId, action) {
+    if (typeof hostId !== "string" || !hostId.trim()) {
+      return invalidHostControlPlane(`${action} requires a string hostId`);
+    }
+    if (hostId !== LOCAL_HOST_ID) {
+      return invalidHostControlPlane(`Unknown hostId: ${hostId}`);
+    }
+    return hostId;
+  }
+
+  async function readLocalHostControlState() {
+    const offscreenPresent = await hasOffscreenDocument();
+    if (!offscreenPresent) {
+      return {
+        offscreenPresent,
+        reachable: false,
+        health: null,
+        error: null
+      };
+    }
+
+    const response = await sendToOffscreen("runner.diagnostics");
+    if (!response.ok) {
+      return {
+        offscreenPresent,
+        reachable: false,
+        health: null,
+        error: response.error ?? {
+          code: "E_RUNTIME",
+          message: "Runner diagnostics unavailable"
+        }
+      };
+    }
+
+    return {
+      offscreenPresent,
+      reachable: response.data?.ready === true,
+      health: response.data?.health ?? null,
+      error: null
+    };
+  }
+
+  function toLocalHostSnapshot(localState) {
+    const connected = localState.reachable === true;
+    const snapshot = {
+      hostId: LOCAL_HOST_ID,
+      kind: "local",
+      connected,
+      state:
+        localState.health?.status
+        ?? (localState.offscreenPresent ? "degraded" : "disconnected"),
+      isDefault: state.defaultHostId === LOCAL_HOST_ID,
+      health: localState.health ?? null
+    };
+    if (localState.error) {
+      return {
+        ...snapshot,
+        error: localState.error
+      };
+    }
+    return snapshot;
+  }
+
+  async function describeLocalHost() {
+    return toLocalHostSnapshot(await readLocalHostControlState());
+  }
+
+  async function listHosts() {
+    return {
+      ok: true,
+      data: {
+        defaultHostId: state.defaultHostId,
+        items: [await describeLocalHost()]
+      }
+    };
+  }
+
+  async function getHost({ hostId } = {}) {
+    const resolvedHostId = resolveHostId(hostId, "hosts.get");
+    if (typeof resolvedHostId !== "string") {
+      return resolvedHostId;
+    }
+    return {
+      ok: true,
+      data: await describeLocalHost()
+    };
+  }
+
+  async function connectHost({ hostId } = {}) {
+    const resolvedHostId = resolveHostId(hostId, "hosts.connect");
+    if (typeof resolvedHostId !== "string") {
+      return resolvedHostId;
+    }
+    const ensured = await ensureHost();
+    if (!ensured.ok) {
+      return ensured;
+    }
+    if (!state.defaultHostId) {
+      state.defaultHostId = resolvedHostId;
+    }
+    return {
+      ok: true,
+      data: {
+        defaultHostId: state.defaultHostId,
+        host: toLocalHostSnapshot({
+          offscreenPresent: true,
+          reachable: ensured.data?.ready === true,
+          health: ensured.data?.health ?? null,
+          error: null
+        })
+      }
+    };
+  }
+
+  async function disconnectHost({ hostId } = {}) {
+    const resolvedHostId = resolveHostId(hostId, "hosts.disconnect");
+    if (typeof resolvedHostId !== "string") {
+      return resolvedHostId;
+    }
+    if ((await hasOffscreenDocument())) {
+      if (typeof chromeApi.offscreen?.closeDocument !== "function") {
+        return {
+          ok: false,
+          error: {
+            code: "E_RUNTIME",
+            message: "chrome.offscreen.closeDocument is required for hosts.disconnect"
+          }
+        };
+      }
+      await chromeApi.offscreen.closeDocument();
+    }
+    state.hostReady = false;
+    return {
+      ok: true,
+      data: {
+        defaultHostId: state.defaultHostId,
+        host: await describeLocalHost()
+      }
+    };
+  }
+
+  async function setDefaultHost({ hostId } = {}) {
+    const resolvedHostId = resolveHostId(hostId, "hosts.set_default");
+    if (typeof resolvedHostId !== "string") {
+      return resolvedHostId;
+    }
+    state.defaultHostId = resolvedHostId;
+    return {
+      ok: true,
+      data: {
+        defaultHostId: state.defaultHostId,
+        host: await describeLocalHost()
+      }
+    };
+  }
+
+  async function hostHealth({ hostId } = {}) {
+    const resolvedHostId = resolveHostId(hostId, "hosts.health");
+    if (typeof resolvedHostId !== "string") {
+      return resolvedHostId;
+    }
+    const host = await describeLocalHost();
+    return {
+      ok: true,
+      data: host
+    };
   }
 
   async function resolveActiveTabMetadata(requestedTab) {
@@ -634,19 +814,24 @@ export function createBackgroundRunnerBridge({
           : "empty";
     const runtimeError = runtimeDiagnostics.runner?.error ?? runtimeDiagnostics.site?.error ?? null;
 
-    const hostItems = runtimeDiagnostics.bridge.offscreenPresent || runtimeDiagnostics.runner?.reachable
-      ? [
-          {
-            hostId: "local",
-            kind: "local",
-            connected: Boolean(runtimeDiagnostics.runner?.reachable),
-            state:
-              runnerHealth?.status
-              ?? (runtimeDiagnostics.runner?.reachable ? "idle" : "unavailable"),
-            isDefault: true
-          }
-        ]
-      : [];
+    const localHost = toLocalHostSnapshot({
+      offscreenPresent: runtimeDiagnostics.bridge.offscreenPresent,
+      reachable: Boolean(runtimeDiagnostics.runner?.reachable),
+      health: runnerHealth ?? null,
+      error: runtimeDiagnostics.runner?.error ?? null
+    });
+    const hostItems =
+      localHost.connected || localHost.state === "degraded"
+        ? [
+            {
+              hostId: localHost.hostId,
+              kind: localHost.kind,
+              connected: localHost.connected,
+              state: localHost.state,
+              isDefault: localHost.isDefault || state.defaultHostId == null
+            }
+          ]
+        : [];
 
     const rawSkillsSummary = await resolveMaybe(listSkills);
     const skillEntries = Array.isArray(rawSkillsSummary)
@@ -692,7 +877,7 @@ export function createBackgroundRunnerBridge({
               : hostItems.some((entry) => entry.state === "degraded")
                 ? "degraded"
                 : "healthy",
-          defaultHostId: hostItems.length > 0 ? "local" : null,
+          defaultHostId: hostItems.length > 0 ? state.defaultHostId ?? LOCAL_HOST_ID : null,
           totalCount: hostItems.length,
           connectedCount: hostItems.filter((entry) => entry.connected).length,
           items: hostItems
@@ -722,6 +907,28 @@ export function createBackgroundRunnerBridge({
         return cancel(message.targetRequestId);
       case "runner.health":
         return health();
+      case "hosts.list":
+        return listHosts();
+      case "hosts.get":
+        return getHost({
+          hostId: message.hostId
+        });
+      case "hosts.connect":
+        return connectHost({
+          hostId: message.hostId
+        });
+      case "hosts.disconnect":
+        return disconnectHost({
+          hostId: message.hostId
+        });
+      case "hosts.set_default":
+        return setDefaultHost({
+          hostId: message.hostId
+        });
+      case "hosts.health":
+        return hostHealth({
+          hostId: message.hostId
+        });
       case "site.runtime.invoke":
         return invokeSiteRuntime(message);
       case "runtime.diagnostics":

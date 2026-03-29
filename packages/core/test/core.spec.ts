@@ -224,6 +224,38 @@ describe("core", () => {
     });
   });
 
+  it("keeps host substrate actions separate from the hosts control plane", () => {
+    expect(getBuiltinsByNamespace("host").map((entry) => entry.id)).toEqual([
+      "host.exec"
+    ]);
+    expect(getBuiltinsByNamespace("hosts").map((entry) => entry.id)).toEqual([
+      "hosts.list",
+      "hosts.get",
+      "hosts.connect",
+      "hosts.disconnect",
+      "hosts.set_default",
+      "hosts.health"
+    ]);
+    expect(
+      getBuiltinsByNamespace("hosts")
+        .filter((entry) => entry.sideEffects === "reads")
+        .map((entry) => entry.id)
+    ).toEqual([
+      "hosts.list",
+      "hosts.get",
+      "hosts.health"
+    ]);
+    expect(
+      getBuiltinsByNamespace("hosts")
+        .filter((entry) => entry.sideEffects === "writes")
+        .map((entry) => entry.id)
+    ).toEqual([
+      "hosts.connect",
+      "hosts.disconnect",
+      "hosts.set_default"
+    ]);
+  });
+
   it("projects bridge-side MCP export handoffs from exportable descriptors only", () => {
     const registry = new CapabilityRegistry([
       descriptor({

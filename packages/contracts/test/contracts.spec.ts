@@ -147,7 +147,7 @@ describe("contracts", () => {
 
   it("exports all expected public namespaces", () => {
     expect(PUBLIC_CAPABILITY_NAMESPACES).toEqual([
-      "memfs", "page", "site", "tabs", "runner", "skills", "runtime", "host"
+      "memfs", "page", "site", "tabs", "runner", "skills", "runtime", "host", "hosts"
     ]);
   });
 
