@@ -64,10 +64,22 @@ export interface PersistentVfsStore {
   delete(key: string): Promise<void>;
 }
 
+export const INDEXED_DB_VFS_SCHEMA_VERSION = 2;
+
+interface VfsDbMetaRecord {
+  key: string;
+  value: number;
+  updatedAt: string;
+}
+
 interface VfsDbSchema extends DBSchema {
   nodes: {
     key: string;
     value: VfsNodeRecord;
+  };
+  meta: {
+    key: string;
+    value: VfsDbMetaRecord;
   };
 }
 
@@ -103,12 +115,65 @@ export class IndexedDbVfsStore implements PersistentVfsStore {
   }
 
   async #getDb(): Promise<IDBPDatabase<VfsDbSchema>> {
-    this.#db ??= openDB<VfsDbSchema>(this.#dbName, 1, {
-      upgrade(db) {
-        db.createObjectStore("nodes", { keyPath: "key" });
-      }
-    });
+    this.#db ??= (async () => {
+      const db = await openDB<VfsDbSchema>(this.#dbName, INDEXED_DB_VFS_SCHEMA_VERSION, {
+        upgrade(database, oldVersion, _newVersion, transaction) {
+          if (oldVersion < 1 && !database.objectStoreNames.contains("nodes")) {
+            database.createObjectStore("nodes", { keyPath: "key" });
+          }
+          if (oldVersion < 2 && !database.objectStoreNames.contains("meta")) {
+            const meta = database.createObjectStore("meta", { keyPath: "key" });
+            meta.put(
+              createSchemaVersionRecord(
+                oldVersion === 0 ? INDEXED_DB_VFS_SCHEMA_VERSION : 1
+              )
+            );
+          } else if (oldVersion >= 2) {
+            transaction.objectStore("meta").put(createSchemaVersionRecord(oldVersion));
+          }
+        }
+      });
+      await this.#migrateIfNeeded(db);
+      return db;
+    })();
     return this.#db;
+  }
+
+  async #migrateIfNeeded(db: IDBPDatabase<VfsDbSchema>): Promise<void> {
+    const currentVersion = await this.#readSchemaVersion(db);
+    if (currentVersion >= INDEXED_DB_VFS_SCHEMA_VERSION) {
+      return;
+    }
+    if (currentVersion === 1) {
+      await this.#migrateV1ToV2(db);
+      return;
+    }
+    throw new CapabilityError(
+      "E_RUNTIME",
+      `Unsupported BrowserVFS schema version: ${currentVersion}`
+    );
+  }
+
+  async #readSchemaVersion(db: IDBPDatabase<VfsDbSchema>): Promise<number> {
+    const record = await db.get("meta", "schemaVersion");
+    return record?.value ?? 1;
+  }
+
+  async #migrateV1ToV2(db: IDBPDatabase<VfsDbSchema>): Promise<void> {
+    const tx = db.transaction(["nodes", "meta"], "readwrite");
+    const nodes = tx.objectStore("nodes");
+    const meta = tx.objectStore("meta");
+    const records = await nodes.getAll();
+
+    for (const record of records) {
+      const normalized = normalizeStoredRecord(record);
+      if (JSON.stringify(normalized) !== JSON.stringify(record)) {
+        await nodes.put(normalized);
+      }
+    }
+
+    await meta.put(createSchemaVersionRecord(INDEXED_DB_VFS_SCHEMA_VERSION));
+    await tx.done;
   }
 }
 
@@ -123,6 +188,10 @@ const DEFAULT_QUOTAS: Record<VfsScope, number> = {
   workspace: 50 * 1024 * 1024,
   library: 200 * 1024 * 1024
 };
+
+function textSize(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
 
 function storagePathFromRaw(raw: string): string {
   const trimmed = raw.trim().replace(/^\/+/, "");
@@ -143,6 +212,14 @@ function storagePathFromRaw(raw: string): string {
 
 function encodeKey(scope: VfsScope, path: string, workspaceId?: string): string {
   return scope === "workspace" ? `${scope}:${workspaceId ?? "default"}:${path}` : `${scope}:${path}`;
+}
+
+function createSchemaVersionRecord(version: number): VfsDbMetaRecord {
+  return {
+    key: "schemaVersion",
+    value: version,
+    updatedAt: new Date().toISOString()
+  };
 }
 
 function isSkillLibraryPath(path: string): boolean {
@@ -167,6 +244,23 @@ function toUri(scope: VfsScope, path: string): string {
     return path === "/skills" ? "mem://skills" : `mem://skills${path.slice("/skills".length)}`;
   }
   return path === "/" ? `mem://${scope}/` : `mem://${scope}${path}`;
+}
+
+function normalizeStoredRecord(record: VfsNodeRecord): VfsNodeRecord {
+  const workspaceId = record.scope === "workspace" ? record.workspaceId : undefined;
+  return {
+    ...record,
+    key: encodeKey(record.scope, record.path, workspaceId),
+    workspaceId,
+    content: record.kind === "file" ? record.content ?? "" : undefined,
+    size: record.kind === "file" ? textSize(record.content ?? "") : 0,
+    snapshot: record.snapshot
+      ? {
+          ...record.snapshot,
+          sourceUri: canonicalizeSkillUri(record.snapshot.sourceUri)
+        }
+      : undefined
+  };
 }
 
 function splitPath(path: string): string[] {
@@ -552,7 +646,7 @@ export class BrowserVfs {
       path,
       kind,
       content: kind === "file" ? content : undefined,
-      size: kind === "file" ? new TextEncoder().encode(content).byteLength : 0,
+      size: kind === "file" ? textSize(content) : 0,
       updatedAt: new Date().toISOString(),
       snapshot
     };

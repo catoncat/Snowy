@@ -1,6 +1,111 @@
 import "fake-indexeddb/auto";
-import { BrowserVfs, IndexedDbVfsStore, PACKAGE_MARKER } from "@bbl-next/browser-vfs";
+import { openDB, type DBSchema } from "idb";
+import {
+  BrowserVfs,
+  IndexedDbVfsStore,
+  INDEXED_DB_VFS_SCHEMA_VERSION,
+  PACKAGE_MARKER
+} from "@bbl-next/browser-vfs";
 import { describe, expect, it } from "vitest";
+
+interface LegacyVfsDbSchema extends DBSchema {
+  nodes: {
+    key: string;
+    value: Record<string, unknown>;
+  };
+}
+
+interface MigratedVfsDbSchema extends DBSchema {
+  nodes: {
+    key: string;
+    value: Record<string, unknown>;
+  };
+  meta: {
+    key: string;
+    value: {
+      key: string;
+      value: number;
+      updatedAt: string;
+    };
+  };
+}
+
+function textSize(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+async function seedLegacyV1Database(dbName: string, versionId: string): Promise<void> {
+  const db = await openDB<LegacyVfsDbSchema>(dbName, 1, {
+    upgrade(database) {
+      database.createObjectStore("nodes", { keyPath: "key" });
+    }
+  });
+
+  const runnerSource = "exports.default = async () => 1;";
+  const sourceUri = "/skills/twitter";
+  const snapshotRoot = `${sourceUri}/@versions/${versionId}`;
+
+  await db.put("nodes", {
+    key: "library:/skills/twitter",
+    scope: "library",
+    path: sourceUri,
+    kind: "dir",
+    size: 0,
+    updatedAt: versionId
+  });
+  await db.put("nodes", {
+    key: "library:/skills/twitter/SKILL.md",
+    scope: "library",
+    path: "/skills/twitter/SKILL.md",
+    kind: "file",
+    content: "# twitter",
+    size: textSize("# twitter"),
+    updatedAt: versionId
+  });
+  await db.put("nodes", {
+    key: "library:/skills/twitter/site/runner.js",
+    scope: "library",
+    path: "/skills/twitter/site/runner.js",
+    kind: "file",
+    content: runnerSource,
+    size: textSize(runnerSource),
+    updatedAt: versionId
+  });
+  await db.put("nodes", {
+    key: `library:${snapshotRoot}`,
+    scope: "library",
+    path: snapshotRoot,
+    kind: "dir",
+    size: 0,
+    updatedAt: versionId,
+    snapshot: {
+      versionId,
+      createdAt: versionId,
+      trusted: true,
+      sourceUri: "mem://library/skills/twitter"
+    }
+  });
+  await db.put("nodes", {
+    key: `library:${snapshotRoot}/SKILL.md`,
+    scope: "library",
+    path: `${snapshotRoot}/SKILL.md`,
+    kind: "file",
+    content: "# twitter",
+    size: textSize("# twitter"),
+    updatedAt: versionId
+  });
+  await db.put("nodes", {
+    key: `library:${snapshotRoot}/site/runner.js`,
+    scope: "library",
+    path: `${snapshotRoot}/site/runner.js`,
+    kind: "file",
+    content: runnerSource,
+    size: textSize(runnerSource),
+    updatedAt: versionId
+  });
+
+  db.close();
+}
 
 describe("browser-vfs", () => {
   it("persists workspace and library writes with write-through semantics", async () => {
@@ -224,6 +329,51 @@ describe("browser-vfs", () => {
     await expect(vfs.write("mem://workspace/too-large.txt", "12345")).rejects.toMatchObject({
       code: "E_VFS_QUOTA_EXCEEDED"
     });
+  });
+
+  it("migrates legacy v1 IndexedDB data without losing canonical snapshot or rollback behavior", async () => {
+    const dbName = `vfs-legacy-migration-${Date.now()}`;
+    const versionId = "2026-03-29T00:00:00.000Z";
+    await seedLegacyV1Database(dbName, versionId);
+
+    const store = new IndexedDbVfsStore(dbName);
+    const vfs = await BrowserVfs.create({
+      workspaceId: "conversation-1",
+      store
+    });
+
+    await expect(vfs.listSnapshots("mem://skills/twitter")).resolves.toEqual([
+      expect.objectContaining({
+        uri: `mem://skills/twitter/@versions/${versionId}`,
+        versionId,
+        trusted: true,
+        sourceUri: "mem://skills/twitter"
+      })
+    ]);
+    await expect(vfs.selectRollbackTarget("mem://skills/twitter")).resolves.toMatchObject({
+      versionId,
+      trusted: true
+    });
+
+    await vfs.rm("mem://skills/twitter/site/runner.js");
+    await vfs.rehydrate(`mem://skills/twitter/@versions/${versionId}`, "mem://skills/twitter");
+    await expect(vfs.read("mem://skills/twitter/site/runner.js")).resolves.toBe(
+      "exports.default = async () => 1;"
+    );
+
+    const migratedDb = await openDB<MigratedVfsDbSchema>(dbName);
+    await expect(migratedDb.get("meta", "schemaVersion")).resolves.toMatchObject({
+      key: "schemaVersion",
+      value: INDEXED_DB_VFS_SCHEMA_VERSION
+    });
+    await expect(
+      migratedDb.get("nodes", `library:/skills/twitter/@versions/${versionId}`)
+    ).resolves.toMatchObject({
+      snapshot: expect.objectContaining({
+        sourceUri: "mem://skills/twitter"
+      })
+    });
+    migratedDb.close();
   });
 
   describe("package discovery", () => {
