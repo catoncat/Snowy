@@ -43,7 +43,6 @@ export interface SiteSkillAction {
 export interface SiteSkillDefinition {
   skillId: string;
   matches: string[];
-  requiresActiveTab?: boolean;
   actions: SiteSkillAction[];
 }
 
@@ -146,7 +145,7 @@ export class SiteSkillRuntime {
     const matches = this.#registry.matchActiveTab(request.tab).some(
       (candidate) => candidate.skillId === request.skillId
     );
-    if (skill.requiresActiveTab !== false && !matches) {
+    if (!matches) {
       throw new CapabilityError("E_BAD_INPUT", `Active tab does not match ${request.skillId}`);
     }
     const action = skill.actions.find((candidate) => candidate.name === request.action);

@@ -14,7 +14,7 @@ import {
   type SiteScriptInstaller,
   type SiteActionVerifier
 } from "@bbl-next/site-runtime";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const tab: ActiveTabMetadata = {
   tabId: 7,
@@ -147,6 +147,80 @@ describe("site-runtime", () => {
         "verify:results_visible"
       ]
     });
+  });
+
+  it("rejects invoke when the active tab does not match the skill", async () => {
+    const installer = {
+      install: vi.fn(async () => undefined)
+    };
+    const registry = new SiteSkillRegistry([
+      {
+        skillId: "twitter.search",
+        matches: ["https://x.com/*"],
+        actions: [
+          {
+            name: "search_posts",
+            module: {
+              id: "twitter.search",
+              source: "exports.default = async () => ({ ok: true });"
+            }
+          }
+        ]
+      }
+    ]);
+    const runtime = new SiteSkillRuntime({
+      registry,
+      runnerHost: new JsRunnerHost(),
+      installer
+    });
+
+    await expect(
+      runtime.invoke({
+        skillId: "twitter.search",
+        action: "search_posts",
+        tab: {
+          ...tab,
+          url: "https://example.com/outside"
+        }
+      })
+    ).rejects.toMatchObject({
+      code: "E_BAD_INPUT",
+      message: "Active tab does not match twitter.search"
+    });
+    expect(installer.install).not.toHaveBeenCalled();
+  });
+
+  it("does not install hooks before an explicit action invoke", () => {
+    const installer = {
+      install: vi.fn(async () => undefined)
+    };
+    const registry = new SiteSkillRegistry([
+      {
+        skillId: "twitter.search",
+        matches: ["https://x.com/*"],
+        actions: [
+          {
+            name: "search_posts",
+            worlds: ["content"],
+            module: {
+              id: "twitter.search",
+              source: "exports.default = async () => ({ ok: true });"
+            }
+          }
+        ]
+      }
+    ]);
+
+    new SiteSkillRuntime({
+      registry,
+      runnerHost: new JsRunnerHost(),
+      installer
+    });
+
+    expect(registry.matchActiveTab(tab).map((skill) => skill.skillId)).toEqual([
+      "twitter.search"
+    ]);
+    expect(installer.install).not.toHaveBeenCalled();
   });
 
   it("runs a real page-hook fixture from action to verifier", async () => {
