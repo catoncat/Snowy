@@ -138,6 +138,7 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 - `ISSUE-035` 已完成：shared runner host path 现在有显式 host-adapter contract，默认 offscreen/local path 会返回结构化 `adapter_missing` error。
 - host adapter 的剩余实现已拆成 `ISSUE-038`。
+- 当前 `workflow:claim:preview` 应返回 `ISSUE-033`。
 - 其余 open issue 与推荐领取顺序以 live backlog frontmatter 和 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview` 为准。
 
 ### 边界说明
@@ -149,4 +150,4 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 - 先运行 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview`
 
-当前批次文档：`docs/next-development-slices-2026-03-29.md`
+当前批次文档：`docs/next-development-slices-2026-03-29-batch-6.md`

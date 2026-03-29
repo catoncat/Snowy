@@ -1,5 +1,5 @@
 ---
-id: ISSUE-036
+id: ISSUE-042
 title: "Review: audit tail is still missing for host control plane changes"
 status: open
 priority: p1

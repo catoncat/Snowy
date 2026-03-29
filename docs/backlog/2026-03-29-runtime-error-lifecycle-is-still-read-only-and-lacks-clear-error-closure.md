@@ -1,5 +1,5 @@
 ---
-id: ISSUE-037
+id: ISSUE-043
 title: "Review: runtime error lifecycle is still read-only and lacks clear-error closure"
 status: open
 priority: p1
@@ -17,7 +17,7 @@ kind: slice
 epic: EPIC-mv3-shell
 parallel_group: mv3-shell
 depends_on:
-  - ISSUE-036
+  - ISSUE-042
 write_scope:
   - packages/contracts/src/index.ts
   - packages/contracts/test/contracts.spec.ts
