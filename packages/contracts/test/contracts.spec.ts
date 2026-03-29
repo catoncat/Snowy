@@ -3,6 +3,7 @@ import {
   AI_SURFACE_PRIMITIVES,
   BOOTSTRAP_RESOURCE_KEYS,
   HOST_CONTROL_PLANE_ACTIONS,
+  RUNTIME_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
   assertCapabilityDescriptor,
   allowedActorsForSkillTransition,
@@ -119,6 +120,14 @@ describe("contracts", () => {
       "hosts.disconnect",
       "hosts.set_default",
       "hosts.health"
+    ]);
+  });
+
+  it("locks the minimal runtime control plane action set", () => {
+    expect(RUNTIME_CONTROL_PLANE_ACTIONS).toEqual([
+      "runtime.list_capabilities",
+      "runtime.get_capability",
+      "runtime.capture_diagnostics"
     ]);
   });
 

@@ -600,6 +600,78 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("routes runtime.capture_diagnostics through the public control plane without recovery side effects", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0
+            }
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1
+          }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0
+      }))
+    };
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await bridge.ensureHost();
+    const offscreenCreatesBefore = harness.offscreenApi.createDocument.mock.calls.length;
+    const offscreenClosesBefore = harness.offscreenApi.closeDocument.mock.calls.length;
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.capture_diagnostics",
+        tabId: 21,
+        world: "main"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "healthy",
+        bridge: {
+          hostReady: true,
+          offscreenPresent: true
+        },
+        runner: {
+          reachable: true,
+          health: {
+            status: "idle"
+          }
+        }
+      }
+    });
+
+    expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(offscreenCreatesBefore);
+    expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(offscreenClosesBefore);
+    dispose();
+    harness.cleanup();
+  });
+
   it("exposes a degraded runtime diagnostics snapshot without recovering the host", async () => {
     const host = {
       dispatch: vi.fn(async (request) => {

@@ -1022,6 +1022,7 @@ export function createBackgroundRunnerBridge({
       case "site.runtime.invoke":
         return invokeSiteRuntime(message);
       case "runtime.diagnostics":
+      case "runtime.capture_diagnostics":
         return diagnostics({
           tabId: message.tabId,
           world: message.world

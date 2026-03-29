@@ -23,6 +23,7 @@ import {
 import {
   HOST_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
+  RUNTIME_CONTROL_PLANE_ACTIONS,
   assertCapabilityDescriptor,
   CapabilityError,
   capabilityNamespace,
@@ -89,6 +90,12 @@ describe("core", () => {
     ]);
   });
 
+  it("keeps runtime control-plane actions aligned with canonical contracts", () => {
+    expect(getBuiltinsByNamespace("runtime").map((entry) => entry.id)).toEqual(
+      [...RUNTIME_CONTROL_PLANE_ACTIONS]
+    );
+  });
+
   it("projects tools from the registry", () => {
     const registry = new CapabilityRegistry([descriptor()]);
 
@@ -123,6 +130,10 @@ describe("core", () => {
       {
         id: "runtime.get_capability",
         description: "Get an action capability descriptor by id"
+      },
+      {
+        id: "runtime.capture_diagnostics",
+        description: "Capture a read-only runtime diagnostics snapshot without triggering recovery"
       }
     ]);
   });
@@ -725,7 +736,8 @@ describe("core", () => {
           "memfs.stat",
           "page.query",
           "tabs.list",
-          "runtime.list_capabilities"
+          "runtime.list_capabilities",
+          "runtime.capture_diagnostics"
         ])
       );
       expect(BUILTIN_EXPORT_HANDOFFS.map((entry) => entry.capabilityId)).not.toEqual(

@@ -222,9 +222,6 @@ Agent / UI / External Client
 
 Resources 解决的是：
 
-- AI 如何知道产品当前状态
-- AI 如何建立自我认知
-- AI 如何先看状态，再做动作
 
 推荐优先暴露的 resource 面：
 
@@ -232,19 +229,9 @@ Resources 解决的是：
    - 当前 session
    - active tab
    - loop state
-   - last error
-   - current mode
-2. `config summary`
-   - 模型配置
-   - 自动化策略
-   - 默认权限策略
-   - user preferences
-3. `skills summary`
-   - 已安装 skills
-   - enabled/disabled 状态
    - trusted 状态
    - 最近变更
-4. `hosts summary`
+用于最小 operability 闭环；它不等于完整 observability 系统（event stream、长时序指标、全量审计回放等由后续 issue 扩展）。
    - 可用 execution hosts
    - local / remote
    - 连接状态
@@ -289,6 +276,9 @@ Actions 分 3 层：
 - `hosts.set_default`
 - `runtime.capture_diagnostics`
 - `runtime.clear_error`
+
+说明：`runtime.capture_diagnostics` 在 v1/Level 1 只定义为 **read-only diagnostics snapshot** 入口，
+用于最小 operability 闭环；它不等于完整 observability 系统（event stream、长时序指标、全量审计回放等由后续 issue 扩展）。
 
 #### B. 浏览器专业动作
 

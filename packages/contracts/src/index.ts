@@ -23,6 +23,12 @@ export const HOST_CONTROL_PLANE_ACTIONS = [
   "hosts.health"
 ] as const;
 export type HostControlPlaneAction = (typeof HOST_CONTROL_PLANE_ACTIONS)[number];
+export const RUNTIME_CONTROL_PLANE_ACTIONS = [
+  "runtime.list_capabilities",
+  "runtime.get_capability",
+  "runtime.capture_diagnostics"
+] as const;
+export type RuntimeControlPlaneAction = (typeof RUNTIME_CONTROL_PLANE_ACTIONS)[number];
 export type ExecutionHostKind = "local" | "remote";
 export type ExecutionHostState = "connected" | "disconnected" | "degraded";
 export type ExecutionHostHealthStatus = "healthy" | "degraded" | "unknown";

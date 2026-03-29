@@ -463,6 +463,21 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       description: "Get an action capability descriptor by id",
       inputSchema: { type: "object", properties: { capabilityId: { type: "string" } }, required: ["capabilityId"] }
     }),
+    catalogEntry({
+      id: "runtime.capture_diagnostics", family: "runtime", operation: "capture_diagnostics",
+      risk: "low", sideEffects: "reads", permissions: ["runtime.capture_diagnostics"],
+      description: "Capture a read-only runtime diagnostics snapshot without triggering recovery",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tabId: { type: "number" },
+          world: {
+            type: "string",
+            enum: ["main", "content"]
+          }
+        }
+      }
+    }),
   ],
   hosts: [
     catalogEntry({
@@ -1162,6 +1177,8 @@ export interface BuiltinCapabilityMap {
     list_capabilities: CapabilityFn;
     getCapability: CapabilityFn;
     get_capability: CapabilityFn;
+    captureDiagnostics: CapabilityFn;
+    capture_diagnostics: CapabilityFn;
   };
   hosts: {
     list: CapabilityFn;
