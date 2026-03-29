@@ -40,9 +40,12 @@ claimed_at: 2026-03-29T13:04:52.829Z
 ## 工作总结
 
 - 同步了 `docs/v0-slice.md`、`docs/legacy-to-vnext-migration-matrix.md`、`docs/migration-parity-dashboard.md`，让 migration control docs 与 `ISSUE-032` 已落地的 host substrate surface 保持一致。
-- 回写了 backlog README 和当前 planning 文档，把 claim 流从已关闭的 `ISSUE-032` 切到当前 open 的 `ISSUE-033`。
-- 已运行 `bun run check`。
+- 回写了 backlog README、Batch 3 历史快照，并重新生成当前 planning 文档，把 claim 流从已关闭的 `ISSUE-032` 切到当前 open 的 `ISSUE-035`。
+- 轻量校验：
+  - `bun run workflow:claim:preview -- --name=codex`
+  - `bun run workflow:plan:preview`
 
 ## 相关 commits
 
 - `8150a46` `docs: sync host substrate migration state`
+- `0fe1379` `docs: seed next host follow-up issues`

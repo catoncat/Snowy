@@ -141,8 +141,8 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 ### 边界说明
 
-- `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030`、`ISSUE-031`、`ISSUE-032` 已完成；当前主缺口已拆成 docs sync `ISSUE-034` 与 host adapter `ISSUE-035`
-- `ISSUE-034` 收口后，`workflow:claim:preview` 应指向 `ISSUE-035`
+- `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030`、`ISSUE-031`、`ISSUE-032`、`ISSUE-034` 已完成；当前主缺口已转为 `ISSUE-035`
+- 当前 `workflow:claim:preview` 应指向 `ISSUE-035`
 
 ## 推荐领取顺序
 

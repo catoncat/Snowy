@@ -32,4 +32,4 @@ Batch 3 is closed; keep this file as the historical snapshot for `ISSUE-026` thr
 ## Sequencing Notes
 
 - Batch 3 no longer has a claimable queue.
-- Host follow-up work continued in `ISSUE-032`, and the current next claim is now `ISSUE-033` in `docs/next-development-slices-2026-03-29.md`.
+- Host follow-up work continued in `ISSUE-032`, and the current next claim is now `ISSUE-035` in `docs/next-development-slices-2026-03-29.md`.
