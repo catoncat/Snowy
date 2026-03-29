@@ -620,6 +620,59 @@ export interface BuiltinCapabilityMap {
   };
 }
 
-export function typedCapabilities(ctx: SkillRuntimeContext): BuiltinCapabilityMap {
-  return ctx.capabilities as unknown as unknown as BuiltinCapabilityMap;
+export type PartialBuiltinCapabilityMap = {
+  [Namespace in keyof BuiltinCapabilityMap]?: Partial<BuiltinCapabilityMap[Namespace]>;
+};
+
+type CamelCase<Value extends string> = Value extends `${infer Head}_${infer Tail}`
+  ? `${Head}${Capitalize<CamelCase<Tail>>}`
+  : Value;
+
+type AllowedMethodsFromPermission<
+  Namespace extends keyof BuiltinCapabilityMap,
+  Permission extends string
+> = Permission extends `${Namespace & string}.${infer Method}`
+  ?
+      | (Method & keyof BuiltinCapabilityMap[Namespace])
+      | (CamelCase<Method & string> & keyof BuiltinCapabilityMap[Namespace])
+  : never;
+
+type AllowedMethods<
+  Namespace extends keyof BuiltinCapabilityMap,
+  Permissions extends readonly string[]
+> =
+  "*" extends Permissions[number]
+    ? keyof BuiltinCapabilityMap[Namespace]
+    : `${Namespace & string}.*` extends Permissions[number]
+      ? keyof BuiltinCapabilityMap[Namespace]
+      : AllowedMethodsFromPermission<Namespace, Permissions[number] & string>;
+
+export type CapabilityMapForPermissions<Permissions extends readonly string[]> =
+  NamespaceCapability<"memfs", Permissions>
+  & NamespaceCapability<"page", Permissions>
+  & NamespaceCapability<"site", Permissions>
+  & NamespaceCapability<"tabs", Permissions>
+  & NamespaceCapability<"runner", Permissions>
+  & NamespaceCapability<"skills", Permissions>
+  & NamespaceCapability<"runtime", Permissions>
+  & NamespaceCapability<"host", Permissions>;
+
+type NamespaceCapability<
+  Namespace extends keyof BuiltinCapabilityMap,
+  Permissions extends readonly string[]
+> = [AllowedMethods<Namespace, Permissions>] extends [never]
+  ? {}
+  : {
+      [Key in Namespace]: Pick<BuiltinCapabilityMap[Namespace], AllowedMethods<Namespace, Permissions>>;
+    };
+
+export function typedCapabilities(ctx: SkillRuntimeContext): PartialBuiltinCapabilityMap {
+  return ctx.capabilities as unknown as PartialBuiltinCapabilityMap;
+}
+
+export function typedCapabilitiesForPermissions<Permissions extends readonly string[]>(
+  ctx: SkillRuntimeContext,
+  _permissions: Permissions
+): CapabilityMapForPermissions<Permissions> {
+  return ctx.capabilities as unknown as CapabilityMapForPermissions<Permissions>;
 }

@@ -5,32 +5,51 @@ export {
   SkillInvocationService,
   createSkillRuntimeContext,
   typedCapabilities,
+  typedCapabilitiesForPermissions,
   type BuiltinCapabilityMap,
+  type CapabilityMapForPermissions,
   type SkillDefinition,
   type SkillInvocationResult,
   type SkillRuntimeContext
 } from "@bbl-next/core";
 
-import { typedCapabilities, type BuiltinCapabilityMap, type SkillDefinition, type SkillRuntimeContext } from "@bbl-next/core";
+import {
+  typedCapabilitiesForPermissions,
+  type CapabilityMapForPermissions,
+  type SkillDefinition,
+  type SkillRuntimeContext
+} from "@bbl-next/core";
 
-export type TypedSkillRuntimeContext = Omit<SkillRuntimeContext, "capabilities"> & {
-  capabilities: BuiltinCapabilityMap;
+export type TypedSkillRuntimeContext<Permissions extends readonly string[]> = Omit<
+  SkillRuntimeContext,
+  "capabilities"
+> & {
+  capabilities: CapabilityMapForPermissions<Permissions>;
 };
 
-export interface SkillDeclaration {
+export interface SkillDeclaration<Permissions extends readonly string[] = string[]> {
   id: string;
-  permissions: string[];
-  handler: (ctx: TypedSkillRuntimeContext, action: string, args: unknown) => Promise<unknown>;
+  permissions: Permissions;
+  handler: (
+    ctx: TypedSkillRuntimeContext<Permissions>,
+    action: string,
+    args: unknown
+  ) => Promise<unknown>;
 }
 
-function withTypedContext(ctx: SkillRuntimeContext): TypedSkillRuntimeContext {
+function withTypedContext<Permissions extends readonly string[]>(
+  ctx: SkillRuntimeContext,
+  permissions: Permissions
+): TypedSkillRuntimeContext<Permissions> {
   return {
     ...ctx,
-    capabilities: typedCapabilities(ctx)
+    capabilities: typedCapabilitiesForPermissions(ctx, permissions)
   };
 }
 
-export function defineSkill(declaration: SkillDeclaration): SkillDefinition {
+export function defineSkill<const Permissions extends readonly string[]>(
+  declaration: SkillDeclaration<Permissions>
+): SkillDefinition {
   if (!declaration.id || typeof declaration.id !== "string") {
     throw new Error("defineSkill: id must be a non-empty string");
   }
@@ -42,7 +61,8 @@ export function defineSkill(declaration: SkillDeclaration): SkillDefinition {
   }
   return {
     id: declaration.id,
-    permissions: declaration.permissions,
-    handler: (ctx, action, args) => declaration.handler(withTypedContext(ctx), action, args)
+    permissions: [...declaration.permissions],
+    handler: (ctx, action, args) =>
+      declaration.handler(withTypedContext(ctx, declaration.permissions), action, args)
   };
 }

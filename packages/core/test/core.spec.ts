@@ -8,6 +8,7 @@ import {
   getBuiltinsByNamespace,
   hasPublicNamespaceCoverage,
   typedCapabilities,
+  typedCapabilitiesForPermissions,
   type BuiltinCapabilityMap
 } from "@bbl-next/core";
 import {
@@ -472,15 +473,15 @@ describe("core", () => {
 
       // memfs namespace should have read, write, list, etc.
       expect(caps.memfs).toBeDefined();
-      expect(typeof caps.memfs.read).toBe("function");
-      expect(typeof caps.memfs.write).toBe("function");
+      expect(typeof caps.memfs?.read).toBe("function");
+      expect(typeof caps.memfs?.write).toBe("function");
 
       // page namespace should have query, click, fill
       expect(caps.page).toBeDefined();
-      expect(typeof caps.page.click).toBe("function");
+      expect(typeof caps.page?.click).toBe("function");
 
       // call through typed accessor should work
-      const result = await caps.memfs.read({ uri: "mem://test" });
+      const result = await caps.memfs!.read!({ uri: "mem://test" });
       expect(result).toEqual({ operation: "read", input: { uri: "mem://test" } });
     });
 
@@ -502,9 +503,36 @@ describe("core", () => {
 
       const caps = typedCapabilities(ctx);
       expect(caps.memfs).toBeDefined();
-      expect(typeof caps.memfs.read).toBe("function");
+      expect(typeof caps.memfs?.read).toBe("function");
       // write is not permitted, so it won't be attached
-      expect(caps.memfs.write).toBeUndefined();
+      expect(caps.memfs?.write).toBeUndefined();
+    });
+
+    it("can narrow the facade using declared permissions", async () => {
+      const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+      const providers = new FamilyProviderRegistry();
+      providers.register({
+        family: "memfs",
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+      });
+
+      const permissions = ["memfs.read"] as const;
+      const ctx = createSkillRuntimeContext({
+        registry,
+        providers,
+        sessionId: "s1",
+        skillId: "skill.narrowed",
+        permissions: [...permissions]
+      });
+
+      const caps = typedCapabilitiesForPermissions(ctx, permissions);
+      const read: BuiltinCapabilityMap["memfs"]["read"] = caps.memfs.read;
+      const result = await read({ uri: "mem://narrowed" });
+
+      expect(result).toEqual({
+        operation: "read",
+        input: { uri: "mem://narrowed" }
+      });
     });
   });
 });
