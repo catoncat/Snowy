@@ -27,11 +27,15 @@ check_cmd: bun run check
 - 可以枚举 `mem://library/skills/*`
 - package root 判断逻辑明确
 
-## Completion
+## 工作总结
 
-**Commits:** `94131aa` (feat: package discovery helpers)
+### 2026-03-29 补记
 
-**Changes:**
-- `packages/browser-vfs/src/index.ts`: Added `VfsPackageInfo` interface, `PACKAGE_MARKER` constant ("SKILL.md"), `discoverPackages(rootUri?)` with @versions exclusion and sorted output, `isPackageRoot(uri)` marker detection, fixed `resolveMemUri` for bare `mem://skills` root
-- `packages/browser-vfs/test/browser-vfs.spec.ts`: 6 new tests — discover with/without marker, @versions exclusion, custom root URI, empty set, isPackageRoot positive/negative cases, PACKAGE_MARKER constant
+- BrowserVFS 已新增 `PACKAGE_MARKER`、`discoverPackages()` 和 `isPackageRoot()`，可在 skill root 与自定义 root 下做无 shell discovery
+- 测试已覆盖有无 `SKILL.md` 标记、workspace 自定义 root、空目录和 package root 判断
+- 该 slice 和 `ISSUE-008` 一起落在同一批代码提交里
 
+## 相关 commits
+
+- `94131aa` `feat(browser-vfs): package discovery helpers (ISSUE-004)`
+- `de478c8` `refactor: extract runner-host-core shared module; mark ISSUE-004, ISSUE-008 done`

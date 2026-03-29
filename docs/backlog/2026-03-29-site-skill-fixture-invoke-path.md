@@ -32,3 +32,15 @@ claimed_at: 2026-03-29T09:07:17.128Z
 
 - 从 skill action 到 runner 到 verifier 有集成测试
 
+## 工作总结
+
+### 2026-03-29 补记
+
+- 已补 page-hook fixture invoke path，installer 返回结果会进入 runner `ctx.site` 并传给 verifier
+- `apps/mv3-shell/src/page-hook.js` 现在提供自包含 fixture API，测试覆盖 `match -> install -> action -> verifier -> trace`
+- 该 slice 的代码和 `ISSUE-004` 一起落在共享 batch commit 中；后续 `de478c8` 只补 shared runner-host-core 抽取和状态回写
+
+## 相关 commits
+
+- `94131aa` `feat(browser-vfs): package discovery helpers (ISSUE-004)` 共享 batch，含 site skill fixture invoke path
+- `de478c8` `refactor: extract runner-host-core shared module; mark ISSUE-004, ISSUE-008 done`

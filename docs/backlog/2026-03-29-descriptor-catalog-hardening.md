@@ -33,12 +33,14 @@ check_cmd: "bun run check"
 - namespace coverage 有明确测试
 - projection / descriptor 校验继续保持单一真相源
 
-## Completion
+## 工作总结
 
-**Commits:** `16b3cb3` (bootstrap with catalog hardening)
+### 2026-03-29 补记
 
-**Changes:**
-- `packages/contracts/src/index.ts`: Added `PUBLIC_CAPABILITY_NAMESPACES`, `CapabilityNamespace` type, `capabilityNamespace()`, `isPublicCapabilityNamespace()`, schema type validation in `assertCapabilityDescriptor`
-- `packages/core/src/index.ts`: Replaced flat `BUILTIN_CAPABILITIES` with structured `BUILTIN_CATALOG` organized by 8 namespaces, added real `inputSchema` for all 21 builtins, added `getBuiltinsByNamespace()`
-- `packages/contracts/test/contracts.spec.ts`: 6 new tests (schema validation, namespace helpers)
-- `packages/core/test/core.spec.ts`: 8 new builtin catalog structure tests
+- 当前 contracts 层已经提供 `CapabilityDescriptor` canonical model、tool projection 和 lifecycle 基线
+- core 侧 public capability registry / runtime ctx 以这套 contracts 基线为前提继续展开
+- 该 slice 在当前历史里没有独立的 post-claim 提交；按 write scope 追溯，落地基线来自仓库 bootstrap
+
+## 相关 commits
+
+- `16b3cb3` `feat: bootstrap bbl-next runtime scaffold`

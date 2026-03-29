@@ -43,4 +43,4 @@ resolved: 2026-03-29
 
 ## 相关 commits
 
-- 未提交
+- `b787ba0` `feat: add js runner rpc and host health`

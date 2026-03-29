@@ -62,7 +62,8 @@ check_cmd: bun run test -- <target> | bun run check
 3. coordinator 在 canonical workspace 执行 claim
 4. worker 根据已分配的 issue 实现，不自行 claim
 5. worker 完成后把结果回传给 coordinator/integrator
-6. coordinator 或 integrator 在 canonical workspace 把 issue 改为 `done` 并追加工作记录
+6. coordinator 或 integrator 先提交对应 code commit
+7. coordinator 或 integrator 在 canonical workspace 把 issue 改为 `done`，并追加工作记录与 commit 记录
 
 ## Canonical Workspace Rule
 
@@ -79,18 +80,26 @@ bun run workflow:claim
 bun run workflow:claim:json
 ```
 
+## Completion Record
+
+- `done` issue 不能只改 frontmatter；必须同时追加 `## 工作总结` 和 `## 相关 commits`
+- `## 工作总结` 至少写：
+  - 实现了什么
+  - 实际跑了什么检查
+  - 还有什么残留风险或外部 blocker
+- `## 相关 commits` 必须写对应 code commit 的 hash 和 message；不要保留 `未提交`
+- 如果仓库级 `bun run check` 被 write scope 外的并行改动阻塞，可以在 issue 中注明 blocker，但仍要把本 slice 已通过的聚焦检查写清楚
+
 ## 当前未完成项
 
-1. `ISSUE-001` Descriptor catalog hardening
-2. `ISSUE-003` BrowserVFS version retention and rollback helpers
-3. `ISSUE-006` MV3 offscreen runner bridge
-4. `ISSUE-007` Site runtime injection plan and installer split
-5. `ISSUE-009` Skill SDK typed facade
+1. `ISSUE-011` Review: ctx permission and trace contract drift
+2. `ISSUE-012` Review: site runtime active-tab boundary regression
+3. `ISSUE-013` Review: phase 4 real injection chain is still mocked
+4. `ISSUE-014` Review: BrowserVFS canonical skill URI drift
 
 ## 推荐领取顺序
 
-1. `ISSUE-001`
-2. `ISSUE-003`
-3. `ISSUE-007`
-4. `ISSUE-009`
-5. `ISSUE-006`
+1. `ISSUE-011`
+2. `ISSUE-012`
+3. `ISSUE-014`
+4. `ISSUE-013`

@@ -31,11 +31,15 @@ claimed_at: 2026-03-29T08:45:04.360Z
 - 支持 trusted snapshot 语义占位
 - 有对应测试
 
-## Completion
+## 工作总结
 
-**Commits:** `16b3cb3` (bootstrap with version retention), `f6c14dd` (typecheck fix + mark done)
+### 2026-03-29 补记
 
-**Changes:**
-- `packages/browser-vfs/src/index.ts`: `VfsSnapshotMetadata` (versionId/createdAt/trusted/sourceUri), `snapshot()` with retention + trusted params, `listSnapshots()` sorted desc, `selectRollbackTarget()` with trusted-first + untrusted fallback, `rehydrate()` preserving version history, `normalizeSnapshotRetention()` default 3 / min 1, `#trimSnapshots()` auto-prune
-- `packages/browser-vfs/test/browser-vfs.spec.ts`: 6 tests covering metadata persistence, retention, rollback selection, configurable retention, legacy fallback, rehydrate with history preservation
+- BrowserVFS 已补齐 snapshot metadata、retention、rollback target 选择和 replace-style `rehydrate()`
+- 测试已覆盖 trusted snapshot、legacy fallback、retention trimming 和回滚重建语义
+- 该 slice 的代码落在共享 batch commit 中，后续 `ISSUE-004` 在同一 lane 上继续扩展 package discovery
 
+## 相关 commits
+
+- `8302863` `feat(site-runtime): injection plan model and installer split (ISSUE-007)` 共享 batch，含 BrowserVFS snapshot/rollback 实现
+- `f6c14dd` `fix(core): safe cast in typedCapabilities + mark ISSUE-003 done`

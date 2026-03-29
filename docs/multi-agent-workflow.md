@@ -78,6 +78,17 @@
 - 跑了什么检查
 - 还有什么残留风险
 
+## Completion Contract
+
+- 代码完成后先提交 code commit，再回写 issue；不要让 `done` issue 还停留在 `未提交`
+- 回写 issue 时至少要做 4 件事：
+  1. 把 `status` 改成 `done`
+  2. 追加 `## 工作总结`
+  3. 在总结里写清实现结果、实际检查、残留风险
+  4. 追加 `## 相关 commits`，写入对应 code commit hash 和 message
+- 如果仓库级 `bun run check` 被 write scope 外的并行改动阻塞，issue 里必须明确写出 blocker，并列出已跑的聚焦检查
+- coordinator / integrator 不能只改状态，不补总结和 commit 记录
+
 ## Anti-Patterns
 
 - 两个 worker 同时改 `packages/core/src/index.ts`

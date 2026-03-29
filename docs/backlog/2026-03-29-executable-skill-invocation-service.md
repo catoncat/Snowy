@@ -28,12 +28,14 @@ check_cmd: bun run check
 - skill invocation 有稳定 service 接口
 - depth / trace / permission 语义被测住
 
-## Completion
+## 工作总结
 
-**Commits:** `16b3cb3` (bootstrap with invocation service), `680314d` (route skills.invoke through capability call chain)
+### 2026-03-29 补记
 
-**Changes:**
-- `packages/core/src/index.ts`: Added `SkillDefinition`, `SkillInvocationServiceOptions`, `SkillInvocationResult` interfaces, `SkillInvocationService` class (register/get/list/invoke) with depth guard, permission isolation, trace isolation, recursion support
-- `packages/skill-sdk/src/index.ts`: Re-exported `SkillInvocationService`, `SkillDefinition`, `SkillInvocationResult`
-- `packages/core/test/core.spec.ts`: 7 new SkillInvocationService tests covering basic invoke, depth guard, permission check, unknown skill, trace isolation, child invoke, error propagation
+- 已把 `skills.invoke` 路由收口进 core 的统一 capability call chain
+- `packages/core/test/core.spec.ts` 已覆盖 skill invocation service 的基础调用与嵌套语义
+- `packages/skill-sdk/src/index.ts` 仍保持薄 facade，没有重新打开私有平行入口
 
+## 相关 commits
+
+- `680314d` `Route skills.invoke through capability call chain`
