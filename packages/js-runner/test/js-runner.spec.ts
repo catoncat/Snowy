@@ -1,4 +1,4 @@
-import { JsRunnerHost } from "@bbl-next/js-runner";
+import { JsRunnerHost, type RunnerRpcRequest } from "@bbl-next/js-runner";
 // @ts-ignore source JS module has no declaration file yet
 import { createRunnerHostCore } from "../src/runner-host-core.js";
 import { describe, expect, it, vi } from "vitest";
@@ -316,9 +316,46 @@ describe("js-runner", () => {
     });
   });
 
+  it("exposes host substrate dispatch through the public JsRunnerHost API", async () => {
+    const hostAdapter = {
+      exec: vi.fn(async (request) => ({
+        hostId: request.hostId,
+        command: request.command,
+        exitCode: 0,
+        stdout: `ran:${request.command}`,
+        stderr: ""
+      }))
+    };
+    const host = new JsRunnerHost({ hostAdapter });
+
+    await expect(
+      host.dispatch({
+        kind: "exec",
+        requestId: "exec-public",
+        hostId: "local",
+        command: "pwd",
+        timeoutMs: 25
+      })
+    ).resolves.toEqual({
+      hostId: "local",
+      command: "pwd",
+      exitCode: 0,
+      stdout: "ran:pwd",
+      stderr: ""
+    });
+
+    expect(hostAdapter.exec).toHaveBeenCalledWith({
+      kind: "exec",
+      requestId: "exec-public",
+      hostId: "local",
+      command: "pwd",
+      timeoutMs: 25
+    });
+  });
+
   it("returns structured host substrate errors when no adapter is configured", async () => {
     const core = createRunnerHostCore();
-    const requests = [
+    const requests: RunnerRpcRequest[] = [
       {
         kind: "read",
         requestId: "read-missing",
@@ -362,6 +399,31 @@ describe("js-runner", () => {
         }
       });
     }
+  });
+
+  it("returns structured host substrate errors through the public JsRunnerHost API", async () => {
+    const host = new JsRunnerHost();
+
+    await expect(
+      host.dispatch({
+        kind: "exec",
+        requestId: "exec-missing-public",
+        hostId: "local",
+        command: "pwd",
+        timeoutMs: 25
+      })
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_RUNTIME",
+        message: "Execution host adapter is not configured for exec",
+        details: {
+          kind: "exec",
+          hostId: "local",
+          reason: "adapter_missing"
+        }
+      }
+    });
   });
 
   it("marks health as degraded after a failure and resets after success", async () => {

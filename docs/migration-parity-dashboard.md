@@ -19,7 +19,7 @@
 | BrowserVFS public skill URI parity | `green` | canonical `mem://skills/...` round-trip 已测 |
 | JS Runner host | `green` | host / cancel / timeout / health / offscreen bridge 已测 |
 | MV3 shell substrate | `green` | offscreen bridge 与显式 page-hook bridge 已测 |
-| local execution host adapter | `yellow` | `host.read/write/edit/exec` contract 与 routing 已落地，但默认 offscreen local host 仍是 contract-only，真实 adapter 仍未实现 |
+| local execution host adapter | `yellow` | `host.read/write/edit/exec` contract、routing 与默认 offscreen host 的显式 adapter error path 已落地，但真实 local adapter 与 remote host path 仍未实现 |
 | site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
 | AI-native product control plane | `yellow` | 最小 `runtime/config/skills/hosts` bootstrap summary 与本地 `hosts.*` control plane 已落地并有测试；config/skills/audit control plane 仍未实现 |
 | old browser automation parity | `red` | 旧 background/focus/CDP 体系尚未正式迁入 |
