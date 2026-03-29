@@ -22,6 +22,16 @@ export interface InjectionPlan {
   steps: InjectionStep[];
 }
 
+export interface SiteInstallation {
+  step: InjectionStep;
+  result?: unknown;
+}
+
+export interface SiteInvokeContext {
+  plan: InjectionPlan;
+  installations: SiteInstallation[];
+}
+
 export interface SiteSkillAction {
   name: string;
   module: RunnerModule;
@@ -38,7 +48,7 @@ export interface SiteSkillDefinition {
 }
 
 export interface SiteScriptInstaller {
-  install(step: InjectionStep, tab: ActiveTabMetadata): Promise<void>;
+  install(step: InjectionStep, tab: ActiveTabMetadata): Promise<unknown>;
 }
 
 export interface SiteActionVerifier {
@@ -47,6 +57,7 @@ export interface SiteActionVerifier {
     action: string;
     tab: ActiveTabMetadata;
     result: unknown;
+    site: SiteInvokeContext;
   }): Promise<boolean>;
 }
 
@@ -150,13 +161,23 @@ export class SiteSkillRuntime {
 
     // Phase 2: Plan & Install
     const plan = buildInjectionPlan(request.skillId, action);
+    const site: SiteInvokeContext = {
+      plan,
+      installations: []
+    };
     if (plan.steps.length > 0) {
       trace.push(`plan:${plan.steps.length}_steps`);
       for (const step of plan.steps) {
+        const installation = this.#installer
+          ? await this.#installer.install(step, request.tab)
+          : undefined;
+        site.installations.push({
+          step,
+          result: installation
+        });
         if (this.#installer) {
-          await this.#installer.install(step, request.tab);
+          trace.push(`install:${step.world}:${step.scriptId}`);
         }
-        trace.push(`install:${step.world}:${step.scriptId}`);
       }
     }
 
@@ -166,7 +187,8 @@ export class SiteSkillRuntime {
       input: request.input ?? {},
       ctx: {
         ...(request.ctx ?? {}),
-        tab: request.tab
+        tab: request.tab,
+        site
       }
     });
     trace.push(`invoke:${request.action}`);
@@ -178,7 +200,8 @@ export class SiteSkillRuntime {
         skillId: request.skillId,
         action: request.action,
         tab: request.tab,
-        result: invocation.result
+        result: invocation.result,
+        site
       });
       trace.push(`verify:${action.verifier}`);
       if (!verified) {

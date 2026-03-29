@@ -50,6 +50,14 @@ export interface VfsRollbackTargetOptions {
   allowUntrustedFallback?: boolean;
 }
 
+export const PACKAGE_MARKER = "SKILL.md";
+
+export interface VfsPackageInfo {
+  id: string;
+  uri: string;
+  hasMarker: boolean;
+}
+
 export interface PersistentVfsStore {
   load(scope: Extract<VfsScope, "workspace" | "library">, workspaceId?: string): Promise<VfsNodeRecord[]>;
   put(record: VfsNodeRecord): Promise<void>;
@@ -213,7 +221,7 @@ export function resolveMemUri(uri: string): {
     throw new CapabilityError("E_BAD_INPUT", `Invalid mem uri: ${uri}`);
   }
   const raw = uri.slice("mem://".length);
-  if (raw.startsWith("skills/")) {
+  if (raw === "skills" || raw.startsWith("skills/")) {
     return {
       scope: "library",
       path: storagePathFromRaw(raw)
@@ -419,6 +427,44 @@ export class BrowserVfs {
       return trusted;
     }
     return options.allowUntrustedFallback ? snapshots[0] ?? null : null;
+  }
+
+  async discoverPackages(rootUri = "mem://skills"): Promise<VfsPackageInfo[]> {
+    const { scope, path: rootPath } = resolveMemUri(rootUri);
+    const map = this.#maps[scope];
+    const prefix = rootPath === "/" ? "/" : `${rootPath}/`;
+    const children = new Set<string>();
+
+    for (const record of map.values()) {
+      if (!record.path.startsWith(prefix)) {
+        continue;
+      }
+      const rest = record.path.slice(prefix.length);
+      const [child] = rest.split("/");
+      if (child && child !== "@versions") {
+        children.add(child);
+      }
+    }
+
+    return [...children]
+      .sort()
+      .map((child) => {
+        const childPath = rootPath === "/" ? `/${child}` : `${rootPath}/${child}`;
+        const markerPath = `${childPath}/${PACKAGE_MARKER}`;
+        const marker = map.get(markerPath);
+        return {
+          id: child,
+          uri: toUri(scope, childPath),
+          hasMarker: marker?.kind === "file"
+        };
+      });
+  }
+
+  async isPackageRoot(uri: string): Promise<boolean> {
+    const { scope, path } = resolveMemUri(uri);
+    const markerPath = `${path}/${PACKAGE_MARKER}`;
+    const record = this.#maps[scope].get(markerPath);
+    return record?.kind === "file";
   }
 
   async stage(entries: Array<{ uri: string; content: string }>): Promise<void> {

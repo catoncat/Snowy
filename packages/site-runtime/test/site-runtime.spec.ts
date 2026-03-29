@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 import { JsRunnerHost } from "@bbl-next/js-runner";
 import {
   SiteSkillRegistry,
@@ -18,6 +22,48 @@ const tab: ActiveTabMetadata = {
   active: true,
   title: "Home"
 };
+
+interface PageHookFixtureHandle {
+  installed: {
+    world: string;
+    scriptId: string;
+    runAt: string | null;
+    tabId: number | null;
+    url: string;
+  };
+  run(action: string, input: unknown, ctx: Record<string, unknown>): unknown;
+  verify(action: string, result: unknown): boolean;
+}
+
+interface PageHookFixtureApi {
+  version: string;
+  state: {
+    installs: Array<PageHookFixtureHandle["installed"]>;
+    invocations: Array<Record<string, unknown>>;
+    verifications: Array<{ action: string; verified: boolean }>;
+  };
+  install(step: InjectionStep, tab: ActiveTabMetadata): PageHookFixtureHandle;
+}
+
+function loadPageHookFixture(): PageHookFixtureApi {
+  const testDir = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(resolve(testDir, "../../../apps/mv3-shell/src/page-hook.js"), "utf8");
+  const sandbox: {
+    console: Console;
+    globalThis?: unknown;
+    __BBL_NEXT_PAGE_HOOK__?: PageHookFixtureApi;
+  } = {
+    console
+  };
+  sandbox.globalThis = sandbox;
+  runInNewContext(source, sandbox, {
+    filename: "page-hook.js"
+  });
+  if (!sandbox.__BBL_NEXT_PAGE_HOOK__) {
+    throw new Error("page hook fixture did not register");
+  }
+  return sandbox.__BBL_NEXT_PAGE_HOOK__;
+}
 
 describe("site-runtime", () => {
   it("matches site skills only on the active tab", () => {
@@ -99,6 +145,121 @@ describe("site-runtime", () => {
         "install:main:twitter.search:search_posts:main",
         "invoke:search_posts",
         "verify:results_visible"
+      ]
+    });
+  });
+
+  it("runs a real page-hook fixture from action to verifier", async () => {
+    const pageHook = loadPageHookFixture();
+    const registry = new SiteSkillRegistry([
+      {
+        skillId: "fixture.page",
+        matches: ["https://fixture.test/*"],
+        actions: [
+          {
+            name: "execute_fixture",
+            injectionSteps: [
+              { world: "main", scriptId: "bbl-next.page-hook.fixture", runAt: "document_idle" }
+            ],
+            verifier: "page_hook_ok",
+            module: {
+              id: "fixture.page.execute",
+              source: `
+                exports.default = async ({ ctx, input }) => {
+                  const installation = ctx.site.installations.find(
+                    (entry) => entry.step.scriptId === "bbl-next.page-hook.fixture"
+                  );
+                  if (!installation || !installation.result) {
+                    throw new Error("fixture install missing");
+                  }
+                  return installation.result.run("execute_fixture", input, ctx);
+                };
+              `
+            }
+          }
+        ]
+      }
+    ]);
+    const runtime = new SiteSkillRuntime({
+      registry,
+      runnerHost: new JsRunnerHost(),
+      installer: {
+        install: async (step, currentTab) => {
+          if (step.scriptId === "bbl-next.page-hook.fixture") {
+            return pageHook.install(step, currentTab);
+          }
+          return undefined;
+        }
+      },
+      verifier: {
+        verify: async ({ action, result, site }) => {
+          const installation = site.installations.find(
+            (entry) => entry.step.scriptId === "bbl-next.page-hook.fixture"
+          );
+          if (!installation || !installation.result) {
+            return false;
+          }
+          return (installation.result as PageHookFixtureHandle).verify(action, result);
+        }
+      }
+    });
+
+    const result = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "execute_fixture",
+      tab: {
+        tabId: 11,
+        url: "https://fixture.test/demo",
+        active: true
+      },
+      input: {
+        query: "hello fixture"
+      }
+    });
+
+    expect(pageHook.version).toBe("fixture-v1");
+    expect(pageHook.state.installs).toEqual([
+      {
+        world: "main",
+        scriptId: "bbl-next.page-hook.fixture",
+        runAt: "document_idle",
+        tabId: 11,
+        url: "https://fixture.test/demo"
+      }
+    ]);
+    expect(pageHook.state.invocations).toEqual([
+      expect.objectContaining({
+        ok: true,
+        action: "execute_fixture",
+        installedScriptId: "bbl-next.page-hook.fixture",
+        tabUrl: "https://fixture.test/demo",
+        installCount: 1
+      })
+    ]);
+    expect(pageHook.state.verifications).toEqual([
+      {
+        action: "execute_fixture",
+        verified: true
+      }
+    ]);
+    expect(result).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "execute_fixture",
+        input: {
+          query: "hello fixture"
+        },
+        installedScriptId: "bbl-next.page-hook.fixture",
+        tabUrl: "https://fixture.test/demo",
+        installCount: 1
+      },
+      trace: [
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.fixture",
+        "invoke:execute_fixture",
+        "verify:page_hook_ok"
       ]
     });
   });

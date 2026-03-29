@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { BrowserVfs, IndexedDbVfsStore } from "@bbl-next/browser-vfs";
+import { BrowserVfs, IndexedDbVfsStore, PACKAGE_MARKER } from "@bbl-next/browser-vfs";
 import { describe, expect, it } from "vitest";
 
 describe("browser-vfs", () => {
@@ -190,6 +190,68 @@ describe("browser-vfs", () => {
 
     await expect(vfs.write("mem://workspace/too-large.txt", "12345")).rejects.toMatchObject({
       code: "E_VFS_QUOTA_EXCEEDED"
+    });
+  });
+
+  describe("package discovery", () => {
+    it("discovers skill packages with and without SKILL.md marker", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await vfs.write("mem://skills/twitter/SKILL.md", "# twitter");
+      await vfs.write("mem://skills/twitter/scripts/run.js", "1");
+      await vfs.write("mem://skills/github/SKILL.md", "# github");
+      await vfs.write("mem://skills/drafty/notes.md", "wip");
+
+      const packages = await vfs.discoverPackages();
+      expect(packages).toEqual([
+        { id: "drafty", uri: "mem://library/skills/drafty", hasMarker: false },
+        { id: "github", uri: "mem://library/skills/github", hasMarker: true },
+        { id: "twitter", uri: "mem://library/skills/twitter", hasMarker: true }
+      ]);
+    });
+
+    it("excludes @versions directories from discovery", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await vfs.write("mem://skills/twitter/SKILL.md", "# twitter");
+      await vfs.snapshot(
+        "mem://skills/twitter",
+        "mem://skills/twitter/@versions/2026-03-29T00:00:00.000Z"
+      );
+
+      const packages = await vfs.discoverPackages();
+      expect(packages).toEqual([
+        { id: "twitter", uri: "mem://library/skills/twitter", hasMarker: true }
+      ]);
+    });
+
+    it("discovers packages under a custom root URI", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await vfs.write("mem://workspace/plugins/alpha/SKILL.md", "# alpha");
+      await vfs.write("mem://workspace/plugins/beta/readme.md", "# beta");
+
+      const packages = await vfs.discoverPackages("mem://workspace/plugins");
+      expect(packages).toEqual([
+        { id: "alpha", uri: "mem://workspace/plugins/alpha", hasMarker: true },
+        { id: "beta", uri: "mem://workspace/plugins/beta", hasMarker: false }
+      ]);
+    });
+
+    it("returns empty array when no packages exist", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await expect(vfs.discoverPackages()).resolves.toEqual([]);
+    });
+
+    it("isPackageRoot returns true only when SKILL.md file exists", async () => {
+      const vfs = await BrowserVfs.create({ workspaceId: "conv-1" });
+      await vfs.write("mem://skills/twitter/SKILL.md", "# twitter");
+      await vfs.mkdir("mem://skills/empty");
+
+      expect(await vfs.isPackageRoot("mem://skills/twitter")).toBe(true);
+      expect(await vfs.isPackageRoot("mem://skills/empty")).toBe(false);
+      expect(await vfs.isPackageRoot("mem://skills/nonexistent")).toBe(false);
+    });
+
+    it("PACKAGE_MARKER constant equals SKILL.md", () => {
+      expect(PACKAGE_MARKER).toBe("SKILL.md");
     });
   });
 });

@@ -1,11 +1,11 @@
 ---
 id: ISSUE-004
 title: BrowserVFS package discovery helpers
-status: open
+status: done
 priority: p1
 source: v0 follow-up
 created: 2026-03-29
-assignee: unassigned
+assignee: agent
 tags: [browser-vfs, skills]
 kind: slice
 epic: EPIC-browser-vfs
