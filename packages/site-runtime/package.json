@@ -1,0 +1,13 @@
+{
+  "name": "@bbl-next/site-runtime",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bbl-next/contracts": "workspace:*",
+    "@bbl-next/js-runner": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
+

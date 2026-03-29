@@ -1,0 +1,9 @@
+{
+  "name": "@bbl-next/contracts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
+

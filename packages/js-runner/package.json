@@ -1,0 +1,12 @@
+{
+  "name": "@bbl-next/js-runner",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bbl-next/contracts": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
+

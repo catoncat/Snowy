@@ -1,0 +1,12 @@
+{
+  "name": "@bbl-next/core",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bbl-next/contracts": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
+

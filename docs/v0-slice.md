@@ -1,0 +1,20 @@
+# V0 Slice
+
+## Implemented
+
+- canonical `CapabilityDescriptor` model and `ToolContract` projection
+- skill lifecycle state machine with `trusted` as an enabled-only flag
+- public capability registry + family provider dispatch
+- skill runtime ctx with permission checks, trace, and reentrancy guard
+- BrowserVFS with `ephemeral/workspace/library`, write-through persistence, quotas, snapshot/rehydrate
+- isolated JS runner host with timeout handling
+- site skill active-tab matching and explicit hook install on invoke
+- minimal MV3 shell with background worker, side panel, and offscreen host entry
+
+## Deferred
+
+- real IndexedDB migration/versioning strategy
+- descriptor-driven full builtin catalog beyond the v0 namespace baseline
+- bridge-side MCP export server
+- full Skill Studio UI
+- Chrome integration for real script injection, runner RPC, and offscreen lifecycle

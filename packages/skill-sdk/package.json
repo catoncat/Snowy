@@ -1,0 +1,12 @@
+{
+  "name": "@bbl-next/skill-sdk",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bbl-next/core": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
+

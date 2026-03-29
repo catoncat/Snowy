@@ -1,0 +1,13 @@
+{
+  "name": "@bbl-next/browser-vfs",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bbl-next/contracts": "workspace:*",
+    "idb": "^8.0.3"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
+
