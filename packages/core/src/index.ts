@@ -292,6 +292,34 @@ export interface HostSubstrateTarget {
   via: "explicit" | "default";
 }
 
+export interface ConfigControlPlane {
+  getBootstrapSummary(): Promise<ConfigBootstrapSummary>;
+  update(patch: unknown): Promise<{
+    config: ConfigBootstrapSummary;
+  }>;
+}
+
+export interface CreateConfigControlPlaneOptions {
+  summary?:
+    | Partial<ConfigBootstrapSummary>
+    | Promise<Partial<ConfigBootstrapSummary> | undefined>
+    | (() => Partial<ConfigBootstrapSummary> | Promise<Partial<ConfigBootstrapSummary> | undefined>)
+    | undefined;
+}
+
+export interface TabsCapabilityRecord {
+  tabId: number;
+  url: string;
+  active: boolean;
+  title?: string;
+}
+
+export interface TabsCapabilityTransport {
+  list(): Promise<TabsCapabilityRecord[]>;
+  getActive(actionKind: string): Promise<TabsCapabilityRecord>;
+  navigate(url: string): Promise<TabsCapabilityRecord>;
+}
+
 interface CatalogEntryInput {
   id: string;
   family: string;
@@ -305,6 +333,78 @@ interface CatalogEntryInput {
   supportsVerify?: boolean;
   exportable?: boolean;
   exportRisk?: CapabilityDescriptor["risk"];
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+async function resolveMaybe<T>(
+  value: T | Promise<T | undefined> | (() => T | Promise<T | undefined>) | undefined,
+): Promise<T | undefined> {
+  if (typeof value === "function") {
+    return (value as () => T | Promise<T | undefined>)();
+  }
+  return value;
+}
+
+function normalizeConfigSurfaceValues(
+  values: unknown,
+): Partial<Record<ConfigResourceField, Record<string, unknown>>> {
+  const out: Partial<Record<ConfigResourceField, Record<string, unknown>>> = {};
+  if (!isPlainObject(values)) {
+    return out;
+  }
+  for (const field of CONFIG_RESOURCE_FIELDS) {
+    if (isPlainObject(values[field])) {
+      out[field] = { ...values[field] };
+    }
+  }
+  return out;
+}
+
+function mergeConfigValues(
+  baseValues: unknown,
+  patchValues: unknown,
+): Partial<Record<ConfigResourceField, Record<string, unknown>>> {
+  const next = normalizeConfigSurfaceValues(baseValues);
+  if (!isPlainObject(patchValues)) {
+    return next;
+  }
+  for (const field of CONFIG_RESOURCE_FIELDS) {
+    if (isPlainObject(patchValues[field])) {
+      next[field] = {
+        ...(next[field] ?? {}),
+        ...patchValues[field],
+      };
+    }
+  }
+  return next;
+}
+
+function normalizeConfigPatch(
+  patch: unknown,
+): Partial<Record<ConfigResourceField, Record<string, unknown>>> {
+  if (!isPlainObject(patch)) {
+    throw new CapabilityError("E_BAD_INPUT", "config.update requires a patch object");
+  }
+
+  const normalized: Partial<Record<ConfigResourceField, Record<string, unknown>>> = {};
+  for (const [field, value] of Object.entries(patch)) {
+    if (!CONFIG_RESOURCE_FIELDS.includes(field as ConfigResourceField)) {
+      throw new CapabilityError("E_BAD_INPUT", `config.update does not support field: ${field}`);
+    }
+    if (!isPlainObject(value)) {
+      throw new CapabilityError("E_BAD_INPUT", `config.update field ${field} must be an object`);
+    }
+    normalized[field as ConfigResourceField] = { ...value };
+  }
+
+  if (Object.keys(normalized).length === 0) {
+    throw new CapabilityError("E_BAD_INPUT", "config.update requires at least one config field");
+  }
+
+  return normalized;
 }
 
 function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
@@ -1413,6 +1513,124 @@ export function createAuditTailResource(input: AuditTailResourceInput): AuditTai
   };
 
   return createResourceDocument("audit.tail", generatedAt, data);
+}
+
+export function createConfigControlPlane(
+  options: CreateConfigControlPlaneOptions = {},
+): ConfigControlPlane {
+  const state: {
+    values: Partial<Record<ConfigResourceField, Record<string, unknown>>>;
+    updatedAt: string | null;
+  } = {
+    values: {},
+    updatedAt: null,
+  };
+
+  const getBootstrapSummary = async (): Promise<ConfigBootstrapSummary> => {
+    const resolved = (await resolveMaybe(options.summary)) ?? {};
+    const baseValues = normalizeConfigSurfaceValues(resolved.values);
+    const values = mergeConfigValues(baseValues, state.values);
+    const hasValues = Object.keys(values).length > 0;
+    const status = hasValues || resolved.status === "ready" ? "ready" : "placeholder";
+    const fields =
+      Array.isArray(resolved.fields) && resolved.fields.length > 0
+        ? resolved.fields.filter((field): field is ConfigResourceField =>
+            CONFIG_RESOURCE_FIELDS.includes(field),
+          )
+        : [...CONFIG_RESOURCE_FIELDS];
+
+    return {
+      status,
+      fields: fields.length > 0 ? fields : [...CONFIG_RESOURCE_FIELDS],
+      values,
+      note:
+        status === "ready"
+          ? null
+          : typeof resolved.note === "string"
+            ? resolved.note
+            : "Config control plane is not implemented yet.",
+      updatedAt:
+        typeof state.updatedAt === "string"
+          ? state.updatedAt
+          : typeof resolved.updatedAt === "string"
+            ? resolved.updatedAt
+            : null,
+    };
+  };
+
+  const update = async (patch: unknown) => {
+    const normalizedPatch = normalizeConfigPatch(patch);
+    const current = await getBootstrapSummary();
+    const values = mergeConfigValues(current.values, normalizedPatch);
+    const updatedAt = new Date().toISOString();
+    state.values = values;
+    state.updatedAt = updatedAt;
+    const config: ConfigBootstrapSummary = {
+      status: "ready",
+      fields: current.fields,
+      values,
+      note: null,
+      updatedAt,
+    };
+
+    return {
+      config,
+    };
+  };
+
+  return {
+    getBootstrapSummary,
+    update,
+  };
+}
+
+export function createConfigCapabilityProvider(
+  configControlPlane: ConfigControlPlane,
+): CapabilityFamilyProvider {
+  return {
+    family: "config",
+    async invoke({ binding, input }) {
+      switch (binding.operation) {
+        case "update":
+          if (!isPlainObject(input)) {
+            throw new CapabilityError("E_BAD_INPUT", "Capability input must be an object");
+          }
+          return configControlPlane.update(input.patch);
+        default:
+          throw new CapabilityError(
+            "E_RUNTIME",
+            `Unsupported config operation: ${binding.operation}`,
+          );
+      }
+    },
+  };
+}
+
+export function createTabsCapabilityProvider(
+  transport: TabsCapabilityTransport,
+): CapabilityFamilyProvider {
+  return {
+    family: "tabs",
+    async invoke({ binding, input }) {
+      switch (binding.operation) {
+        case "list":
+          return transport.list();
+        case "get_active":
+          return transport.getActive("tabs.get_active");
+        case "navigate": {
+          if (!isPlainObject(input) || typeof input.url !== "string" || !input.url.trim()) {
+            throw new CapabilityError("E_BAD_INPUT", "tabs.navigate requires a non-empty url");
+          }
+          return transport.navigate(input.url.trim());
+        }
+        default:
+          throw new CapabilityError(
+            "E_RUNTIME",
+            `Unsupported tabs operation: ${binding.operation}`,
+          );
+      }
+    },
+  };
 }
 
 export function getBuiltinsByNamespace(namespace: string): CapabilityDescriptor[] {

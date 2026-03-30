@@ -1,13 +1,16 @@
 import { BrowserVfs } from "@bbl-next/browser-vfs";
-import { CONFIG_RESOURCE_FIELDS, CapabilityError } from "@bbl-next/contracts";
+import { CapabilityError } from "@bbl-next/contracts";
 import {
   BUILTIN_CAPABILITIES,
   CapabilityRegistry,
   FamilyProviderRegistry,
+  createConfigCapabilityProvider,
+  createConfigControlPlane,
+  createTabsCapabilityProvider,
   dispatchCapabilityCall,
 } from "@bbl-next/core";
 import { InMemorySessionStorage, VfsSessionStorage, createKernel } from "@bbl-next/kernel";
-import { SiteSkillRegistry, SiteSkillRuntime } from "@bbl-next/site-runtime";
+import { invokeSingleActionSiteSkill } from "@bbl-next/site-runtime";
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -66,13 +69,6 @@ async function createSessionStorage({ sessionStorage, workspaceId }) {
   return new VfsSessionStorage(vfs);
 }
 
-async function resolveMaybe(value) {
-  if (typeof value === "function") {
-    return value();
-  }
-  return value;
-}
-
 function toCanonicalTab(activeTab) {
   return {
     tabId: activeTab.id,
@@ -108,189 +104,91 @@ async function requireActiveTab(chromeApi, actionKind) {
   return activeTab;
 }
 
-function normalizeConfigValues(values) {
-  const out = {};
-  if (!isPlainObject(values)) {
-    return out;
-  }
-  for (const field of CONFIG_RESOURCE_FIELDS) {
-    if (isPlainObject(values[field])) {
-      out[field] = { ...values[field] };
-    }
-  }
-  return out;
+function createChromeTabsTransport({ chromeApi }) {
+  return {
+    async list() {
+      if (!chromeApi?.tabs?.query) {
+        throw new CapabilityError("E_RUNTIME", "chrome.tabs.query is required for tabs.list");
+      }
+      const tabs = await chromeApi.tabs.query({});
+      return Array.isArray(tabs)
+        ? tabs
+            .filter((tab) => typeof tab?.id === "number" && typeof tab?.url === "string")
+            .map((tab) => toCanonicalTab(tab))
+        : [];
+    },
+    async getActive(actionKind) {
+      return toCanonicalTab(await requireActiveTab(chromeApi, actionKind));
+    },
+    async navigate(url) {
+      if (!chromeApi?.tabs?.update) {
+        throw new CapabilityError("E_RUNTIME", "chrome.tabs.update is required for tabs.navigate");
+      }
+      const activeTab = await requireActiveTab(chromeApi, "tabs.navigate");
+      const updatedTab = await chromeApi.tabs.update(activeTab.id, {
+        url,
+      });
+
+      return toCanonicalTab(
+        updatedTab && typeof updatedTab.id === "number" && typeof updatedTab.url === "string"
+          ? updatedTab
+          : {
+              ...activeTab,
+              url,
+              active: true,
+            },
+      );
+    },
+  };
 }
 
-function mergeConfigValues(baseValues, patchValues) {
-  const next = normalizeConfigValues(baseValues);
-  for (const field of CONFIG_RESOURCE_FIELDS) {
-    if (isPlainObject(patchValues[field])) {
-      next[field] = {
-        ...(next[field] ?? {}),
-        ...patchValues[field],
+async function resolveRuntimeInvokeTab(chromeApi, requestedTab, actionKind) {
+  if (!requestedTab || typeof requestedTab.tabId !== "number") {
+    throw new CapabilityError("E_BAD_INPUT", `${actionKind} requires tab metadata`);
+  }
+
+  const activeTab = await requireActiveTab(chromeApi, actionKind);
+  if (activeTab.id !== requestedTab.tabId) {
+    throw new CapabilityError("E_BAD_INPUT", `${actionKind} target must be the active tab`);
+  }
+
+  return toCanonicalTab(activeTab);
+}
+
+function buildPageActionRequest({ action, input, tab, scriptPath }) {
+  switch (action) {
+    case "press_key":
+      if (!isPlainObject(input) || typeof input.key !== "string" || input.key.length === 0) {
+        throw new CapabilityError("E_BAD_INPUT", "page.press_key requires a non-empty key");
+      }
+      return {
+        skillId: "bbl.page",
+        action: "press_key",
+        tab,
+        input: {
+          key: input.key,
+        },
+        plan: {
+          skillId: "bbl.page",
+          action: "press_key",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: scriptPath,
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "bbl.page.press_key",
+          source: "exports.default = async ({ input }) => ({ key: input.key });",
+        },
+        verifier: "page_press_key",
       };
-    }
+    default:
+      throw new CapabilityError("E_BAD_INPUT", `Unsupported page action: ${action}`);
   }
-  return next;
-}
-
-function normalizeConfigPatch(patch) {
-  if (!isPlainObject(patch)) {
-    throw new CapabilityError("E_BAD_INPUT", "config.update requires a patch object");
-  }
-
-  const normalized = {};
-  for (const [field, value] of Object.entries(patch)) {
-    if (!CONFIG_RESOURCE_FIELDS.includes(field)) {
-      throw new CapabilityError("E_BAD_INPUT", `config.update does not support field: ${field}`);
-    }
-    if (!isPlainObject(value)) {
-      throw new CapabilityError("E_BAD_INPUT", `config.update field ${field} must be an object`);
-    }
-    normalized[field] = { ...value };
-  }
-
-  if (Object.keys(normalized).length === 0) {
-    throw new CapabilityError("E_BAD_INPUT", "config.update requires at least one config field");
-  }
-
-  return normalized;
-}
-
-function createTabsFamilyProvider({ chromeApi }) {
-  return {
-    family: "tabs",
-    async invoke({ binding, input }) {
-      switch (binding.operation) {
-        case "list": {
-          if (!chromeApi?.tabs?.query) {
-            throw new CapabilityError("E_RUNTIME", "chrome.tabs.query is required for tabs.list");
-          }
-          const tabs = await chromeApi.tabs.query({});
-          return Array.isArray(tabs)
-            ? tabs
-                .filter((tab) => typeof tab?.id === "number" && typeof tab?.url === "string")
-                .map((tab) => toCanonicalTab(tab))
-            : [];
-        }
-        case "get_active":
-          return toCanonicalTab(await requireActiveTab(chromeApi, "tabs.get_active"));
-        case "navigate": {
-          if (!isPlainObject(input) || typeof input.url !== "string" || !input.url.trim()) {
-            throw new CapabilityError("E_BAD_INPUT", "tabs.navigate requires a non-empty url");
-          }
-          if (!chromeApi?.tabs?.update) {
-            throw new CapabilityError(
-              "E_RUNTIME",
-              "chrome.tabs.update is required for tabs.navigate",
-            );
-          }
-
-          const nextUrl = input.url.trim();
-          const activeTab = await requireActiveTab(chromeApi, "tabs.navigate");
-          const updatedTab = await chromeApi.tabs.update(activeTab.id, {
-            url: nextUrl,
-          });
-
-          return toCanonicalTab(
-            updatedTab && typeof updatedTab.id === "number" && typeof updatedTab.url === "string"
-              ? updatedTab
-              : {
-                  ...activeTab,
-                  url: nextUrl,
-                  active: true,
-                },
-          );
-        }
-        default:
-          throw new CapabilityError(
-            "E_RUNTIME",
-            `Unsupported tabs operation: ${binding.operation}`,
-          );
-      }
-    },
-  };
-}
-
-function createConfigControlPlane({ configSummary }) {
-  const state = {
-    values: {},
-    updatedAt: null,
-  };
-
-  async function getBootstrapSummary() {
-    const resolved = (await resolveMaybe(configSummary)) ?? {};
-    const baseValues = normalizeConfigValues(resolved.values);
-    const values = mergeConfigValues(baseValues, state.values);
-    const hasValues = Object.keys(values).length > 0;
-    const status = hasValues || resolved.status === "ready" ? "ready" : "placeholder";
-    const fields =
-      Array.isArray(resolved.fields) && resolved.fields.length > 0
-        ? resolved.fields.filter((field) => CONFIG_RESOURCE_FIELDS.includes(field))
-        : [...CONFIG_RESOURCE_FIELDS];
-
-    return {
-      status,
-      fields: fields.length > 0 ? fields : [...CONFIG_RESOURCE_FIELDS],
-      values,
-      note:
-        status === "ready"
-          ? null
-          : typeof resolved.note === "string"
-            ? resolved.note
-            : "Config control plane is not implemented yet.",
-      updatedAt:
-        typeof state.updatedAt === "string"
-          ? state.updatedAt
-          : typeof resolved.updatedAt === "string"
-            ? resolved.updatedAt
-            : null,
-    };
-  }
-
-  async function update(patch) {
-    const normalizedPatch = normalizeConfigPatch(patch);
-    const current = await getBootstrapSummary();
-    const values = mergeConfigValues(current.values, normalizedPatch);
-    const updatedAt = new Date().toISOString();
-    state.values = values;
-    state.updatedAt = updatedAt;
-
-    return {
-      config: {
-        status: "ready",
-        fields: current.fields,
-        values,
-        note: null,
-        updatedAt,
-      },
-    };
-  }
-
-  return {
-    getBootstrapSummary,
-    update,
-  };
-}
-
-function createConfigFamilyProvider(configControlPlane) {
-  return {
-    family: "config",
-    async invoke({ binding, input }) {
-      switch (binding.operation) {
-        case "update":
-          if (!isPlainObject(input)) {
-            throw new CapabilityError("E_BAD_INPUT", "Capability input must be an object");
-          }
-          return configControlPlane.update(input.patch);
-        default:
-          throw new CapabilityError(
-            "E_RUNTIME",
-            `Unsupported config operation: ${binding.operation}`,
-          );
-      }
-    },
-  };
 }
 
 export function createBackgroundRuntimeServices({
@@ -302,6 +200,7 @@ export function createBackgroundRuntimeServices({
   configSummary = undefined,
   workspaceId = "mv3-shell",
   interventionTimeoutMs = DEFAULT_INTERVENTION_TIMEOUT_MS,
+  pageHookScriptPath = "src/page-hook.js",
 } = {}) {
   let servicesPromise = null;
   let sessionPromise = null;
@@ -315,10 +214,10 @@ export function createBackgroundRuntimeServices({
         });
         const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
         const providers = new FamilyProviderRegistry();
-        const configControlPlane = createConfigControlPlane({ configSummary });
+        const configControlPlane = createConfigControlPlane({ summary: configSummary });
 
-        providers.register(createTabsFamilyProvider({ chromeApi }));
-        providers.register(createConfigFamilyProvider(configControlPlane));
+        providers.register(createTabsCapabilityProvider(createChromeTabsTransport({ chromeApi })));
+        providers.register(createConfigCapabilityProvider(configControlPlane));
 
         const runnerHost = createBridgeRunnerHost({ invokeRunner });
         const kernel = createKernel({
@@ -461,26 +360,32 @@ export function createBackgroundRuntimeServices({
     verifier,
     intervention,
   }) {
+    if (!plan || !Array.isArray(plan.steps)) {
+      throw new CapabilityError("E_BAD_INPUT", "Site runtime invoke requires an injection plan");
+    }
+    if (!module || typeof module.id !== "string" || typeof module.source !== "string") {
+      throw new CapabilityError("E_BAD_INPUT", "Site runtime invoke requires a runner module");
+    }
+    if (plan.steps.length > 0 && !pageHookBridge) {
+      throw new CapabilityError("E_RUNTIME", "Page hook bridge is not configured");
+    }
+
     const [{ kernel, runnerHost }, session] = await Promise.all([
       ensureServices(),
       ensureSession(),
     ]);
-    const runtime = new SiteSkillRuntime({
-      registry: new SiteSkillRegistry([
-        {
-          skillId,
-          matches: [tab.url],
-          actions: [
-            {
-              name: action,
-              module,
-              injectionSteps: plan.steps,
-              ...(verifier ? { verifier } : {}),
-              ...(intervention ? { intervention } : {}),
-            },
-          ],
-        },
-      ]),
+    const result = await invokeSingleActionSiteSkill({
+      request: {
+        skillId,
+        action,
+        tab: await resolveRuntimeInvokeTab(chromeApi, tab, "Site runtime invoke"),
+        input,
+        ctx,
+        plan,
+        module,
+        ...(verifier ? { verifier } : {}),
+        ...(intervention ? { intervention } : {}),
+      },
       runnerHost,
       ...(pageHookBridge
         ? {
@@ -489,12 +394,42 @@ export function createBackgroundRuntimeServices({
         : {}),
     });
 
-    const result = await runtime.invoke({
-      skillId,
+    if (!result.intervention) {
+      return result;
+    }
+
+    const requested = kernel.requestIntervention(session.id, result.intervention, {
+      timeoutMs: interventionTimeoutMs,
+    });
+
+    return {
+      ...result,
+      intervention: requested,
+    };
+  }
+
+  async function invokePageAction({ action, input = {}, ctx = {} } = {}) {
+    if (!pageHookBridge) {
+      throw new CapabilityError("E_RUNTIME", "Page hook bridge is not configured");
+    }
+
+    const [{ kernel, runnerHost }, session] = await Promise.all([
+      ensureServices(),
+      ensureSession(),
+    ]);
+    const request = buildPageActionRequest({
       action,
-      tab,
       input,
-      ctx,
+      tab: toCanonicalTab(await requireActiveTab(chromeApi, `page.${action}`)),
+      scriptPath: pageHookScriptPath,
+    });
+    const result = await invokeSingleActionSiteSkill({
+      request: {
+        ...request,
+        ctx,
+      },
+      runnerHost,
+      installer: createSiteRuntimeInstaller(pageHookBridge),
     });
 
     if (!result.intervention) {
@@ -518,6 +453,7 @@ export function createBackgroundRuntimeServices({
     getConfigBootstrapSummary,
     getInterventionState,
     getKernelRuntimeState,
+    invokePageAction,
     invokeSiteSkill,
     listInterventions,
     readInterventionAudit,

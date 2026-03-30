@@ -11,6 +11,8 @@ import {
   SiteSkillRegistry,
   SiteSkillRuntime,
   buildInjectionPlan,
+  createSingleActionSiteSkillDefinition,
+  invokeSingleActionSiteSkill,
 } from "@bbl-next/site-runtime";
 // @ts-ignore source JS module has no declaration file yet
 import { createPageHookBridge } from "mv3-shell/background";
@@ -347,6 +349,130 @@ describe("site-runtime", () => {
 
     expect(registry.matchActiveTab(tab).map((skill) => skill.skillId)).toEqual(["twitter.search"]);
     expect(installer.install).not.toHaveBeenCalled();
+  });
+
+  it("exposes a package-owned single-action definition for app bridge integration", () => {
+    expect(
+      createSingleActionSiteSkillDefinition({
+        skillId: "fixture.page",
+        action: "execute_fixture",
+        tab: {
+          tabId: 11,
+          url: "https://fixture.test/demo",
+          active: true,
+        },
+        plan: {
+          skillId: "fixture.page",
+          action: "execute_fixture",
+          steps: [{ world: "main", scriptId: "bbl-next.page-hook.fixture" }],
+        },
+        module: {
+          id: "fixture.page.execute",
+          source: "exports.default = async () => ({ ok: true });",
+        },
+        verifier: "page_hook_ok",
+      }),
+    ).toEqual({
+      skillId: "fixture.page",
+      matches: ["https://fixture.test/demo"],
+      actions: [
+        {
+          name: "execute_fixture",
+          module: {
+            id: "fixture.page.execute",
+            source: "exports.default = async () => ({ ok: true });",
+          },
+          injectionSteps: [{ world: "main", scriptId: "bbl-next.page-hook.fixture" }],
+          verifier: "page_hook_ok",
+        },
+      ],
+    });
+  });
+
+  it("invokes a single-action site runtime through the package-owned helper", async () => {
+    const scriptingHarness = createScriptingChromeHarness();
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: scriptingHarness.chromeApi,
+    });
+
+    const result = await invokeSingleActionSiteSkill({
+      request: {
+        skillId: "fixture.page",
+        action: "press_key",
+        tab: {
+          tabId: 13,
+          url: "https://fixture.test/demo",
+          active: true,
+        },
+        input: {
+          key: "Enter",
+        },
+        plan: {
+          skillId: "fixture.page",
+          action: "press_key",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "fixture.page.press_key",
+          source: "exports.default = async ({ input }) => ({ key: input.key });",
+        },
+        verifier: "page_press_key",
+      },
+      runnerHost: new JsRunnerHost(),
+      installer: {
+        install: async (step, currentTab) => pageHookBridge.install(step, currentTab),
+        invoke: async ({ installation, action, input, tab: currentTab, ctx }) =>
+          pageHookBridge.invoke({
+            installation,
+            action,
+            input,
+            tab: currentTab,
+            ctx,
+          }),
+        verify: async ({ installation, action, result, tab: currentTab }) =>
+          pageHookBridge.verify({
+            installation,
+            action,
+            result,
+            tab: currentTab,
+          }),
+      },
+    });
+
+    const snapshot = (await pageHookBridge.snapshotState({
+      tabId: 13,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+
+    expect(snapshot?.installs).toEqual([
+      expect.objectContaining({
+        installationId: "bbl-next.page-hook.page:1",
+        scriptId: "bbl-next.page-hook.page",
+      }),
+    ]);
+    expect(result).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "press_key",
+        key: "Enter",
+        installationId: "bbl-next.page-hook.page:1",
+      },
+      trace: [
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:press_key",
+        "verify:page_press_key",
+      ],
+    });
   });
 
   it("runs a real page-hook file through the explicit injection bridge", async () => {

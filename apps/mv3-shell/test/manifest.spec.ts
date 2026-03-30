@@ -1275,6 +1275,98 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("delegates tabs routes through composed runtime services dispatch", async () => {
+    const runtimeServices = {
+      getKernelRuntimeState: vi.fn(async () => ({
+        session: { id: "kernel-session" },
+        runState: { phase: "idle" },
+      })),
+      dispatchCapability: vi.fn(
+        async ({
+          capabilityId,
+          input,
+        }: {
+          capabilityId: string;
+          input: { url?: string };
+        }) =>
+          capabilityId === "tabs.get_active"
+            ? {
+                tabId: 21,
+                url: "https://fixture.test/home",
+                active: true,
+                title: "Fixture Home",
+              }
+            : {
+                tabId: 21,
+                url: input.url,
+                active: true,
+                title: "Fixture Home",
+              },
+      ),
+      invokeSiteSkill: vi.fn(),
+    };
+    const harness = createChromeHarness({
+      activeTab: null,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      runtimeServices,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "tabs.get_active",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        tabId: 21,
+        url: "https://fixture.test/home",
+        active: true,
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "tabs.navigate",
+        url: "https://fixture.test/settings",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        tabId: 21,
+        url: "https://fixture.test/settings",
+        active: true,
+      },
+    });
+
+    expect(runtimeServices.dispatchCapability).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        capabilityId: "tabs.get_active",
+        input: {},
+      }),
+    );
+    expect(runtimeServices.dispatchCapability).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        capabilityId: "tabs.navigate",
+        input: {
+          url: "https://fixture.test/settings",
+        },
+      }),
+    );
+    expect(harness.tabsApi.query).not.toHaveBeenCalled();
+    expect(harness.tabsApi.update).not.toHaveBeenCalled();
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("returns active tab metadata and navigates the active tab through the MV3 bridge", async () => {
     const harness = createChromeHarness({
       activeTab: {
@@ -1323,6 +1415,76 @@ describe("mv3-shell manifest", () => {
     expect(harness.tabsApi.update).toHaveBeenCalledWith(21, {
       url: "https://fixture.test/settings",
     });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("delegates config.update through composed runtime services dispatch", async () => {
+    const runtimeServices = {
+      getKernelRuntimeState: vi.fn(async () => ({
+        session: { id: "kernel-session" },
+        runState: { phase: "idle" },
+      })),
+      dispatchCapability: vi.fn(async () => ({
+        config: {
+          status: "ready",
+          fields: ["model", "automation", "permissions", "preferences"],
+          values: {
+            model: {
+              provider: "openai",
+            },
+          },
+          note: null,
+          updatedAt: "2026-03-30T00:00:00.000Z",
+        },
+      })),
+      invokeSiteSkill: vi.fn(),
+    };
+    const harness = createChromeHarness({});
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      runtimeServices,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "config.update",
+        patch: {
+          model: {
+            provider: "openai",
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        config: {
+          status: "ready",
+          values: {
+            model: {
+              provider: "openai",
+            },
+          },
+        },
+      },
+    });
+
+    expect(runtimeServices.dispatchCapability).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capabilityId: "config.update",
+        input: {
+          patch: {
+            model: {
+              provider: "openai",
+            },
+          },
+        },
+      }),
+    );
 
     dispose();
     harness.cleanup();
@@ -1482,6 +1644,59 @@ describe("mv3-shell manifest", () => {
         },
       },
     });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("delegates page.press_key through composed runtime services", async () => {
+    const runtimeServices = {
+      getKernelRuntimeState: vi.fn(async () => ({
+        session: { id: "kernel-session" },
+        runState: { phase: "idle" },
+      })),
+      invokePageAction: vi.fn(async () => ({
+        result: {
+          ok: true,
+          via: "services",
+        },
+        verified: true,
+        trace: ["invoke:press_key"],
+      })),
+      invokeSiteSkill: vi.fn(),
+    };
+    const harness = createChromeHarness({
+      activeTab: null,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      runtimeServices,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "page.press_key",
+        key: "Enter",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        ok: true,
+        via: "services",
+      },
+    });
+
+    expect(runtimeServices.invokePageAction).toHaveBeenCalledWith({
+      action: "press_key",
+      input: {
+        key: "Enter",
+      },
+    });
+    expect(harness.tabsApi.query).not.toHaveBeenCalled();
+    expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
 
     dispose();
     harness.cleanup();

@@ -25,8 +25,11 @@ import {
   createAuditTailResource,
   createBootstrapSummary,
   createBootstrapSummaryResources,
+  createConfigCapabilityProvider,
+  createConfigControlPlane,
   createHostControlPlaneSnapshot,
   createSkillRuntimeContext,
+  createTabsCapabilityProvider,
   disconnectExecutionHost,
   dispatchCapabilityCall,
   getBuiltinsByNamespace,
@@ -105,6 +108,114 @@ describe("core", () => {
     expect(getBuiltinsByNamespace("runtime").map((entry) => entry.id)).toEqual([
       ...RUNTIME_CONTROL_PLANE_ACTIONS,
     ]);
+  });
+
+  it("dispatches config.update through the package-owned config control-plane helper", async () => {
+    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+    const providers = new FamilyProviderRegistry();
+    const configControlPlane = createConfigControlPlane();
+
+    providers.register(createConfigCapabilityProvider(configControlPlane));
+
+    await expect(
+      dispatchCapabilityCall({
+        registry,
+        providers,
+        sessionId: "s1",
+        capabilityId: "config.update",
+        input: {
+          patch: {
+            model: {
+              provider: "openai",
+            },
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      config: {
+        status: "ready",
+        values: {
+          model: {
+            provider: "openai",
+          },
+        },
+      },
+    });
+
+    await expect(configControlPlane.getBootstrapSummary()).resolves.toMatchObject({
+      status: "ready",
+      values: {
+        model: {
+          provider: "openai",
+        },
+      },
+    });
+  });
+
+  it("dispatches tabs through the package-owned tabs transport helper", async () => {
+    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+    const providers = new FamilyProviderRegistry();
+    let navigatedUrl = "";
+
+    providers.register(
+      createTabsCapabilityProvider({
+        list: async () => [
+          {
+            tabId: 21,
+            url: "https://fixture.test/home",
+            active: true,
+            title: "Fixture Home",
+          },
+        ],
+        getActive: async () => ({
+          tabId: 21,
+          url: "https://fixture.test/home",
+          active: true,
+          title: "Fixture Home",
+        }),
+        navigate: async (url) => {
+          navigatedUrl = url;
+          return {
+            tabId: 21,
+            url,
+            active: true,
+            title: "Fixture Home",
+          };
+        },
+      }),
+    );
+
+    await expect(
+      dispatchCapabilityCall({
+        registry,
+        providers,
+        sessionId: "s1",
+        capabilityId: "tabs.get_active",
+        input: {},
+      }),
+    ).resolves.toMatchObject({
+      tabId: 21,
+      url: "https://fixture.test/home",
+      active: true,
+    });
+
+    await expect(
+      dispatchCapabilityCall({
+        registry,
+        providers,
+        sessionId: "s1",
+        capabilityId: "tabs.navigate",
+        input: {
+          url: "https://fixture.test/settings",
+        },
+      }),
+    ).resolves.toMatchObject({
+      tabId: 21,
+      url: "https://fixture.test/settings",
+      active: true,
+    });
+
+    expect(navigatedUrl).toBe("https://fixture.test/settings");
   });
 
   it("keeps skill lifecycle control-plane actions aligned with canonical contracts", () => {

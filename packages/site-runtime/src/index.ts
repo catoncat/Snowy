@@ -109,6 +109,18 @@ export interface SiteInvocationIntervention {
 
 export type SiteInvocationResult = SiteInvocationSuccess | SiteInvocationIntervention;
 
+export interface SingleActionSiteSkillRequest {
+  skillId: string;
+  action: string;
+  tab: ActiveTabMetadata;
+  input?: unknown;
+  ctx?: Record<string, unknown>;
+  plan: InjectionPlan;
+  module: RunnerModule;
+  verifier?: string;
+  intervention?: SiteActionInterventionPolicy;
+}
+
 export function buildInjectionPlan(skillId: string, action: SiteSkillAction): InjectionPlan {
   if (action.injectionSteps && action.injectionSteps.length > 0) {
     return {
@@ -176,6 +188,49 @@ function asInterventionPayload(value: unknown): Record<string, unknown> | undefi
     return undefined;
   }
   return value as Record<string, unknown>;
+}
+
+export function createSingleActionSiteSkillDefinition(
+  request: Pick<
+    SingleActionSiteSkillRequest,
+    "skillId" | "tab" | "action" | "plan" | "module" | "verifier" | "intervention"
+  >,
+): SiteSkillDefinition {
+  return {
+    skillId: request.skillId,
+    matches: [request.tab.url],
+    actions: [
+      {
+        name: request.action,
+        module: request.module,
+        injectionSteps: request.plan.steps,
+        ...(request.verifier ? { verifier: request.verifier } : {}),
+        ...(request.intervention ? { intervention: request.intervention } : {}),
+      },
+    ],
+  };
+}
+
+export async function invokeSingleActionSiteSkill(options: {
+  request: SingleActionSiteSkillRequest;
+  runnerHost: JsRunnerHost;
+  installer?: SiteScriptInstaller;
+  verifier?: SiteActionVerifier;
+}): Promise<SiteInvocationResult> {
+  const runtime = new SiteSkillRuntime({
+    registry: new SiteSkillRegistry([createSingleActionSiteSkillDefinition(options.request)]),
+    runnerHost: options.runnerHost,
+    ...(options.installer ? { installer: options.installer } : {}),
+    ...(options.verifier ? { verifier: options.verifier } : {}),
+  });
+
+  return runtime.invoke({
+    skillId: options.request.skillId,
+    action: options.request.action,
+    tab: options.request.tab,
+    input: options.request.input,
+    ctx: options.request.ctx,
+  });
 }
 
 export class SiteSkillRegistry {

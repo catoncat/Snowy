@@ -1,5 +1,4 @@
 import {
-  CONFIG_RESOURCE_FIELDS,
   BOOTSTRAP_RESOURCE_KEYS as CONTRACT_BOOTSTRAP_RESOURCE_KEYS,
   HOST_AUDIT_KINDS,
   HOST_AUDIT_STATUSES,
@@ -93,16 +92,6 @@ function createChromeAuditStore(chromeApi, storageKey = AUDIT_STORAGE_KEY) {
   };
 }
 
-function invalidSiteRuntimeInvoke(message) {
-  return {
-    ok: false,
-    error: {
-      code: "E_BAD_INPUT",
-      message,
-    },
-  };
-}
-
 function invalidPageAutomation(message) {
   return {
     ok: false,
@@ -141,20 +130,6 @@ function invalidHostSubstrate(message) {
       message,
     },
   };
-}
-
-function invalidConfigControlPlane(message) {
-  return {
-    ok: false,
-    error: {
-      code: "E_BAD_INPUT",
-      message,
-    },
-  };
-}
-
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function toExecutionHostHealthStatus(localState) {
@@ -198,15 +173,6 @@ function defaultBootstrapSummaryBuilder(input) {
     resourceKeys: Array.isArray(input.resourceKeys)
       ? [...input.resourceKeys]
       : [...BOOTSTRAP_RESOURCE_KEYS],
-  };
-}
-
-function toCanonicalTab(activeTab) {
-  return {
-    tabId: activeTab.id,
-    url: activeTab.url,
-    active: activeTab.active === true,
-    title: typeof activeTab.title === "string" ? activeTab.title : undefined,
   };
 }
 
@@ -303,8 +269,6 @@ export function createBackgroundRunnerBridge({
     hostRecoveryReason: undefined,
     lastRuntimeError: null,
     lastRuntimeErrorClearedAt: null,
-    configValues: {},
-    configUpdatedAt: null,
   };
   let composedRuntimeServices = null;
 
@@ -403,6 +367,7 @@ export function createBackgroundRunnerBridge({
         pageHookBridge: effectivePageHookBridge,
         configSummary,
         interventionTimeoutMs,
+        pageHookScriptPath: PAGE_HOOK_DEFAULT_FILE,
       });
       composedRuntimeServices = runtimeServices
         ? {
@@ -477,26 +442,6 @@ export function createBackgroundRunnerBridge({
     return activeTab;
   }
 
-  async function readActiveTabMetadata(actionKind) {
-    if (!chromeApi?.tabs?.query) {
-      return {
-        ok: false,
-        error: {
-          code: "E_RUNTIME",
-          message: "chrome.tabs.query is required for active tab metadata",
-        },
-      };
-    }
-    const activeTab = await queryActiveTab();
-    if (!activeTab) {
-      return invalidPageAutomation(`${actionKind} requires an active tab with url metadata`);
-    }
-    return {
-      ok: true,
-      data: activeTab,
-    };
-  }
-
   async function resolveMaybe(value) {
     if (typeof value === "function") {
       return value();
@@ -504,109 +449,36 @@ export function createBackgroundRunnerBridge({
     return value;
   }
 
-  function normalizeConfigValues(values) {
-    const out = {};
-    if (!isPlainObject(values)) {
-      return out;
+  async function routeRuntimeCapability(capabilityId, input = {}) {
+    try {
+      return {
+        ok: true,
+        data: await getRuntimeServices().dispatchCapability({
+          capabilityId,
+          input,
+          permissions: [capabilityId],
+        }),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: toBridgeError(error),
+      };
     }
-    for (const field of CONFIG_RESOURCE_FIELDS) {
-      if (isPlainObject(values[field])) {
-        out[field] = { ...values[field] };
-      }
-    }
-    return out;
   }
 
-  function mergeConfigValues(baseValues, patchValues) {
-    const next = normalizeConfigValues(baseValues);
-    for (const field of CONFIG_RESOURCE_FIELDS) {
-      if (isPlainObject(patchValues[field])) {
-        next[field] = {
-          ...(next[field] ?? {}),
-          ...patchValues[field],
-        };
-      }
+  async function routeRuntimeService(call) {
+    try {
+      return {
+        ok: true,
+        data: await call(),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: toBridgeError(error),
+      };
     }
-    return next;
-  }
-
-  function normalizeConfigPatch(patch) {
-    if (!isPlainObject(patch)) {
-      return invalidConfigControlPlane("config.update requires a patch object");
-    }
-
-    const normalized = {};
-    for (const [field, value] of Object.entries(patch)) {
-      if (!CONFIG_RESOURCE_FIELDS.includes(field)) {
-        return invalidConfigControlPlane(`config.update does not support field: ${field}`);
-      }
-      if (!isPlainObject(value)) {
-        return invalidConfigControlPlane(`config.update field ${field} must be an object`);
-      }
-      normalized[field] = { ...value };
-    }
-
-    if (Object.keys(normalized).length === 0) {
-      return invalidConfigControlPlane("config.update requires at least one config field");
-    }
-
-    return normalized;
-  }
-
-  async function resolveConfigBootstrapSummary() {
-    const resolved = (await resolveMaybe(configSummary)) ?? {};
-    const baseValues = normalizeConfigValues(resolved.values);
-    const values = mergeConfigValues(baseValues, state.configValues);
-    const hasValues = Object.keys(values).length > 0;
-    const status = hasValues || resolved.status === "ready" ? "ready" : "placeholder";
-    const fields =
-      Array.isArray(resolved.fields) && resolved.fields.length > 0
-        ? resolved.fields.filter((field) => CONFIG_RESOURCE_FIELDS.includes(field))
-        : [...CONFIG_RESOURCE_FIELDS];
-
-    return {
-      status,
-      fields: fields.length > 0 ? fields : [...CONFIG_RESOURCE_FIELDS],
-      values,
-      note:
-        status === "ready"
-          ? null
-          : typeof resolved.note === "string"
-            ? resolved.note
-            : "Config control plane is not implemented yet.",
-      updatedAt:
-        typeof state.configUpdatedAt === "string"
-          ? state.configUpdatedAt
-          : typeof resolved.updatedAt === "string"
-            ? resolved.updatedAt
-            : null,
-    };
-  }
-
-  async function updateConfig({ patch }) {
-    const normalizedPatch = normalizeConfigPatch(patch);
-    if (normalizedPatch.ok === false) {
-      return normalizedPatch;
-    }
-
-    const current = await resolveConfigBootstrapSummary();
-    const values = mergeConfigValues(current.values, normalizedPatch);
-    const updatedAt = isoNow();
-    state.configValues = values;
-    state.configUpdatedAt = updatedAt;
-
-    return {
-      ok: true,
-      data: {
-        config: {
-          status: "ready",
-          fields: current.fields,
-          values,
-          note: null,
-          updatedAt,
-        },
-      },
-    };
   }
 
   function resolveHostId(hostId, action) {
@@ -829,136 +701,6 @@ export function createBackgroundRunnerBridge({
     };
   }
 
-  async function resolveActiveTabMetadata(requestedTab) {
-    if (!requestedTab || typeof requestedTab.tabId !== "number") {
-      return invalidSiteRuntimeInvoke("Site runtime invoke requires tab metadata");
-    }
-    if (!chromeApi?.tabs?.query) {
-      return {
-        ok: false,
-        error: {
-          code: "E_RUNTIME",
-          message: "chrome.tabs.query is required for active tab metadata",
-        },
-      };
-    }
-
-    const activeTab = await queryActiveTab();
-    if (!activeTab) {
-      return invalidSiteRuntimeInvoke("Site runtime invoke requires an active tab");
-    }
-    if (activeTab.id !== requestedTab.tabId) {
-      return invalidSiteRuntimeInvoke("Site runtime invoke target must be the active tab");
-    }
-    if (typeof activeTab.url !== "string") {
-      return invalidSiteRuntimeInvoke("Site runtime invoke requires active tab url metadata");
-    }
-
-    return {
-      ok: true,
-      data: toCanonicalTab(activeTab),
-    };
-  }
-
-  async function getActiveTabMetadata() {
-    const activeTabResult = await readActiveTabMetadata("tabs.get_active");
-    if (!activeTabResult.ok) {
-      return activeTabResult;
-    }
-
-    return {
-      ok: true,
-      data: toCanonicalTab(activeTabResult.data),
-    };
-  }
-
-  async function navigateActiveTab({ url } = {}) {
-    if (typeof url !== "string" || !url.trim()) {
-      return invalidPageAutomation("tabs.navigate requires a non-empty url");
-    }
-    if (!chromeApi?.tabs?.update) {
-      return {
-        ok: false,
-        error: {
-          code: "E_RUNTIME",
-          message: "chrome.tabs.update is required for tabs.navigate",
-        },
-      };
-    }
-
-    const activeTabResult = await readActiveTabMetadata("tabs.navigate");
-    if (!activeTabResult.ok) {
-      return activeTabResult;
-    }
-
-    const nextUrl = url.trim();
-    const activeTab = activeTabResult.data;
-    const updatedTab = await chromeApi.tabs.update(activeTab.id, {
-      url: nextUrl,
-    });
-
-    return {
-      ok: true,
-      data: toCanonicalTab(
-        updatedTab && typeof updatedTab.id === "number" && typeof updatedTab.url === "string"
-          ? updatedTab
-          : {
-              ...activeTab,
-              url: nextUrl,
-              active: true,
-            },
-      ),
-    };
-  }
-
-  function createPageAutomationPlan(action) {
-    return {
-      skillId: "bbl.page",
-      action,
-      steps: [
-        {
-          world: "main",
-          scriptId: "bbl-next.page-hook.page",
-          jsPath: PAGE_HOOK_DEFAULT_FILE,
-          runAt: "document_idle",
-        },
-      ],
-    };
-  }
-
-  async function pressActiveTabKey({ key } = {}) {
-    if (typeof key !== "string" || key.length === 0) {
-      return invalidPageAutomation("page.press_key requires a non-empty key");
-    }
-
-    const activeTabResult = await readActiveTabMetadata("page.press_key");
-    if (!activeTabResult.ok) {
-      return activeTabResult;
-    }
-
-    const invokeResult = await invokeSiteRuntime({
-      skillId: "bbl.page",
-      action: "press_key",
-      tab: toCanonicalTab(activeTabResult.data),
-      input: { key },
-      plan: createPageAutomationPlan("press_key"),
-      module: {
-        id: "bbl.page.press_key",
-        source: "exports.default = async ({ input }) => ({ key: input.key });",
-      },
-      verifier: "page_press_key",
-    });
-
-    if (!invokeResult.ok) {
-      return invokeResult;
-    }
-
-    return {
-      ok: true,
-      data: invokeResult.data.result,
-    };
-  }
-
   function normalizeScreenshotRequest({ format, quality } = {}) {
     const normalizedFormat = format == null ? "png" : format;
     if (normalizedFormat !== "png" && normalizedFormat !== "jpeg") {
@@ -991,9 +733,9 @@ export function createBackgroundRunnerBridge({
       };
     }
 
-    const activeTabResult = await readActiveTabMetadata("page.screenshot");
-    if (!activeTabResult.ok) {
-      return activeTabResult;
+    const activeTab = await queryActiveTab();
+    if (!activeTab) {
+      return invalidPageAutomation("page.screenshot requires an active tab with url metadata");
     }
 
     const screenshotOptions = normalizeScreenshotRequest({ format, quality });
@@ -1001,7 +743,6 @@ export function createBackgroundRunnerBridge({
       return screenshotOptions;
     }
 
-    const activeTab = activeTabResult.data;
     const dataUrl = await chromeApi.tabs.captureVisibleTab(activeTab.windowId, screenshotOptions);
 
     return {
@@ -1148,62 +889,6 @@ export function createBackgroundRunnerBridge({
     };
   }
 
-  async function invokeSiteRuntime({
-    skillId,
-    action,
-    tab,
-    input = {},
-    ctx = {},
-    plan,
-    module,
-    verifier,
-    intervention,
-  } = {}) {
-    if (!plan || !Array.isArray(plan.steps)) {
-      return invalidSiteRuntimeInvoke("Site runtime invoke requires an injection plan");
-    }
-    if (!module || typeof module.id !== "string" || typeof module.source !== "string") {
-      return invalidSiteRuntimeInvoke("Site runtime invoke requires a runner module");
-    }
-    const resolvedTabResponse = await resolveActiveTabMetadata(tab);
-    if (!resolvedTabResponse.ok) {
-      return resolvedTabResponse;
-    }
-    const resolvedTab = resolvedTabResponse.data;
-
-    if (plan.steps.length > 0 && !effectivePageHookBridge) {
-      return {
-        ok: false,
-        error: {
-          code: "E_RUNTIME",
-          message: "Page hook bridge is not configured",
-        },
-      };
-    }
-
-    try {
-      return {
-        ok: true,
-        data: await getRuntimeServices().invokeSiteSkill({
-          skillId,
-          action,
-          tab: resolvedTab,
-          input,
-          ctx,
-          plan,
-          module,
-          verifier,
-          intervention,
-        }),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: toBridgeError(error),
-      };
-    }
-  }
-
   async function diagnostics({ tabId, world = "main" } = {}) {
     const capturedAt = isoNow();
     const offscreenPresent = await hasOffscreenDocument();
@@ -1344,7 +1029,16 @@ export function createBackgroundRunnerBridge({
     const skillEntries = Array.isArray(rawSkillsSummary)
       ? rawSkillsSummary.map((entry) => normalizeSkillSummaryInput(entry)).filter(Boolean)
       : [];
-    const resolvedConfigSummary = await resolveConfigBootstrapSummary();
+    const resolvedConfigSummary =
+      typeof getRuntimeServices().getConfigBootstrapSummary === "function"
+        ? await getRuntimeServices().getConfigBootstrapSummary()
+        : {
+            status: "placeholder",
+            fields: [],
+            values: {},
+            note: "Config control plane is not implemented yet.",
+            updatedAt: null,
+          };
     const interventionState =
       typeof getRuntimeServices().getInterventionState === "function"
         ? await getRuntimeServices().getInterventionState()
@@ -1485,12 +1179,18 @@ export function createBackgroundRunnerBridge({
           hostId: message.hostId,
         });
       case "config.update":
-        return updateConfig({
+        return routeRuntimeCapability("config.update", {
           patch: message.patch,
         });
       case "page.press_key":
-        return pressActiveTabKey({
-          key: message.key,
+        return routeRuntimeService(async () => {
+          const result = await getRuntimeServices().invokePageAction({
+            action: "press_key",
+            input: {
+              key: message.key,
+            },
+          });
+          return result.result;
         });
       case "page.screenshot":
         return captureActiveTabScreenshot({
@@ -1498,9 +1198,9 @@ export function createBackgroundRunnerBridge({
           quality: message.quality,
         });
       case "tabs.get_active":
-        return getActiveTabMetadata();
+        return routeRuntimeCapability("tabs.get_active");
       case "tabs.navigate":
-        return navigateActiveTab({
+        return routeRuntimeCapability("tabs.navigate", {
           url: message.url,
         });
       case "audit.host":
@@ -1555,7 +1255,7 @@ export function createBackgroundRunnerBridge({
           },
         };
       case "site.runtime.invoke":
-        return invokeSiteRuntime(message);
+        return routeRuntimeService(() => getRuntimeServices().invokeSiteSkill(message));
       case "runtime.diagnostics":
       case "runtime.capture_diagnostics":
         return diagnostics({
@@ -1613,12 +1313,10 @@ export function createBackgroundRunnerBridge({
     ensureOffscreenDocument,
     ensureHost,
     invoke,
-    invokeSiteRuntime,
     cancel,
     health,
     diagnostics,
     bootstrap,
-    updateConfig,
     getAuditTail,
     clearRuntimeError,
     route,
