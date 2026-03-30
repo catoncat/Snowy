@@ -12,6 +12,7 @@ tags:
   - ai-surface
   - control-plane
   - skills
+  - plugin-mainline-correction
 module_id: ai-surface-control-plane
 module_stage: secondary
 tracking_kind: follow-up

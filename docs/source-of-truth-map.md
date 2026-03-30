@@ -32,6 +32,8 @@
   - 定义当前 session 级 live ticket 锁
 - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
   - 定义“为什么 repo 主线已切回 browser-side kernel”
+- `docs/reviews/2026-03-30-plugin-mainline-correction-control.md`
+  - 定义“这轮插件主线纠偏 findings 由哪些 backlog gate 承载”
 - `docs/kernel-skeleton-design.md`
   - 定义 `packages/kernel` 的当前主线骨架与切片
 - `docs/backlog/*.md`
@@ -56,6 +58,7 @@
 | 哪些原则不能变 | `AGENTS.md` → `docs/locked-decisions-2026-03-29.md` |
 | workflow 必须跟踪哪些模块 | `docs/module-tracking-ledger.json` |
 | 当前主线为什么是 kernel | `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
+| 本轮插件主线纠偏现在由哪些 issue 承载 | `docs/reviews/2026-03-30-plugin-mainline-correction-control.md` |
 | `packages/kernel` 该怎么做 | `docs/kernel-skeleton-design.md` |
 | 我现在该 claim 什么 | `docs/backlog/README.md` → `docs/workflow/live-queue.json` → `BBL_AGENT_NAME=<name> bun run workflow:claim:preview` |
 | 当前批次是什么 | `docs/next-development-slices-2026-03-29-batch-7.md` |
@@ -203,14 +206,20 @@
 ### 类别 A：当前主线纠偏文档
 
 - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+- `docs/reviews/2026-03-30-plugin-mainline-correction-control.md`
 
-它虽然放在 `reviews/` 目录下，但它不是普通 review。
+它们虽然放在 `reviews/` 目录下，但都不是普通 review。
 
-它是：
+它们分别是：
 
-- repo 当前重新定性的正式文档
-- kernel 主线回归的依据
-- backlog / workflow / planning 应该对齐的上游判断
+- `2026-03-29-vnext-architecture-recovery-report.md`
+  - repo 当前重新定性的正式文档
+  - kernel 主线回归的依据
+  - backlog / workflow / planning 应该对齐的上游判断
+- `2026-03-30-plugin-mainline-correction-control.md`
+  - 本轮“插件主线纠偏”执行控制文档
+  - 负责把 review findings 映射到 correction gates 与 backlog
+  - 不替代 backlog，只决定 correction stream 如何判断“是否已经纠偏”
 
 ### 类别 B：gap inventory / follow-up 来源
 
