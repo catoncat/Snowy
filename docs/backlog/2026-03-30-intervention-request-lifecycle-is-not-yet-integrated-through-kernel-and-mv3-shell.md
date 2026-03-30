@@ -1,7 +1,7 @@
 ---
 id: ISSUE-068
 title: "Follow-up: intervention request lifecycle is not yet integrated through kernel and mv3-shell"
-status: open
+status: done
 priority: p1
 source: "ISSUE-041 intervention/handoff decision 2026-03-30"
 created: 2026-03-30
@@ -28,6 +28,7 @@ write_scope:
   - packages/kernel/test/
   - packages/site-runtime/src/index.ts
   - packages/site-runtime/test/site-runtime.spec.ts
+  - apps/mv3-shell/src/background.js
   - apps/mv3-shell/src/runtime-services.js
   - apps/mv3-shell/test/manifest.spec.ts
 acceptance_ref: docs/browser-automation-cutover-boundary.md
@@ -50,3 +51,14 @@ check_cmd: "bun run check"
 - intervention 至少具备最小 lifecycle：request / resolve(or resume) / cancel / timeout。
 - runtime diagnostics / audit 能读到 intervention 的当前状态或最近事件，不再只剩 package-local trace。
 - 测试锁住 `site-runtime -> kernel/app -> diagnostics/audit` 的最小 handoff 主链。
+
+## 工作总结
+
+- 在 `packages/kernel` 新增 intervention controller，并通过 `createKernel()` 暴露 request / resolve / cancel / timeout / audit / summary 最小生命周期。
+- `apps/mv3-shell/src/runtime-services.js` 现在会把 `SiteInvocationResult.intervention` 提升为 kernel runtime state，并暴露 intervention list / resolve / cancel / audit 读取接口。
+- `apps/mv3-shell/src/background.js` 增加 intervention bridge routes，并让 `runtime.diagnostics` / `runtime.bootstrap` 可见当前 intervention summary。
+- 测试补到 kernel 与 MV3 集成主链，锁住 request / resolve / cancel / timeout / diagnostics / bootstrap / audit。
+
+## 相关 commits
+
+- `e47ff93` `feat(kernel): wire intervention lifecycle through mv3 shell`
