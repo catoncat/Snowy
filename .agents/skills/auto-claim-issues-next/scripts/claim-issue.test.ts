@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  type IssueFile,
   chooseIssue,
   dependenciesSatisfied,
   isNamedAgentAssignee,
   parseFrontmatter,
-  type IssueFile
 } from "./claim-issue";
 import type { ModuleLedger } from "./module-ledger";
 
@@ -15,7 +15,7 @@ function issueFromFrontmatter(frontmatterBlock: string): IssueFile {
     path: "/tmp/issue.md",
     filename: "issue.md",
     body: parsed.body,
-    frontmatter: parsed.frontmatter
+    frontmatter: parsed.frontmatter,
   };
 }
 
@@ -35,7 +35,7 @@ describe("auto-claim-issues-next", () => {
         code_roots: ["packages/kernel/"],
         source_docs: ["docs/kernel-skeleton-design.md"],
         cutover_gate: null,
-        default_parallel_group: "kernel"
+        default_parallel_group: "kernel",
       },
       {
         module_id: "repo-workflow-dx",
@@ -48,9 +48,9 @@ describe("auto-claim-issues-next", () => {
         code_roots: ["docs/"],
         source_docs: ["docs/source-of-truth-map.md"],
         cutover_gate: null,
-        default_parallel_group: "sdk-docs"
-      }
-    ]
+        default_parallel_group: "sdk-docs",
+      },
+    ],
   };
 
   it("requires a real agent name for a persisted claim", () => {
@@ -120,12 +120,16 @@ write_scope:
   - packages/contracts/src/index.ts
 ---`);
 
-    const result = chooseIssue([active, candidate], {
-      assignee: "atlas",
-      dryRun: true,
-      json: false,
-      allowConflicts: false
-    }, { moduleLedger });
+    const result = chooseIssue(
+      [active, candidate],
+      {
+        assignee: "atlas",
+        dryRun: true,
+        json: false,
+        allowConflicts: false,
+      },
+      { moduleLedger },
+    );
 
     expect(result.kind).toBe("blocked");
     if (result.kind === "blocked") {
@@ -159,12 +163,16 @@ write_scope:
   - packages/kernel/src/
 ---`);
 
-    const result = chooseIssue([deferred, mainline], {
-      assignee: "atlas",
-      dryRun: true,
-      json: false,
-      allowConflicts: false
-    }, { moduleLedger });
+    const result = chooseIssue(
+      [deferred, mainline],
+      {
+        assignee: "atlas",
+        dryRun: true,
+        json: false,
+        allowConflicts: false,
+      },
+      { moduleLedger },
+    );
 
     expect(result.kind).toBe("preview");
     if (result.kind === "preview") {

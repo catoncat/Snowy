@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -31,7 +31,7 @@ function makeRepo() {
             code_roots: ["packages/core/"],
             source_docs: ["docs/ai-native-capability-surface-design.md"],
             cutover_gate: "Gate G",
-            default_parallel_group: "contracts-core"
+            default_parallel_group: "contracts-core",
           },
           {
             module_id: "execution-host-bridge",
@@ -44,24 +44,20 @@ function makeRepo() {
             code_roots: ["packages/js-runner/"],
             source_docs: ["docs/migration-parity-dashboard.md"],
             cutover_gate: "Gate C",
-            default_parallel_group: "js-runner"
-          }
-        ]
+            default_parallel_group: "js-runner",
+          },
+        ],
       },
       null,
-      2
+      2,
     ),
-    "utf8"
+    "utf8",
   );
   return repoRoot;
 }
 
 function writeIssue(repoRoot: string, filename: string, frontmatter: string) {
-  writeFileSync(
-    path.join(repoRoot, "docs", "backlog", filename),
-    `${frontmatter}\nbody\n`,
-    "utf8"
-  );
+  writeFileSync(path.join(repoRoot, "docs", "backlog", filename), `${frontmatter}\nbody\n`, "utf8");
 }
 
 afterEach(() => {
@@ -98,7 +94,7 @@ depends_on: []
 write_scope: []
 acceptance_ref: project_plan.md
 check_cmd: bun run check
----`
+---`,
     );
 
     const result = createReviewIssue({
@@ -114,7 +110,7 @@ check_cmd: bun run check
       source: "review pass",
       tags: ["review", "core"],
       writeScope: ["packages/core/src/index.ts"],
-      acceptance: ["permission gate is enforced"]
+      acceptance: ["permission gate is enforced"],
     });
 
     expect(result.kind).toBe("preview");
@@ -144,8 +140,8 @@ check_cmd: bun run check
       reviewFinding: ["health endpoint is not propagated end-to-end"],
       acceptance: [
         "health contract is covered by tests",
-        "bridge reports host health consistently"
-      ]
+        "bridge reports host health consistently",
+      ],
     });
 
     expect(result.kind).toBe("created");

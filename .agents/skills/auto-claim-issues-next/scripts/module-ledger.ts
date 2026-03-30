@@ -27,7 +27,7 @@ export interface ModuleLedger {
 export const MODULE_STAGE_ORDER: Record<ModuleStage, number> = {
   mainline: 0,
   secondary: 1,
-  deferred: 2
+  deferred: 2,
 };
 
 function isModuleStage(value: unknown): value is ModuleStage {
@@ -101,23 +101,25 @@ export function loadModuleLedger(repoRoot: string): ModuleLedger {
       status: entry.status,
       depends_on_modules: expectStringArray(
         entry?.depends_on_modules,
-        `modules[${index}].depends_on_modules`
+        `modules[${index}].depends_on_modules`,
       ),
       code_roots: expectStringArray(entry?.code_roots, `modules[${index}].code_roots`),
       source_docs: expectStringArray(entry?.source_docs, `modules[${index}].source_docs`),
       cutover_gate:
-        entry?.cutover_gate == null ? null : expectString(entry.cutover_gate, `modules[${index}].cutover_gate`),
+        entry?.cutover_gate == null
+          ? null
+          : expectString(entry.cutover_gate, `modules[${index}].cutover_gate`),
       default_parallel_group: expectString(
         entry?.default_parallel_group,
-        `modules[${index}].default_parallel_group`
-      )
+        `modules[${index}].default_parallel_group`,
+      ),
     } satisfies ModuleRecord;
   });
 
   return {
     schema_version: 1,
     updated_at: parsed.updated_at,
-    modules
+    modules,
   };
 }
 

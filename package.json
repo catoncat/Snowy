@@ -2,10 +2,7 @@
   "name": "browser-brain-loop-next",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
+  "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "dev": "bun ext:dev",
     "build": "bun ext:build",

@@ -4,7 +4,7 @@ import {
   CLAIM_SKILLS,
   deriveAgentName,
   isWorkflowSkillPrompt,
-  readExplicitIssueId
+  readExplicitIssueId,
 } from "./workflow-ticket";
 
 describe("workflow-ticket hook", () => {

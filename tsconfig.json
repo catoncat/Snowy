@@ -8,15 +8,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "types": [
-      "node",
-      "vitest/globals"
-    ]
+    "types": ["node", "vitest/globals"]
   },
-  "include": [
-    ".agents/**/*.ts",
-    "packages/**/*.ts",
-    "apps/**/*.ts"
-  ]
+  "include": [".agents/**/*.ts", "packages/**/*.ts", "apps/**/*.ts"]
 }
-

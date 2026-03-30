@@ -6,7 +6,7 @@ export default defineConfig({
     include: [
       "packages/*/test/**/*.spec.ts",
       "apps/*/test/**/*.spec.ts",
-      ".agents/skills/**/scripts/*.test.ts"
-    ]
-  }
+      ".agents/skills/**/scripts/*.test.ts",
+    ],
+  },
 });

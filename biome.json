@@ -45,11 +45,6 @@
       "*.ts",
       "*.json"
     ],
-    "ignore": [
-      "node_modules",
-      "dist",
-      "bun.lock",
-      "*.md"
-    ]
+    "ignore": ["node_modules", "dist", "bun.lock", "*.md"]
   }
 }

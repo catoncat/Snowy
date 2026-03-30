@@ -4,14 +4,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import {
-  loadAllIssues,
+  type IssueFile,
   type Priority,
-  type IssueFile
+  loadAllIssues,
 } from "../../auto-claim-issues-next/scripts/claim-issue";
 import {
+  type ModuleLedger,
   getModuleRecord,
   loadModuleLedger,
-  type ModuleLedger
 } from "../../auto-claim-issues-next/scripts/module-ledger";
 
 export interface CreateReviewIssueArgs {
@@ -102,7 +102,7 @@ function resolveTrackingKind(args: CreateReviewIssueArgs) {
 function buildFrontmatter(
   args: CreateReviewIssueArgs,
   issueId: string,
-  moduleLedger: ModuleLedger
+  moduleLedger: ModuleLedger,
 ): string {
   const dependsOn = args.dependsOn ?? [];
   const tags = [...new Set(args.tags)];
@@ -120,7 +120,7 @@ function buildFrontmatter(
     `source: ${quoteIfNeeded(args.source)}`,
     `created: ${args.date ?? todayDate()}`,
     `assignee: ${args.assignee ?? "unassigned"}`,
-    "tags:"
+    "tags:",
   ];
 
   for (const tag of tags) {
@@ -133,7 +133,7 @@ function buildFrontmatter(
     `tracking_kind: ${quoteIfNeeded(resolveTrackingKind(args))}`,
     "kind: slice",
     `epic: ${quoteIfNeeded(args.epic)}`,
-    `parallel_group: ${quoteIfNeeded(parallelGroup)}`
+    `parallel_group: ${quoteIfNeeded(parallelGroup)}`,
   );
 
   if (dependsOn.length === 0) {
@@ -152,7 +152,7 @@ function buildFrontmatter(
   lines.push(
     `acceptance_ref: ${quoteIfNeeded(args.acceptanceRef)}`,
     'check_cmd: "bun run check"',
-    "---"
+    "---",
   );
   return `${lines.join("\n")}\n`;
 }
@@ -164,15 +164,7 @@ function buildBody(args: CreateReviewIssueArgs): string {
     `把 ${titleWithoutPrefix || "当前 drift"} 收口成可执行的 backlog 结论，并明确后续 follow-up。`;
   const findings = args.reviewFinding ?? ["待补充具体 drift / 风险描述"];
 
-  const lines: string[] = [
-    "",
-    "## Goal",
-    "",
-    goal,
-    "",
-    "## Review Finding",
-    ""
-  ];
+  const lines: string[] = ["", "## Goal", "", goal, "", "## Review Finding", ""];
 
   for (const finding of findings) {
     lines.push(`- ${finding}`);
@@ -204,11 +196,14 @@ export function parseArgs(argv: string[], cwd = process.cwd()): CreateReviewIssu
     dependsOn: [],
     assignee: "unassigned",
     reviewFinding: [],
-    acceptance: []
+    acceptance: [],
   };
 
   const appendList = (target: string[], value: string) => {
-    for (const item of value.split(",").map((part) => part.trim()).filter(Boolean)) {
+    for (const item of value
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean)) {
       target.push(item);
     }
   };
@@ -321,8 +316,8 @@ export function createReviewIssue(args: CreateReviewIssueArgs): CreateReviewIssu
       module_stage: module.stage,
       parallel_group: resolveParallelGroup(args, moduleLedger),
       write_scope: args.writeScope,
-      acceptance_ref: args.acceptanceRef
-    }
+      acceptance_ref: args.acceptanceRef,
+    },
   };
 }
 
