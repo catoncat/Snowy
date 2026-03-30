@@ -1,6 +1,6 @@
-import { describe, expect, it, beforeEach } from "vitest";
-import { SessionStore, InMemorySessionStorage } from "@bbl-next/kernel";
-import type { MessagePayload, CompactionPayload } from "@bbl-next/contracts";
+import type { CompactionPayload, MessagePayload } from "@bbl-next/contracts";
+import { InMemorySessionStorage, SessionStore } from "@bbl-next/kernel";
+import { beforeEach, describe, expect, it } from "vitest";
 
 describe("SessionStore", () => {
   let store: SessionStore;
@@ -55,12 +55,12 @@ describe("SessionStore", () => {
 
       const e1 = await store.appendEntry(session.id, "message", {
         role: "user",
-        text: "Hello"
+        text: "Hello",
       } satisfies MessagePayload);
 
       const e2 = await store.appendEntry(session.id, "message", {
         role: "assistant",
-        text: "Hi there"
+        text: "Hi there",
       } satisfies MessagePayload);
 
       expect(e1.parentId).toBeUndefined();
@@ -71,10 +71,12 @@ describe("SessionStore", () => {
       const session = await store.createSession();
 
       await store.appendEntry(session.id, "message", {
-        role: "user", text: "A"
+        role: "user",
+        text: "A",
       } satisfies MessagePayload);
       await store.appendEntry(session.id, "message", {
-        role: "assistant", text: "B"
+        role: "assistant",
+        text: "B",
       } satisfies MessagePayload);
       await store.appendEntry(session.id, "label", { label: "checkpoint" });
 
@@ -87,7 +89,7 @@ describe("SessionStore", () => {
 
     it("throws on append to nonexistent session", async () => {
       await expect(
-        store.appendEntry("nonexistent", "message", { role: "user", text: "X" })
+        store.appendEntry("nonexistent", "message", { role: "user", text: "X" }),
       ).rejects.toThrow("Session not found");
     });
 
@@ -109,10 +111,12 @@ describe("SessionStore", () => {
       const session = await store.createSession();
 
       await store.appendEntry(session.id, "message", {
-        role: "user", text: "Hello"
+        role: "user",
+        text: "Hello",
       } satisfies MessagePayload);
       await store.appendEntry(session.id, "message", {
-        role: "assistant", text: "Hi"
+        role: "assistant",
+        text: "Hi",
       } satisfies MessagePayload);
 
       const ctx = await store.buildContext(session.id);
@@ -129,11 +133,13 @@ describe("SessionStore", () => {
       const session = await store.createSession();
 
       await store.appendEntry(session.id, "message", {
-        role: "user", text: "Hello"
+        role: "user",
+        text: "Hello",
       } satisfies MessagePayload);
       await store.appendEntry(session.id, "label", { label: "mark" });
       await store.appendEntry(session.id, "message", {
-        role: "assistant", text: "Hi"
+        role: "assistant",
+        text: "Hi",
       } satisfies MessagePayload);
 
       const ctx = await store.buildContext(session.id);
@@ -149,7 +155,7 @@ describe("SessionStore", () => {
         role: "assistant",
         text: "result",
         toolName: "page_click",
-        toolCallId: "tc-001"
+        toolCallId: "tc-001",
       } satisfies MessagePayload);
 
       const ctx = await store.buildContext(session.id);
@@ -164,10 +170,12 @@ describe("SessionStore", () => {
 
       // Pre-compaction messages
       const e1 = await store.appendEntry(session.id, "message", {
-        role: "user", text: "old message 1"
+        role: "user",
+        text: "old message 1",
       } satisfies MessagePayload);
       await store.appendEntry(session.id, "message", {
-        role: "assistant", text: "old message 2"
+        role: "assistant",
+        text: "old message 2",
       } satisfies MessagePayload);
 
       // Compaction entry (firstKeptEntryId = e1 means e1 is kept)
@@ -176,12 +184,13 @@ describe("SessionStore", () => {
         summary: "Previous conversation about setup.",
         firstKeptEntryId: e1.entryId,
         tokensBefore: 10000,
-        tokensAfter: 2000
+        tokensAfter: 2000,
       } satisfies CompactionPayload);
 
       // Post-compaction messages
       await store.appendEntry(session.id, "message", {
-        role: "user", text: "new message"
+        role: "user",
+        text: "new message",
       } satisfies MessagePayload);
 
       const ctx = await store.buildContext(session.id);
@@ -204,7 +213,8 @@ describe("SessionStore", () => {
       const session = await store.createSession();
 
       await store.appendEntry(session.id, "message", {
-        role: "user", text: "dropped"
+        role: "user",
+        text: "dropped",
       } satisfies MessagePayload);
 
       // Compaction with firstKeptEntryId that doesn't match any entry
@@ -214,11 +224,12 @@ describe("SessionStore", () => {
         summary: "Context was summarized.",
         firstKeptEntryId: "nonexistent",
         tokensBefore: 20000,
-        tokensAfter: 1000
+        tokensAfter: 1000,
       } satisfies CompactionPayload);
 
       await store.appendEntry(session.id, "message", {
-        role: "user", text: "fresh start"
+        role: "user",
+        text: "fresh start",
       } satisfies MessagePayload);
 
       const ctx = await store.buildContext(session.id);
@@ -232,7 +243,8 @@ describe("SessionStore", () => {
       const session = await store.createSession();
 
       await store.appendEntry(session.id, "message", {
-        role: "user", text: "very old"
+        role: "user",
+        text: "very old",
       } satisfies MessagePayload);
 
       await store.appendEntry(session.id, "compaction", {
@@ -240,11 +252,12 @@ describe("SessionStore", () => {
         summary: "First compaction.",
         firstKeptEntryId: "nonexistent",
         tokensBefore: 10000,
-        tokensAfter: 2000
+        tokensAfter: 2000,
       } satisfies CompactionPayload);
 
       await store.appendEntry(session.id, "message", {
-        role: "user", text: "middle"
+        role: "user",
+        text: "middle",
       } satisfies MessagePayload);
 
       await store.appendEntry(session.id, "compaction", {
@@ -253,11 +266,12 @@ describe("SessionStore", () => {
         firstKeptEntryId: "nonexistent",
         previousSummary: "First compaction.",
         tokensBefore: 8000,
-        tokensAfter: 1500
+        tokensAfter: 1500,
       } satisfies CompactionPayload);
 
       await store.appendEntry(session.id, "message", {
-        role: "user", text: "latest"
+        role: "user",
+        text: "latest",
       } satisfies MessagePayload);
 
       const ctx = await store.buildContext(session.id);

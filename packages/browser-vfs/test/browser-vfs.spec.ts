@@ -1,19 +1,19 @@
 import "fake-indexeddb/auto";
-import { openDB, type DBSchema } from "idb";
 import {
   BrowserVfs,
-  IndexedDbVfsStore,
   INDEXED_DB_VFS_SCHEMA_VERSION,
+  IndexedDbVfsStore,
   PACKAGE_MARKER,
   resolveMemUri,
-  snapshotInfoToSkillVersionRef
+  snapshotInfoToSkillVersionRef,
 } from "@bbl-next/browser-vfs";
 import {
-  createSkillLifecycleVersionSurface,
   DEFAULT_SKILL_VERSION_RETENTION,
+  createSkillLifecycleVersionSurface,
   skillVersionRootUri,
-  skillVersionUri
+  skillVersionUri,
 } from "@bbl-next/contracts";
+import { type DBSchema, openDB } from "idb";
 import { describe, expect, it } from "vitest";
 
 interface LegacyVfsDbSchema extends DBSchema {
@@ -46,7 +46,7 @@ async function seedLegacyV1Database(dbName: string, versionId: string): Promise<
   const db = await openDB<LegacyVfsDbSchema>(dbName, 1, {
     upgrade(database) {
       database.createObjectStore("nodes", { keyPath: "key" });
-    }
+    },
   });
 
   const runnerSource = "exports.default = async () => 1;";
@@ -59,7 +59,7 @@ async function seedLegacyV1Database(dbName: string, versionId: string): Promise<
     path: sourceUri,
     kind: "dir",
     size: 0,
-    updatedAt: versionId
+    updatedAt: versionId,
   });
   await db.put("nodes", {
     key: "library:/skills/twitter/SKILL.md",
@@ -68,7 +68,7 @@ async function seedLegacyV1Database(dbName: string, versionId: string): Promise<
     kind: "file",
     content: "# twitter",
     size: textSize("# twitter"),
-    updatedAt: versionId
+    updatedAt: versionId,
   });
   await db.put("nodes", {
     key: "library:/skills/twitter/site/runner.js",
@@ -77,7 +77,7 @@ async function seedLegacyV1Database(dbName: string, versionId: string): Promise<
     kind: "file",
     content: runnerSource,
     size: textSize(runnerSource),
-    updatedAt: versionId
+    updatedAt: versionId,
   });
   await db.put("nodes", {
     key: `library:${snapshotRoot}`,
@@ -90,8 +90,8 @@ async function seedLegacyV1Database(dbName: string, versionId: string): Promise<
       versionId,
       createdAt: versionId,
       trusted: true,
-      sourceUri: "mem://library/skills/twitter"
-    }
+      sourceUri: "mem://library/skills/twitter",
+    },
   });
   await db.put("nodes", {
     key: `library:${snapshotRoot}/SKILL.md`,
@@ -100,7 +100,7 @@ async function seedLegacyV1Database(dbName: string, versionId: string): Promise<
     kind: "file",
     content: "# twitter",
     size: textSize("# twitter"),
-    updatedAt: versionId
+    updatedAt: versionId,
   });
   await db.put("nodes", {
     key: `library:${snapshotRoot}/site/runner.js`,
@@ -109,7 +109,7 @@ async function seedLegacyV1Database(dbName: string, versionId: string): Promise<
     kind: "file",
     content: runnerSource,
     size: textSize(runnerSource),
-    updatedAt: versionId
+    updatedAt: versionId,
   });
 
   db.close();
@@ -120,14 +120,14 @@ describe("browser-vfs", () => {
     const store = new IndexedDbVfsStore("vfs-write-through");
     const first = await BrowserVfs.create({
       workspaceId: "conversation-1",
-      store
+      store,
     });
     await first.write("mem://workspace/notes/todo.md", "ship it");
     await first.write("mem://library/skills/demo/SKILL.md", "# demo");
 
     const second = await BrowserVfs.create({
       workspaceId: "conversation-1",
-      store
+      store,
     });
 
     await expect(second.read("mem://workspace/notes/todo.md")).resolves.toBe("ship it");
@@ -138,68 +138,66 @@ describe("browser-vfs", () => {
     const store = new IndexedDbVfsStore("vfs-snapshot");
     const vfs = await BrowserVfs.create({
       workspaceId: "conversation-1",
-      store
+      store,
     });
     await vfs.write("mem://skills/twitter/SKILL.md", "# twitter");
     await vfs.write("mem://skills/twitter/site/runner.js", "exports.default = async () => 1;");
 
     await vfs.snapshot(
       "mem://skills/twitter",
-      "mem://skills/twitter/@versions/2026-03-29T00:00:00.000Z"
+      "mem://skills/twitter/@versions/2026-03-29T00:00:00.000Z",
     );
     await vfs.rm("mem://skills/twitter/site/runner.js");
     await vfs.rehydrate(
       "mem://skills/twitter/@versions/2026-03-29T00:00:00.000Z",
-      "mem://skills/twitter"
+      "mem://skills/twitter",
     );
 
     await expect(vfs.read("mem://skills/twitter/site/runner.js")).resolves.toBe(
-      "exports.default = async () => 1;"
+      "exports.default = async () => 1;",
     );
   });
 
   it("keeps canonical skill URIs in stat, list, and snapshot outputs", async () => {
     const vfs = await BrowserVfs.create({
-      workspaceId: "conversation-1"
+      workspaceId: "conversation-1",
     });
     const versionId = "2026-03-29T00:00:00.000Z";
 
     await vfs.write("mem://skills/twitter/SKILL.md", "# twitter");
-    await vfs.snapshot(
-      "mem://skills/twitter",
-      `mem://skills/twitter/@versions/${versionId}`,
-      { trusted: true }
-    );
+    await vfs.snapshot("mem://skills/twitter", `mem://skills/twitter/@versions/${versionId}`, {
+      trusted: true,
+    });
 
     await expect(vfs.stat("mem://skills/twitter")).resolves.toMatchObject({
-      uri: "mem://skills/twitter"
+      uri: "mem://skills/twitter",
     });
     await expect(vfs.list("mem://skills")).resolves.toEqual([
       {
         uri: "mem://skills/twitter",
         name: "twitter",
         kind: "dir",
-        size: 0
-      }
+        size: 0,
+      },
     ]);
     await expect(vfs.listSnapshots("mem://skills/twitter")).resolves.toEqual([
       expect.objectContaining({
         uri: `mem://skills/twitter/@versions/${versionId}`,
         sourceUri: "mem://skills/twitter",
-        trusted: true
-      })
+        trusted: true,
+      }),
     ]);
   });
 
   it("bridges snapshot primitives into the lifecycle/version engine surface", async () => {
     const vfs = await BrowserVfs.create({
-      workspaceId: "conversation-1"
+      workspaceId: "conversation-1",
     });
     const versionId = "2026-03-29T00:00:00.000Z";
 
     await vfs.write("mem://skills/twitter/SKILL.md", "# twitter");
     await vfs.snapshot("mem://skills/twitter", skillVersionUri("twitter", versionId), {
-      trusted: true
+      trusted: true,
     });
 
     const [snapshot] = await vfs.listSnapshots("mem://skills/twitter");
@@ -208,10 +206,10 @@ describe("browser-vfs", () => {
       skillId: "twitter",
       lifecycle: {
         status: "installed",
-        trusted: false
+        trusted: false,
       },
       activeVersion: version,
-      versions: [version]
+      versions: [version],
     });
 
     expect(skillVersionRootUri("twitter")).toBe("mem://skills/twitter/@versions");
@@ -219,7 +217,7 @@ describe("browser-vfs", () => {
       versionId,
       uri: `mem://skills/twitter/@versions/${versionId}`,
       createdAt: versionId,
-      trusted: true
+      trusted: true,
     });
     expect(surface.policy.retention).toBe(DEFAULT_SKILL_VERSION_RETENTION);
     expect(surface.rollbackTarget).toEqual(version);
@@ -229,58 +227,58 @@ describe("browser-vfs", () => {
     const store = new IndexedDbVfsStore("vfs-snapshot-metadata");
     const first = await BrowserVfs.create({
       workspaceId: "conversation-1",
-      store
+      store,
     });
     const skillUri = "mem://skills/twitter";
     const versions = [
       "2026-03-29T00:00:00.000Z",
       "2026-03-29T00:01:00.000Z",
       "2026-03-29T00:02:00.000Z",
-      "2026-03-29T00:03:00.000Z"
+      "2026-03-29T00:03:00.000Z",
     ];
 
     await first.write(`${skillUri}/SKILL.md`, "# twitter v1");
     await first.snapshot(`${skillUri}`, `${skillUri}/@versions/${versions[0]}`, {
-      trusted: true
+      trusted: true,
     });
     await first.write(`${skillUri}/SKILL.md`, "# twitter v2");
     await first.snapshot(`${skillUri}`, `${skillUri}/@versions/${versions[1]}`);
     await first.write(`${skillUri}/SKILL.md`, "# twitter v3");
     await first.snapshot(`${skillUri}`, `${skillUri}/@versions/${versions[2]}`, {
-      trusted: true
+      trusted: true,
     });
     await first.write(`${skillUri}/SKILL.md`, "# twitter v4");
     await first.snapshot(`${skillUri}`, `${skillUri}/@versions/${versions[3]}`);
 
     const second = await BrowserVfs.create({
       workspaceId: "conversation-1",
-      store
+      store,
     });
     const snapshots = await second.listSnapshots(skillUri);
 
     expect(snapshots.map((snapshot) => snapshot.versionId)).toEqual([
       versions[3],
       versions[2],
-      versions[1]
+      versions[1],
     ]);
     expect(snapshots.map((snapshot) => snapshot.createdAt)).toEqual([
       versions[3],
       versions[2],
-      versions[1]
+      versions[1],
     ]);
     expect(snapshots.find((snapshot) => snapshot.versionId === versions[2])).toMatchObject({
       trusted: true,
-      sourceUri: "mem://skills/twitter"
+      sourceUri: "mem://skills/twitter",
     });
     await expect(second.selectRollbackTarget(skillUri)).resolves.toMatchObject({
       versionId: versions[2],
-      trusted: true
+      trusted: true,
     });
   });
 
   it("supports configurable retention and legacy rollback fallback", async () => {
     const vfs = await BrowserVfs.create({
-      workspaceId: "conversation-1"
+      workspaceId: "conversation-1",
     });
     const skillUri = "mem://skills/twitter";
     const legacyVersion = "2026-03-28T23:59:00.000Z";
@@ -293,45 +291,42 @@ describe("browser-vfs", () => {
       expect.objectContaining({
         versionId: legacyVersion,
         createdAt: legacyVersion,
-        trusted: false
-      })
+        trusted: false,
+      }),
     ]);
     await expect(vfs.selectRollbackTarget(skillUri)).resolves.toBeNull();
     await expect(
-      vfs.selectRollbackTarget(skillUri, { allowUntrustedFallback: true })
+      vfs.selectRollbackTarget(skillUri, { allowUntrustedFallback: true }),
     ).resolves.toMatchObject({
-      versionId: legacyVersion
+      versionId: legacyVersion,
     });
     await vfs.snapshot(skillUri, `${skillUri}/@versions/${recentVersion}`);
     await vfs.snapshot(skillUri, `${skillUri}/@versions/${newestVersion}`, {
-      retention: 2
+      retention: 2,
     });
 
     const snapshots = await vfs.listSnapshots(skillUri);
-    expect(snapshots.map((snapshot) => snapshot.versionId)).toEqual([
-      newestVersion,
-      recentVersion
-    ]);
+    expect(snapshots.map((snapshot) => snapshot.versionId)).toEqual([newestVersion, recentVersion]);
     expect(snapshots[1]).toMatchObject({
       createdAt: recentVersion,
-      trusted: false
+      trusted: false,
     });
     await expect(vfs.selectRollbackTarget(skillUri)).resolves.toBeNull();
     await expect(
-      vfs.selectRollbackTarget(skillUri, { allowUntrustedFallback: true })
+      vfs.selectRollbackTarget(skillUri, { allowUntrustedFallback: true }),
     ).resolves.toMatchObject({
-      versionId: newestVersion
+      versionId: newestVersion,
     });
     await expect(
-      vfs.stat(`${skillUri}/@versions/${newestVersion}/@versions/${legacyVersion}/SKILL.md`)
+      vfs.stat(`${skillUri}/@versions/${newestVersion}/@versions/${legacyVersion}/SKILL.md`),
     ).rejects.toMatchObject({
-      code: "E_BAD_INPUT"
+      code: "E_BAD_INPUT",
     });
   });
 
   it("rehydrates by replacing live files while preserving version history", async () => {
     const vfs = await BrowserVfs.create({
-      workspaceId: "conversation-1"
+      workspaceId: "conversation-1",
     });
     const skillUri = "mem://skills/twitter";
     const trustedVersion = "2026-03-29T00:00:00.000Z";
@@ -339,7 +334,7 @@ describe("browser-vfs", () => {
     await vfs.write(`${skillUri}/SKILL.md`, "# twitter");
     await vfs.write(`${skillUri}/site/runner.js`, "exports.default = async () => 1;");
     await vfs.snapshot(skillUri, `${skillUri}/@versions/${trustedVersion}`, {
-      trusted: true
+      trusted: true,
     });
 
     await vfs.rm(`${skillUri}/site/runner.js`);
@@ -347,16 +342,16 @@ describe("browser-vfs", () => {
     await vfs.rehydrate(`${skillUri}/@versions/${trustedVersion}`, skillUri);
 
     await expect(vfs.read(`${skillUri}/site/runner.js`)).resolves.toBe(
-      "exports.default = async () => 1;"
+      "exports.default = async () => 1;",
     );
     await expect(vfs.read(`${skillUri}/notes.txt`)).rejects.toMatchObject({
-      code: "E_BAD_INPUT"
+      code: "E_BAD_INPUT",
     });
     await expect(vfs.listSnapshots(skillUri)).resolves.toEqual([
       expect.objectContaining({
         versionId: trustedVersion,
-        trusted: true
-      })
+        trusted: true,
+      }),
     ]);
   });
 
@@ -364,12 +359,12 @@ describe("browser-vfs", () => {
     const vfs = await BrowserVfs.create({
       workspaceId: "conversation-1",
       quotas: {
-        workspace: 4
-      }
+        workspace: 4,
+      },
     });
 
     await expect(vfs.write("mem://workspace/too-large.txt", "12345")).rejects.toMatchObject({
-      code: "E_VFS_QUOTA_EXCEEDED"
+      code: "E_VFS_QUOTA_EXCEEDED",
     });
   });
 
@@ -381,7 +376,7 @@ describe("browser-vfs", () => {
     const store = new IndexedDbVfsStore(dbName);
     const vfs = await BrowserVfs.create({
       workspaceId: "conversation-1",
-      store
+      store,
     });
 
     await expect(vfs.listSnapshots("mem://skills/twitter")).resolves.toEqual([
@@ -389,31 +384,31 @@ describe("browser-vfs", () => {
         uri: `mem://skills/twitter/@versions/${versionId}`,
         versionId,
         trusted: true,
-        sourceUri: "mem://skills/twitter"
-      })
+        sourceUri: "mem://skills/twitter",
+      }),
     ]);
     await expect(vfs.selectRollbackTarget("mem://skills/twitter")).resolves.toMatchObject({
       versionId,
-      trusted: true
+      trusted: true,
     });
 
     await vfs.rm("mem://skills/twitter/site/runner.js");
     await vfs.rehydrate(`mem://skills/twitter/@versions/${versionId}`, "mem://skills/twitter");
     await expect(vfs.read("mem://skills/twitter/site/runner.js")).resolves.toBe(
-      "exports.default = async () => 1;"
+      "exports.default = async () => 1;",
     );
 
     const migratedDb = await openDB<MigratedVfsDbSchema>(dbName);
     await expect(migratedDb.get("meta", "schemaVersion")).resolves.toMatchObject({
       key: "schemaVersion",
-      value: INDEXED_DB_VFS_SCHEMA_VERSION
+      value: INDEXED_DB_VFS_SCHEMA_VERSION,
     });
     await expect(
-      migratedDb.get("nodes", `library:/skills/twitter/@versions/${versionId}`)
+      migratedDb.get("nodes", `library:/skills/twitter/@versions/${versionId}`),
     ).resolves.toMatchObject({
       snapshot: expect.objectContaining({
-        sourceUri: "mem://skills/twitter"
-      })
+        sourceUri: "mem://skills/twitter",
+      }),
     });
     migratedDb.close();
   });
@@ -430,7 +425,7 @@ describe("browser-vfs", () => {
       expect(packages).toEqual([
         { id: "drafty", uri: "mem://skills/drafty", hasMarker: false },
         { id: "github", uri: "mem://skills/github", hasMarker: true },
-        { id: "twitter", uri: "mem://skills/twitter", hasMarker: true }
+        { id: "twitter", uri: "mem://skills/twitter", hasMarker: true },
       ]);
     });
 
@@ -439,13 +434,11 @@ describe("browser-vfs", () => {
       await vfs.write("mem://skills/twitter/SKILL.md", "# twitter");
       await vfs.snapshot(
         "mem://skills/twitter",
-        "mem://skills/twitter/@versions/2026-03-29T00:00:00.000Z"
+        "mem://skills/twitter/@versions/2026-03-29T00:00:00.000Z",
       );
 
       const packages = await vfs.discoverPackages();
-      expect(packages).toEqual([
-        { id: "twitter", uri: "mem://skills/twitter", hasMarker: true }
-      ]);
+      expect(packages).toEqual([{ id: "twitter", uri: "mem://skills/twitter", hasMarker: true }]);
     });
 
     it("discovers packages under a custom root URI", async () => {
@@ -456,7 +449,7 @@ describe("browser-vfs", () => {
       const packages = await vfs.discoverPackages("mem://workspace/plugins");
       expect(packages).toEqual([
         { id: "alpha", uri: "mem://workspace/plugins/alpha", hasMarker: true },
-        { id: "beta", uri: "mem://workspace/plugins/beta", hasMarker: false }
+        { id: "beta", uri: "mem://workspace/plugins/beta", hasMarker: false },
       ]);
     });
 

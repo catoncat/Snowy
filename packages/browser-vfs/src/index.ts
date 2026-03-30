@@ -1,9 +1,9 @@
-import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import {
   CapabilityError,
   DEFAULT_SKILL_VERSION_RETENTION,
-  type SkillVersionRef
+  type SkillVersionRef,
 } from "@bbl-next/contracts";
+import { type DBSchema, type IDBPDatabase, openDB } from "idb";
 
 export type VfsScope = "ephemeral" | "workspace" | "library";
 export type VfsNodeKind = "file" | "dir";
@@ -50,7 +50,7 @@ export function snapshotInfoToSkillVersionRef(snapshot: VfsSnapshotInfo): SkillV
     versionId: snapshot.versionId,
     uri: snapshot.uri,
     createdAt: snapshot.createdAt,
-    trusted: snapshot.trusted
+    trusted: snapshot.trusted,
   };
 }
 
@@ -72,7 +72,10 @@ export interface VfsPackageInfo {
 }
 
 export interface PersistentVfsStore {
-  load(scope: Extract<VfsScope, "workspace" | "library">, workspaceId?: string): Promise<VfsNodeRecord[]>;
+  load(
+    scope: Extract<VfsScope, "workspace" | "library">,
+    workspaceId?: string,
+  ): Promise<VfsNodeRecord[]>;
   put(record: VfsNodeRecord): Promise<void>;
   delete(key: string): Promise<void>;
 }
@@ -106,14 +109,13 @@ export class IndexedDbVfsStore implements PersistentVfsStore {
 
   async load(
     scope: Extract<VfsScope, "workspace" | "library">,
-    workspaceId?: string
+    workspaceId?: string,
   ): Promise<VfsNodeRecord[]> {
     const db = await this.#getDb();
     const all = await db.getAll("nodes");
     return all.filter(
       (record) =>
-        record.scope === scope &&
-        (scope === "library" || record.workspaceId === workspaceId)
+        record.scope === scope && (scope === "library" || record.workspaceId === workspaceId),
     );
   }
 
@@ -137,14 +139,12 @@ export class IndexedDbVfsStore implements PersistentVfsStore {
           if (oldVersion < 2 && !database.objectStoreNames.contains("meta")) {
             const meta = database.createObjectStore("meta", { keyPath: "key" });
             meta.put(
-              createSchemaVersionRecord(
-                oldVersion === 0 ? INDEXED_DB_VFS_SCHEMA_VERSION : 1
-              )
+              createSchemaVersionRecord(oldVersion === 0 ? INDEXED_DB_VFS_SCHEMA_VERSION : 1),
             );
           } else if (oldVersion >= 2) {
             transaction.objectStore("meta").put(createSchemaVersionRecord(oldVersion));
           }
-        }
+        },
       });
       await this.#migrateIfNeeded(db);
       return db;
@@ -163,7 +163,7 @@ export class IndexedDbVfsStore implements PersistentVfsStore {
     }
     throw new CapabilityError(
       "E_RUNTIME",
-      `Unsupported BrowserVFS schema version: ${currentVersion}`
+      `Unsupported BrowserVFS schema version: ${currentVersion}`,
     );
   }
 
@@ -199,7 +199,7 @@ export interface BrowserVfsOptions {
 const DEFAULT_QUOTAS: Record<VfsScope, number> = {
   ephemeral: Number.POSITIVE_INFINITY,
   workspace: 50 * 1024 * 1024,
-  library: 200 * 1024 * 1024
+  library: 200 * 1024 * 1024,
 };
 
 function textSize(value: string): number {
@@ -224,14 +224,16 @@ function storagePathFromRaw(raw: string): string {
 }
 
 function encodeKey(scope: VfsScope, path: string, workspaceId?: string): string {
-  return scope === "workspace" ? `${scope}:${workspaceId ?? "default"}:${path}` : `${scope}:${path}`;
+  return scope === "workspace"
+    ? `${scope}:${workspaceId ?? "default"}:${path}`
+    : `${scope}:${path}`;
 }
 
 function createSchemaVersionRecord(version: number): VfsDbMetaRecord {
   return {
     key: "schemaVersion",
     value: version,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -265,14 +267,14 @@ function normalizeStoredRecord(record: VfsNodeRecord): VfsNodeRecord {
     ...record,
     key: encodeKey(record.scope, record.path, workspaceId),
     workspaceId,
-    content: record.kind === "file" ? record.content ?? "" : undefined,
+    content: record.kind === "file" ? (record.content ?? "") : undefined,
     size: record.kind === "file" ? textSize(record.content ?? "") : 0,
     snapshot: record.snapshot
       ? {
           ...record.snapshot,
-          sourceUri: canonicalizeSkillUri(record.snapshot.sourceUri)
+          sourceUri: canonicalizeSkillUri(record.snapshot.sourceUri),
         }
-      : undefined
+      : undefined,
   };
 }
 
@@ -309,7 +311,7 @@ function parseSnapshotRootPath(path: string): { livePath: string; versionId: str
   const liveSegments = segments.slice(0, versionsIndex);
   return {
     livePath: liveSegments.length === 0 ? "/" : `/${liveSegments.join("/")}`,
-    versionId: segments[versionsIndex + 1]
+    versionId: segments[versionsIndex + 1],
   };
 }
 
@@ -351,7 +353,7 @@ export function resolveMemUri(uri: string): {
   if (raw === "skills" || raw.startsWith("skills/")) {
     return {
       scope: "library",
-      path: storagePathFromRaw(raw)
+      path: storagePathFromRaw(raw),
     };
   }
   const [scopeToken, ...rest] = raw.split("/");
@@ -360,7 +362,7 @@ export function resolveMemUri(uri: string): {
   }
   return {
     scope: scopeToken,
-    path: storagePathFromRaw(rest.join("/"))
+    path: storagePathFromRaw(rest.join("/")),
   };
 }
 
@@ -370,12 +372,15 @@ export class BrowserVfs {
   readonly #quotas: Record<VfsScope, number>;
   readonly #maps: Record<VfsScope, Map<string, VfsNodeRecord>>;
 
-  private constructor(options: BrowserVfsOptions, initial: Record<VfsScope, Map<string, VfsNodeRecord>>) {
+  private constructor(
+    options: BrowserVfsOptions,
+    initial: Record<VfsScope, Map<string, VfsNodeRecord>>,
+  ) {
     this.#workspaceId = options.workspaceId;
     this.#store = options.store;
     this.#quotas = {
       ...DEFAULT_QUOTAS,
-      ...options.quotas
+      ...options.quotas,
     };
     this.#maps = initial;
   }
@@ -394,7 +399,7 @@ export class BrowserVfs {
     return new BrowserVfs(options, {
       ephemeral: new Map<string, VfsNodeRecord>(),
       workspace,
-      library
+      library,
     });
   }
 
@@ -435,7 +440,7 @@ export class BrowserVfs {
       uri: toUri(scope, path),
       kind: record.kind,
       size: record.size,
-      updatedAt: record.updatedAt
+      updatedAt: record.updatedAt,
     };
   }
 
@@ -460,7 +465,7 @@ export class BrowserVfs {
           uri: toUri(scope, childPath),
           name: child,
           kind: childRecord.kind,
-          size: childRecord.size
+          size: childRecord.size,
         });
       }
     }
@@ -495,13 +500,13 @@ export class BrowserVfs {
   async snapshot(
     sourceUri: string,
     targetUri: string,
-    options: VfsSnapshotOptions = {}
+    options: VfsSnapshotOptions = {},
   ): Promise<void> {
     const source = resolveMemUri(sourceUri);
     const target = resolveMemUri(targetUri);
     const targetSnapshot = parseSnapshotRootPath(target.path);
     const records = this.#collectTree(source.scope, source.path, {
-      excludePaths: [versionDirectoryPath(source.path)]
+      excludePaths: [versionDirectoryPath(source.path)],
     });
     const retention = normalizeSnapshotRetention(options.retention);
     const metadata =
@@ -513,13 +518,13 @@ export class BrowserVfs {
               ? targetSnapshot.versionId
               : new Date().toISOString(),
             trusted: options.trusted ?? false,
-            sourceUri: toUri(source.scope, source.path)
+            sourceUri: toUri(source.scope, source.path),
           };
 
     await this.#mutateScope(target.scope, (draft) => {
       this.#removeTree(draft, target.path);
       this.#writeTree(draft, target.scope, records, source.path, target.path, {
-        rootSnapshot: metadata
+        rootSnapshot: metadata,
       });
       if (targetSnapshot) {
         this.#trimSnapshots(draft, target.scope, targetSnapshot.livePath, retention);
@@ -534,7 +539,7 @@ export class BrowserVfs {
     await this.#mutateScope(target.scope, (draft) => {
       this.#removeTree(draft, target.path, [versionDirectoryPath(target.path)]);
       this.#writeTree(draft, target.scope, records, snapshot.path, target.path, {
-        clearRootSnapshot: true
+        clearRootSnapshot: true,
       });
     });
   }
@@ -546,14 +551,14 @@ export class BrowserVfs {
 
   async selectRollbackTarget(
     sourceUri: string,
-    options: VfsRollbackTargetOptions = {}
+    options: VfsRollbackTargetOptions = {},
   ): Promise<VfsSnapshotInfo | null> {
     const snapshots = await this.listSnapshots(sourceUri);
     const trusted = snapshots.find((snapshot) => snapshot.trusted);
     if (trusted) {
       return trusted;
     }
-    return options.allowUntrustedFallback ? snapshots[0] ?? null : null;
+    return options.allowUntrustedFallback ? (snapshots[0] ?? null) : null;
   }
 
   async discoverPackages(rootUri = "mem://skills"): Promise<VfsPackageInfo[]> {
@@ -573,18 +578,16 @@ export class BrowserVfs {
       }
     }
 
-    return [...children]
-      .sort()
-      .map((child) => {
-        const childPath = rootPath === "/" ? `/${child}` : `${rootPath}/${child}`;
-        const markerPath = `${childPath}/${PACKAGE_MARKER}`;
-        const marker = map.get(markerPath);
-        return {
-          id: child,
-          uri: toUri(scope, childPath),
-          hasMarker: marker?.kind === "file"
-        };
-      });
+    return [...children].sort().map((child) => {
+      const childPath = rootPath === "/" ? `/${child}` : `${rootPath}/${child}`;
+      const markerPath = `${childPath}/${PACKAGE_MARKER}`;
+      const marker = map.get(markerPath);
+      return {
+        id: child,
+        uri: toUri(scope, childPath),
+        hasMarker: marker?.kind === "file",
+      };
+    });
   }
 
   async isPackageRoot(uri: string): Promise<boolean> {
@@ -609,15 +612,15 @@ export class BrowserVfs {
     rootPath: string,
     options: {
       excludePaths?: string[];
-    } = {}
+    } = {},
   ): VfsNodeRecord[] {
     const map = this.#maps[scope];
     const records = [...map.values()].filter(
       (record) =>
         isSameOrDescendant(record.path, rootPath) &&
         !(options.excludePaths ?? []).some((excludedPath) =>
-          isSameOrDescendant(record.path, excludedPath)
-        )
+          isSameOrDescendant(record.path, excludedPath),
+        ),
     );
     if (records.length === 0) {
       throw new CapabilityError("E_BAD_INPUT", `Path not found: ${toUri(scope, rootPath)}`);
@@ -633,11 +636,7 @@ export class BrowserVfs {
     return record;
   }
 
-  #ensureParents(
-    scope: VfsScope,
-    draft: Map<string, VfsNodeRecord>,
-    path: string
-  ): void {
+  #ensureParents(scope: VfsScope, draft: Map<string, VfsNodeRecord>, path: string): void {
     for (const parent of parentPaths(path)) {
       if (!draft.has(parent)) {
         draft.set(parent, this.#createRecord(scope, parent, "dir"));
@@ -650,7 +649,7 @@ export class BrowserVfs {
     path: string,
     kind: VfsNodeKind,
     content = "",
-    snapshot?: VfsSnapshotMetadata
+    snapshot?: VfsSnapshotMetadata,
   ): VfsNodeRecord {
     return {
       key: encodeKey(scope, path, this.#workspaceId),
@@ -661,7 +660,7 @@ export class BrowserVfs {
       content: kind === "file" ? content : undefined,
       size: kind === "file" ? textSize(content) : 0,
       updatedAt: new Date().toISOString(),
-      snapshot
+      snapshot,
     };
   }
 
@@ -674,7 +673,7 @@ export class BrowserVfs {
     options: {
       rootSnapshot?: VfsSnapshotMetadata;
       clearRootSnapshot?: boolean;
-    } = {}
+    } = {},
   ): void {
     for (const record of records) {
       const nextPath =
@@ -683,21 +682,17 @@ export class BrowserVfs {
         record.path === fromPath
           ? options.clearRootSnapshot
             ? undefined
-            : options.rootSnapshot ?? record.snapshot
+            : (options.rootSnapshot ?? record.snapshot)
           : record.snapshot;
       this.#ensureParents(scope, draft, nextPath);
       draft.set(
         nextPath,
-        this.#createRecord(scope, nextPath, record.kind, record.content, snapshot)
+        this.#createRecord(scope, nextPath, record.kind, record.content, snapshot),
       );
     }
   }
 
-  #removeTree(
-    draft: Map<string, VfsNodeRecord>,
-    rootPath: string,
-    keepRoots: string[] = []
-  ): void {
+  #removeTree(draft: Map<string, VfsNodeRecord>, rootPath: string, keepRoots: string[] = []): void {
     for (const key of [...draft.keys()]) {
       if (!isSameOrDescendant(key, rootPath)) {
         continue;
@@ -712,7 +707,7 @@ export class BrowserVfs {
   #listSnapshotsFromMap(
     map: Map<string, VfsNodeRecord>,
     scope: VfsScope,
-    sourcePath: string
+    sourcePath: string,
   ): VfsSnapshotInfo[] {
     const versionsPath = versionDirectoryPath(sourcePath);
     const roots = new Map<string, VfsNodeRecord>();
@@ -742,11 +737,14 @@ export class BrowserVfs {
     scope: VfsScope,
     sourcePath: string,
     snapshotPath: string,
-    record: VfsNodeRecord
+    record: VfsNodeRecord,
   ): VfsSnapshotInfo {
     const parsed = parseSnapshotRootPath(snapshotPath);
     if (!parsed) {
-      throw new CapabilityError("E_BAD_INPUT", `Invalid snapshot path: ${toUri(scope, snapshotPath)}`);
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        `Invalid snapshot path: ${toUri(scope, snapshotPath)}`,
+      );
     }
     return {
       uri: toUri(scope, snapshotPath),
@@ -755,7 +753,7 @@ export class BrowserVfs {
         record.snapshot?.createdAt ??
         (isIsoTimestamp(parsed.versionId) ? parsed.versionId : record.updatedAt),
       trusted: record.snapshot?.trusted ?? false,
-      sourceUri: canonicalizeSkillUri(record.snapshot?.sourceUri ?? toUri(scope, sourcePath))
+      sourceUri: canonicalizeSkillUri(record.snapshot?.sourceUri ?? toUri(scope, sourcePath)),
     };
   }
 
@@ -763,7 +761,7 @@ export class BrowserVfs {
     draft: Map<string, VfsNodeRecord>,
     scope: VfsScope,
     sourcePath: string,
-    retention: number
+    retention: number,
   ): void {
     const snapshots = this.#listSnapshotsFromMap(draft, scope, sourcePath);
     for (const snapshot of snapshots.slice(retention)) {
@@ -774,7 +772,7 @@ export class BrowserVfs {
 
   async #mutateScope(
     scope: VfsScope,
-    mutate: (draft: Map<string, VfsNodeRecord>) => void
+    mutate: (draft: Map<string, VfsNodeRecord>) => void,
   ): Promise<void> {
     const current = this.#maps[scope];
     const draft = new Map<string, VfsNodeRecord>();
@@ -788,7 +786,7 @@ export class BrowserVfs {
     if (bytes > this.#quotas[scope]) {
       throw new CapabilityError(
         "E_VFS_QUOTA_EXCEEDED",
-        `Quota exceeded for ${scope}: ${bytes} > ${this.#quotas[scope]}`
+        `Quota exceeded for ${scope}: ${bytes} > ${this.#quotas[scope]}`,
       );
     }
     this.#maps[scope] = draft;
@@ -800,7 +798,7 @@ export class BrowserVfs {
   async #persistScope(
     scope: Extract<VfsScope, "workspace" | "library">,
     previous: Map<string, VfsNodeRecord>,
-    next: Map<string, VfsNodeRecord>
+    next: Map<string, VfsNodeRecord>,
   ): Promise<void> {
     if (!this.#store) {
       return;

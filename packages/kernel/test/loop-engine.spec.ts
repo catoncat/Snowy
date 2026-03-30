@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeEach } from "vitest";
 import { LoopEngine, type StepRequest, type StepResult } from "@bbl-next/kernel";
+import { beforeEach, describe, expect, it } from "vitest";
 
 describe("LoopEngine", () => {
   let engine: LoopEngine;
@@ -194,7 +194,7 @@ describe("LoopEngine", () => {
 
     it("returns progress_uncertain when no-progress budget is exhausted", () => {
       const engine2 = new LoopEngine({
-        noProgressContinueBudget: { repeat_signature: 0 }
+        noProgressContinueBudget: { repeat_signature: 0 },
       });
 
       for (let i = 0; i < 3; i++) {
@@ -236,7 +236,7 @@ describe("LoopEngine", () => {
       // Zero budget for ping_pong means immediate detection
       const engine2 = new LoopEngine({
         maxSteps: 50,
-        noProgressContinueBudget: { ping_pong: 0 }
+        noProgressContinueBudget: { ping_pong: 0 },
       });
 
       const actions = ["page.click", "page.fill", "page.click", "page.fill"];

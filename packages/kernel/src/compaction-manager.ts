@@ -1,10 +1,10 @@
 import type {
-  SessionEntry,
+  CompactionDraft,
   CompactionPayload,
   CompactionReason,
-  CompactionDraft,
+  KernelLlmAdapter,
   MessagePayload,
-  KernelLlmAdapter
+  SessionEntry,
 } from "@bbl-next/contracts";
 import type { SessionStore } from "./session-store.js";
 
@@ -50,20 +50,22 @@ function isCompactionPayload(payload: unknown): payload is CompactionPayload {
   }
 
   const maybe = payload as Partial<CompactionPayload>;
-  const reasonValid = maybe.reason === "overflow" || maybe.reason === "threshold" || maybe.reason === "manual";
+  const reasonValid =
+    maybe.reason === "overflow" || maybe.reason === "threshold" || maybe.reason === "manual";
   const summaryValid = typeof maybe.summary === "string";
   const firstKeptValid = typeof maybe.firstKeptEntryId === "string";
-  const prevSummaryValid = maybe.previousSummary === undefined || typeof maybe.previousSummary === "string";
+  const prevSummaryValid =
+    maybe.previousSummary === undefined || typeof maybe.previousSummary === "string";
   const tokensBeforeValid = typeof maybe.tokensBefore === "number";
   const tokensAfterValid = typeof maybe.tokensAfter === "number";
 
   return (
-    reasonValid
-    && summaryValid
-    && firstKeptValid
-    && prevSummaryValid
-    && tokensBeforeValid
-    && tokensAfterValid
+    reasonValid &&
+    summaryValid &&
+    firstKeptValid &&
+    prevSummaryValid &&
+    tokensBeforeValid &&
+    tokensAfterValid
   );
 }
 
@@ -78,10 +80,7 @@ function estimateTextTokens(text: string): number {
 }
 
 function escapeXmlLike(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 function estimateTokens(entries: SessionEntry[]): number {
@@ -116,7 +115,7 @@ export class CompactionManager {
   async shouldCompact(
     sessionId: string,
     contextWindow: number,
-    currentTokens?: number
+    currentTokens?: number,
   ): Promise<boolean> {
     const tokens = currentTokens ?? estimateTokens(await this.#store.getEntries(sessionId));
     const threshold = contextWindow * this.#thresholdRatio;
@@ -161,9 +160,8 @@ export class CompactionManager {
 
     const messagesToSummarize = entriesToConsider.slice(0, cutIdx);
     const keptEntries = entriesToConsider.slice(cutIdx);
-    const firstKeptEntryId = keptEntries.length > 0
-      ? keptEntries[0].entryId
-      : entries[entries.length - 1].entryId;
+    const firstKeptEntryId =
+      keptEntries.length > 0 ? keptEntries[0].entryId : entries[entries.length - 1].entryId;
 
     return {
       sessionId,
@@ -172,7 +170,7 @@ export class CompactionManager {
       keptEntries,
       firstKeptEntryId,
       previousSummary,
-      tokensBefore
+      tokensBefore,
     };
   }
 
@@ -188,7 +186,7 @@ export class CompactionManager {
         firstKeptEntryId: preparation.firstKeptEntryId,
         previousSummary,
         tokensBefore,
-        tokensAfter
+        tokensAfter,
       };
     }
 
@@ -214,7 +212,7 @@ export class CompactionManager {
         firstKeptEntryId: preparation.firstKeptEntryId,
         previousSummary,
         tokensBefore,
-        tokensAfter
+        tokensAfter,
       };
     }
 
@@ -226,11 +224,10 @@ export class CompactionManager {
 
     const summary = await this.#llm.complete({
       systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userPrompt }]
+      messages: [{ role: "user", content: userPrompt }],
     });
 
-    const tokensAfter = estimateTextTokens(summary)
-      + estimateTokens(preparation.keptEntries);
+    const tokensAfter = estimateTextTokens(summary) + estimateTokens(preparation.keptEntries);
 
     return {
       reason: preparation.reason,
@@ -238,7 +235,7 @@ export class CompactionManager {
       firstKeptEntryId: preparation.firstKeptEntryId,
       previousSummary,
       tokensBefore,
-      tokensAfter
+      tokensAfter,
     };
   }
 
@@ -249,7 +246,7 @@ export class CompactionManager {
       firstKeptEntryId: draft.firstKeptEntryId,
       previousSummary: draft.previousSummary,
       tokensBefore: draft.tokensBefore,
-      tokensAfter: draft.tokensAfter
+      tokensAfter: draft.tokensAfter,
     };
     await this.#store.appendEntry(sessionId, "compaction", payload);
   }

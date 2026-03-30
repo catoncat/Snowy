@@ -19,10 +19,7 @@
   function getKeyboardTarget() {
     const documentRef = globalScope.document;
     return (
-      documentRef?.activeElement ??
-      documentRef?.body ??
-      documentRef?.documentElement ??
-      documentRef
+      documentRef?.activeElement ?? documentRef?.body ?? documentRef?.documentElement ?? documentRef
     );
   }
 
@@ -120,11 +117,11 @@
         result.ok === true &&
         result.action === action &&
         result.installedScriptId === installed.scriptId &&
-        result.installationId === installationId
+        result.installationId === installationId,
     );
     if (verified && action === "press_key") {
       verified = state.keyEvents.some(
-        (entry) => entry.installationId === installationId && entry.key === result.key
+        (entry) => entry.installationId === installationId && entry.key === result.key,
       );
     }
     state.verifications.push({

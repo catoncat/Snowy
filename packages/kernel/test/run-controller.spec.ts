@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeEach } from "vitest";
 import { RunController } from "@bbl-next/kernel";
+import { beforeEach, describe, expect, it } from "vitest";
 
 describe("RunController", () => {
   let ctrl: RunController;
@@ -68,16 +68,12 @@ describe("RunController", () => {
     });
 
     it("rejects transitions before run state exists", () => {
-      expect(() => ctrl.transition(sid, "pause")).toThrow(
-        "Run state not found"
-      );
+      expect(() => ctrl.transition(sid, "pause")).toThrow("Run state not found");
     });
 
     it("rejects running → idle (not a valid transition)", () => {
       ctrl.transition(sid, "start");
-      expect(() => ctrl.transition(sid, "reset")).toThrow(
-        "Illegal run phase transition"
-      );
+      expect(() => ctrl.transition(sid, "reset")).toThrow("Illegal run phase transition");
     });
 
     it("resets retry state on stop/done/reset", () => {
@@ -88,7 +84,9 @@ describe("RunController", () => {
 
       ctrl.transition(sid, "stop");
       expect(ctrl.getState(sid).retry).toEqual({
-        active: false, attempt: 0, maxAttempts: 2
+        active: false,
+        attempt: 0,
+        maxAttempts: 2,
       });
     });
   });

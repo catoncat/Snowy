@@ -8,7 +8,7 @@
 function hostAdapterError(code, message, details) {
   return {
     ok: false,
-    error: { code, message, details }
+    error: { code, message, details },
   };
 }
 
@@ -20,7 +20,7 @@ export function createLocalHostAdapter() {
     return {
       hostId: request.hostId,
       path: request.path,
-      content
+      content,
     };
   }
 
@@ -29,7 +29,7 @@ export function createLocalHostAdapter() {
       return hostAdapterError("E_BAD_INPUT", "write requires a non-empty path", {
         kind: "write",
         hostId: request.hostId,
-        reason: "execution_failed"
+        reason: "execution_failed",
       });
     }
     const content = request.content ?? "";
@@ -37,7 +37,7 @@ export function createLocalHostAdapter() {
     return {
       hostId: request.hostId,
       path: request.path,
-      content
+      content,
     };
   }
 
@@ -46,7 +46,7 @@ export function createLocalHostAdapter() {
       return hostAdapterError("E_BAD_INPUT", "edit requires a non-empty path", {
         kind: "edit",
         hostId: request.hostId,
-        reason: "execution_failed"
+        reason: "execution_failed",
       });
     }
     const existing = files.get(request.path) ?? "";
@@ -55,7 +55,7 @@ export function createLocalHostAdapter() {
     return {
       hostId: request.hostId,
       path: request.path,
-      content
+      content,
     };
   }
 

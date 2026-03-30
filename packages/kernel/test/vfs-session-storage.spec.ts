@@ -1,6 +1,6 @@
-import { describe, expect, it, beforeEach } from "vitest";
-import { BrowserVfs } from "../../browser-vfs/src/index.js";
 import { SessionStore, VfsSessionStorage } from "@bbl-next/kernel";
+import { beforeEach, describe, expect, it } from "vitest";
+import { BrowserVfs } from "../../browser-vfs/src/index.js";
 
 describe("VfsSessionStorage", () => {
   let vfs: BrowserVfs;
@@ -15,28 +15,28 @@ describe("VfsSessionStorage", () => {
     await storage.createSession({
       id: "s-vfs-1",
       createdAt: "2026-03-30T00:00:00.000Z",
-      title: "Kernel VFS"
+      title: "Kernel VFS",
     });
 
     await storage.appendEntry("s-vfs-1", {
       entryId: "e-1",
       type: "message",
       timestamp: "2026-03-30T00:00:01.000Z",
-      payload: { role: "user", text: "hello" }
+      payload: { role: "user", text: "hello" },
     });
     await storage.appendEntry("s-vfs-1", {
       entryId: "e-2",
       parentId: "e-1",
       type: "message",
       timestamp: "2026-03-30T00:00:02.000Z",
-      payload: { role: "assistant", text: "hi" }
+      payload: { role: "assistant", text: "hi" },
     });
 
     expect(await vfs.read("mem://workspace/kernel/sessions/s-vfs-1/header.json")).toContain(
-      '"id":"s-vfs-1"'
+      '"id":"s-vfs-1"',
     );
     expect(await vfs.read("mem://workspace/kernel/sessions/s-vfs-1/entries.jsonl")).toContain(
-      '"entryId":"e-2"'
+      '"entryId":"e-2"',
     );
 
     expect(await storage.getEntries("s-vfs-1")).toEqual([
@@ -44,15 +44,15 @@ describe("VfsSessionStorage", () => {
         entryId: "e-1",
         type: "message",
         timestamp: "2026-03-30T00:00:01.000Z",
-        payload: { role: "user", text: "hello" }
+        payload: { role: "user", text: "hello" },
       },
       {
         entryId: "e-2",
         parentId: "e-1",
         type: "message",
         timestamp: "2026-03-30T00:00:02.000Z",
-        payload: { role: "assistant", text: "hi" }
-      }
+        payload: { role: "assistant", text: "hi" },
+      },
     ]);
   });
 
@@ -74,11 +74,11 @@ describe("VfsSessionStorage", () => {
 
     const first = await store.appendEntry(session.id, "message", {
       role: "user",
-      text: "persist me"
+      text: "persist me",
     });
     const second = await store.appendEntry(session.id, "message", {
       role: "assistant",
-      text: "persisted"
+      text: "persisted",
     });
 
     const context = await store.buildContext(session.id);

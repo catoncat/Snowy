@@ -1,8 +1,4 @@
-import type {
-  SessionStorage,
-  SessionHeader,
-  SessionEntry
-} from "@bbl-next/contracts";
+import type { SessionEntry, SessionHeader, SessionStorage } from "@bbl-next/contracts";
 
 function cloneValue<T>(value: T): T {
   if (typeof structuredClone === "function") {

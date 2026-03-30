@@ -1,8 +1,4 @@
-import type {
-  LoopTurn,
-  LoopTerminalStatus,
-  NoProgressReason
-} from "@bbl-next/contracts";
+import type { LoopTerminalStatus, LoopTurn, NoProgressReason } from "@bbl-next/contracts";
 
 export interface CapabilityStepRequest {
   kind?: "capability";
@@ -66,7 +62,7 @@ const DEFAULT_MAX_STEPS = 50;
 const DEFAULT_SIGNATURE_HISTORY_LIMIT = 6;
 const DEFAULT_NO_PROGRESS_BUDGET: Record<NoProgressReason, number> = {
   repeat_signature: 1,
-  ping_pong: 0
+  ping_pong: 0,
 };
 
 function generateTurnId(): string {
@@ -84,10 +80,11 @@ export class LoopEngine {
 
   constructor(opts?: LoopEngineOptions) {
     this.#maxSteps = opts?.maxSteps ?? DEFAULT_MAX_STEPS;
-    this.#signatureHistoryLimit = opts?.noProgressSignatureHistoryLimit ?? DEFAULT_SIGNATURE_HISTORY_LIMIT;
+    this.#signatureHistoryLimit =
+      opts?.noProgressSignatureHistoryLimit ?? DEFAULT_SIGNATURE_HISTORY_LIMIT;
     this.#noProgressBudget = {
       ...DEFAULT_NO_PROGRESS_BUDGET,
-      ...opts?.noProgressContinueBudget
+      ...opts?.noProgressContinueBudget,
     };
     this.#executor = opts?.executor;
   }
@@ -101,7 +98,7 @@ export class LoopEngine {
       stepIndex,
       capabilityId: this.#resolveCapabilityId(step),
       status: "pending",
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
     };
   }
 
@@ -153,7 +150,7 @@ export class LoopEngine {
       verified: result.verified,
       lastError: result.error,
       timedOut,
-      endedAt: new Date().toISOString()
+      endedAt: new Date().toISOString(),
     };
 
     // Track signature for no-progress detection
@@ -173,7 +170,7 @@ export class LoopEngine {
   checkTerminal(
     sessionId: string,
     turn: LoopTurn,
-    opts?: { stopped?: boolean }
+    opts?: { stopped?: boolean },
   ): LoopTerminalStatus | null {
     if (opts?.stopped) {
       return "stopped";
@@ -252,7 +249,7 @@ export class LoopEngine {
   #applyBudget(sessionId: string, reason: NoProgressReason): NoProgressReason | null {
     const counts = this.#noProgressCounts.get(sessionId) ?? {
       repeat_signature: 0,
-      ping_pong: 0
+      ping_pong: 0,
     };
     if (counts[reason] < this.#noProgressBudget[reason]) {
       counts[reason] += 1;

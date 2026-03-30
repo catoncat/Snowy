@@ -7,26 +7,26 @@ function toBridgeError(error, fallbackCode = "E_RUNTIME") {
     return {
       code: error.code,
       message: error.message,
-      details: "details" in error ? error.details : undefined
+      details: "details" in error ? error.details : undefined,
     };
   }
   if (error instanceof Error) {
     return {
       code: fallbackCode,
-      message: error.message
+      message: error.message,
     };
   }
   return {
     code: fallbackCode,
     message: "Unknown offscreen bridge error",
-    details: error
+    details: error,
   };
 }
 
 export function createOffscreenRunnerBridge({
   runtimeApi = globalThis.chrome?.runtime,
   createHost = () => createRunnerHostCore({ hostAdapter: createLocalHostAdapter() }),
-  target = RUNNER_OFFSCREEN_TARGET
+  target = RUNNER_OFFSCREEN_TARGET,
 } = {}) {
   const host = createHost();
 
@@ -40,20 +40,20 @@ export function createOffscreenRunnerBridge({
       content: message.content,
       patch: message.patch,
       command: message.command,
-      timeoutMs: message.timeoutMs
+      timeoutMs: message.timeoutMs,
     });
     if (response && typeof response === "object" && response.ok === false) {
       return {
         ok: false,
         error: response.error ?? {
           code: "E_RUNTIME",
-          message: `Execution host operation failed: ${kind}`
-        }
+          message: `Execution host operation failed: ${kind}`,
+        },
       };
     }
     return {
       ok: true,
-      data: response
+      data: response,
     };
   }
 
@@ -67,16 +67,16 @@ export function createOffscreenRunnerBridge({
           ok: true,
           data: {
             ready: true,
-            health: typeof host.getHealth === "function" ? host.getHealth() : null
-          }
+            health: typeof host.getHealth === "function" ? host.getHealth() : null,
+          },
         };
       case "runner.diagnostics":
         return {
           ok: true,
           data: {
             ready: true,
-            health: typeof host.getHealth === "function" ? host.getHealth() : null
-          }
+            health: typeof host.getHealth === "function" ? host.getHealth() : null,
+          },
         };
       case "runner.invoke":
         return {
@@ -84,8 +84,8 @@ export function createOffscreenRunnerBridge({
           data: await host.dispatch({
             kind: "invoke",
             requestId: message.requestId,
-            invocation: message.invocation
-          })
+            invocation: message.invocation,
+          }),
         };
       case "runner.cancel":
         return {
@@ -93,16 +93,16 @@ export function createOffscreenRunnerBridge({
           data: await host.dispatch({
             kind: "cancel",
             requestId: message.requestId,
-            targetRequestId: message.targetRequestId
-          })
+            targetRequestId: message.targetRequestId,
+          }),
         };
       case "runner.health":
         return {
           ok: true,
           data: await host.dispatch({
             kind: "health",
-            requestId: message.requestId
-          })
+            requestId: message.requestId,
+          }),
         };
       case "host.read":
       case "host.write":
@@ -114,8 +114,8 @@ export function createOffscreenRunnerBridge({
           ok: false,
           error: {
             code: "E_RUNTIME",
-            message: `Unknown offscreen runner message: ${message.kind}`
-          }
+            message: `Unknown offscreen runner message: ${message.kind}`,
+          },
         };
     }
   }
@@ -135,7 +135,7 @@ export function createOffscreenRunnerBridge({
         .catch((error) => {
           sendResponse({
             ok: false,
-            error: toBridgeError(error)
+            error: toBridgeError(error),
           });
         });
       return true;
@@ -149,7 +149,7 @@ export function createOffscreenRunnerBridge({
   return {
     host,
     handleMessage,
-    registerRuntimeListener
+    registerRuntimeListener,
   };
 }
 
@@ -162,7 +162,7 @@ export function startOffscreenRunnerBridge(options = {}) {
   const dispose = bridge.registerRuntimeListener();
   return {
     bridge,
-    dispose
+    dispose,
   };
 }
 

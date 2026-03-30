@@ -1,9 +1,9 @@
 import {
-  type RunState,
-  type RunPhase,
+  CapabilityError,
   type QueuedPrompt,
+  type RunPhase,
+  type RunState,
   canTransitionRunPhase,
-  CapabilityError
 } from "@bbl-next/contracts";
 
 export type RunEvent =
@@ -26,7 +26,7 @@ const EVENT_TARGET_PHASE: Record<RunEvent, RunPhase> = {
   compact_done_retry: "running",
   compact_done_idle: "idle",
   done: "stopped",
-  reset: "idle"
+  reset: "idle",
 };
 
 const DEFAULT_MAX_RETRY_ATTEMPTS = 2;
@@ -36,7 +36,7 @@ function createDefaultRunState(sessionId: string): RunState {
     sessionId,
     phase: "idle",
     retry: { active: false, attempt: 0, maxAttempts: DEFAULT_MAX_RETRY_ATTEMPTS },
-    queue: { steer: [], followUp: [] }
+    queue: { steer: [], followUp: [] },
   };
 }
 
@@ -75,7 +75,7 @@ export class RunController {
     if (!canTransitionRunPhase(current.phase, targetPhase)) {
       throw new CapabilityError(
         "E_RUNTIME",
-        `Illegal run phase transition: ${current.phase} → ${targetPhase} (event: ${event})`
+        `Illegal run phase transition: ${current.phase} → ${targetPhase} (event: ${event})`,
       );
     }
 
@@ -95,7 +95,7 @@ export class RunController {
     const prompt: QueuedPrompt = {
       id: generatePromptId(),
       text,
-      enqueuedAt: new Date().toISOString()
+      enqueuedAt: new Date().toISOString(),
     };
     state.queue[behavior].push(prompt);
     return prompt;
@@ -120,7 +120,7 @@ export class RunController {
     state.retry = {
       ...state.retry,
       active: true,
-      attempt: state.retry.attempt + 1
+      attempt: state.retry.attempt + 1,
     };
   }
 

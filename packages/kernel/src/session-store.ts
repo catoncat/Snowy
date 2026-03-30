@@ -1,11 +1,11 @@
 import type {
-  SessionStorage,
-  SessionHeader,
-  SessionEntry,
+  CompactionPayload,
+  MessagePayload,
   SessionContext,
   SessionContextMessage,
-  MessagePayload,
-  CompactionPayload
+  SessionEntry,
+  SessionHeader,
+  SessionStorage,
 } from "@bbl-next/contracts";
 
 function generateSessionId(): string {
@@ -36,20 +36,22 @@ function isCompactionPayload(payload: unknown): payload is CompactionPayload {
   }
 
   const maybe = payload as Partial<CompactionPayload>;
-  const reasonValid = maybe.reason === "overflow" || maybe.reason === "threshold" || maybe.reason === "manual";
+  const reasonValid =
+    maybe.reason === "overflow" || maybe.reason === "threshold" || maybe.reason === "manual";
   const summaryValid = typeof maybe.summary === "string";
   const firstKeptValid = typeof maybe.firstKeptEntryId === "string";
-  const prevSummaryValid = maybe.previousSummary === undefined || typeof maybe.previousSummary === "string";
+  const prevSummaryValid =
+    maybe.previousSummary === undefined || typeof maybe.previousSummary === "string";
   const tokensBeforeValid = typeof maybe.tokensBefore === "number";
   const tokensAfterValid = typeof maybe.tokensAfter === "number";
 
   return (
-    reasonValid
-    && summaryValid
-    && firstKeptValid
-    && prevSummaryValid
-    && tokensBeforeValid
-    && tokensAfterValid
+    reasonValid &&
+    summaryValid &&
+    firstKeptValid &&
+    prevSummaryValid &&
+    tokensBeforeValid &&
+    tokensAfterValid
   );
 }
 
@@ -68,7 +70,7 @@ export class SessionStore {
     const header: SessionHeader = {
       id: generateSessionId(),
       createdAt: new Date().toISOString(),
-      ...opts
+      ...opts,
     };
     await this.#storage.createSession(header);
     return header;
@@ -85,7 +87,7 @@ export class SessionStore {
   async appendEntry(
     sessionId: string,
     type: SessionEntry["type"],
-    payload: unknown
+    payload: unknown,
   ): Promise<SessionEntry> {
     const entries = await this.#storage.getEntries(sessionId);
     const lastEntry = entries.length > 0 ? entries[entries.length - 1] : undefined;
@@ -94,7 +96,7 @@ export class SessionStore {
       parentId: lastEntry?.entryId,
       type,
       timestamp: new Date().toISOString(),
-      payload
+      payload,
     };
     await this.#storage.appendEntry(sessionId, entry);
     return entry;
@@ -137,11 +139,13 @@ export class SessionStore {
         messages.push({
           role: "compactionSummary",
           content: compactionPayload.summary,
-          entryId: compactionEntry.entryId
+          entryId: compactionEntry.entryId,
         });
 
         // Find the index of firstKeptEntryId
-        const firstKeptIdx = entries.findIndex((e) => e.entryId === compactionPayload.firstKeptEntryId);
+        const firstKeptIdx = entries.findIndex(
+          (e) => e.entryId === compactionPayload.firstKeptEntryId,
+        );
         startIdx = firstKeptIdx >= 0 ? firstKeptIdx : lastCompactionIdx + 1;
 
         // Include kept entries (between firstKeptEntryId and compaction entry)
@@ -168,9 +172,7 @@ export class SessionStore {
   }
 }
 
-function entryToContextMessage(
-  entry: SessionEntry
-): SessionContextMessage | null {
+function entryToContextMessage(entry: SessionEntry): SessionContextMessage | null {
   if (entry.type !== "message") return null;
   if (!isMessagePayload(entry.payload)) {
     return null;
@@ -182,6 +184,6 @@ function entryToContextMessage(
     content: payload.text,
     entryId: entry.entryId,
     toolName: payload.toolName,
-    toolCallId: payload.toolCallId
+    toolCallId: payload.toolCallId,
   };
 }

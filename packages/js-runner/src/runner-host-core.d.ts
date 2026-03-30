@@ -2,7 +2,7 @@ import type {
   RunnerHostAdapter,
   RunnerHostHealth,
   RunnerRpcRequest,
-  RunnerRpcResponse
+  RunnerRpcResponse,
 } from "./index.js";
 
 export interface RunnerHostCore {
@@ -10,8 +10,6 @@ export interface RunnerHostCore {
   getHealth(): RunnerHostHealth;
 }
 
-export function createRunnerHostCore(
-  options?: {
-    hostAdapter?: RunnerHostAdapter;
-  }
-): RunnerHostCore;
+export function createRunnerHostCore(options?: {
+  hostAdapter?: RunnerHostAdapter;
+}): RunnerHostCore;
