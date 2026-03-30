@@ -1,28 +1,27 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-30T12:36:17.345Z",
+  "generated_at": "2026-03-30T13:20:01.315Z",
   "repo_root": "/Users/envvar/work/repos/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-056",
-      "issue_path": "docs/backlog/2026-03-30-skill-lifecycle-control-plane-actions-are-not-exposed-beyond-invoke-list.md",
-      "title": "Review: skill lifecycle control-plane actions are not exposed beyond invoke/list",
+      "issue_id": "ISSUE-069",
+      "issue_path": "docs/backlog/2026-03-30-skill-lifecycle-uninstall-control-plane-remains-deferred.md",
+      "title": "Review: skill lifecycle uninstall control-plane action remains deferred",
       "parallel_group": "contracts-core",
       "module_id": "ai-surface-control-plane",
       "module_stage": "secondary",
       "tracking_kind": "follow-up",
       "check_cmd": "bun run check",
       "depends_on": [
-        "ISSUE-055"
+        "ISSUE-056"
       ],
       "write_scope": [
         "packages/contracts/src/index.ts",
-        "packages/contracts/test/contracts.spec.ts",
         "packages/core/src/index.ts",
         "packages/core/test/core.spec.ts",
-        "packages/skill-sdk/src/index.ts",
         "docs/ai-surface-index.md",
-        "docs/backlog/README.md",
+        "docs/skill-lifecycle-version-engine-boundary.md",
+        "docs/skill-runtime-site-capability-redesign-2026-03-29.md",
         "docs/backlog"
       ]
     }
