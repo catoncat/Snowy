@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-30T15:12:12.057Z",
+  "generated_at": "2026-03-30T15:20:28.975Z",
   "repo_root": "/Users/envvar/work/repos/browser-brain-loop-next",
   "entries": [
     {
@@ -43,9 +43,9 @@
       ]
     },
     {
-      "issue_id": "ISSUE-076",
-      "issue_path": "docs/backlog/2026-03-30-follow-up-repo-wide-biome-baseline-drift-is-blocking-bun-run-check-again.md",
-      "title": "Follow-up: repo-wide Biome baseline drift is blocking bun run check again",
+      "issue_id": "ISSUE-078",
+      "issue_path": "docs/backlog/2026-03-30-follow-up-residual-kernel-runtime-biome-drift-remains-outside-claimed-scopes.md",
+      "title": "Follow-up: residual kernel-runtime Biome drift remains outside claimed scopes",
       "parallel_group": "sdk-docs",
       "module_id": "repo-workflow-dx",
       "module_stage": "deferred",
@@ -53,23 +53,23 @@
       "check_cmd": "bun run check",
       "depends_on": [],
       "write_scope": [
-        "package.json",
-        "biome.json",
-        "tsconfig.json",
-        "vitest.config.ts",
-        "packages/browser-vfs/package.json",
-        "packages/contracts/package.json",
-        "packages/core/package.json",
-        "packages/js-runner/package.json",
-        "packages/site-runtime/package.json",
-        "packages/skill-sdk/package.json",
-        "apps/mv3-shell/manifest.json",
-        ".agents/skills/auto-claim-issues-next/scripts/claim-issue.test.ts",
-        ".agents/skills/auto-claim-issues-next/scripts/module-ledger.ts",
-        ".agents/skills/next-batch-planner/scripts/create-review-issue.ts",
-        ".agents/skills/next-batch-planner/scripts/create-review-issue.test.ts",
-        ".codex/hooks/workflow-ticket.test.ts",
-        ".vscode/mcp.json"
+        "apps/mv3-shell/src/local-host-adapter.js",
+        "apps/mv3-shell/src/offscreen.js",
+        "apps/mv3-shell/src/page-hook.js",
+        "packages/browser-vfs/src/index.ts",
+        "packages/browser-vfs/test/browser-vfs.spec.ts",
+        "packages/js-runner/src/runner-host-core.d.ts",
+        "packages/kernel/src/compaction-manager.ts",
+        "packages/kernel/src/in-memory-session-storage.ts",
+        "packages/kernel/src/loop-engine.ts",
+        "packages/kernel/src/run-controller.ts",
+        "packages/kernel/src/session-store.ts",
+        "packages/kernel/src/vfs-session-storage.ts",
+        "packages/kernel/test/compaction-manager.spec.ts",
+        "packages/kernel/test/loop-engine.spec.ts",
+        "packages/kernel/test/run-controller.spec.ts",
+        "packages/kernel/test/session-store.spec.ts",
+        "packages/kernel/test/vfs-session-storage.spec.ts"
       ]
     }
   ]

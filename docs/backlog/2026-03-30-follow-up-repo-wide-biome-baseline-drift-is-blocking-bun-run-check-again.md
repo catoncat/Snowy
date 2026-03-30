@@ -1,7 +1,7 @@
 ---
 id: ISSUE-076
 title: "Follow-up: repo-wide Biome baseline drift is blocking bun run check again"
-status: open
+status: done
 priority: p1
 source: "current workflow concurrency correction 2026-03-30"
 created: 2026-03-30
@@ -56,3 +56,18 @@ check_cmd: "bun run check"
 - 当前仓库列出的 repo-wide Biome drift 文件被统一收口，bun run lint 不再因既有格式债失败
 - 相关 workflow scripts、hook tests、package manifests 与根配置通过同一套格式规则，不再反复回流
 - bun run check 恢复为可作为多数 slice 默认门禁的可信命令，而不是长期例外说明
+
+## Sub Issues
+
+- `ISSUE-078` `Follow-up: residual kernel-runtime Biome drift remains outside claimed scopes`
+
+## 工作总结
+
+- 已对当前 `write_scope` 的 17 个根配置、package manifest、workflow script 与 hook 文件执行 `bunx biome check --write --unsafe ...`，并通过同一批文件的 `bunx biome check ...` 复验。
+- 已新增 `ISSUE-078`，把当前 active issues 之外仍未覆盖的 17 个 kernel/runtime 残余 drift 文件单独建票，避免继续把全局 lint 噪音挂在多数 slice 上。
+- 已运行 `bun run check`；当前仍失败，但失败集合已收缩到 `write_scope` 外文件，并已有明确去向：`ISSUE-067` 覆盖 `docs/*` 与 `packages/js-runner/src/index.ts`/`test`，`ISSUE-077` 覆盖 `packages/skill-sdk/*`，`ISSUE-078` 覆盖剩余未认领的 kernel/runtime 漂移。
+- 当前 slice 的完成结论是：本 issue 负责的基线文件已拉平，仓库级 `bun run check` 的剩余不可信部分已被拆分成显式 follow-up，而不是继续作为隐性 repo noise。
+
+## 相关 commits
+
+- `8d996d2` `chore(dx): rebaseline biome workflow files`
