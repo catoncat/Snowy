@@ -55,18 +55,18 @@ claimed_at: 2026-03-30T02:30:18.859Z
 
 ## 工作总结
 
-### 完成内容
+- 新增 `docs/browser-automation-cutover-boundary.md`，把旧 browser automation 能力收口成 Tier 1 / 2 / 3 cutover boundary，并明确 `page.press_key`、`page.screenshot`、`tabs.navigate` 是 Tier 1 descriptor 缺口。
+- 修正了 cutover 文档里与 ISSUE-045 决策冲突的表述：当前阶段默认沿用 `SiteSkillRuntime` / MV3 独立路径，不要求先补 `page.*` / `tabs.*` FamilyProvider bridge。
+- 同步了 `docs/cutover-readiness-criteria.md` 与 `docs/legacy-to-vnext-migration-matrix.md`，让 Soft Gate 2、migration matrix 与 cutover boundary 口径一致。
+- 新增 follow-up backlog：`ISSUE-057`（page Tier 1 descriptor/runtime path）和 `ISSUE-058`（`tabs.navigate` active-tab runtime path），避免结论只停在口头。
+- 检查结果：`bun run check` 被 write scope 外的既有 TypeScript 问题阻塞（`.agents/skills/auto-claim-issues-next/scripts/ticket-machine*.ts` 与测试）；本次相关文档已通过 `git diff --check`。
+- 残留风险：Tier 1 仍停留在边界裁决与 backlog 分解阶段，真正的 descriptor / runtime path 实现要等 `ISSUE-037`、`ISSUE-057`、`ISSUE-058` 收口。
 
-1. **创建 `docs/browser-automation-cutover-boundary.md`**
-   - 旧仓 ~39 tools 全面分析（页面交互、DOM 检查、Tab 管理、视觉捕获、自动化控制、验证、人工干预）
-   - 三层裁决：
-     - **Tier 1 (cutover 前必需)**: page.query/click/fill/press_key/screenshot + tabs.navigate/get_active + verify + intervention（8 原语 + verify + intervention）
-     - **Tier 2 (cutover 后可补)**: scroll, select_option, hover, tabs.create/close, fetch_with_session, background mode, highlight
-     - **Tier 3 (暂不纳入)**: stealth tab, computer mode, batch download, fill_form, lease policy
-   - 新增 descriptor 需求：page.press_key, page.screenshot, tabs.navigate
-   - 实现路径映射到具体 package
+## Sub Issues
 
-2. **更新 migration-matrix**: browser automation `not-started` → `review-gap`
-3. **更新 parity-dashboard**: browser automation parity `red` → `yellow`
-4. **更新 cutover-readiness-criteria**: Soft Gate 2 标注"边界已裁决"
-5. **Follow-up 确认**: 现有 ISSUE-037/040/041 已覆盖全部 Tier 1 实现需求，无需新建 issue
+- `ISSUE-057` Follow-up: Tier 1 page automation descriptors and runtime path are still missing
+- `ISSUE-058` Follow-up: tabs.navigate active-tab automation path is still missing
+
+## 相关 commits
+
+- `51f39a7` `docs: lock browser automation cutover boundary`
