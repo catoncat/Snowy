@@ -1,11 +1,11 @@
 ---
 id: ISSUE-059
 title: "kernel: VFS-backed SessionStorage adapter"
-status: open
+status: done
 priority: p1
 source: review
 created: 2026-03-30
-assignee: unassigned
+assignee: copilot-opus
 tags:
   - review
   - follow-up

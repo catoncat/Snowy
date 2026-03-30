@@ -3,13 +3,7 @@ import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import manifest from "../manifest.json";
 // @ts-ignore source JS module has no declaration file yet
-import {
-  RUNNER_BACKGROUND_TARGET,
-  RUNNER_OFFSCREEN_DOCUMENT_PATH,
-  RUNNER_OFFSCREEN_REASONS,
-  createBackgroundRunnerBridge,
-  createPageHookBridge,
-} from "../src/background.js";
+import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCREEN_REASONS, createBackgroundRunnerBridge, createPageHookBridge } from "../src/background.js";
 // @ts-ignore source JS module has no declaration file yet
 import { createOffscreenRunnerBridge } from "../src/offscreen.js";
 
@@ -99,6 +93,12 @@ function createChromeHarness({
   const messageBus = createMessageBus();
   let hasOffscreen = false;
   let disposeOffscreen: null | (() => void) = null;
+  let currentActiveTab = activeTab
+    ? {
+        ...activeTab,
+        active: activeTab.active ?? true,
+      }
+    : null;
   const hostFactory = createHost ?? (host ? () => host : undefined);
   const runtimeApi = {
     ...messageBus,
@@ -127,15 +127,27 @@ function createChromeHarness({
 
   const tabsApi = {
     query: vi.fn(async () =>
-      activeTab
+      currentActiveTab
         ? [
             {
-              ...activeTab,
-              active: activeTab.active ?? true,
+              ...currentActiveTab,
             },
           ]
         : [],
     ),
+    update: vi.fn(async (tabId: number, updateProperties: { url?: string }) => {
+      if (!currentActiveTab || currentActiveTab.id !== tabId) {
+        throw new Error(`Active tab ${tabId} is unavailable`);
+      }
+      currentActiveTab = {
+        ...currentActiveTab,
+        ...(typeof updateProperties.url === "string" ? { url: updateProperties.url } : {}),
+        active: true,
+      };
+      return {
+        ...currentActiveTab,
+      };
+    }),
   };
 
   const offscreenApi = {
@@ -1098,6 +1110,87 @@ describe("mv3-shell manifest", () => {
       lastFocusedWindow: true,
     });
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
+    dispose();
+    harness.cleanup();
+  });
+
+  it("returns active tab metadata and navigates the active tab through the MV3 bridge", async () => {
+    const harness = createChromeHarness({
+      activeTab: {
+        id: 21,
+        url: "https://fixture.test/home",
+        title: "Fixture Home",
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "tabs.get_active",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        tabId: 21,
+        url: "https://fixture.test/home",
+        active: true,
+        title: "Fixture Home",
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "tabs.navigate",
+        url: "https://fixture.test/settings",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        tabId: 21,
+        url: "https://fixture.test/settings",
+        active: true,
+        title: "Fixture Home",
+      },
+    });
+
+    expect(harness.tabsApi.update).toHaveBeenCalledWith(21, {
+      url: "https://fixture.test/settings",
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("rejects tabs.navigate when active tab metadata is unavailable", async () => {
+    const harness = createChromeHarness({
+      activeTab: null,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "tabs.navigate",
+        url: "https://fixture.test/settings",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_BAD_INPUT",
+        message: "tabs.navigate requires an active tab with url metadata",
+      },
+    });
+
     dispose();
     harness.cleanup();
   });
