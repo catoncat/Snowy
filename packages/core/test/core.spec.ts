@@ -130,6 +130,7 @@ describe("core", () => {
         id: "tabs.navigate",
         sideEffects: "writes",
         supportsVerify: true,
+        exportable: false,
         inputSchema: {
           required: ["url"],
         },
@@ -169,6 +170,7 @@ describe("core", () => {
         id: "page.press_key",
         sideEffects: "writes",
         supportsVerify: true,
+        exportable: false,
         inputSchema: {
           required: ["key"],
         },

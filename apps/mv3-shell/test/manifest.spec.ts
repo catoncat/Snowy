@@ -1552,6 +1552,68 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("mv3 gate: tabs.navigate invalid input does not crash the bridge", async () => {
+    const harness = createChromeHarness({
+      activeTab: {
+        id: 21,
+        url: "https://fixture.test/home",
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "tabs.navigate",
+        url: "",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_BAD_INPUT",
+        message: "tabs.navigate requires a non-empty url",
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("mv3 gate: page.screenshot invalid request does not crash the bridge", async () => {
+    const harness = createChromeHarness({
+      activeTab: {
+        id: 21,
+        url: "https://fixture.test/home",
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "page.screenshot",
+        format: "gif",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_BAD_INPUT",
+        message: "page.screenshot format must be png or jpeg",
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("updates config via config.update and keeps runtime.bootstrap in sync", async () => {
     const harness = createChromeHarness({
       host: {

@@ -862,7 +862,7 @@ export function createBackgroundRunnerBridge({
 
   async function navigateActiveTab({ url } = {}) {
     if (typeof url !== "string" || !url.trim()) {
-      return invalidTabsAutomation("tabs.navigate requires a non-empty url");
+      return invalidPageAutomation("tabs.navigate requires a non-empty url");
     }
     if (!chromeApi?.tabs?.update) {
       return {
