@@ -12,6 +12,9 @@ tags:
   - core
   - permissions
   - trace
+module_id: ai-surface-control-plane
+module_stage: secondary
+tracking_kind: gap
 kind: slice
 epic: EPIC-contracts-core
 parallel_group: contracts-core

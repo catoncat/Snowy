@@ -1,16 +1,22 @@
 ---
 id: ISSUE-050
-title: 根 README quickstart + 包级 README 模板
+title: "根 README quickstart + 包级 README 模板"
 status: done
 priority: p2
-source: docs/reviews/2026-03-29-docs-dx-review.md § 1.2 / § 2.1
+source: "docs/reviews/2026-03-29-docs-dx-review.md § 1.2 / § 2.1"
 created: 2026-03-29
 assignee: unassigned
-tags: [dx, docs]
+tags:
+  - dx
+  - docs
+module_id: repo-workflow-dx
+module_stage: deferred
+tracking_kind: doc-debt
 kind: slice
 epic: EPIC-dx-hardening
 parallel_group: sdk-docs
-depends_on: [ISSUE-010]
+depends_on:
+  - ISSUE-010
 write_scope:
   - README.md
   - packages/contracts/README.md

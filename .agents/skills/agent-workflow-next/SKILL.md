@@ -23,13 +23,14 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 4. `docs/document-system-contract.md`
 5. `docs/start-here.md`
 6. `docs/locked-decisions-2026-03-29.md`
-7. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-8. `docs/kernel-skeleton-design.md`
-9. `docs/ai-surface-index.md`
-10. `docs/v0-slice.md`
-11. `docs/legacy-reference-map.md`
-12. `docs/backlog/README.md`
-13. `docs/multi-agent-workflow.md`
+7. `docs/module-tracking-ledger.json`
+8. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+9. `docs/kernel-skeleton-design.md`
+10. `docs/ai-surface-index.md`
+11. `docs/v0-slice.md`
+12. `docs/legacy-reference-map.md`
+13. `docs/backlog/README.md`
+14. `docs/multi-agent-workflow.md`
 
 ## 状态判断顺序
 
@@ -62,10 +63,10 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 - 如果不在 canonical workspace，只做 claim 判断并把结论带回
 - claim 后进入实现 loop
 - 若同时存在多个 claimable issue，默认顺序：
-  1. `kernel p0`
-  2. operability / diagnostics
-  3. browser automation / site-runtime
-  4. DX / docs / 测试补洞
+  1. module ledger 的 `mainline`
+  2. module ledger 的 `secondary`
+  3. module ledger 的 `deferred`
+  4. 同 stage 内再看 module order 和 issue priority
 
 ### 状态 D：没有 `open`，但还有 `in-progress`
 
@@ -112,7 +113,7 @@ bun run workflow:claim:preview -- --name=<agent-name>
 bun run workflow:claim -- --name=<agent-name>
 bun run workflow:claim:json -- --name=<agent-name>
 
-bun run workflow:new-review-issue -- --title=... --group=... --epic=... --acceptance-ref=... --scope=... --accept=...
+bun run workflow:new-review-issue -- --module=... --title=... --epic=... --acceptance-ref=... --scope=... --accept=...
 bun run workflow:plan:preview
 bun run workflow:plan
 ```

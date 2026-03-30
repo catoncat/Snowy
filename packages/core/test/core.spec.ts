@@ -134,6 +134,10 @@ describe("core", () => {
       {
         id: "runtime.capture_diagnostics",
         description: "Capture a read-only runtime diagnostics snapshot without triggering recovery"
+      },
+      {
+        id: "runtime.clear_error",
+        description: "Clear the current runtime error state, idempotent if no error is present"
       }
     ]);
   });

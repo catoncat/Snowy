@@ -9,6 +9,9 @@ assignee: agent
 tags:
   - mv3-shell
   - js-runner
+module_id: execution-host-bridge
+module_stage: secondary
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-js-runner
 parallel_group: mv3-shell

@@ -41,6 +41,7 @@
 当前代表：
 
 - `docs/source-of-truth-map.md`
+- `docs/module-tracking-ledger.json`
 - `docs/agent-bootstrap-context-pack.md`
 - `docs/multi-agent-workflow.md`
 - `docs/ai-surface-index.md`
@@ -81,8 +82,9 @@
 
 1. `AGENTS.md`
 2. `docs/source-of-truth-map.md`
-3. `docs/agent-bootstrap-context-pack.md`
-4. 当前 issue
+3. `docs/module-tracking-ledger.json`
+4. `docs/agent-bootstrap-context-pack.md`
+5. 当前 issue
 
 如果要改架构层，再读：
 
@@ -113,9 +115,10 @@
 
 1. `docs/ai-surface-index.md`
 2. `docs/agent-bootstrap-context-pack.md`
-3. `docs/legacy-to-vnext-migration-matrix.md`
-4. `docs/migration-parity-dashboard.md`
-5. `docs/cutover-readiness-criteria.md`
+3. `docs/module-tracking-ledger.json`
+4. `docs/legacy-to-vnext-migration-matrix.md`
+5. `docs/migration-parity-dashboard.md`
+6. `docs/cutover-readiness-criteria.md`
 
 ### 何时可以不改文档
 

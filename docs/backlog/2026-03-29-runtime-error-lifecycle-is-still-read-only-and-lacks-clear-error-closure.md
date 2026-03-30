@@ -1,11 +1,11 @@
 ---
 id: ISSUE-043
 title: "Review: runtime error lifecycle is still read-only and lacks clear-error closure"
-status: open
+status: done
 priority: p1
 source: "next-batch operability planning 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: copilot-opus
 tags:
   - review
   - mv3-shell
@@ -13,6 +13,9 @@ tags:
   - runtime
   - error
   - operability
+module_id: observability-audit
+module_stage: mainline
+tracking_kind: gap
 kind: slice
 epic: EPIC-mv3-shell
 parallel_group: mv3-shell

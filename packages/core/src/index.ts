@@ -478,6 +478,12 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
         }
       }
     }),
+    catalogEntry({
+      id: "runtime.clear_error", family: "runtime", operation: "clear_error",
+      risk: "low", sideEffects: "writes", permissions: ["runtime.clear_error"],
+      description: "Clear the current runtime error state, idempotent if no error is present",
+      inputSchema: { type: "object" }
+    }),
   ],
   hosts: [
     catalogEntry({

@@ -11,6 +11,9 @@ tags:
   - skill-sdk
   - lifecycle
   - versioning
+module_id: skill-runtime-sdk-studio
+module_stage: deferred
+tracking_kind: gap
 kind: slice
 epic: EPIC-skill-lifecycle
 parallel_group: sdk-docs

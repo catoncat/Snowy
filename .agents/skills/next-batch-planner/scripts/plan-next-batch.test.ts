@@ -16,6 +16,40 @@ function makeRepo() {
   return repoRoot;
 }
 
+function writeModuleLedger(
+  repoRoot: string,
+  modules: Array<{
+    module_id: string;
+    title: string;
+    tracking_order: number;
+    stage: "mainline" | "secondary" | "deferred";
+    status?: "shipped" | "partial" | "not-started";
+    default_parallel_group: string;
+  }>
+) {
+  writeFileSync(
+    path.join(repoRoot, "docs", "module-tracking-ledger.json"),
+    JSON.stringify(
+      {
+        schema_version: 1,
+        updated_at: "2026-03-29",
+        modules: modules.map((module) => ({
+          ...module,
+          status: module.status ?? "partial",
+          summary: module.title,
+          depends_on_modules: [],
+          code_roots: ["packages/"],
+          source_docs: ["docs/start-here.md"],
+          cutover_gate: null
+        }))
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+}
+
 function writeIssue(repoRoot: string, filename: string, frontmatter: string, body = "body\n") {
   writeFileSync(
     path.join(repoRoot, "docs", "backlog", filename),
@@ -34,26 +68,45 @@ afterEach(() => {
 });
 
 describe("plan-next-batch", () => {
-  it("builds a new planning document from open issues", () => {
+  it("builds a planning document grouped by tracked modules", () => {
     const repoRoot = makeRepo();
+    writeModuleLedger(repoRoot, [
+      {
+        module_id: "kernel",
+        title: "Kernel",
+        tracking_order: 10,
+        stage: "mainline",
+        default_parallel_group: "kernel"
+      },
+      {
+        module_id: "browser-vfs",
+        title: "BrowserVFS",
+        tracking_order: 80,
+        stage: "deferred",
+        default_parallel_group: "browser-vfs"
+      }
+    ]);
     writeIssue(
       repoRoot,
       "2026-03-29-alpha.md",
       `---
 id: ISSUE-011
-title: "Review: ctx permission and trace contract drift"
+title: "Kernel B-1"
 status: open
 priority: p0
 source: review
 created: 2026-03-29
 assignee: unassigned
-tags: [review, core]
+tags: [kernel]
+module_id: kernel
+module_stage: mainline
+tracking_kind: mainline
 kind: slice
-epic: EPIC-contracts-core
-parallel_group: contracts-core
+epic: EPIC-kernel
+parallel_group: kernel
 depends_on: []
 write_scope:
-  - packages/core/src/index.ts
+  - packages/kernel/src/index.ts
 acceptance_ref: project_plan.md
 check_cmd: bun run check
 ---`
@@ -63,13 +116,16 @@ check_cmd: bun run check
       "2026-03-29-beta.md",
       `---
 id: ISSUE-014
-title: "Review: BrowserVFS canonical skill URI drift"
+title: "BrowserVFS gap"
 status: open
 priority: p1
 source: review
 created: 2026-03-29
 assignee: unassigned
 tags: [review, browser-vfs]
+module_id: browser-vfs
+module_stage: deferred
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-browser-vfs
 parallel_group: browser-vfs
@@ -94,33 +150,44 @@ check_cmd: bun run check
       throw new Error(`expected preview result, got ${result.kind}`);
     }
     expect(result.issueCount).toBe(2);
-    expect(result.outputPath).toBe("docs/next-development-slices-2026-03-30.md");
-    expect(result.markdown).toContain("Batch 1");
-    expect(result.markdown).toContain("ISSUE-011");
-    expect(result.markdown).toContain("contracts-core");
-    expect(result.markdown).toContain("browser-vfs");
+    expect(result.outputPath).toBe("docs/next-development-slices-2026-03-30-batch-1.md");
+    expect(result.markdown).toContain("Kernel (`kernel`)");
+    expect(result.markdown).toContain("BrowserVFS (`browser-vfs`)");
+    expect(result.moduleCoverage).toHaveLength(2);
   });
 
   it("refuses to plan a new batch while issues are still in progress", () => {
     const repoRoot = makeRepo();
+    writeModuleLedger(repoRoot, [
+      {
+        module_id: "kernel",
+        title: "Kernel",
+        tracking_order: 10,
+        stage: "mainline",
+        default_parallel_group: "kernel"
+      }
+    ]);
     writeIssue(
       repoRoot,
       "2026-03-29-active.md",
       `---
 id: ISSUE-012
-title: "Review: site runtime active-tab boundary regression"
+title: "Kernel B-2"
 status: in-progress
 priority: p0
 source: review
 created: 2026-03-29
-assignee: agent
-tags: [review, site-runtime]
+assignee: atlas
+tags: [kernel]
+module_id: kernel
+module_stage: mainline
+tracking_kind: mainline
 kind: slice
-epic: EPIC-site-runtime
-parallel_group: site-runtime
+epic: EPIC-kernel
+parallel_group: kernel
 depends_on: []
 write_scope:
-  - packages/site-runtime/src/index.ts
+  - packages/kernel/src/run-controller.ts
 acceptance_ref: project_plan.md
 check_cmd: bun run check
 ---`
@@ -143,25 +210,37 @@ check_cmd: bun run check
 
   it("writes the planning document when not in dry-run mode", () => {
     const repoRoot = makeRepo();
+    writeModuleLedger(repoRoot, [
+      {
+        module_id: "execution-host-bridge",
+        title: "Execution Host",
+        tracking_order: 60,
+        stage: "secondary",
+        default_parallel_group: "js-runner"
+      }
+    ]);
     writeIssue(
       repoRoot,
       "2026-03-29-gamma.md",
       `---
 id: ISSUE-013
-title: "Review: phase 4 real injection chain is still mocked"
+title: "Host adapter follow-up"
 status: open
 priority: p1
 source: review
 created: 2026-03-29
 assignee: unassigned
-tags: [review, mv3-shell]
+tags: [review, js-runner]
+module_id: execution-host-bridge
+module_stage: secondary
+tracking_kind: gap
 kind: slice
-epic: EPIC-site-runtime
-parallel_group: mv3-shell
+epic: EPIC-js-runner
+parallel_group: js-runner
 depends_on:
   - ISSUE-012
 write_scope:
-  - apps/mv3-shell/src/page-hook.js
+  - packages/js-runner/src/index.ts
 acceptance_ref: project_plan.md
 check_cmd: bun run check
 ---`
@@ -178,7 +257,66 @@ check_cmd: bun run check
     if (result.kind !== "planned") {
       throw new Error(`expected planned result, got ${result.kind}`);
     }
-    const outputFile = path.join(repoRoot, "docs", "next-development-slices-2026-03-30.md");
+    const outputFile = path.join(repoRoot, "docs", "next-development-slices-2026-03-30-batch-1.md");
     expect(readFileSync(outputFile, "utf8")).toContain("ISSUE-013");
+  });
+
+  it("returns a coverage gap when a tracked non-deferred module has no live issue", () => {
+    const repoRoot = makeRepo();
+    writeModuleLedger(repoRoot, [
+      {
+        module_id: "kernel",
+        title: "Kernel",
+        tracking_order: 10,
+        stage: "mainline",
+        default_parallel_group: "kernel"
+      },
+      {
+        module_id: "observability-audit",
+        title: "Observability",
+        tracking_order: 20,
+        stage: "mainline",
+        default_parallel_group: "mv3-shell"
+      }
+    ]);
+    writeIssue(
+      repoRoot,
+      "2026-03-29-kernel.md",
+      `---
+id: ISSUE-051
+title: "Kernel B-1"
+status: open
+priority: p0
+source: review
+created: 2026-03-29
+assignee: unassigned
+tags: [kernel]
+module_id: kernel
+module_stage: mainline
+tracking_kind: mainline
+kind: slice
+epic: EPIC-kernel
+parallel_group: kernel
+depends_on: []
+write_scope:
+  - packages/kernel/src/
+acceptance_ref: project_plan.md
+check_cmd: bun run check
+---`
+    );
+
+    const result = planNextBatch({
+      repoRoot,
+      date: "2026-03-30",
+      dryRun: true,
+      json: false
+    });
+
+    expect(result.kind).toBe("blocked");
+    if (result.kind !== "blocked") {
+      throw new Error(`expected blocked result, got ${result.kind}`);
+    }
+    expect(result.reason).toContain("coverage");
+    expect(result.missingModules.map((item) => item.moduleId)).toEqual(["observability-audit"]);
   });
 });

@@ -10,6 +10,9 @@ tags:
   - review
   - mcp
   - export
+module_id: ai-surface-control-plane
+module_stage: secondary
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-contracts-core
 parallel_group: contracts-core

@@ -9,6 +9,9 @@ assignee: agent
 tags:
   - site-runtime
   - fixture
+module_id: site-runtime-browser-automation
+module_stage: secondary
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-site-runtime
 parallel_group: site-runtime

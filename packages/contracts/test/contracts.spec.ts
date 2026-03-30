@@ -127,7 +127,8 @@ describe("contracts", () => {
     expect(RUNTIME_CONTROL_PLANE_ACTIONS).toEqual([
       "runtime.list_capabilities",
       "runtime.get_capability",
-      "runtime.capture_diagnostics"
+      "runtime.capture_diagnostics",
+      "runtime.clear_error"
     ]);
   });
 

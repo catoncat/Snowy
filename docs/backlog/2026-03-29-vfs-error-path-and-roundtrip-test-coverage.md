@@ -1,12 +1,18 @@
 ---
 id: ISSUE-047
-title: VFS error path 与 round-trip 操作测试补全
+title: "VFS error path 与 round-trip 操作测试补全"
 status: done
 priority: p1
-source: docs/reviews/2026-03-29-code-engineering-quality-review.md § 3.3
+source: "docs/reviews/2026-03-29-code-engineering-quality-review.md § 3.3"
 created: 2026-03-29
 assignee: unassigned
-tags: [test-quality, browser-vfs, error-path]
+tags:
+  - test-quality
+  - browser-vfs
+  - error-path
+module_id: browser-vfs
+module_stage: deferred
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-test-hardening
 parallel_group: browser-vfs
@@ -14,7 +20,7 @@ depends_on: []
 write_scope:
   - packages/browser-vfs/test/browser-vfs.spec.ts
 acceptance_ref: docs/reviews/2026-03-29-code-engineering-quality-review.md
-check_cmd: bun run test -- packages/browser-vfs
+check_cmd: "bun run test -- packages/browser-vfs"
 ---
 
 ## 问题

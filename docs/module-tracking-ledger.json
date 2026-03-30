@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-03-29",
+  "modules": [
+    {
+      "module_id": "kernel",
+      "title": "Browser-side Kernel",
+      "summary": "Session, run queue, loop, compaction, and the future browser-side brain mainline.",
+      "tracking_order": 10,
+      "stage": "mainline",
+      "status": "partial",
+      "depends_on_modules": [],
+      "code_roots": [
+        "packages/kernel/",
+        "packages/contracts/src/index.ts"
+      ],
+      "source_docs": [
+        "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md",
+        "docs/kernel-skeleton-design.md"
+      ],
+      "cutover_gate": null,
+      "default_parallel_group": "kernel"
+    },
+    {
+      "module_id": "observability-audit",
+      "title": "Observability And Audit",
+      "summary": "Diagnostics, audit tail, runtime history, and operator-facing runtime visibility.",
+      "tracking_order": 20,
+      "stage": "mainline",
+      "status": "partial",
+      "depends_on_modules": [
+        "kernel"
+      ],
+      "code_roots": [
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
+        "apps/mv3-shell/src/background.js"
+      ],
+      "source_docs": [
+        "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md",
+        "docs/cutover-readiness-criteria.md"
+      ],
+      "cutover_gate": "Gate F",
+      "default_parallel_group": "mv3-shell"
+    },
+    {
+      "module_id": "intervention-handoff",
+      "title": "Intervention And Handoff",
+      "summary": "Human intervention, handoff, and confirm-oriented control flow around automation and runtime failures.",
+      "tracking_order": 30,
+      "stage": "mainline",
+      "status": "not-started",
+      "depends_on_modules": [
+        "kernel",
+        "observability-audit"
+      ],
+      "code_roots": [
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
+        "packages/site-runtime/src/index.ts"
+      ],
+      "source_docs": [
+        "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md",
+        "docs/cutover-readiness-criteria.md"
+      ],
+      "cutover_gate": "Soft Gate 3",
+      "default_parallel_group": "site-runtime"
+    },
+    {
+      "module_id": "ai-surface-control-plane",
+      "title": "AI Surface Control Plane",
+      "summary": "Product control-plane surfaces across runtime, config, skills, hosts, and northbound action/resource boundaries.",
+      "tracking_order": 40,
+      "stage": "secondary",
+      "status": "partial",
+      "depends_on_modules": [
+        "kernel"
+      ],
+      "code_roots": [
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
+        "docs/ai-native-capability-surface-design.md"
+      ],
+      "source_docs": [
+        "docs/ai-native-capability-surface-design.md",
+        "docs/ai-surface-index.md"
+      ],
+      "cutover_gate": "Gate G",
+      "default_parallel_group": "contracts-core"
+    },
+    {
+      "module_id": "site-runtime-browser-automation",
+      "title": "Site Runtime And Browser Automation",
+      "summary": "Site runtime, page/tabs/site automation, background mode, downloads, screenshots, and cutover boundaries.",
+      "tracking_order": 50,
+      "stage": "secondary",
+      "status": "partial",
+      "depends_on_modules": [
+        "kernel",
+        "intervention-handoff"
+      ],
+      "code_roots": [
+        "packages/site-runtime/",
+        "apps/mv3-shell/src/page-hook.js",
+        "apps/mv3-shell/src/background.js"
+      ],
+      "source_docs": [
+        "docs/cutover-readiness-criteria.md",
+        "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md"
+      ],
+      "cutover_gate": "Soft Gate 2",
+      "default_parallel_group": "site-runtime"
+    },
+    {
+      "module_id": "execution-host-bridge",
+      "title": "Execution Host And Bridge",
+      "summary": "JS runner, host substrate, offscreen bridge, MV3 runtime wiring, and local or remote execution host paths.",
+      "tracking_order": 60,
+      "stage": "secondary",
+      "status": "partial",
+      "depends_on_modules": [
+        "kernel"
+      ],
+      "code_roots": [
+        "packages/js-runner/",
+        "apps/mv3-shell/src/offscreen.js",
+        "apps/mv3-shell/src/background.js"
+      ],
+      "source_docs": [
+        "docs/migration-parity-dashboard.md",
+        "docs/cutover-readiness-criteria.md"
+      ],
+      "cutover_gate": "Gate C",
+      "default_parallel_group": "js-runner"
+    },
+    {
+      "module_id": "provider-profile-routing",
+      "title": "Provider And Profile Routing",
+      "summary": "Provider registry, profile routing, escalation policy, and model-selection control flow.",
+      "tracking_order": 70,
+      "stage": "deferred",
+      "status": "not-started",
+      "depends_on_modules": [
+        "kernel",
+        "ai-surface-control-plane"
+      ],
+      "code_roots": [
+        "packages/core/src/index.ts",
+        "packages/kernel/"
+      ],
+      "source_docs": [
+        "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md",
+        "docs/legacy-to-vnext-migration-matrix.md"
+      ],
+      "cutover_gate": null,
+      "default_parallel_group": "contracts-core"
+    },
+    {
+      "module_id": "browser-vfs",
+      "title": "BrowserVFS",
+      "summary": "mem:// semantics, IndexedDB persistence, package discovery, retention, and VFS error-path correctness.",
+      "tracking_order": 80,
+      "stage": "deferred",
+      "status": "partial",
+      "depends_on_modules": [],
+      "code_roots": [
+        "packages/browser-vfs/"
+      ],
+      "source_docs": [
+        "docs/legacy-to-vnext-migration-matrix.md",
+        "docs/migration-parity-dashboard.md"
+      ],
+      "cutover_gate": "Gate B",
+      "default_parallel_group": "browser-vfs"
+    },
+    {
+      "module_id": "skill-runtime-sdk-studio",
+      "title": "Skill Runtime, SDK, And Studio",
+      "summary": "Executable skill packaging, lifecycle, SDK authoring, and future studio surfaces.",
+      "tracking_order": 90,
+      "stage": "deferred",
+      "status": "partial",
+      "depends_on_modules": [
+        "ai-surface-control-plane"
+      ],
+      "code_roots": [
+        "packages/skill-sdk/",
+        "docs/skill-authoring-guide.md",
+        "docs/skill-package-convention.md"
+      ],
+      "source_docs": [
+        "docs/legacy-to-vnext-migration-matrix.md",
+        "docs/cutover-readiness-criteria.md"
+      ],
+      "cutover_gate": "Soft Gate 1",
+      "default_parallel_group": "sdk-docs"
+    },
+    {
+      "module_id": "repo-workflow-dx",
+      "title": "Repo Workflow And DX",
+      "summary": "Workflow guardrails, documentation hygiene, CI, lint, and backlog planning ergonomics for parallel agents.",
+      "tracking_order": 100,
+      "stage": "deferred",
+      "status": "partial",
+      "depends_on_modules": [],
+      "code_roots": [
+        ".agents/skills/",
+        "docs/",
+        ".github/workflows/"
+      ],
+      "source_docs": [
+        "docs/source-of-truth-map.md",
+        "docs/multi-agent-workflow.md"
+      ],
+      "cutover_gate": null,
+      "default_parallel_group": "sdk-docs"
+    }
+  ]
+}

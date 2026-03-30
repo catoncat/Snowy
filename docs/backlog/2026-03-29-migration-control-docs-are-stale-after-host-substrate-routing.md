@@ -10,6 +10,9 @@ tags:
   - review
   - docs
   - host
+module_id: repo-workflow-dx
+module_stage: deferred
+tracking_kind: doc-debt
 kind: slice
 epic: EPIC-sdk-docs
 parallel_group: sdk-docs

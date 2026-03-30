@@ -10,6 +10,9 @@ tags:
   - review
   - core
   - maintainability
+module_id: repo-workflow-dx
+module_stage: deferred
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-contracts-core
 parallel_group: contracts-core

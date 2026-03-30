@@ -10,6 +10,9 @@ tags:
   - review
   - core
   - browser-vfs
+module_id: browser-vfs
+module_stage: deferred
+tracking_kind: gap
 kind: slice
 epic: EPIC-contracts-core
 parallel_group: contracts-core

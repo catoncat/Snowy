@@ -21,6 +21,7 @@
 - browser-side kernel 主层
 - session / run queue / compaction 主链
 - 完整 diagnostics / intervention / browser automation 主线
+- 一份被 workflow scripts 直接消费的全模块追踪台账
 
 所以现在的主线不是“继续把 substrate 做得更满”，而是：
 
@@ -78,6 +79,7 @@
 - 当前 architecture mainline 见：
   - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
   - `docs/kernel-skeleton-design.md`
+  - `docs/module-tracking-ledger.json`
 
 ## 进入代码前的强制阅读顺序
 
@@ -89,15 +91,16 @@
 6. `docs/locked-decisions-2026-03-29.md`
 7. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
 8. `docs/kernel-skeleton-design.md`
-9. `docs/ai-native-capability-surface-design.md`
-10. `docs/ai-surface-index.md`
-11. `docs/v0-slice.md`
-12. `docs/legacy-reference-map.md`
-13. `docs/legacy-to-vnext-migration-matrix.md`
-14. `docs/migration-parity-dashboard.md`
-15. `docs/cutover-readiness-criteria.md`
-16. 当前 backlog issue
-17. 当前 batch / planning 文档
+9. `docs/module-tracking-ledger.json`
+10. `docs/ai-native-capability-surface-design.md`
+11. `docs/ai-surface-index.md`
+12. `docs/v0-slice.md`
+13. `docs/legacy-reference-map.md`
+14. `docs/legacy-to-vnext-migration-matrix.md`
+15. `docs/migration-parity-dashboard.md`
+16. `docs/cutover-readiness-criteria.md`
+17. 当前 backlog issue
+18. 当前 batch / planning 文档
 
 ## 如果你要判断“旧仓是不是已经迁完”
 

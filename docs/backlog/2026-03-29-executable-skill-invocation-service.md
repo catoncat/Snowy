@@ -1,22 +1,28 @@
 ---
 id: ISSUE-002
-title: Executable skill invocation service
+title: "Executable skill invocation service"
 status: done
 priority: p0
-source: v0 follow-up
+source: "v0 follow-up"
 created: 2026-03-29
 assignee: agent
-tags: [core, skills]
+tags:
+  - core
+  - skills
+module_id: skill-runtime-sdk-studio
+module_stage: deferred
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-runtime-core
 parallel_group: contracts-core
-depends_on: [ISSUE-001]
+depends_on:
+  - ISSUE-001
 write_scope:
   - packages/core/src/index.ts
   - packages/core/test/core.spec.ts
   - packages/skill-sdk/src/index.ts
 acceptance_ref: docs/next-development-slices-2026-03-29.md
-check_cmd: bun run check
+check_cmd: "bun run check"
 ---
 
 ## Goal

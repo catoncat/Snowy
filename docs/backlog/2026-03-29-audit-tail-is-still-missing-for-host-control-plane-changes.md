@@ -1,11 +1,11 @@
 ---
 id: ISSUE-042
 title: "Review: audit tail is still missing for host control plane changes"
-status: open
+status: done
 priority: p1
 source: "next-batch operability planning 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: copilot-opus
 tags:
   - review
   - mv3-shell
@@ -13,6 +13,9 @@ tags:
   - hosts
   - runtime
   - operability
+module_id: observability-audit
+module_stage: mainline
+tracking_kind: gap
 kind: slice
 epic: EPIC-mv3-shell
 parallel_group: mv3-shell

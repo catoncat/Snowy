@@ -9,6 +9,9 @@ assignee: agent
 tags:
   - docs
   - skill-sdk
+module_id: skill-runtime-sdk-studio
+module_stage: deferred
+tracking_kind: doc-debt
 kind: slice
 epic: EPIC-skill-sdk
 parallel_group: sdk-docs

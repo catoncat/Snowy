@@ -11,6 +11,9 @@ tags:
   - host
   - js-runner
   - mv3-shell
+module_id: execution-host-bridge
+module_stage: secondary
+tracking_kind: gap
 kind: slice
 epic: EPIC-js-runner
 parallel_group: js-runner

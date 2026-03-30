@@ -1,15 +1,18 @@
 ---
 id: ISSUE-052
 title: "Kernel B-2: run controller + loop engine skeleton"
-status: open
+status: done
 priority: p0
 source: "kernel skeleton design 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: copilot-opus
 tags:
   - kernel
   - run-state
   - loop
+module_id: kernel
+module_stage: mainline
+tracking_kind: mainline
 kind: slice
 epic: EPIC-kernel
 parallel_group: kernel

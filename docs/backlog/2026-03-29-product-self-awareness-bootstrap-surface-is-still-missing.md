@@ -12,6 +12,9 @@ tags:
   - core
   - runtime
   - ai-surface
+module_id: ai-surface-control-plane
+module_stage: secondary
+tracking_kind: gap
 kind: slice
 epic: EPIC-mv3-shell
 parallel_group: mv3-shell

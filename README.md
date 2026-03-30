@@ -60,6 +60,7 @@ bun run lint:fix     # biome auto-fix
 - [Locked Decisions](docs/locked-decisions-2026-03-29.md) — architecture constraints that should not drift
 - [Recovery Report](docs/reviews/2026-03-29-vnext-architecture-recovery-report.md) — why the mainline has been reclassified back to browser-side kernel
 - [Kernel Skeleton Design](docs/kernel-skeleton-design.md) — current `packages/kernel` mainline shape and slice plan
+- [Module Tracking Ledger](docs/module-tracking-ledger.json) — machine-readable module truth for workflow skills and planning
 - [V0 Slice](docs/v0-slice.md) — what has already been implemented
 - [AI-Native Surface Design](docs/ai-native-capability-surface-design.md) — how the product exposes itself to AI
 - [AI Surface Index](docs/ai-surface-index.md) — compact map of current and target AI surface

@@ -8,6 +8,11 @@ import {
   type Priority,
   type IssueFile
 } from "../../auto-claim-issues-next/scripts/claim-issue";
+import {
+  getModuleRecord,
+  loadModuleLedger,
+  type ModuleLedger
+} from "../../auto-claim-issues-next/scripts/module-ledger";
 
 export interface CreateReviewIssueArgs {
   repoRoot: string;
@@ -16,7 +21,8 @@ export interface CreateReviewIssueArgs {
   json: boolean;
   title: string;
   priority: Priority;
-  parallelGroup: string;
+  moduleId: string;
+  parallelGroup?: string;
   epic: string;
   acceptanceRef: string;
   source: string;
@@ -24,6 +30,7 @@ export interface CreateReviewIssueArgs {
   writeScope: string[];
   dependsOn?: string[];
   assignee?: string;
+  trackingKind?: "mainline" | "gap" | "follow-up" | "doc-debt";
   goal?: string;
   reviewFinding?: string[];
   acceptance: string[];
@@ -36,6 +43,8 @@ export type CreateReviewIssueResult = {
     id: string;
     title: string;
     path: string;
+    module_id: string;
+    module_stage: string;
     parallel_group: string;
     write_scope: string[];
     acceptance_ref: string;
@@ -78,8 +87,30 @@ function quoteIfNeeded(value: string): string {
   return JSON.stringify(value);
 }
 
-function buildFrontmatter(args: CreateReviewIssueArgs, issueId: string): string {
+function resolveParallelGroup(args: CreateReviewIssueArgs, moduleLedger: ModuleLedger): string {
+  const module = getModuleRecord(moduleLedger, args.moduleId);
+  if (!module) {
+    fail(`unknown --module=${args.moduleId}`);
+  }
+  return args.parallelGroup || module.default_parallel_group;
+}
+
+function resolveTrackingKind(args: CreateReviewIssueArgs) {
+  return args.trackingKind ?? "gap";
+}
+
+function buildFrontmatter(
+  args: CreateReviewIssueArgs,
+  issueId: string,
+  moduleLedger: ModuleLedger
+): string {
   const dependsOn = args.dependsOn ?? [];
+  const tags = [...new Set(args.tags)];
+  const module = getModuleRecord(moduleLedger, args.moduleId);
+  if (!module) {
+    fail(`unknown --module=${args.moduleId}`);
+  }
+  const parallelGroup = resolveParallelGroup(args, moduleLedger);
   const lines: string[] = [
     "---",
     `id: ${issueId}`,
@@ -92,14 +123,17 @@ function buildFrontmatter(args: CreateReviewIssueArgs, issueId: string): string 
     "tags:"
   ];
 
-  for (const tag of args.tags) {
+  for (const tag of tags) {
     lines.push(`  - ${quoteIfNeeded(tag)}`);
   }
 
   lines.push(
+    `module_id: ${quoteIfNeeded(module.module_id)}`,
+    `module_stage: ${module.stage}`,
+    `tracking_kind: ${quoteIfNeeded(resolveTrackingKind(args))}`,
     "kind: slice",
     `epic: ${quoteIfNeeded(args.epic)}`,
-    `parallel_group: ${quoteIfNeeded(args.parallelGroup)}`
+    `parallel_group: ${quoteIfNeeded(parallelGroup)}`
   );
 
   if (dependsOn.length === 0) {
@@ -126,7 +160,8 @@ function buildFrontmatter(args: CreateReviewIssueArgs, issueId: string): string 
 function buildBody(args: CreateReviewIssueArgs): string {
   const titleWithoutPrefix = args.title.replace(/^review:\s*/i, "").trim();
   const goal =
-    args.goal ?? `把 ${titleWithoutPrefix || "当前 drift"} 收口到 locked decisions 和测试口径。`;
+    args.goal ??
+    `把 ${titleWithoutPrefix || "当前 drift"} 收口成可执行的 backlog 结论，并明确后续 follow-up。`;
   const findings = args.reviewFinding ?? ["待补充具体 drift / 风险描述"];
 
   const lines: string[] = [
@@ -159,7 +194,8 @@ export function parseArgs(argv: string[], cwd = process.cwd()): CreateReviewIssu
     json: false,
     title: "",
     priority: "p1",
-    parallelGroup: "",
+    moduleId: "",
+    parallelGroup: undefined,
     epic: "",
     acceptanceRef: "",
     source: "review",
@@ -201,6 +237,8 @@ export function parseArgs(argv: string[], cwd = process.cwd()): CreateReviewIssu
       out.title = value;
     } else if (key === "priority" && value) {
       out.priority = value as Priority;
+    } else if (key === "module" && value) {
+      out.moduleId = value;
     } else if (key === "group" && value) {
       out.parallelGroup = value;
     } else if (key === "epic" && value) {
@@ -211,6 +249,8 @@ export function parseArgs(argv: string[], cwd = process.cwd()): CreateReviewIssu
       out.source = value;
     } else if (key === "assignee" && value) {
       out.assignee = value;
+    } else if (key === "tracking-kind" && value) {
+      out.trackingKind = value as CreateReviewIssueArgs["trackingKind"];
     } else if (key === "goal" && value) {
       out.goal = value;
     } else if (key === "tag" && value) {
@@ -233,8 +273,8 @@ function validateArgs(args: CreateReviewIssueArgs): void {
   if (!args.title) {
     fail("missing --title");
   }
-  if (!args.parallelGroup) {
-    fail("missing --group");
+  if (!args.moduleId) {
+    fail("missing --module");
   }
   if (!args.epic) {
     fail("missing --epic");
@@ -252,12 +292,17 @@ function validateArgs(args: CreateReviewIssueArgs): void {
 
 export function createReviewIssue(args: CreateReviewIssueArgs): CreateReviewIssueResult {
   validateArgs(args);
+  const moduleLedger = loadModuleLedger(args.repoRoot);
+  const module = getModuleRecord(moduleLedger, args.moduleId);
+  if (!module) {
+    fail(`unknown --module=${args.moduleId}`);
+  }
   const issues = loadAllIssues(args.repoRoot);
   const issueId = nextIssueId(issues);
   const date = args.date ?? todayDate();
   const slug = slugify(args.title) || "review-item";
   const relativePath = path.join("docs", "backlog", `${date}-${slug}.md`);
-  const content = `${buildFrontmatter({ ...args, date }, issueId)}${buildBody({ ...args, date })}`;
+  const content = `${buildFrontmatter({ ...args, date }, issueId, moduleLedger)}${buildBody({ ...args, date })}`;
 
   if (!args.dryRun) {
     const fullPath = path.join(args.repoRoot, relativePath);
@@ -272,7 +317,9 @@ export function createReviewIssue(args: CreateReviewIssueArgs): CreateReviewIssu
       id: issueId,
       title: args.title,
       path: relativePath,
-      parallel_group: args.parallelGroup,
+      module_id: module.module_id,
+      module_stage: module.stage,
+      parallel_group: resolveParallelGroup(args, moduleLedger),
       write_scope: args.writeScope,
       acceptance_ref: args.acceptanceRef
     }

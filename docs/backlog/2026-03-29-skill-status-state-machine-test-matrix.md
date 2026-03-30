@@ -1,12 +1,18 @@
 ---
 id: ISSUE-046
-title: SkillStatus 状态机需要全矩阵测试覆盖
+title: "SkillStatus 状态机需要全矩阵测试覆盖"
 status: done
 priority: p1
-source: docs/reviews/2026-03-29-code-engineering-quality-review.md § 3.3
+source: "docs/reviews/2026-03-29-code-engineering-quality-review.md § 3.3"
 created: 2026-03-29
 assignee: unassigned
-tags: [test-quality, contracts, state-machine]
+tags:
+  - test-quality
+  - contracts
+  - state-machine
+module_id: skill-runtime-sdk-studio
+module_stage: deferred
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-test-hardening
 parallel_group: contracts-core
@@ -14,7 +20,7 @@ depends_on: []
 write_scope:
   - packages/contracts/test/contracts.spec.ts
 acceptance_ref: docs/reviews/2026-03-29-code-engineering-quality-review.md
-check_cmd: bun run test -- packages/contracts
+check_cmd: "bun run test -- packages/contracts"
 ---
 
 ## 问题

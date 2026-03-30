@@ -11,6 +11,9 @@ tags:
   - mv3-shell
   - diagnostics
   - debug
+module_id: observability-audit
+module_stage: mainline
+tracking_kind: gap
 kind: slice
 epic: EPIC-mv3-shell
 parallel_group: mv3-shell

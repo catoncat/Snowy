@@ -11,6 +11,9 @@ tags:
   - host
   - mv3-shell
   - core
+module_id: execution-host-bridge
+module_stage: secondary
+tracking_kind: gap
 kind: slice
 epic: EPIC-mv3-shell
 parallel_group: mv3-shell

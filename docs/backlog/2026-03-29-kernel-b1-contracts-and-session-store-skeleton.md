@@ -1,15 +1,18 @@
 ---
 id: ISSUE-051
 title: "Kernel B-1: contracts + session store skeleton"
-status: open
+status: done
 priority: p0
 source: "kernel skeleton design 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: copilot-opus
 tags:
   - kernel
   - contracts
   - session
+module_id: kernel
+module_stage: mainline
+tracking_kind: mainline
 kind: slice
 epic: EPIC-kernel
 parallel_group: kernel

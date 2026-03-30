@@ -25,6 +25,9 @@ tags: [tag1, tag2]
 kind: slice
 epic: EPIC-<标识>
 parallel_group: contracts-core | browser-vfs | js-runner | site-runtime | mv3-shell | sdk-docs | kernel
+module_id: <module-id from docs/module-tracking-ledger.json>
+module_stage: mainline | secondary | deferred
+tracking_kind: mainline | gap | follow-up | doc-debt
 depends_on: [ISSUE-xxx]
 write_scope:
   - packages/...
@@ -54,6 +57,22 @@ check_cmd: bun run test -- <target> | bun run check
   - integration
 - 建议先触发 `agent-workflow-next`，再按状态进入 `auto-claim-issues-next` 或 `next-batch-planner`
 - `.agents/prompts/*.md` 是可选 stance overlay，不是固定角色绑定
+- 每个 backlog issue 都必须归属到 `docs/module-tracking-ledger.json` 里的一个 module
+- `module_stage` 必须与模块台账一致，不能单独在 issue 里改口
+
+## 模块追踪规则
+
+workflow 不再只看 issue priority。
+
+默认排序是：
+
+1. `module_stage`
+2. module ledger 里的 `tracking_order`
+3. issue `priority`
+4. `depends_on`
+5. `write_scope` 冲突
+
+如果某个非 deferred、且未标成 `shipped` 的模块没有任何 live issue，planner 必须把它报成 coverage gap，而不是继续输出“看起来完整”的计划。
 
 ## 当前主线优先级
 
@@ -78,6 +97,7 @@ check_cmd: bun run test -- <target> | bun run check
 5. 进入某个 issue 后，只在该 issue 的 `write_scope` 内推进
 6. 完成后先提交 code commit
 7. 再在 canonical workspace 把 issue 改为 `done`，并追加工作记录与 commit 记录
+8. 若通过 Codex 显式触发 `$agent-workflow-next` 或 `$auto-claim-issues-next`，repo-local hook 会在 prompt 提交时先尝试锁定当前 session 的 issue；同一 session 后续再次触发会优先复用已有 ticket
 
 ## 当当前 batch 做完时
 
@@ -112,7 +132,7 @@ bun run workflow:claim:json -- --name=<agent-name>
 bun run workflow:plan:preview
 bun run workflow:plan
 bun run workflow:plan:json
-bun run workflow:new-review-issue -- --title=... --group=... --epic=... --acceptance-ref=... --scope=... --accept=...
+bun run workflow:new-review-issue -- --module=... --title=... --epic=... --acceptance-ref=... --scope=... --accept=...
 ```
 
 命名规则：
@@ -152,7 +172,9 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 
 - 当前主线 batch 已切到 `docs/next-development-slices-2026-03-29-batch-7.md`
 - `ISSUE-051` / `ISSUE-052` / `ISSUE-053` 是当前 kernel mainline 队列
+- `ISSUE-054` 已补上 ai-surface-control-plane 的 live coverage
 - batch 6 中的 operability / site-runtime / host follow-up 仍有效，但现在是 kernel 次级队列
+- live 模块顺序以 `docs/module-tracking-ledger.json` 为准
 - claim 真相仍以 live backlog frontmatter 与 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview` 为准。
 
 ### 边界说明
@@ -168,11 +190,13 @@ bun run workflow:new-review-issue -- --title=... --group=... --epic=... --accept
 1. `ISSUE-051` kernel B-1 contracts + session store skeleton
 2. `ISSUE-052` kernel B-2 run controller + loop engine skeleton
 3. `ISSUE-053` kernel B-3 compaction manager + kernel facade
-4. `ISSUE-033` runtime diagnostics public control-plane entry
-5. `ISSUE-042` host control-plane audit tail
-6. `ISSUE-043` runtime clear-error closure
-7. `ISSUE-036` browser automation cutover boundary
-8. `ISSUE-038` real local execution host adapter follow-up
+4. `ISSUE-042` host control-plane audit tail
+5. `ISSUE-043` runtime clear-error closure
+6. `ISSUE-041` intervention and human handoff scope
+7. `ISSUE-054` ai-surface control-plane follow-up coverage
+8. `ISSUE-036` browser automation cutover boundary
+9. `ISSUE-045` site-runtime capability routing bridge strategy
+10. `ISSUE-038` real local execution host adapter follow-up
 
 最终领取顺序仍以 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview` 为准。
 

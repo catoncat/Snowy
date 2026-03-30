@@ -12,6 +12,9 @@ tags:
   - mv3-shell
   - phase4
   - injection
+module_id: site-runtime-browser-automation
+module_stage: secondary
+tracking_kind: gap
 kind: slice
 epic: EPIC-site-runtime
 parallel_group: mv3-shell

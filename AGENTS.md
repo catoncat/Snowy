@@ -8,6 +8,7 @@
 - 产品对 AI 暴露统一 `AI Surface`；其中 invokable actions 继续通过 `Capability API` 暴露。
 - 默认不做 legacy/fallback 设计；旧仓只作行为和概念参考，不作兼容前提。
 - 当前阶段判断：v0 已完成的是 substrate foundation；当前主线是补回 browser-side kernel。
+- workflow/planning 的 live 模块真相源是 `docs/module-tracking-ledger.json`，不是散落在 review 文档里的口头模块列表。
 
 ## 1.1 Mandatory Onboarding
 
@@ -16,12 +17,13 @@
   2. `docs/source-of-truth-map.md`
   3. `docs/agent-bootstrap-context-pack.md`
   4. `docs/locked-decisions-2026-03-29.md`
-  5. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-  6. `docs/kernel-skeleton-design.md`
-  7. `docs/ai-native-capability-surface-design.md`
-  8. `docs/ai-surface-index.md`
-  9. `docs/v0-slice.md`
-  10. `docs/legacy-reference-map.md`
+  5. `docs/module-tracking-ledger.json`
+  6. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+  7. `docs/kernel-skeleton-design.md`
+  8. `docs/ai-native-capability-surface-design.md`
+  9. `docs/ai-surface-index.md`
+  10. `docs/v0-slice.md`
+  11. `docs/legacy-reference-map.md`
 - 如果要改 architecture-level 代码，再去读旧仓：
   - `/Users/envvar/work/repos/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
   - `/Users/envvar/work/repos/browser-brain-loop/docs/kernel-architecture.md`
@@ -38,6 +40,7 @@
 - 浏览器是控制中枢；`Execution Host` 是一等执行面，可本地也可远程。
 - 当前主线不是继续横向扩 substrate，而是补回 `packages/kernel` 这一层 browser-side brain。
 - `packages/kernel` 负责 session / run / compaction / diagnostics / intervention 主层。
+- planning 默认按模块台账推进：module stage → module order → issue priority。
 - `host.*` 保持粗粒度原语，不要按产品功能无限细分。
 - `Skill` 通过 `ctx.call()` / `ctx.capabilities.*` 使用能力，不直连私有内核实现。
 
@@ -343,7 +346,7 @@
 - `bun run workflow:plan:preview`
 - `bun run workflow:plan`
 - `bun run workflow:plan:json`
-- `bun run workflow:new-review-issue -- --title=... --group=... --epic=... --acceptance-ref=... --scope=... --accept=...`
+- `bun run workflow:new-review-issue -- --module=... --title=... --epic=... --acceptance-ref=... --scope=... --accept=...`
 
 ## 11. First Places To Read Before Changing Code
 

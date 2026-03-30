@@ -46,11 +46,12 @@
 4. `docs/document-system-contract.md`
 5. `docs/start-here.md`
 6. `docs/locked-decisions-2026-03-29.md`
-7. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-8. `docs/kernel-skeleton-design.md`
-9. `docs/ai-surface-index.md`
-10. `docs/v0-slice.md`
-11. `docs/legacy-reference-map.md`
+7. `docs/module-tracking-ledger.json`
+8. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+9. `docs/kernel-skeleton-design.md`
+10. `docs/ai-surface-index.md`
+11. `docs/v0-slice.md`
+12. `docs/legacy-reference-map.md`
 
 ### Workflow Skills
 
@@ -88,6 +89,9 @@
 - 但只有运行在 canonical workspace 的那个 Agent，才应该真正执行 claim / 状态回写
 - 真正 claim 时，`assignee` 必须写该 Agent 自己选定的名字，不能写通用 `agent`
 - 同一位 Agent 在当前上下文里应持续复用同一个名字，方便其他 Agent 识别 ownership
+- 若通过 Codex 显式触发 `$agent-workflow-next` 或 `$auto-claim-issues-next`，repo-local `UserPromptSubmit` hook 会在模型回合开始前先做一次 workflow ticket 预处理
+- 这个 hook 只对显式 skill token 生效；普通对话、普通 review、以及 `next-batch-planner` 不会触发取号
+- hook 默认直接 claim live issue；若要只验证不落盘，可临时设置 `BBL_WORKFLOW_TICKET_DRY_RUN=1`
 
 ### Helper Rule
 
@@ -108,10 +112,11 @@
 ### Step 0: Build Context
 
 1. 读 base context 文档
-2. 查看 `docs/backlog/*.md`
-3. 查看当前 working tree 和最近提交
-4. 必要时查看当前 planning 文档
-5. 默认先触发 `agent-workflow-next`
+2. 先看 `docs/module-tracking-ledger.json`
+3. 再看 `docs/backlog/*.md`
+4. 查看当前 working tree 和最近提交
+5. 必要时查看当前 planning 文档
+6. 默认先触发 `agent-workflow-next`
 
 ### Step 1: Detect Current State
 
@@ -122,6 +127,8 @@
 3. 是否存在可 claim 的 `open` issue
 4. 若没有 open issue，是否仍有 `in-progress`
 5. 若 open / in-progress 都没有，是否该进入 next-batch planning
+
+当 Codex hook 已经为当前 session 注入 workflow ticket 时，等价于把“claim 判断”前置到了模型首 token 之前。此时当前 turn 应直接把 hook 注入的 issue 当作 live task，而不是再做一次 claim。
 
 ### Step 2: Choose Action
 
@@ -142,10 +149,9 @@
 - 在 canonical workspace 中执行真正 claim
 - 再进入实现 loop
 - 若同时存在多个 claimable issue：
-  - 先看当前主线 batch
-  - 默认优先 `kernel p0`
-  - 再看 operability / browser automation
-  - 最后才是 DX / doc-debt / 测试补洞
+  - 先看 module ledger 的 stage 和 order
+  - 再看 issue priority
+  - DX / doc-debt 不能越过 mainline module
 
 #### State D: 没有 open issue，但还有 `in-progress`
 
@@ -202,18 +208,22 @@
 
 1. 临时叠加 `coordinator` stance
 2. 使用 `next-batch-planner` skill
-3. 先做一轮 drift review：
+3. 先做一轮 module coverage review：
+   - 非 deferred modules 是否都有 live issue
+   - 是否存在没有 `module_id` 的 issue
+   - issue `module_stage` 是否与台账一致
+4. 再做一轮 drift review：
    - recovery report drift
    - kernel skeleton drift
    - locked decisions drift
    - AI surface drift
    - doc freshness drift
-4. 再做一轮 LLM 主导的 review：
+5. 再做一轮 LLM 主导的 review：
    - locked decisions drift
    - plan drift
    - implementation / test gap
-5. 每个发现都落成 backlog issue
-6. 用 helper 命令生成新的 planning 文档
+6. 每个发现都落成 backlog issue
+7. 用 helper 命令生成新的 planning 文档
 
 ## Recommended Commands
 
@@ -228,7 +238,7 @@ bun run workflow:claim:preview -- --name=<agent-name>
 bun run workflow:claim -- --name=<agent-name>
 bun run workflow:claim:json -- --name=<agent-name>
 
-bun run workflow:new-review-issue -- --title=... --group=... --epic=... --acceptance-ref=... --scope=... --accept=...
+bun run workflow:new-review-issue -- --module=... --title=... --epic=... --acceptance-ref=... --scope=... --accept=...
 bun run workflow:plan:preview
 bun run workflow:plan
 ```

@@ -1,12 +1,17 @@
 ---
 id: ISSUE-048
-title: 修复测试边界违规与 js-runner 时间依赖
+title: "修复测试边界违规与 js-runner 时间依赖"
 status: done
 priority: p2
-source: docs/reviews/2026-03-29-code-engineering-quality-review.md § 1.3 / § 3.4
+source: "docs/reviews/2026-03-29-code-engineering-quality-review.md § 1.3 / § 3.4"
 created: 2026-03-29
 assignee: unassigned
-tags: [test-quality, hygiene]
+tags:
+  - test-quality
+  - hygiene
+module_id: repo-workflow-dx
+module_stage: deferred
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-test-hardening
 parallel_group: contracts-core
@@ -16,7 +21,7 @@ write_scope:
   - packages/site-runtime/test/site-runtime.spec.ts
   - packages/js-runner/test/js-runner.spec.ts
 acceptance_ref: docs/reviews/2026-03-29-code-engineering-quality-review.md
-check_cmd: bun run test && bun run typecheck
+check_cmd: "bun run test && bun run typecheck"
 ---
 
 ## 问题

@@ -3,8 +3,17 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import {
+  getModuleRecord,
+  loadModuleLedger,
+  moduleStageRank,
+  type ModuleLedger,
+  type ModuleStage
+} from "./module-ledger";
+
 export type Status = "open" | "in-progress" | "done";
 export type Priority = "p0" | "p1" | "p2";
+export type TrackingKind = "mainline" | "gap" | "follow-up" | "doc-debt";
 
 export type FrontmatterValue = string | string[];
 
@@ -29,21 +38,37 @@ export interface ParsedArgs {
   allowConflicts: boolean;
 }
 
+export interface IssueSummary {
+  id: string;
+  title: string;
+  status: Status;
+  priority: Priority;
+  assignee: string;
+  parallel_group: string;
+  depends_on: string[];
+  write_scope: string[];
+  check_cmd: string;
+  path: string;
+  module_id: string;
+  module_stage: ModuleStage;
+  tracking_kind: TrackingKind;
+}
+
 export type ClaimResult =
   | {
       kind: "claimed" | "preview";
-      issue: ReturnType<typeof toIssueSummary>;
+      issue: IssueSummary;
       reason: string;
     }
   | {
       kind: "blocked";
       reason: string;
-      blockedByDependencies: Array<ReturnType<typeof toIssueSummary>>;
-      blockedByConflicts: Array<ReturnType<typeof toIssueSummary>>;
+      blockedByDependencies: IssueSummary[];
+      blockedByConflicts: IssueSummary[];
     }
   | {
       kind: "already_claimed";
-      issue: ReturnType<typeof toIssueSummary>;
+      issue: IssueSummary;
       reason: string;
     };
 
@@ -148,6 +173,14 @@ function stripInlineComment(raw: string): string {
     }
   }
   return text.trimEnd();
+}
+
+function isModuleStage(value: string): value is ModuleStage {
+  return value === "mainline" || value === "secondary" || value === "deferred";
+}
+
+function isTrackingKind(value: string): value is TrackingKind {
+  return value === "mainline" || value === "gap" || value === "follow-up" || value === "doc-debt";
 }
 
 export function parseFrontmatter(text: string): { frontmatter: Frontmatter; body: string } {
@@ -271,6 +304,26 @@ export function readArray(issue: IssueFile, key: string): string[] {
   return [String(value).trim()].filter(Boolean);
 }
 
+export function issueModuleId(issue: IssueFile): string {
+  return readString(issue, "module_id");
+}
+
+export function issueModuleStage(issue: IssueFile): ModuleStage {
+  const value = readString(issue, "module_stage");
+  if (isModuleStage(value)) {
+    return value;
+  }
+  fail(`issue ${readString(issue, "id")} 缺少合法 module_stage`);
+}
+
+export function issueTrackingKind(issue: IssueFile): TrackingKind {
+  const value = readString(issue, "tracking_kind");
+  if (isTrackingKind(value)) {
+    return value;
+  }
+  fail(`issue ${readString(issue, "id")} 缺少合法 tracking_kind`);
+}
+
 function normalizeScope(raw: string): string {
   return String(raw || "")
     .trim()
@@ -317,7 +370,7 @@ function priorityRank(priority: Priority): number {
   return 2;
 }
 
-export function toIssueSummary(issue: IssueFile) {
+export function toIssueSummary(issue: IssueFile): IssueSummary {
   return {
     id: readString(issue, "id"),
     title: readString(issue, "title"),
@@ -328,7 +381,10 @@ export function toIssueSummary(issue: IssueFile) {
     depends_on: readArray(issue, "depends_on"),
     write_scope: readArray(issue, "write_scope"),
     check_cmd: readString(issue, "check_cmd"),
-    path: path.relative(process.cwd(), issue.path)
+    path: path.relative(process.cwd(), issue.path),
+    module_id: issueModuleId(issue),
+    module_stage: issueModuleStage(issue),
+    tracking_kind: issueTrackingKind(issue)
   };
 }
 
@@ -365,15 +421,84 @@ export function hasScopeConflict(issue: IssueFile, active: IssueFile[]): boolean
   });
 }
 
-export function loadAllIssues(repoRoot: string): IssueFile[] {
+export function validateIssueModuleMetadata(issue: IssueFile, moduleLedger: ModuleLedger): void {
+  const issueId = readString(issue, "id");
+  const moduleId = issueModuleId(issue);
+  if (!moduleId) {
+    fail(`issue ${issueId} 缺少 module_id`);
+  }
+
+  const module = getModuleRecord(moduleLedger, moduleId);
+  if (!module) {
+    fail(`issue ${issueId} 使用了未知 module_id: ${moduleId}`);
+  }
+
+  const stage = issueModuleStage(issue);
+  if (stage !== module.stage) {
+    fail(`issue ${issueId} 的 module_stage=${stage} 与台账 ${module.stage} 不一致`);
+  }
+
+  issueTrackingKind(issue);
+}
+
+export function loadAllIssues(
+  repoRoot: string,
+  opts?: { moduleLedger?: ModuleLedger; validateModuleMetadata?: boolean }
+): IssueFile[] {
   const backlogDir = path.join(repoRoot, "docs", "backlog");
   const files = readdirSync(backlogDir)
     .filter((name) => name.endsWith(".md") && name !== "README.md")
     .sort();
-  return files.map((name) => loadIssueFile(path.join(backlogDir, name)));
+  const issues = files.map((name) => loadIssueFile(path.join(backlogDir, name)));
+  if (opts?.validateModuleMetadata) {
+    if (!opts.moduleLedger) {
+      fail("validateModuleMetadata 需要 module ledger");
+    }
+    for (const issue of issues) {
+      validateIssueModuleMetadata(issue, opts.moduleLedger);
+    }
+  }
+  return issues;
 }
 
-export function chooseIssue(issues: IssueFile[], args: ParsedArgs): ClaimResult {
+function compareClaimPriority(
+  left: IssueFile,
+  right: IssueFile,
+  moduleLedger?: ModuleLedger
+): number {
+  const leftStage = issueModuleStage(left);
+  const rightStage = issueModuleStage(right);
+  const stageDelta = moduleStageRank(leftStage) - moduleStageRank(rightStage);
+  if (stageDelta !== 0) {
+    return stageDelta;
+  }
+
+  if (moduleLedger) {
+    const leftModule = getModuleRecord(moduleLedger, issueModuleId(left));
+    const rightModule = getModuleRecord(moduleLedger, issueModuleId(right));
+    const leftOrder = leftModule?.tracking_order ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = rightModule?.tracking_order ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+  }
+
+  const priorityDelta = priorityRank(issuePriority(left)) - priorityRank(issuePriority(right));
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+  const createdDelta = readString(left, "created").localeCompare(readString(right, "created"));
+  if (createdDelta !== 0) {
+    return createdDelta;
+  }
+  return readString(left, "id").localeCompare(readString(right, "id"));
+}
+
+export function chooseIssue(
+  issues: IssueFile[],
+  args: ParsedArgs,
+  opts?: { moduleLedger?: ModuleLedger }
+): ClaimResult {
   const active = issues.filter((issue) => issueStatus(issue) === "in-progress");
 
   if (args.issueId) {
@@ -421,17 +546,7 @@ export function chooseIssue(issues: IssueFile[], args: ParsedArgs): ClaimResult 
   const claimable = candidates
     .filter((issue) => dependenciesSatisfied(issue, issues))
     .filter((issue) => args.allowConflicts || !hasScopeConflict(issue, active))
-    .sort((a, b) => {
-      const prio = priorityRank(issuePriority(a)) - priorityRank(issuePriority(b));
-      if (prio !== 0) {
-        return prio;
-      }
-      const created = readString(a, "created").localeCompare(readString(b, "created"));
-      if (created !== 0) {
-        return created;
-      }
-      return readString(a, "id").localeCompare(readString(b, "id"));
-    });
+    .sort((a, b) => compareClaimPriority(a, b, opts?.moduleLedger));
 
   if (claimable[0]) {
     return {
@@ -496,6 +611,9 @@ function printResult(result: ClaimResult, asJson: boolean): void {
   console.log(`title: ${result.issue.title}`);
   console.log(`assignee: ${result.issue.assignee || "(none)"}`);
   console.log(`parallel_group: ${result.issue.parallel_group}`);
+  console.log(`module_id: ${result.issue.module_id}`);
+  console.log(`module_stage: ${result.issue.module_stage}`);
+  console.log(`tracking_kind: ${result.issue.tracking_kind}`);
   console.log(`path: ${result.issue.path}`);
   console.log(`depends_on: ${result.issue.depends_on.join(", ") || "(none)"}`);
   console.log(`write_scope: ${result.issue.write_scope.join(", ") || "(none)"}`);
@@ -505,8 +623,12 @@ function printResult(result: ClaimResult, asJson: boolean): void {
 export function main() {
   const args = parseArgs(process.argv.slice(2));
   const repoRoot = process.cwd();
-  const issues = loadAllIssues(repoRoot);
-  const result = chooseIssue(issues, args);
+  const moduleLedger = loadModuleLedger(repoRoot);
+  const issues = loadAllIssues(repoRoot, {
+    moduleLedger,
+    validateModuleMetadata: true
+  });
+  const result = chooseIssue(issues, args, { moduleLedger });
 
   if (result.kind === "claimed") {
     if (!isNamedAgentAssignee(args.assignee)) {

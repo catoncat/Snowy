@@ -11,6 +11,9 @@ tags:
   - site-runtime
   - mv3-shell
   - permissions
+module_id: site-runtime-browser-automation
+module_stage: secondary
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-site-runtime
 parallel_group: site-runtime

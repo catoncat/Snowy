@@ -13,6 +13,7 @@
 - 仓库：`browser-brain-loop-next`
 - 性质：Browser Brain Loop 的 vNext 主线实验仓
 - 主轴：`Skill + AI Surface + Browser-side Kernel + BrowserVFS + JS Runner + Site Runtime + Execution Host`
+- planning 真相源：`docs/module-tracking-ledger.json` + live backlog
 
 ## 2. 不能变的原则
 
@@ -63,6 +64,7 @@
 1. 先读：
    - `AGENTS.md`
    - `docs/source-of-truth-map.md`
+   - `docs/module-tracking-ledger.json`
    - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
    - `docs/kernel-skeleton-design.md`
    - 本文件
@@ -82,6 +84,7 @@
 - 仓库工作规则：`AGENTS.md`
 - 真相源排序：`docs/source-of-truth-map.md`
 - 架构铁律：`docs/locked-decisions-2026-03-29.md`
+- 模块追踪台账：`docs/module-tracking-ledger.json`
 - 当前纠偏结论：`docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
 - kernel 主线设计：`docs/kernel-skeleton-design.md`
 - AI surface 主轴：`docs/ai-native-capability-surface-design.md`

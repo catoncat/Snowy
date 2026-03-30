@@ -10,6 +10,9 @@ tags:
   - contracts
   - core
   - capability-api
+module_id: ai-surface-control-plane
+module_stage: secondary
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-runtime-core
 parallel_group: contracts-core

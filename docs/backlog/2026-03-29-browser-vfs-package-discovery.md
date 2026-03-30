@@ -1,21 +1,27 @@
 ---
 id: ISSUE-004
-title: BrowserVFS package discovery helpers
+title: "BrowserVFS package discovery helpers"
 status: done
 priority: p1
-source: v0 follow-up
+source: "v0 follow-up"
 created: 2026-03-29
 assignee: agent
-tags: [browser-vfs, skills]
+tags:
+  - browser-vfs
+  - skills
+module_id: browser-vfs
+module_stage: deferred
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-browser-vfs
 parallel_group: browser-vfs
-depends_on: [ISSUE-003]
+depends_on:
+  - ISSUE-003
 write_scope:
   - packages/browser-vfs/src/index.ts
   - packages/browser-vfs/test/browser-vfs.spec.ts
 acceptance_ref: docs/next-development-slices-2026-03-29.md
-check_cmd: bun run check
+check_cmd: "bun run check"
 ---
 
 ## Goal

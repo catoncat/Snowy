@@ -11,6 +11,9 @@ tags:
   - site-runtime
   - core
   - capability-routing
+module_id: site-runtime-browser-automation
+module_stage: secondary
+tracking_kind: gap
 kind: slice
 epic: EPIC-site-runtime
 parallel_group: site-runtime

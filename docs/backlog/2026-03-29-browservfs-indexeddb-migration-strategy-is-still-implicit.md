@@ -11,6 +11,9 @@ tags:
   - browser-vfs
   - idb
   - migration
+module_id: browser-vfs
+module_stage: deferred
+tracking_kind: gap
 kind: slice
 epic: EPIC-browser-vfs
 parallel_group: browser-vfs

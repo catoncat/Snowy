@@ -18,6 +18,8 @@
 
 - `AGENTS.md` + `docs/locked-decisions-2026-03-29.md`
   - 定义不能改口的仓库边界
+- `docs/module-tracking-ledger.json`
+  - 定义 workflow 必须持续跟踪的模块、阶段和默认顺序
 - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
   - 定义“为什么 repo 主线已切回 browser-side kernel”
 - `docs/kernel-skeleton-design.md`
@@ -42,6 +44,7 @@
 |---|---|
 | 这仓库现在到底想成为什么 | `AGENTS.md` → `docs/start-here.md` → `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
 | 哪些原则不能变 | `AGENTS.md` → `docs/locked-decisions-2026-03-29.md` |
+| workflow 必须跟踪哪些模块 | `docs/module-tracking-ledger.json` |
 | 当前主线为什么是 kernel | `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
 | `packages/kernel` 该怎么做 | `docs/kernel-skeleton-design.md` |
 | 我现在该 claim 什么 | `docs/backlog/README.md` → live `docs/backlog/*.md` → `BBL_AGENT_NAME=<name> bun run workflow:claim:preview` |
@@ -144,14 +147,15 @@
 3. `docs/source-of-truth-map.md`
 4. `docs/agent-bootstrap-context-pack.md`
 5. `docs/locked-decisions-2026-03-29.md`
-6. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-7. `docs/kernel-skeleton-design.md`
-8. `docs/backlog/README.md`
-9. `docs/multi-agent-workflow.md`
-10. `docs/next-development-slices-2026-03-29-batch-7.md`
-11. 你要做的那个 `docs/backlog/<issue>.md`
-12. 相关 lane 的 `packages/*/src/` + `packages/*/test/*.spec.ts`
-13. 如需要旧仓对照，再读 `docs/legacy-reference-map.md`
+6. `docs/module-tracking-ledger.json`
+7. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+8. `docs/kernel-skeleton-design.md`
+9. `docs/backlog/README.md`
+10. `docs/multi-agent-workflow.md`
+11. `docs/next-development-slices-2026-03-29-batch-7.md`
+12. 你要做的那个 `docs/backlog/<issue>.md`
+13. 相关 lane 的 `packages/*/src/` + `packages/*/test/*.spec.ts`
+14. 如需要旧仓对照，再读 `docs/legacy-reference-map.md`
 
 ## 5. 这套架构到底想成为什么
 
@@ -160,9 +164,10 @@
 1. `docs/start-here.md`
 2. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
 3. `docs/kernel-skeleton-design.md`
-4. `docs/locked-decisions-2026-03-29.md`
-5. `docs/ai-native-capability-surface-design.md`
-6. `docs/ai-surface-index.md`
+4. `docs/module-tracking-ledger.json`
+5. `docs/locked-decisions-2026-03-29.md`
+6. `docs/ai-native-capability-surface-design.md`
+7. `docs/ai-surface-index.md`
 
 一句话版本：
 
@@ -222,10 +227,12 @@
 
 默认规划顺序是：
 
-1. 先看 live backlog 是否还有 kernel 主线 issue
-2. 若还有，先按 kernel 主线推进
-3. kernel 主线收口后，再回到 operability / diagnostics / site-runtime / host / DX 次级队列
-4. 当 live backlog 没有可 claim issue 时，再进入 next-batch planning
+1. 先看 `docs/module-tracking-ledger.json` 里的 module stage 和 module order
+2. 再看 live backlog 是否已经覆盖这些非 deferred 模块
+3. 若还有 mainline module 的 live issue，先按 module order 推进
+4. mainline 收口后，再看 secondary modules
+5. deferred modules 只在前两层没有 live issue 时再进入
+6. 当 live backlog 没有可 claim issue 时，再进入 next-batch planning
 
 当前默认 planning 快照是：
 

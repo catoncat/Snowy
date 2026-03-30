@@ -9,6 +9,9 @@ assignee: agent
 tags:
   - js-runner
   - rpc
+module_id: execution-host-bridge
+module_stage: secondary
+tracking_kind: follow-up
 kind: slice
 epic: EPIC-js-runner
 parallel_group: js-runner

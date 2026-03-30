@@ -1,12 +1,18 @@
 ---
 id: ISSUE-049
-title: Linter + Formatter + CI 质量门禁基线
+title: "Linter + Formatter + CI 质量门禁基线"
 status: done
 priority: p1
-source: docs/reviews/2026-03-29-docs-dx-review.md § 4.1
+source: "docs/reviews/2026-03-29-docs-dx-review.md § 4.1"
 created: 2026-03-29
 assignee: unassigned
-tags: [dx, ci, toolchain]
+tags:
+  - dx
+  - ci
+  - toolchain
+module_id: repo-workflow-dx
+module_stage: deferred
+tracking_kind: doc-debt
 kind: slice
 epic: EPIC-dx-hardening
 parallel_group: sdk-docs
@@ -16,7 +22,7 @@ write_scope:
   - .github/workflows/
   - biome.json
 acceptance_ref: docs/reviews/2026-03-29-docs-dx-review.md
-check_cmd: bun run lint && bun run format:check
+check_cmd: "bun run lint && bun run format:check"
 ---
 
 ## 问题

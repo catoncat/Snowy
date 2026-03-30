@@ -12,6 +12,9 @@ tags:
   - automation
   - intervention
   - human-handoff
+module_id: intervention-handoff
+module_stage: mainline
+tracking_kind: gap
 kind: slice
 epic: EPIC-site-runtime
 parallel_group: site-runtime

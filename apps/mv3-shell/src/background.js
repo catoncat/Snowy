@@ -199,13 +199,56 @@ export function createBackgroundRunnerBridge({
 } = {}) {
   let creating = null;
   let requestSequence = 0;
+  const AUDIT_MAX_ENTRIES = 64;
+  const auditEntries = [];
   const state = {
     defaultHostId: null,
     hostReady: false,
     hostLastSeenAt: undefined,
     hostRecoveredAt: undefined,
-    hostRecoveryReason: undefined
+    hostRecoveryReason: undefined,
+    lastRuntimeError: null,
+    lastRuntimeErrorClearedAt: null
   };
+
+  function appendAudit({ kind, hostId, status, error }) {
+    const entry = { timestamp: isoNow(), kind, hostId, status };
+    if (error) {
+      entry.error = typeof error === "string" ? error : error.message ?? String(error);
+    }
+    auditEntries.push(entry);
+    if (auditEntries.length > AUDIT_MAX_ENTRIES) {
+      auditEntries.splice(0, auditEntries.length - AUDIT_MAX_ENTRIES);
+    }
+  }
+
+  function getAuditTail(limit) {
+    const max = typeof limit === "number" && limit > 0 ? limit : AUDIT_MAX_ENTRIES;
+    return auditEntries.slice(-max);
+  }
+
+  function setRuntimeError(error) {
+    if (error) {
+      state.lastRuntimeError = {
+        code: error.code ?? "E_RUNTIME",
+        message: error.message ?? String(error),
+        capturedAt: isoNow()
+      };
+    }
+  }
+
+  function clearRuntimeError() {
+    const hadError = state.lastRuntimeError !== null;
+    state.lastRuntimeError = null;
+    if (hadError) {
+      state.lastRuntimeErrorClearedAt = isoNow();
+    }
+    return { cleared: hadError };
+  }
+
+  function getRuntimeError() {
+    return state.lastRuntimeError;
+  }
 
   function nextRequestId() {
     requestSequence += 1;
@@ -393,11 +436,13 @@ export function createBackgroundRunnerBridge({
     }
     const ensured = await ensureHost();
     if (!ensured.ok) {
+      appendAudit({ kind: "hosts.connect", hostId: resolvedHostId, status: "failed", error: ensured.error?.message });
       return ensured;
     }
     if (!state.defaultHostId) {
       state.defaultHostId = resolvedHostId;
     }
+    appendAudit({ kind: "hosts.connect", hostId: resolvedHostId, status: "connected" });
     return {
       ok: true,
       data: {
@@ -431,6 +476,7 @@ export function createBackgroundRunnerBridge({
       await chromeApi.offscreen.closeDocument();
     }
     state.hostReady = false;
+    appendAudit({ kind: "hosts.disconnect", hostId: resolvedHostId, status: "disconnected" });
     return {
       ok: true,
       data: {
@@ -446,6 +492,7 @@ export function createBackgroundRunnerBridge({
       return resolvedHostId;
     }
     state.defaultHostId = resolvedHostId;
+    appendAudit({ kind: "hosts.set_default", hostId: resolvedHostId, status: "default_set" });
     return {
       ok: true,
       data: {
@@ -880,6 +927,11 @@ export function createBackgroundRunnerBridge({
           : "empty";
     const runtimeError = runtimeDiagnostics.runner?.error ?? runtimeDiagnostics.site?.error ?? null;
 
+    if (runtimeError) {
+      setRuntimeError(runtimeError);
+    }
+    const effectiveError = getRuntimeError();
+
     const localHost = toLocalHostSnapshot({
       checkedAt: generatedAt,
       offscreenPresent: runtimeDiagnostics.bridge.offscreenPresent,
@@ -919,10 +971,10 @@ export function createBackgroundRunnerBridge({
           sessionId,
           activeTab: activeTabSummary,
           loopState: runnerHealth?.status ?? (activeTabSummary ? "idle" : null),
-          lastError: runtimeError
+          lastError: effectiveError
             ? {
-                code: runtimeError.code,
-                message: runtimeError.message
+                code: effectiveError.code,
+                message: effectiveError.message
               }
             : null,
           actionCapabilities: {
@@ -1019,6 +1071,13 @@ export function createBackgroundRunnerBridge({
         return hostHealth({
           hostId: message.hostId
         });
+      case "audit.host":
+        return {
+          ok: true,
+          data: {
+            entries: getAuditTail(message.limit)
+          }
+        };
       case "site.runtime.invoke":
         return invokeSiteRuntime(message);
       case "runtime.diagnostics":
@@ -1027,6 +1086,11 @@ export function createBackgroundRunnerBridge({
           tabId: message.tabId,
           world: message.world
         });
+      case "runtime.clear_error":
+        return {
+          ok: true,
+          data: clearRuntimeError()
+        };
       case "runtime.bootstrap":
         return bootstrap({
           world: message.world
@@ -1078,6 +1142,8 @@ export function createBackgroundRunnerBridge({
     health,
     diagnostics,
     bootstrap,
+    getAuditTail,
+    clearRuntimeError,
     route,
     registerRuntimeListener,
     getBridgeState
