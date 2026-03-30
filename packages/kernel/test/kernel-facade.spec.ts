@@ -1,13 +1,36 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import type { CapabilityDescriptor, KernelLlmAdapter } from "@bbl-next/contracts";
 import {
-  createKernel,
-  InMemorySessionStorage
-} from "@bbl-next/kernel";
+  type CapabilityProviderRequest,
+  CapabilityRegistry,
+  FamilyProviderRegistry,
+} from "@bbl-next/core";
+import { InMemorySessionStorage, createKernel } from "@bbl-next/kernel";
 import type { Kernel } from "@bbl-next/kernel";
-import type { KernelLlmAdapter } from "@bbl-next/contracts";
+import { beforeEach, describe, expect, it } from "vitest";
 
 function createMockLlm(response = "Compacted summary."): KernelLlmAdapter {
   return { complete: async () => response };
+}
+
+function createDescriptor(id: string): CapabilityDescriptor {
+  const [, operation = "invoke"] = id.split(".");
+  return {
+    id,
+    version: 1,
+    description: `Test descriptor for ${id}`,
+    inputSchema: { type: "object" },
+    outputSchema: { type: "object" },
+    risk: "low",
+    sideEffects: "reads",
+    permissions: [id],
+    supportsVerify: false,
+    supportsStreaming: false,
+    exportable: false,
+    executionBinding: {
+      family: "test",
+      operation,
+    },
+  };
 }
 
 describe("KernelFacade (createKernel)", () => {
@@ -16,7 +39,7 @@ describe("KernelFacade (createKernel)", () => {
   beforeEach(() => {
     kernel = createKernel({
       storage: new InMemorySessionStorage(),
-      llm: createMockLlm()
+      llm: createMockLlm(),
     });
   });
 
@@ -94,10 +117,64 @@ describe("KernelFacade (createKernel)", () => {
 
       const updated = kernel.recordTurnResult(turn, {
         ok: true,
-        data: { result: "abc" }
+        data: { result: "abc" },
       });
       expect(updated.status).toBe("succeeded");
       expect(kernel.getStepCount(s.id)).toBe(1);
+    });
+
+    it("dispatches a registered capability through injected registry/provider wiring", async () => {
+      const registry = new CapabilityRegistry([createDescriptor("runtime.echo")]);
+      const providers = new FamilyProviderRegistry();
+      providers.register({
+        family: "test",
+        invoke: async ({ descriptor, input }: CapabilityProviderRequest) => ({
+          capabilityId: descriptor.id,
+          echoed: input,
+        }),
+      });
+
+      const wiredKernel = createKernel({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        registry,
+        providers,
+      });
+      const s = await wiredKernel.createSession();
+
+      const executed = await wiredKernel.executeStep(s.id, {
+        capabilityId: "runtime.echo",
+        input: { value: "hello" },
+      });
+
+      expect(executed.result).toEqual({
+        ok: true,
+        data: {
+          capabilityId: "runtime.echo",
+          echoed: { value: "hello" },
+        },
+      });
+      expect(executed.turn.status).toBe("succeeded");
+      expect(executed.turn.capabilityId).toBe("runtime.echo");
+      expect(wiredKernel.getStepCount(s.id)).toBe(1);
+    });
+
+    it("records a failed turn when kernel is not wired with registry/providers", async () => {
+      const s = await kernel.createSession();
+
+      const executed = await kernel.executeStep(s.id, {
+        capabilityId: "runtime.echo",
+        input: { value: "hello" },
+      });
+
+      expect(executed.result).toEqual({
+        ok: false,
+        error: "Kernel is not wired with capability registry/providers",
+      });
+      expect(executed.turn.status).toBe("failed");
+      expect(executed.turn.lastError).toBe(
+        "Kernel is not wired with capability registry/providers",
+      );
     });
   });
 
@@ -114,7 +191,7 @@ describe("KernelFacade (createKernel)", () => {
       const compactingKernel = createKernel({
         storage: new InMemorySessionStorage(),
         compaction: { keepRecentTokens: 1 },
-        llm: createMockLlm()
+        llm: createMockLlm(),
       });
       const s = await compactingKernel.createSession();
       compactingKernel.startRun(s.id);
@@ -123,7 +200,7 @@ describe("KernelFacade (createKernel)", () => {
       for (let i = 0; i < 3; i++) {
         await compactingKernel.appendMessage(s.id, {
           role: i % 2 === 0 ? "user" : "assistant",
-          text: `Message ${i}: ${"x".repeat(200)}`
+          text: `Message ${i}: ${"x".repeat(200)}`,
         });
       }
 
@@ -149,18 +226,20 @@ describe("KernelFacade (createKernel)", () => {
         llm: {
           complete: async () => {
             throw new Error("LLM unavailable");
-          }
-        }
+          },
+        },
       });
 
       const s = await failingKernel.createSession();
       failingKernel.startRun(s.id);
       await failingKernel.appendMessage(s.id, {
         role: "user",
-        text: `Needs compaction ${"x".repeat(120)}`
+        text: `Needs compaction ${"x".repeat(120)}`,
       });
 
-      await expect(failingKernel.triggerCompaction(s.id, "threshold")).rejects.toThrow("LLM unavailable");
+      await expect(failingKernel.triggerCompaction(s.id, "threshold")).rejects.toThrow(
+        "LLM unavailable",
+      );
       expect(failingKernel.getRunState(s.id).phase).toBe("idle");
     });
   });

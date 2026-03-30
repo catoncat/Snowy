@@ -1,35 +1,63 @@
+import { CapabilityError } from "@bbl-next/contracts";
 import type {
-  SessionHeader,
-  SessionEntry,
-  SessionContext,
-  SessionStorage,
-  RunState,
-  QueuedPrompt,
   CompactionDraft,
   CompactionReason,
   KernelLlmAdapter,
   LoopTurn,
-  MessagePayload
+  MessagePayload,
+  QueuedPrompt,
+  RunState,
+  SessionContext,
+  SessionEntry,
+  SessionHeader,
+  SessionStorage,
 } from "@bbl-next/contracts";
-import { SessionStore } from "./session-store.js";
-import { RunController } from "./run-controller.js";
-import { LoopEngine, type StepRequest, type StepResult, type LoopEngineOptions } from "./loop-engine.js";
+import {
+  type CapabilityDispatchOptions,
+  type CapabilityRegistry,
+  type FamilyProviderRegistry,
+  dispatchCapabilityCall,
+} from "@bbl-next/core";
 import { CompactionManager, type CompactionOptions } from "./compaction-manager.js";
+import {
+  LoopEngine,
+  type LoopEngineOptions,
+  type StepRequest,
+  type StepResult,
+} from "./loop-engine.js";
+import { RunController } from "./run-controller.js";
+import { SessionStore } from "./session-store.js";
+
+type KernelDispatchConfig = Pick<
+  CapabilityDispatchOptions,
+  "confirm" | "invokeSkill" | "listSkills" | "permissions" | "skillId"
+>;
 
 export interface KernelOptions {
   storage: SessionStorage;
   llm: KernelLlmAdapter;
+  registry?: CapabilityRegistry;
+  providers?: FamilyProviderRegistry;
+  dispatch?: KernelDispatchConfig;
   loop?: LoopEngineOptions;
   compaction?: CompactionOptions;
 }
 
 export interface Kernel {
   // Session
-  createSession(opts?: { parentSessionId?: string; title?: string; model?: string }): Promise<SessionHeader>;
+  createSession(opts?: {
+    parentSessionId?: string;
+    title?: string;
+    model?: string;
+  }): Promise<SessionHeader>;
   listSessions(): Promise<SessionHeader[]>;
   deleteSession(sessionId: string): Promise<void>;
   buildContext(sessionId: string): Promise<SessionContext>;
-  appendEntry(sessionId: string, type: SessionEntry["type"], payload: unknown): Promise<SessionEntry>;
+  appendEntry(
+    sessionId: string,
+    type: SessionEntry["type"],
+    payload: unknown,
+  ): Promise<SessionEntry>;
   appendMessage(sessionId: string, payload: MessagePayload): Promise<SessionEntry>;
 
   // Run lifecycle
@@ -46,6 +74,10 @@ export interface Kernel {
   // Loop
   createTurn(sessionId: string, step: StepRequest): LoopTurn;
   recordTurnResult(turn: LoopTurn, result: StepResult): LoopTurn;
+  executeStep(
+    sessionId: string,
+    step: StepRequest,
+  ): Promise<{ turn: LoopTurn; result: StepResult }>;
   getStepCount(sessionId: string): number;
 
   // Compaction
@@ -64,6 +96,65 @@ export function createKernel(opts: KernelOptions): Kernel {
   const runs = new RunController();
   const loop = new LoopEngine(opts.loop);
   const compaction = new CompactionManager(sessions, opts.llm, opts.compaction);
+
+  const executeStep = async (
+    sessionId: string,
+    step: StepRequest,
+  ): Promise<{ turn: LoopTurn; result: StepResult }> => {
+    const turn = loop.createTurn(sessionId, step);
+
+    if (!step.capabilityId) {
+      const result: StepResult = {
+        ok: false,
+        error: "Kernel step requires capabilityId",
+      };
+      return {
+        turn: loop.recordTurnResult(turn, result),
+        result,
+      };
+    }
+
+    if (!opts.registry || !opts.providers) {
+      const result: StepResult = {
+        ok: false,
+        error: "Kernel is not wired with capability registry/providers",
+      };
+      return {
+        turn: loop.recordTurnResult(turn, result),
+        result,
+      };
+    }
+
+    try {
+      const data = await dispatchCapabilityCall({
+        registry: opts.registry,
+        providers: opts.providers,
+        sessionId,
+        capabilityId: step.capabilityId,
+        input: step.input,
+        skillId: opts.dispatch?.skillId ?? "kernel.loop",
+        permissions: opts.dispatch?.permissions ?? ["*"],
+        confirm: opts.dispatch?.confirm,
+        invokeSkill: opts.dispatch?.invokeSkill,
+        listSkills: opts.dispatch?.listSkills,
+      });
+      const result: StepResult = { ok: true, data };
+      return {
+        turn: loop.recordTurnResult(turn, result),
+        result,
+      };
+    } catch (error) {
+      const result: StepResult = {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+        retryable: error instanceof CapabilityError && error.code === "E_RUNTIME",
+      };
+      return {
+        turn: loop.recordTurnResult(turn, result),
+        result,
+      };
+    }
+  };
 
   return {
     // Session
@@ -90,6 +181,7 @@ export function createKernel(opts: KernelOptions): Kernel {
     // Loop
     createTurn: (id, step) => loop.createTurn(id, step),
     recordTurnResult: (turn, result) => loop.recordTurnResult(turn, result),
+    executeStep,
     getStepCount: (id) => loop.getStepCount(id),
 
     // Compaction
@@ -100,7 +192,8 @@ export function createKernel(opts: KernelOptions): Kernel {
         const prep = await compaction.prepare(sessionId, reason);
         const draft = await compaction.execute(prep);
 
-        const shouldPersist = prep.messagesToSummarize.length > 0 && draft.summary.trim().length > 0;
+        const shouldPersist =
+          prep.messagesToSummarize.length > 0 && draft.summary.trim().length > 0;
         if (shouldPersist) {
           await compaction.apply(sessionId, draft);
         }
@@ -117,6 +210,6 @@ export function createKernel(opts: KernelOptions): Kernel {
     sessions,
     runs,
     loop,
-    compaction
+    compaction,
   };
 }
