@@ -1399,7 +1399,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("returns structured host substrate errors through the default offscreen host", async () => {
+  it("default offscreen host with local adapter supports read/write/edit and rejects exec", async () => {
     const harness = createChromeHarness({});
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
@@ -1423,19 +1423,47 @@ describe("mv3-shell manifest", () => {
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.write",
+        path: "/workspace/demo.txt",
+        content: "hello from local adapter"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "local",
+        path: "/workspace/demo.txt",
+        content: "hello from local adapter"
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
         kind: "host.read",
         path: "/workspace/demo.txt"
       })
     ).resolves.toMatchObject({
-      ok: false,
-      error: {
-        code: "E_RUNTIME",
-        message: "Execution host adapter is not configured for read",
-        details: {
-          kind: "read",
-          hostId: "local",
-          reason: "adapter_missing"
-        }
+      ok: true,
+      data: {
+        hostId: "local",
+        path: "/workspace/demo.txt",
+        content: "hello from local adapter"
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.edit",
+        path: "/workspace/demo.txt",
+        patch: " world"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "local",
+        path: "/workspace/demo.txt",
+        content: "hello from local adapter world"
       }
     });
 
@@ -1448,12 +1476,12 @@ describe("mv3-shell manifest", () => {
     ).resolves.toMatchObject({
       ok: false,
       error: {
-        code: "E_RUNTIME",
-        message: "Execution host adapter is not configured for exec",
+        code: "E_CAPABILITY_NOT_FOUND",
+        message: "Execution host adapter does not implement exec",
         details: {
           kind: "exec",
           hostId: "local",
-          reason: "adapter_missing"
+          reason: "operation_not_supported"
         }
       }
     });
@@ -1583,6 +1611,176 @@ describe("mv3-shell manifest", () => {
 
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(1);
     expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(1);
+    dispose();
+    harness.cleanup();
+  });
+
+  it("writes and reads back host control plane audit entries", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0
+            }
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: { result: "ok", durationMs: 1 }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0
+      }))
+    };
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    // connect
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "hosts.connect",
+      hostId: "local"
+    });
+
+    // set_default
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "hosts.set_default",
+      hostId: "local"
+    });
+
+    // disconnect
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "hosts.disconnect",
+      hostId: "local"
+    });
+
+    // read audit tail via route
+    const auditResult = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "audit.host"
+    }) as { ok: boolean; data: { entries: Array<{ timestamp: string; kind: string; hostId: string; status: string }> } };
+
+    expect(auditResult.ok).toBe(true);
+    const entries = auditResult.data.entries;
+    expect(entries).toHaveLength(3);
+
+    expect(entries[0]).toMatchObject({
+      kind: "hosts.connect",
+      hostId: "local",
+      status: "connected"
+    });
+    expect(typeof entries[0].timestamp).toBe("string");
+
+    expect(entries[1]).toMatchObject({
+      kind: "hosts.set_default",
+      hostId: "local",
+      status: "default_set"
+    });
+
+    expect(entries[2]).toMatchObject({
+      kind: "hosts.disconnect",
+      hostId: "local",
+      status: "disconnected"
+    });
+
+    // also verify direct API
+    const directTail = bridge.getAuditTail(2);
+    expect(directTail).toHaveLength(2);
+    expect(directTail[0].kind).toBe("hosts.set_default");
+    expect(directTail[1].kind).toBe("hosts.disconnect");
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("clears runtime error state via runtime.clear_error and returns consistent bootstrap", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: { status: "idle", inflightCount: 0, consecutiveFailures: 0 }
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: { result: "ok", durationMs: 1 }
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0
+      }))
+    };
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    // Bootstrap without connecting — offscreen is absent, so runner diagnostics reports an error.
+    // This captures a runtime error in the bridge state.
+    const firstBootstrap = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "runtime.bootstrap"
+    }) as { ok: boolean; data: { runtime: { lastError: unknown } } };
+    expect(firstBootstrap.ok).toBe(true);
+    expect(firstBootstrap.data.runtime.lastError).toMatchObject({
+      code: "E_RUNTIME"
+    });
+
+    // Clear the error
+    const clearResult = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "runtime.clear_error"
+    }) as { ok: boolean; data: { cleared: boolean } };
+    expect(clearResult).toMatchObject({ ok: true, data: { cleared: true } });
+
+    // Bootstrap again — lastError should be null (error was cleared, and the live error
+    // from absent offscreen still gets captured, but since we just cleared we simulate
+    // the "acknowledged" state. A fresh bootstrap will re-capture the live error.)
+    // To properly test the clear path, connect the host first so there's no live error.
+    await bridge.ensureHost();
+    const secondBootstrap = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "runtime.bootstrap"
+    }) as { ok: boolean; data: { runtime: { lastError: unknown } } };
+    expect(secondBootstrap.ok).toBe(true);
+    expect(secondBootstrap.data.runtime.lastError).toBeNull();
+
+    // Idempotent clear when no error
+    const idempotentClear = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "runtime.clear_error"
+    }) as { ok: boolean; data: { cleared: boolean } };
+    expect(idempotentClear).toMatchObject({ ok: true, data: { cleared: false } });
+
+    // Direct API also works
+    expect(bridge.clearRuntimeError()).toEqual({ cleared: false });
+
     dispose();
     harness.cleanup();
   });

@@ -427,6 +427,50 @@ describe("js-runner", () => {
     });
   });
 
+  it("returns operation_not_supported when adapter lacks the requested operation", async () => {
+    const hostAdapter = {
+      read: vi.fn(async (request) => ({
+        hostId: request.hostId,
+        path: request.path,
+        content: "data"
+      }))
+    };
+    const host = new JsRunnerHost({ hostAdapter });
+
+    await expect(
+      host.dispatch({
+        kind: "read",
+        requestId: "read-partial",
+        hostId: "local",
+        path: "/demo.txt"
+      })
+    ).resolves.toMatchObject({
+      hostId: "local",
+      path: "/demo.txt",
+      content: "data"
+    });
+
+    await expect(
+      host.dispatch({
+        kind: "exec",
+        requestId: "exec-partial",
+        hostId: "local",
+        command: "pwd"
+      })
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_CAPABILITY_NOT_FOUND",
+        message: "Execution host adapter does not implement exec",
+        details: {
+          kind: "exec",
+          hostId: "local",
+          reason: "operation_not_supported"
+        }
+      }
+    });
+  });
+
   it("marks health as degraded after a failure and resets after success", async () => {
     const host = new JsRunnerHost();
 

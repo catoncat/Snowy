@@ -58,11 +58,11 @@ function loadModule(module) {
   return factory(exportsObject, moduleObject);
 }
 
-function createHostAdapterError(request, reason, message) {
+function createHostAdapterError(request, reason, message, code = "E_RUNTIME") {
   return {
     ok: false,
     error: {
-      code: "E_RUNTIME",
+      code,
       message,
       details: {
         kind: request.kind,
@@ -171,7 +171,8 @@ export function createRunnerHostCore({ hostAdapter } = {}) {
       return createHostAdapterError(
         request,
         "operation_not_supported",
-        `Execution host adapter does not implement ${request.kind}`
+        `Execution host adapter does not implement ${request.kind}`,
+        "E_CAPABILITY_NOT_FOUND"
       );
     }
 
