@@ -84,6 +84,14 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 
 必须明确这些能力是核心主线还是可延后。
 
+**状态：screenshot / download 边界已裁决。** 详见 `docs/screenshot-download-surface-boundary.md`。
+
+- `page.screenshot`：cutover 前必需的最小视觉原语，作为 substrate capability 保留；实现落 `ISSUE-057`
+- `screenshot_with_highlight`：cutover 后可补的 diagnostics composite
+- `download_image`：cutover 后可补的 product/workflow export ability
+- `download_chat_images`：暂不纳入主链
+- intervention / human handoff：仍待 `ISSUE-041` 裁决
+
 ## Not Enough To Claim Cutover
 
 - 只有 v0 substrate，但没有迁移矩阵

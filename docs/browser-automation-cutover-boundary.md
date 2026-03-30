@@ -70,7 +70,7 @@
 | `tabs.create` / `tabs.close` | Tab 生命周期——active-tab-only 限制优先级低 |
 | `site.fetch_with_session` | 带登录态 fetch——重要但可独立补 |
 | Background mode | 双轨执行——Focus mode 足够支撑 cutover |
-| highlight / bounding box | 辅助调试——非阻塞 |
+| highlight / bounding box / screenshot with highlight | 辅助调试 composite——非阻塞 |
 
 ## 暂不纳入主链（Tier 3）
 
@@ -78,9 +78,9 @@
 |------|------|
 | Stealth tab / 隐身窗口 | Background mode 的子功能，depend on Tier 2 |
 | Computer (坐标模式) | Focus mode 专有，极少使用 |
-| Download image (批量) | 非核心产品场景 |
+| `download_image` / batch download | 更适合作为 product/workflow export layer，不进 browser automation 主链 |
 | Tab ungroup | 边缘操作 |
-| Screenshot with highlight | 可由 screenshot + highlight 组合 |
+| `download_chat_images` | chat/product workflow 专用导出，不纳入主链 |
 | Fill form (批量) | 可由多次 fill 替代 |
 | Lease policy | Background mode 并发控制，Focus mode 不需要 |
 | Focus escalation UI | 依赖 Background mode |
