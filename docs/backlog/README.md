@@ -172,14 +172,14 @@ bun run workflow:new-review-issue -- --module=... --title=... --epic=... --accep
 
 - 当前主线 batch 已切到 `docs/next-development-slices-2026-03-29-batch-7.md`
 - `ISSUE-051` / `ISSUE-052` / `ISSUE-053` 是当前 kernel mainline 队列
-- `ISSUE-054` 已补上 ai-surface-control-plane 的 live coverage
+- `ISSUE-055` / `ISSUE-056` 已补上 ai-surface-control-plane 在 `config.*` / `skills.*` 上的 live coverage
 - batch 6 中的 operability / site-runtime / host follow-up 仍有效，但现在是 kernel 次级队列
 - live 模块顺序以 `docs/module-tracking-ledger.json` 为准
 - claim 真相仍以 live backlog frontmatter 与 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview` 为准。
 
 ### 边界说明
 
-- `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030`、`ISSUE-031`、`ISSUE-032`、`ISSUE-034`、`ISSUE-035` 已完成。
+- `ISSUE-026`、`ISSUE-028`、`ISSUE-029`、`ISSUE-030`、`ISSUE-031`、`ISSUE-032`、`ISSUE-034`、`ISSUE-035`、`ISSUE-054` 已完成。
 - host substrate 仍未收口的主缺口是 `ISSUE-038` 对真实 local adapter 的跟进。
 - 但 repo 当前最大的产品级缺口已经从 host substrate 切回 browser-side kernel。
 
@@ -193,10 +193,11 @@ bun run workflow:new-review-issue -- --module=... --title=... --epic=... --accep
 4. `ISSUE-042` host control-plane audit tail
 5. `ISSUE-043` runtime clear-error closure
 6. `ISSUE-041` intervention and human handoff scope
-7. `ISSUE-054` ai-surface control-plane follow-up coverage
-8. `ISSUE-036` browser automation cutover boundary
-9. `ISSUE-045` site-runtime capability routing bridge strategy
-10. `ISSUE-038` real local execution host adapter follow-up
+7. `ISSUE-055` config control-plane action surface placeholder closure
+8. `ISSUE-056` skill lifecycle control-plane actions beyond invoke/list
+9. `ISSUE-036` browser automation cutover boundary
+10. `ISSUE-045` site-runtime capability routing bridge strategy
+11. `ISSUE-038` real local execution host adapter follow-up
 
 最终领取顺序仍以 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview` 为准。
 

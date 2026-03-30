@@ -61,6 +61,10 @@
 ### Product control plane
 
 - `config.update`
+- `skills.install`
+- `skills.enable`
+- `skills.disable`
+- `skills.uninstall`
 - `hosts.list`
 - `hosts.get`
 - `hosts.connect`
