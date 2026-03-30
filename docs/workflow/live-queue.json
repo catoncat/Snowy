@@ -1,28 +1,29 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-30T13:27:43.857Z",
+  "generated_at": "2026-03-30T13:34:03.471Z",
   "repo_root": "/Users/envvar/work/repos/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-069",
-      "issue_path": "docs/backlog/2026-03-30-skill-lifecycle-uninstall-control-plane-remains-deferred.md",
-      "title": "Review: skill lifecycle uninstall control-plane action remains deferred",
-      "parallel_group": "contracts-core",
-      "module_id": "ai-surface-control-plane",
+      "issue_id": "ISSUE-066",
+      "issue_path": "docs/backlog/2026-03-30-apps-mv3-shell-still-owns-app-local-truth-instead-of-package-upstream-runtime-surfaces.md",
+      "title": "Review: apps/mv3-shell still owns app-local truth instead of package-upstream runtime surfaces",
+      "parallel_group": "mv3-shell",
+      "module_id": "execution-host-bridge",
       "module_stage": "secondary",
-      "tracking_kind": "follow-up",
+      "tracking_kind": "gap",
       "check_cmd": "bun run check",
       "depends_on": [
-        "ISSUE-056"
+        "ISSUE-065"
       ],
       "write_scope": [
-        "packages/contracts/src/index.ts",
+        "apps/mv3-shell/src/background.js",
+        "apps/mv3-shell/src/runtime-services.js",
+        "apps/mv3-shell/test/manifest.spec.ts",
         "packages/core/src/index.ts",
         "packages/core/test/core.spec.ts",
-        "docs/ai-surface-index.md",
-        "docs/skill-lifecycle-version-engine-boundary.md",
-        "docs/skill-runtime-site-capability-redesign-2026-03-29.md",
-        "docs/backlog"
+        "packages/site-runtime/src/index.ts",
+        "packages/site-runtime/test/site-runtime.spec.ts",
+        "docs/"
       ]
     }
   ]
