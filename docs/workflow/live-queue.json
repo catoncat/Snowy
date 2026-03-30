@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-30T15:20:28.975Z",
+  "generated_at": "2026-03-30T15:21:31.234Z",
   "repo_root": "/Users/envvar/work/repos/browser-brain-loop-next",
   "entries": [
     {
@@ -25,21 +25,6 @@
         "apps/mv3-shell/src/runtime-services.js",
         "apps/mv3-shell/test/manifest.spec.ts",
         "docs/"
-      ]
-    },
-    {
-      "issue_id": "ISSUE-077",
-      "issue_path": "docs/backlog/2026-03-30-executable-skill-setup-hooks-still-have-no-vnext-slice.md",
-      "title": "Review: executable skill setup hooks still have no vNext slice",
-      "parallel_group": "sdk-docs",
-      "module_id": "skill-runtime-sdk-studio",
-      "module_stage": "deferred",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/skill-sdk/src/index.ts",
-        "packages/skill-sdk/test/skill-sdk.spec.ts"
       ]
     },
     {

@@ -1,5 +1,5 @@
 ---
-id: ISSUE-078
+id: ISSUE-079
 title: "Follow-up: skill setup hook authoring docs are stale"
 status: open
 priority: p2
