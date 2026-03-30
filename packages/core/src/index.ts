@@ -270,6 +270,7 @@ interface CatalogEntryInput {
   description: string;
   inputSchema: JsonSchema;
   outputSchema?: JsonSchema;
+  supportsVerify?: boolean;
 }
 
 function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
@@ -283,6 +284,7 @@ function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
     description,
     inputSchema,
     outputSchema = { type: "object" },
+    supportsVerify = family === "page" || family === "site",
   } = input;
   return {
     id,
@@ -293,7 +295,7 @@ function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
     risk,
     sideEffects,
     permissions,
-    supportsVerify: family === "page" || family === "site",
+    supportsVerify,
     supportsStreaming: false,
     exportable: sideEffects === "reads" || sideEffects === "none",
     exportName: id,
@@ -609,6 +611,41 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       permissions: ["tabs.get_active"],
       description: "Get metadata of the currently active tab",
       inputSchema: { type: "object" },
+      outputSchema: {
+        type: "object",
+        properties: {
+          tabId: { type: "number" },
+          url: { type: "string" },
+          active: { type: "boolean" },
+          title: { type: "string" },
+        },
+        required: ["tabId", "url", "active"],
+      },
+    }),
+    catalogEntry({
+      id: "tabs.navigate",
+      family: "tabs",
+      operation: "navigate",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["tabs.navigate"],
+      description: "Navigate the active tab to a URL",
+      inputSchema: {
+        type: "object",
+        properties: { url: { type: "string" } },
+        required: ["url"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          tabId: { type: "number" },
+          url: { type: "string" },
+          active: { type: "boolean" },
+          title: { type: "string" },
+        },
+        required: ["tabId", "url", "active"],
+      },
+      supportsVerify: true,
     }),
   ],
   runner: [
@@ -1444,6 +1481,7 @@ export interface BuiltinCapabilityMap {
     list: CapabilityFn;
     getActive: CapabilityFn;
     get_active: CapabilityFn;
+    navigate: CapabilityFn;
   };
   runner: {
     invoke: CapabilityFn;

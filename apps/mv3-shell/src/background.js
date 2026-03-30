@@ -57,6 +57,16 @@ function invalidSiteRuntimeInvoke(message) {
   };
 }
 
+function invalidTabsAutomation(message) {
+  return {
+    ok: false,
+    error: {
+      code: "E_BAD_INPUT",
+      message,
+    },
+  };
+}
+
 function invalidHostControlPlane(message) {
   return {
     ok: false,
@@ -138,6 +148,7 @@ function toCanonicalTab(activeTab) {
     tabId: activeTab.id,
     url: activeTab.url,
     active: activeTab.active === true,
+    title: typeof activeTab.title === "string" ? activeTab.title : undefined,
   };
 }
 
@@ -333,6 +344,17 @@ export function createBackgroundRunnerBridge({
       return null;
     }
     return activeTab;
+  }
+
+  async function readActiveTabMetadata(actionKind) {
+    const activeTab = await queryActiveTab();
+    if (!activeTab) {
+      return invalidTabsAutomation(`${actionKind} requires an active tab with url metadata`);
+    }
+    return {
+      ok: true,
+      data: activeTab,
+    };
   }
 
   async function resolveMaybe(value) {
@@ -691,6 +713,57 @@ export function createBackgroundRunnerBridge({
     return {
       ok: true,
       data: toCanonicalTab(activeTab),
+    };
+  }
+
+  async function getActiveTabMetadata() {
+    const activeTabResult = await readActiveTabMetadata("tabs.get_active");
+    if (!activeTabResult.ok) {
+      return activeTabResult;
+    }
+
+    return {
+      ok: true,
+      data: toCanonicalTab(activeTabResult.data),
+    };
+  }
+
+  async function navigateActiveTab({ url } = {}) {
+    if (typeof url !== "string" || !url.trim()) {
+      return invalidTabsAutomation("tabs.navigate requires a non-empty url");
+    }
+    if (!chromeApi?.tabs?.update) {
+      return {
+        ok: false,
+        error: {
+          code: "E_RUNTIME",
+          message: "chrome.tabs.update is required for tabs.navigate",
+        },
+      };
+    }
+
+    const activeTabResult = await readActiveTabMetadata("tabs.navigate");
+    if (!activeTabResult.ok) {
+      return activeTabResult;
+    }
+
+    const nextUrl = url.trim();
+    const activeTab = activeTabResult.data;
+    const updatedTab = await chromeApi.tabs.update(activeTab.id, {
+      url: nextUrl,
+    });
+
+    return {
+      ok: true,
+      data: toCanonicalTab(
+        updatedTab && typeof updatedTab.id === "number" && typeof updatedTab.url === "string"
+          ? updatedTab
+          : {
+              ...activeTab,
+              url: nextUrl,
+              active: true,
+            },
+      ),
     };
   }
 
@@ -1194,6 +1267,12 @@ export function createBackgroundRunnerBridge({
       case "config.update":
         return updateConfig({
           patch: message.patch,
+        });
+      case "tabs.get_active":
+        return getActiveTabMetadata();
+      case "tabs.navigate":
+        return navigateActiveTab({
+          url: message.url,
         });
       case "audit.host":
         return {

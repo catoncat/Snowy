@@ -76,7 +76,7 @@
 | Capability ID | 状态 | 参数 | Risk | Side Effects | 执行路径 |
 |--------------|------|------|------|-------------|---------|
 | `tabs.get_active` | **已声明** | `{}` | low | reads | `chrome.tabs.query({ active: true, currentWindow: true })` |
-| `tabs.navigate` | **待新增** | `{ url: string }` | medium | writes | `chrome.tabs.update(tabId, { url })` |
+| `tabs.navigate` | **已实现** | `{ url: string }` | medium | writes | `chrome.tabs.update(tabId, { url })` |
 
 ### 不纳入 Cutover 前（本 issue 不处理）
 
@@ -203,6 +203,10 @@
 - 实现层使用 `chrome.tabs.update(tabId, { url })`，不新开 tab
 - URL 校验在 provider 层做（http/https only），不在 descriptor 层硬编码
 
+**当前状态：**
+- 已由 `ISSUE-058` 落地到 `packages/core/src/index.ts` 与 `apps/mv3-shell/src/background.js`
+- 当前通过 MV3 background bridge 走 active-tab-only round-trip，不要求先注册 `tabs` FamilyProvider
+
 ## 已有 Descriptor 确认
 
 ### `page.query`（无变更）
@@ -280,7 +284,7 @@ ISSUE-045 已锁定：
 
 1. 在 `packages/contracts/src/index.ts` 无需改动（descriptor 类型已通用）
 2. 在 `packages/core/src/index.ts` 的 `BUILTIN_CATALOG.page` 中新增 `page.press_key` 和 `page.screenshot`
-3. 在 `packages/core/src/index.ts` 的 `BUILTIN_CATALOG.tabs` 中新增 `tabs.navigate`
+3. 在 `packages/core/src/index.ts` 的 `BUILTIN_CATALOG.tabs` 中新增 `tabs.navigate`（已由 `ISSUE-058` 完成）
 4. 补测试确认 descriptor validity 和 tool projection
 
 ### Phase 2: MV3 Shell 执行层（后续批次）
@@ -306,7 +310,7 @@ ISSUE-045 已锁定：
 已有的 follow-up 完全覆盖本 review 的结论：
 
 - **ISSUE-057**：Tier 1 page automation descriptors and runtime path — 新增 `page.press_key` / `page.screenshot` descriptor + MV3 page-hook 执行层
-- **ISSUE-058**：tabs.navigate active-tab automation path — 新增 `tabs.navigate` descriptor + MV3 background navigate 执行层
+- **ISSUE-058**：tabs.navigate active-tab automation path — 已完成 `tabs.navigate` descriptor + MV3 background navigate 执行层
 - **ISSUE-040**：screenshot/download surfaces — 与 `page.screenshot` descriptor 有交叉，但 ISSUE-040 侧重"surface 边界审查"而非实现
 
 无需新建额外 issue。

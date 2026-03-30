@@ -1,11 +1,11 @@
 ---
 id: ISSUE-058
 title: "Follow-up: tabs.navigate active-tab automation path is still missing"
-status: open
+status: done
 priority: p1
 source: "ISSUE-036 cutover boundary 2026-03-30"
 created: 2026-03-30
-assignee: unassigned
+assignee: copilot
 tags:
   - review
   - follow-up
@@ -46,3 +46,36 @@ check_cmd: "bun run check"
 - tabs.navigate 通过现有 MV3 runtime path 跑通最小 round-trip，不要求提前注册 tabs FamilyProvider。
 - 补测试覆盖导航行为与 active tab 元数据约束。
 - 相关文档与 ISSUE-036 口径一致。
+
+## 工作总结
+
+### 完成内容
+
+1. **补齐 `tabs.navigate` public contract**
+  - 在 `packages/core/src/index.ts` 的 `BUILTIN_CATALOG.tabs` 新增 `tabs.navigate`
+  - input schema 收口为 `{ url: string }`
+  - output schema 明确为 active-tab metadata：`tabId/url/active/title?`
+  - `supportsVerify: true`，保持 active-tab-only 导航原语定位
+
+2. **补齐最小 MV3 runtime path**
+  - 在 `apps/mv3-shell/src/background.js` 新增 `tabs.get_active` / `tabs.navigate` background route
+  - `tabs.navigate` 通过 `chrome.tabs.update(activeTab.id, { url })` 实现最小 round-trip
+  - 不提前引入 `tabs` FamilyProvider；仍走现有 MV3 background bridge
+  - active tab 缺失或无 url metadata 时返回 `E_BAD_INPUT`
+
+3. **补测试 / 验证覆盖**
+  - `packages/core/test/core.spec.ts`：新增 tabs builtin contract 断言
+  - `apps/mv3-shell/test/manifest.spec.ts`：复用现有 MV3 bridge 测试，验证 active tab metadata 读取、导航成功、缺少 active tab 失败三类场景
+
+4. **同步文档口径**
+  - 更新 `docs/page-tabs-public-automation-path.md`
+  - 更新 `docs/browser-automation-cutover-boundary.md`
+  - 更新 `docs/legacy-to-vnext-migration-matrix.md`
+  - 更新 `docs/migration-parity-dashboard.md`
+
+### 验证
+
+- `bunx vitest run apps/mv3-shell/test/manifest.spec.ts packages/core/test/core.spec.ts` ✅
+- `bun run typecheck` ✅
+- `bun run check` ❌ 被仓库现有、且本 issue write scope 外的格式化漂移阻塞（例如 `.vscode/mcp.json`、`apps/mv3-shell/manifest.json`、`packages/skill-sdk/test/skill-sdk.spec.ts`、`.codex/hooks/workflow-ticket.test.ts` 等）
+- `bunx biome check apps/mv3-shell/src/background.js apps/mv3-shell/test/manifest.spec.ts packages/core/src/index.ts packages/core/test/core.spec.ts ...` ✅（本次改动代码文件通过）

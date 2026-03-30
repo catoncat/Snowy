@@ -102,6 +102,40 @@ describe("core", () => {
     ]);
   });
 
+  it("keeps tabs automation actions aligned with the active-tab-only boundary", () => {
+    expect(getBuiltinsByNamespace("tabs").map((entry) => entry.id)).toEqual([
+      "tabs.list",
+      "tabs.get_active",
+      "tabs.navigate",
+    ]);
+    expect(getBuiltinsByNamespace("tabs")).toMatchObject([
+      {
+        id: "tabs.list",
+        sideEffects: "reads",
+        supportsVerify: false,
+      },
+      {
+        id: "tabs.get_active",
+        sideEffects: "reads",
+        supportsVerify: false,
+        outputSchema: {
+          required: ["tabId", "url", "active"],
+        },
+      },
+      {
+        id: "tabs.navigate",
+        sideEffects: "writes",
+        supportsVerify: true,
+        inputSchema: {
+          required: ["url"],
+        },
+        outputSchema: {
+          required: ["tabId", "url", "active"],
+        },
+      },
+    ]);
+  });
+
   it("projects tools from the registry", () => {
     const registry = new CapabilityRegistry([descriptor()]);
 

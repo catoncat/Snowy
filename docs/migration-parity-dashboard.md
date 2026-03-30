@@ -22,7 +22,7 @@
 | local execution host adapter | `yellow` | 默认 offscreen local adapter 已实现 read/write/edit（ISSUE-038）；exec 需 remote host；remote host path 仍未实现 |
 | site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
 | AI-native product control plane | `yellow` | 最小 `runtime/config/skills/hosts` bootstrap summary、`runtime.capture_diagnostics` / `runtime.clear_error`、本地 `hosts.*` control plane 与 `config.update` 已落地并有测试；`skills.*` lifecycle 与 `audit.*` 仍未实现 |
-| old browser automation parity | `yellow` | Tier 1/2/3 cutover boundary 已锁定（见 `docs/browser-automation-cutover-boundary.md`），Tier 1 实现仍待推进 |
+| old browser automation parity | `yellow` | Tier 1/2/3 cutover boundary 已锁定（见 `docs/browser-automation-cutover-boundary.md`）；`tabs.navigate` 已落地，剩余 Tier 1 page runtime path / screenshot / intervention 仍待推进 |
 | old visual/download/intervention parity | `red` | 旧产品能力未在新仓形成主链 |
 | skill SDK / authoring | `yellow` | typed facade 与文档已起步，完整 authoring/studio 不足 |
 | plugin -> executable skill migration | `yellow` | 方向明确，但还不是可替代旧 plugin 生态的状态 |
