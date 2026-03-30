@@ -62,6 +62,30 @@ export interface HostControlPlaneSnapshot {
   hosts: ExecutionHostRecord[];
 }
 
+export const HOST_AUDIT_KINDS = [
+  "hosts.connect",
+  "hosts.disconnect",
+  "hosts.set_default",
+] as const;
+export type HostAuditKind = (typeof HOST_AUDIT_KINDS)[number];
+
+export const HOST_AUDIT_STATUSES = [
+  "connected",
+  "disconnected",
+  "default_set",
+  "failed",
+] as const;
+export type HostAuditStatus = (typeof HOST_AUDIT_STATUSES)[number];
+
+export interface HostAuditEntry {
+  timestamp: string;
+  sessionId: string | null;
+  kind: HostAuditKind;
+  hostId: string;
+  status: HostAuditStatus;
+  error?: string;
+}
+
 export type CapabilityRisk = "low" | "medium" | "high";
 export type CapabilitySideEffects = "none" | "reads" | "writes" | "external";
 export type SkillStatus = "draft" | "staged" | "installed" | "enabled" | "disabled" | "archived";

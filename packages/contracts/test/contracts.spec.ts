@@ -9,6 +9,8 @@ import {
   type CompactionDraft,
   type CompactionPayload,
   DEFAULT_SKILL_VERSION_RETENTION,
+  HOST_AUDIT_KINDS,
+  HOST_AUDIT_STATUSES,
   HOST_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
   type KernelLlmAdapter,
@@ -121,6 +123,20 @@ describe("contracts", () => {
       "hosts.disconnect",
       "hosts.set_default",
       "hosts.health",
+    ]);
+  });
+
+  it("locks the host audit vocabulary", () => {
+    expect(HOST_AUDIT_KINDS).toEqual([
+      "hosts.connect",
+      "hosts.disconnect",
+      "hosts.set_default",
+    ]);
+    expect(HOST_AUDIT_STATUSES).toEqual([
+      "connected",
+      "disconnected",
+      "default_set",
+      "failed",
     ]);
   });
 

@@ -1,3 +1,12 @@
+import {
+  BOOTSTRAP_RESOURCE_KEYS as CONTRACT_BOOTSTRAP_RESOURCE_KEYS,
+  HOST_AUDIT_KINDS,
+  HOST_AUDIT_STATUSES,
+} from "@bbl-next/contracts";
+import { createBootstrapSummary } from "@bbl-next/core";
+export { createPageHookBridge } from "./page-hook-bridge.js";
+import { createBackgroundRuntimeServices } from "./runtime-services.js";
+
 export const RUNNER_BACKGROUND_TARGET = "bbl-next.runner.background";
 export const RUNNER_OFFSCREEN_TARGET = "bbl-next.runner.offscreen";
 export const RUNNER_OFFSCREEN_DOCUMENT_PATH = "src/offscreen.html";
@@ -7,9 +16,9 @@ export const RUNNER_OFFSCREEN_JUSTIFICATION =
 export const RUNNER_BRIDGE_TIMEOUT_MS = 5_000;
 export const PAGE_HOOK_GLOBAL_KEY = "__BBL_NEXT_PAGE_HOOK__";
 export const PAGE_HOOK_DEFAULT_FILE = "src/page-hook.js";
-export const BOOTSTRAP_RESOURCE_KEYS = ["runtime", "config", "skills", "hosts"];
+export const BOOTSTRAP_RESOURCE_KEYS = [...CONTRACT_BOOTSTRAP_RESOURCE_KEYS];
 const LOCAL_HOST_ID = "local";
-const CONFIG_RESOURCE_FIELDS = ["model", "automation", "permissions", "preferences"];
+const AUDIT_STORAGE_KEY = "bbl-next.audit.host.v1";
 
 function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   if (error && typeof error === "object" && "code" in error && "message" in error) {
@@ -36,28 +45,52 @@ function isoNow() {
   return new Date().toISOString();
 }
 
-function siteWorldToExecutionWorld(world) {
-  return world === "main" ? "MAIN" : "ISOLATED";
-}
-
-function unwrapExecuteScriptResult(result) {
-  if (Array.isArray(result)) {
-    return result[0]?.result;
+function normalizeAuditEntry(value) {
+  if (!value || typeof value !== "object") {
+    return null;
   }
-  return result;
+  if (
+    typeof value.kind !== "string"
+    || !HOST_AUDIT_KINDS.includes(value.kind)
+    || typeof value.status !== "string"
+    || !HOST_AUDIT_STATUSES.includes(value.status)
+    || typeof value.hostId !== "string"
+  ) {
+    return null;
+  }
+
+  const entry = {
+    timestamp: typeof value.timestamp === "string" ? value.timestamp : isoNow(),
+    sessionId: typeof value.sessionId === "string" ? value.sessionId : null,
+    kind: value.kind,
+    hostId: value.hostId,
+    status: value.status,
+  };
+  if (typeof value.error === "string" && value.error.length > 0) {
+    entry.error = value.error;
+  }
+  return entry;
 }
 
-function invalidSiteRuntimeInvoke(message) {
+function createChromeAuditStore(chromeApi, storageKey = AUDIT_STORAGE_KEY) {
+  const storageArea = chromeApi?.storage?.local;
+  if (typeof storageArea?.get !== "function" || typeof storageArea?.set !== "function") {
+    return undefined;
+  }
   return {
-    ok: false,
-    error: {
-      code: "E_BAD_INPUT",
-      message,
+    async load() {
+      const loaded = await storageArea.get(storageKey);
+      return Array.isArray(loaded?.[storageKey]) ? loaded[storageKey] : [];
+    },
+    async save(entries) {
+      await storageArea.set({
+        [storageKey]: entries,
+      });
     },
   };
 }
 
-function invalidTabsAutomation(message) {
+function invalidSiteRuntimeInvoke(message) {
   return {
     ok: false,
     error: {
@@ -87,20 +120,6 @@ function invalidHostSubstrate(message) {
   };
 }
 
-function invalidConfigControlPlane(message) {
-  return {
-    ok: false,
-    error: {
-      code: "E_BAD_INPUT",
-      message,
-    },
-  };
-}
-
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 function toExecutionHostHealthStatus(localState) {
   if (localState.health?.status === "degraded" || localState.error) {
     return "degraded";
@@ -118,29 +137,31 @@ function toExecutionHostState(localState) {
   return localState.reachable ? "connected" : "disconnected";
 }
 
-function defaultBootstrapSummaryBuilder({
-  generatedAt,
-  resourceKeys,
-  runtime,
-  skills,
-  hosts,
-  config,
-}) {
-  const summary = {
-    status:
-      runtime.status === "degraded" || hosts.status === "degraded"
-        ? "degraded"
-        : runtime.status === "empty" && skills.status === "empty" && hosts.status === "empty"
-          ? "empty"
-          : "healthy",
-    generatedAt,
-    resourceKeys,
-    runtime,
-    skills,
-    hosts,
-    config,
+function defaultBootstrapSummaryBuilder(input) {
+  const summary = createBootstrapSummary({
+    generatedAt: input.generatedAt,
+    activeTab: input.runtime?.activeTab ?? null,
+    runtime: {
+      status: input.runtime?.status,
+      sessionId: input.runtime?.sessionId,
+      loopState: input.runtime?.loopState,
+      lastError: input.runtime?.lastError,
+    },
+    skills: input.skills,
+    hosts: input.hosts,
+    config: input.config,
+  });
+
+  return {
+    ...summary,
+    runtime: {
+      ...summary.runtime,
+      mode: input.runtime?.mode ?? summary.runtime.mode,
+    },
+    resourceKeys: Array.isArray(input.resourceKeys)
+      ? [...input.resourceKeys]
+      : [...BOOTSTRAP_RESOURCE_KEYS],
   };
-  return summary;
 }
 
 function toCanonicalTab(activeTab) {
@@ -222,11 +243,15 @@ export function createBackgroundRunnerBridge({
   currentMode = "active-tab-only",
   listSkills = undefined,
   configSummary = undefined,
+  runtimeServices = undefined,
+  auditStore = undefined,
+  auditStorageKey = AUDIT_STORAGE_KEY,
 } = {}) {
   let creating = null;
   let requestSequence = 0;
   const AUDIT_MAX_ENTRIES = 64;
   const auditEntries = [];
+  const resolvedAuditStore = auditStore ?? createChromeAuditStore(chromeApi, auditStorageKey);
   const state = {
     defaultHostId: null,
     hostReady: false,
@@ -235,12 +260,47 @@ export function createBackgroundRunnerBridge({
     hostRecoveryReason: undefined,
     lastRuntimeError: null,
     lastRuntimeErrorClearedAt: null,
-    configValues: {},
-    configUpdatedAt: null,
   };
+  let composedRuntimeServices = null;
 
-  function appendAudit({ kind, hostId, status, error }) {
-    const entry = { timestamp: isoNow(), kind, hostId, status };
+  const auditReady = (async () => {
+    if (!resolvedAuditStore) {
+      return;
+    }
+    const loadedEntries = await resolvedAuditStore.load();
+    const normalizedEntries = Array.isArray(loadedEntries)
+      ? loadedEntries.map((entry) => normalizeAuditEntry(entry)).filter(Boolean)
+      : [];
+    auditEntries.splice(0, auditEntries.length, ...normalizedEntries.slice(-AUDIT_MAX_ENTRIES));
+  })();
+
+  async function persistAuditEntries() {
+    if (!resolvedAuditStore) {
+      return;
+    }
+    await resolvedAuditStore.save(auditEntries.map((entry) => ({ ...entry })));
+  }
+
+  async function resolveAuditSessionId() {
+    if (typeof sessionId === "string" && sessionId.trim()) {
+      return sessionId;
+    }
+    if (!runtimeServices && !composedRuntimeServices) {
+      return null;
+    }
+    const runtimeKernelState = await getRuntimeServices().getKernelRuntimeState();
+    return runtimeKernelState?.session?.id ?? null;
+  }
+
+  async function appendAudit({ kind, hostId, status, error }) {
+    await auditReady;
+    const entry = {
+      timestamp: isoNow(),
+      sessionId: await resolveAuditSessionId(),
+      kind,
+      hostId,
+      status,
+    };
     if (error) {
       entry.error = typeof error === "string" ? error : (error.message ?? String(error));
     }
@@ -248,11 +308,18 @@ export function createBackgroundRunnerBridge({
     if (auditEntries.length > AUDIT_MAX_ENTRIES) {
       auditEntries.splice(0, auditEntries.length - AUDIT_MAX_ENTRIES);
     }
+    await persistAuditEntries();
+    return entry;
   }
 
   function getAuditTail(limit) {
     const max = typeof limit === "number" && limit > 0 ? limit : AUDIT_MAX_ENTRIES;
     return auditEntries.slice(-max);
+  }
+
+  async function readAuditTail(limit) {
+    await auditReady;
+    return getAuditTail(limit);
   }
 
   function setRuntimeError(error) {
@@ -281,6 +348,24 @@ export function createBackgroundRunnerBridge({
   function nextRequestId() {
     requestSequence += 1;
     return `bridge-${requestSequence}`;
+  }
+
+  function getRuntimeServices() {
+    if (!composedRuntimeServices) {
+      const baseRuntimeServices = createBackgroundRuntimeServices({
+        chromeApi,
+        invokeRunner: invoke,
+        pageHookBridge,
+        configSummary,
+      });
+      composedRuntimeServices = runtimeServices
+        ? {
+            ...baseRuntimeServices,
+            ...runtimeServices,
+          }
+        : baseRuntimeServices;
+    }
+    return composedRuntimeServices;
   }
 
   async function hasOffscreenDocument() {
@@ -346,127 +431,11 @@ export function createBackgroundRunnerBridge({
     return activeTab;
   }
 
-  async function readActiveTabMetadata(actionKind) {
-    const activeTab = await queryActiveTab();
-    if (!activeTab) {
-      return invalidTabsAutomation(`${actionKind} requires an active tab with url metadata`);
-    }
-    return {
-      ok: true,
-      data: activeTab,
-    };
-  }
-
   async function resolveMaybe(value) {
     if (typeof value === "function") {
       return value();
     }
     return value;
-  }
-
-  function normalizeConfigValues(values) {
-    const out = {};
-    if (!isPlainObject(values)) {
-      return out;
-    }
-    for (const field of CONFIG_RESOURCE_FIELDS) {
-      if (isPlainObject(values[field])) {
-        out[field] = { ...values[field] };
-      }
-    }
-    return out;
-  }
-
-  function mergeConfigValues(baseValues, patchValues) {
-    const next = normalizeConfigValues(baseValues);
-    for (const field of CONFIG_RESOURCE_FIELDS) {
-      if (isPlainObject(patchValues[field])) {
-        next[field] = {
-          ...(next[field] ?? {}),
-          ...patchValues[field],
-        };
-      }
-    }
-    return next;
-  }
-
-  function normalizeConfigPatch(patch) {
-    if (!isPlainObject(patch)) {
-      return invalidConfigControlPlane("config.update requires a patch object");
-    }
-
-    const normalized = {};
-    for (const [field, value] of Object.entries(patch)) {
-      if (!CONFIG_RESOURCE_FIELDS.includes(field)) {
-        return invalidConfigControlPlane(`config.update does not support field: ${field}`);
-      }
-      if (!isPlainObject(value)) {
-        return invalidConfigControlPlane(`config.update field ${field} must be an object`);
-      }
-      normalized[field] = { ...value };
-    }
-
-    if (Object.keys(normalized).length === 0) {
-      return invalidConfigControlPlane("config.update requires at least one config field");
-    }
-
-    return normalized;
-  }
-
-  async function resolveConfigBootstrapSummary() {
-    const resolved = (await resolveMaybe(configSummary)) ?? {};
-    const baseValues = normalizeConfigValues(resolved.values);
-    const values = mergeConfigValues(baseValues, state.configValues);
-    const hasValues = Object.keys(values).length > 0;
-    const status = hasValues || resolved.status === "ready" ? "ready" : "placeholder";
-    const fields =
-      Array.isArray(resolved.fields) && resolved.fields.length > 0
-        ? resolved.fields.filter((field) => CONFIG_RESOURCE_FIELDS.includes(field))
-        : [...CONFIG_RESOURCE_FIELDS];
-
-    return {
-      status,
-      fields: fields.length > 0 ? fields : [...CONFIG_RESOURCE_FIELDS],
-      values,
-      note:
-        status === "ready"
-          ? null
-          : typeof resolved.note === "string"
-            ? resolved.note
-            : "Config control plane is not implemented yet.",
-      updatedAt:
-        typeof state.configUpdatedAt === "string"
-          ? state.configUpdatedAt
-          : typeof resolved.updatedAt === "string"
-            ? resolved.updatedAt
-            : null,
-    };
-  }
-
-  async function updateConfig({ patch }) {
-    const normalizedPatch = normalizeConfigPatch(patch);
-    if (normalizedPatch.ok === false) {
-      return normalizedPatch;
-    }
-
-    const current = await resolveConfigBootstrapSummary();
-    const values = mergeConfigValues(current.values, normalizedPatch);
-    const updatedAt = isoNow();
-    state.configValues = values;
-    state.configUpdatedAt = updatedAt;
-
-    return {
-      ok: true,
-      data: {
-        config: {
-          status: "ready",
-          fields: current.fields,
-          values,
-          note: null,
-          updatedAt,
-        },
-      },
-    };
   }
 
   function resolveHostId(hostId, action) {
@@ -580,7 +549,7 @@ export function createBackgroundRunnerBridge({
     }
     const ensured = await ensureHost();
     if (!ensured.ok) {
-      appendAudit({
+      await appendAudit({
         kind: "hosts.connect",
         hostId: resolvedHostId,
         status: "failed",
@@ -591,7 +560,7 @@ export function createBackgroundRunnerBridge({
     if (!state.defaultHostId) {
       state.defaultHostId = resolvedHostId;
     }
-    appendAudit({ kind: "hosts.connect", hostId: resolvedHostId, status: "connected" });
+    await appendAudit({ kind: "hosts.connect", hostId: resolvedHostId, status: "connected" });
     return {
       ok: true,
       data: {
@@ -625,7 +594,7 @@ export function createBackgroundRunnerBridge({
       await chromeApi.offscreen.closeDocument();
     }
     state.hostReady = false;
-    appendAudit({ kind: "hosts.disconnect", hostId: resolvedHostId, status: "disconnected" });
+    await appendAudit({ kind: "hosts.disconnect", hostId: resolvedHostId, status: "disconnected" });
     return {
       ok: true,
       data: {
@@ -641,7 +610,7 @@ export function createBackgroundRunnerBridge({
       return resolvedHostId;
     }
     state.defaultHostId = resolvedHostId;
-    appendAudit({ kind: "hosts.set_default", hostId: resolvedHostId, status: "default_set" });
+    await appendAudit({ kind: "hosts.set_default", hostId: resolvedHostId, status: "default_set" });
     return {
       ok: true,
       data: {
@@ -924,102 +893,36 @@ export function createBackgroundRunnerBridge({
     }
     const resolvedTab = resolvedTabResponse.data;
 
-    const trace = [`match:${skillId}`];
-    const site = {
-      plan,
-      installations: [],
-    };
-
-    if (plan.steps.length > 0) {
-      if (!pageHookBridge) {
-        return {
-          ok: false,
-          error: {
-            code: "E_RUNTIME",
-            message: "Page hook bridge is not configured",
-          },
-        };
-      }
-      trace.push(`plan:${plan.steps.length}_steps`);
-      for (const step of plan.steps) {
-        const installation = await pageHookBridge.install(step, resolvedTab);
-        site.installations.push({
-          step,
-          result: installation,
-        });
-        trace.push(`install:${step.world}:${step.scriptId}`);
-      }
-    }
-
-    const runnerResponse = await invoke({
-      module,
-      input,
-      ctx: {
-        ...ctx,
-        tab: resolvedTab,
-        site,
-      },
-    });
-    if (!runnerResponse.ok) {
-      return runnerResponse;
-    }
-    if (runnerResponse.data?.ok !== true) {
+    if (plan.steps.length > 0 && !pageHookBridge) {
       return {
         ok: false,
-        error: runnerResponse.data?.error ?? {
+        error: {
           code: "E_RUNTIME",
-          message: "Runner invocation failed",
+          message: "Page hook bridge is not configured",
         },
       };
     }
 
-    let result = runnerResponse.data.result?.result;
-    const targetInstallation = site.installations[site.installations.length - 1];
-    if (targetInstallation && pageHookBridge?.invoke) {
-      result = await pageHookBridge.invoke({
-        installation: targetInstallation,
-        action,
-        input: result,
-        tab: resolvedTab,
-        ctx: {
-          ...ctx,
-          tab: resolvedTab,
-          site,
-        },
-      });
-    }
-    trace.push(`invoke:${action}`);
-
-    let verified = true;
-    if (verifier && targetInstallation && pageHookBridge?.verify) {
-      verified = Boolean(
-        await pageHookBridge.verify({
-          installation: targetInstallation,
+    try {
+      return {
+        ok: true,
+        data: await getRuntimeServices().invokeSiteSkill({
+          skillId,
           action,
-          result,
           tab: resolvedTab,
+          input,
+          ctx,
+          plan,
+          module,
+          verifier,
         }),
-      );
-      trace.push(`verify:${verifier}`);
-      if (!verified) {
-        return {
-          ok: false,
-          error: {
-            code: "E_VERIFY_FAILED",
-            message: `Verifier failed for ${skillId}.${action}`,
-          },
-        };
-      }
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: toBridgeError(error),
+      };
     }
-
-    return {
-      ok: true,
-      data: {
-        result,
-        verified,
-        trace,
-      },
-    };
   }
 
   async function diagnostics({ tabId, world = "main" } = {}) {
@@ -1115,6 +1018,8 @@ export function createBackgroundRunnerBridge({
     const runtimeDiagnostics = diagnosticsResult.data;
     const runnerHealth = runtimeDiagnostics.runner?.health;
     const activeTabSummary = activeTab ? toBootstrapActiveTab(activeTab, world) : null;
+    const runtimeKernelState =
+      sessionId == null && runtimeServices ? await getRuntimeServices().getKernelRuntimeState() : null;
     const runtimeStatus =
       runtimeDiagnostics.status === "degraded"
         ? activeTabSummary || runtimeDiagnostics.bridge.offscreenPresent
@@ -1159,13 +1064,15 @@ export function createBackgroundRunnerBridge({
       ok: true,
       data: bootstrapSummaryBuilder({
         generatedAt,
-        resourceKeys: BOOTSTRAP_RESOURCE_KEYS,
         runtime: {
           status: runtimeStatus,
           mode: currentMode,
-          sessionId,
+          sessionId: sessionId ?? runtimeKernelState?.session.id ?? null,
           activeTab: activeTabSummary,
-          loopState: runnerHealth?.status ?? (activeTabSummary ? "idle" : null),
+          loopState:
+            runtimeKernelState?.runState.phase ??
+            runnerHealth?.status ??
+            (activeTabSummary ? "idle" : null),
           lastError: effectiveError
             ? {
                 code: effectiveError.code,
@@ -1278,7 +1185,7 @@ export function createBackgroundRunnerBridge({
         return {
           ok: true,
           data: {
-            entries: getAuditTail(message.limit),
+            entries: await readAuditTail(message.limit),
           },
         };
       case "site.runtime.invoke":
@@ -1351,109 +1258,6 @@ export function createBackgroundRunnerBridge({
     route,
     registerRuntimeListener,
     getBridgeState,
-  };
-}
-
-export function createPageHookBridge({
-  chromeApi = globalThis.chrome,
-  hookKey = PAGE_HOOK_GLOBAL_KEY,
-  defaultFile = PAGE_HOOK_DEFAULT_FILE,
-} = {}) {
-  if (!chromeApi?.scripting?.executeScript) {
-    throw new Error("chrome.scripting.executeScript is required for page hook injection");
-  }
-
-  async function executeInTab({ tabId, world, files, func, args = [] }) {
-    const executionResult = await chromeApi.scripting.executeScript({
-      target: { tabId },
-      world: siteWorldToExecutionWorld(world),
-      ...(files ? { files } : { func, args }),
-    });
-    return unwrapExecuteScriptResult(executionResult);
-  }
-
-  function getInstallationId(installation) {
-    return installation?.result?.installationId;
-  }
-
-  async function install(step, tab) {
-    const jsPath = step.jsPath ?? defaultFile;
-    await executeInTab({
-      tabId: tab.tabId,
-      world: step.world,
-      files: [jsPath],
-    });
-    return executeInTab({
-      tabId: tab.tabId,
-      world: step.world,
-      func: (installedHookKey, installedStep, installedTab) => {
-        const api = globalThis[installedHookKey];
-        if (!api || typeof api.install !== "function") {
-          throw new Error(`Page hook ${installedHookKey} is not installed`);
-        }
-        return api.install(installedStep, installedTab);
-      },
-      args: [hookKey, { ...step, jsPath }, tab],
-    });
-  }
-
-  async function invoke({ installation, action, input, tab, ctx }) {
-    const installationId = getInstallationId(installation);
-    if (typeof installationId !== "string") {
-      throw new Error("Page hook installation is missing installationId");
-    }
-    return executeInTab({
-      tabId: tab.tabId,
-      world: installation.step.world,
-      func: (installedHookKey, installedId, installedAction, installedInput, installedCtx) => {
-        const api = globalThis[installedHookKey];
-        if (!api || typeof api.invoke !== "function") {
-          throw new Error(`Page hook ${installedHookKey} does not expose invoke()`);
-        }
-        return api.invoke(installedId, installedAction, installedInput, installedCtx);
-      },
-      args: [hookKey, installationId, action, input, ctx],
-    });
-  }
-
-  async function verify({ installation, action, result, tab }) {
-    const installationId = getInstallationId(installation);
-    if (typeof installationId !== "string") {
-      throw new Error("Page hook installation is missing installationId");
-    }
-    return Boolean(
-      await executeInTab({
-        tabId: tab.tabId,
-        world: installation.step.world,
-        func: (installedHookKey, installedId, installedAction, installedResult) => {
-          const api = globalThis[installedHookKey];
-          if (!api || typeof api.verify !== "function") {
-            throw new Error(`Page hook ${installedHookKey} does not expose verify()`);
-          }
-          return api.verify(installedId, installedAction, installedResult);
-        },
-        args: [hookKey, installationId, action, result],
-      }),
-    );
-  }
-
-  async function snapshotState({ tabId, world = "main" }) {
-    return executeInTab({
-      tabId,
-      world,
-      func: (installedHookKey) => {
-        const api = globalThis[installedHookKey];
-        return api?.state ?? null;
-      },
-      args: [hookKey],
-    });
-  }
-
-  return {
-    install,
-    invoke,
-    verify,
-    snapshotState,
   };
 }
 

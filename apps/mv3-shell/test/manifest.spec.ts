@@ -66,6 +66,25 @@ function createMessageBus() {
   };
 }
 
+function cloneValue<T>(value: T): T {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function createAuditStoreHarness(initialEntries: unknown[] = []) {
+  let persistedEntries = cloneValue(initialEntries);
+  return {
+    async load() {
+      return cloneValue(persistedEntries);
+    },
+    async save(entries: unknown[]) {
+      persistedEntries = cloneValue(entries);
+    },
+  };
+}
+
 function createChromeHarness({
   host,
   createHost,
@@ -311,14 +330,11 @@ describe("mv3-shell manifest", () => {
     expect(source).not.toMatch(/\.ts["']/);
   });
 
-  it("keeps the offscreen runner core synced with packages/js-runner", () => {
-    const packageCore = readFileSync(
-      new URL("../../../packages/js-runner/src/runner-host-core.js", import.meta.url),
-      "utf8",
-    );
-    const appCore = readFileSync(new URL("../src/runner-host-core.js", import.meta.url), "utf8");
+  it("wires the offscreen entry to the workspace js-runner package", () => {
+    const source = readFileSync(new URL("../src/offscreen.js", import.meta.url), "utf8");
 
-    expect(appCore).toBe(packageCore);
+    expect(source).toMatch(/@bbl-next\/js-runner/);
+    expect(source).not.toMatch(/\.\/runner-host-core\.js/);
   });
 
   it("creates the offscreen document once and uses the WORKERS reason", async () => {
@@ -503,6 +519,7 @@ describe("mv3-shell manifest", () => {
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
+      sessionId: "session-audit-1",
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -1110,6 +1127,82 @@ describe("mv3-shell manifest", () => {
       lastFocusedWindow: true,
     });
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
+    dispose();
+    harness.cleanup();
+  });
+
+  it("uses composed runtime services for bootstrap session state when sessionId is omitted", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0,
+            },
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1,
+          },
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0,
+      })),
+    };
+    const runtimeServices = {
+      getKernelRuntimeState: vi.fn(async () => ({
+        session: { id: "kernel-session" },
+        runState: { phase: "paused" },
+      })),
+      invokeSiteSkill: vi.fn(),
+    };
+    const harness = createChromeHarness({
+      host,
+      activeTab: {
+        id: 21,
+        url: "https://x.com/home",
+        title: "Home",
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      runtimeServices,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await bridge.ensureHost();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.bootstrap",
+        world: "main",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        runtime: {
+          sessionId: "kernel-session",
+          loopState: "paused",
+        },
+      },
+    });
+
+    expect(runtimeServices.getKernelRuntimeState).toHaveBeenCalledTimes(1);
     dispose();
     harness.cleanup();
   });
@@ -1818,6 +1911,7 @@ describe("mv3-shell manifest", () => {
   });
 
   it("writes and reads back host control plane audit entries", async () => {
+    const auditStore = createAuditStoreHarness();
     const host = {
       dispatch: vi.fn(async (request) => {
         if (request.kind === "health") {
@@ -1849,6 +1943,8 @@ describe("mv3-shell manifest", () => {
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
+      sessionId: "session-audit-1",
+      auditStore,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -1879,7 +1975,15 @@ describe("mv3-shell manifest", () => {
       kind: "audit.host",
     })) as {
       ok: boolean;
-      data: { entries: Array<{ timestamp: string; kind: string; hostId: string; status: string }> };
+      data: {
+        entries: Array<{
+          timestamp: string;
+          sessionId: string | null;
+          kind: string;
+          hostId: string;
+          status: string;
+        }>;
+      };
     };
 
     expect(auditResult.ok).toBe(true);
@@ -1887,6 +1991,7 @@ describe("mv3-shell manifest", () => {
     expect(entries).toHaveLength(3);
 
     expect(entries[0]).toMatchObject({
+      sessionId: "session-audit-1",
       kind: "hosts.connect",
       hostId: "local",
       status: "connected",
@@ -1894,12 +1999,14 @@ describe("mv3-shell manifest", () => {
     expect(typeof entries[0].timestamp).toBe("string");
 
     expect(entries[1]).toMatchObject({
+      sessionId: "session-audit-1",
       kind: "hosts.set_default",
       hostId: "local",
       status: "default_set",
     });
 
     expect(entries[2]).toMatchObject({
+      sessionId: "session-audit-1",
       kind: "hosts.disconnect",
       hostId: "local",
       status: "disconnected",
@@ -1913,6 +2020,105 @@ describe("mv3-shell manifest", () => {
 
     dispose();
     harness.cleanup();
+  });
+
+  it("persists audit tail across bridge restart and rehydrates from the shared store", async () => {
+    const auditStore = createAuditStoreHarness();
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0,
+            },
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: { result: "ok", durationMs: 1 },
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0,
+      })),
+    };
+
+    const firstHarness = createChromeHarness({ host });
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstHarness.chromeApi,
+      timeoutMs: 50,
+      sessionId: "session-persist-1",
+      auditStore,
+    });
+    const disposeFirst = firstBridge.registerRuntimeListener();
+
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "hosts.connect",
+      hostId: "local",
+    });
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "hosts.set_default",
+      hostId: "local",
+    });
+
+    disposeFirst();
+    firstHarness.cleanup();
+
+    const secondHarness = createChromeHarness({ host });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+      auditStore,
+    });
+    const disposeSecond = secondBridge.registerRuntimeListener();
+
+    const auditResult = (await secondHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "audit.host",
+    })) as {
+      ok: boolean;
+      data: {
+        entries: Array<{
+          sessionId: string | null;
+          kind: string;
+          status: string;
+        }>;
+      };
+    };
+
+    expect(auditResult).toMatchObject({
+      ok: true,
+      data: {
+        entries: [
+          {
+            sessionId: "session-persist-1",
+            kind: "hosts.connect",
+            status: "connected",
+          },
+          {
+            sessionId: "session-persist-1",
+            kind: "hosts.set_default",
+            status: "default_set",
+          },
+        ],
+      },
+    });
+
+    expect(secondBridge.getAuditTail(10)).toHaveLength(2);
+
+    disposeSecond();
+    secondHarness.cleanup();
   });
 
   it("clears runtime error state via runtime.clear_error and returns consistent bootstrap", async () => {
@@ -2152,6 +2358,99 @@ describe("mv3-shell manifest", () => {
         },
       },
     });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("delegates site runtime invoke through composed runtime services", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/demo",
+      },
+      host: {
+        dispatch: vi.fn(async () => ({
+          kind: "health_result",
+          ok: true,
+          health: {
+            status: "idle",
+            inflightCount: 0,
+            consecutiveFailures: 0,
+          },
+        })),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0,
+        })),
+      },
+    });
+    const runtimeServices = {
+      getKernelRuntimeState: vi.fn(async () => ({
+        session: { id: "kernel-session" },
+        runState: { phase: "idle" },
+      })),
+      invokeSiteSkill: vi.fn(async () => ({
+        result: { ok: true, via: "services" },
+        verified: true,
+        trace: ["match:fixture.page"],
+      })),
+    };
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      runtimeServices,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "site.runtime.invoke",
+        skillId: "fixture.page",
+        action: "execute_fixture",
+        tab: {
+          tabId: 11,
+          url: "https://fixture.test/demo",
+          active: true,
+        },
+        input: {
+          query: "hello runtime",
+        },
+        plan: {
+          skillId: "fixture.page",
+          action: "execute_fixture",
+          steps: [],
+        },
+        module: {
+          id: "fixture.page.execute",
+          source: "exports.default = async () => ({ ok: true });",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        result: {
+          ok: true,
+          via: "services",
+        },
+        verified: true,
+        trace: ["match:fixture.page"],
+      },
+    });
+
+    expect(runtimeServices.invokeSiteSkill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skillId: "fixture.page",
+        action: "execute_fixture",
+        tab: expect.objectContaining({
+          tabId: 11,
+          url: "https://fixture.test/demo",
+          active: true,
+        }),
+      }),
+    );
 
     dispose();
     harness.cleanup();

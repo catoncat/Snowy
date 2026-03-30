@@ -1,11 +1,11 @@
 ---
 id: ISSUE-062
 title: "observability: persistent audit event store with session correlation"
-status: open
+status: done
 priority: p1
 source: review
 created: 2026-03-30
-assignee: unassigned
+assignee: copilot-opus
 tags:
   - review
   - gap
