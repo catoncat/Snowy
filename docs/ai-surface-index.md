@@ -87,15 +87,21 @@
 - `skills.disable`
 - `skills.uninstall`
 
-## 4. 当前应优先有的 resources
+## 4. 当前已落地的轻量 resources
 
-优先有摘要读面即可：
+当前已在 `packages/contracts` / `packages/core` 落地轻量 resource ids、typed summary/audit payload 与 builder：
 
-- `runtime summary`
-- `config summary`
-- `skills summary`
-- `hosts summary`
-- `audit tail`
+- `runtime.summary`
+- `config.summary`
+- `skills.summary`
+- `hosts.summary`
+- `audit.tail`
+
+当前口径：
+
+- 这是轻量 resource contract，不是完整 resource registry
+- `runtime.bootstrap` / `audit.host` 仍是当前 bridge read path
+- 统一 northbound resource registry 与 app integration 仍由后续 issue 收口
 
 ## 5. Audience 原则
 

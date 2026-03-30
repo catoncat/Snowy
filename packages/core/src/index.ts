@@ -1,23 +1,41 @@
 import {
   type AiSurfaceBoundary,
+  type AiSurfaceResourceId,
+  type AuditTailResource,
+  type AuditTailSummary,
   BOOTSTRAP_RESOURCE_KEYS,
+  type BootstrapActiveTabSummary,
   type BootstrapResourceKey,
+  type BootstrapSummary,
+  type BootstrapSummaryStatus,
   CONFIG_RESOURCE_FIELDS,
   AI_SURFACE_BOUNDARY as CONTRACT_AI_SURFACE_BOUNDARY,
   type CapabilityDescriptor,
   CapabilityError,
   type CapabilityExportHandoff,
   type CapabilityTraceEntry,
+  type ConfigBootstrapSummary,
   type ConfigResourceField,
+  type ConfigSummaryResource,
+  type ConfigSummaryStatus,
   type ExecutionBinding,
   type ExecutionHostHealthStatus,
   type ExecutionHostKind,
   type ExecutionHostRecord,
   type ExecutionHostState,
+  type HostAuditEntry,
+  type HostBootstrapSummaryItem,
   type HostControlPlaneSnapshot,
+  type HostsBootstrapSummary,
+  type HostsSummaryResource,
   type JsonSchema,
   MAX_SKILL_CALL_DEPTH,
   PUBLIC_CAPABILITY_NAMESPACES,
+  type ResourceDocument,
+  type RuntimeBootstrapSummary,
+  type RuntimeSummaryResource,
+  type SkillsBootstrapSummary,
+  type SkillsSummaryResource,
   type ToolContract,
   assertCapabilityDescriptor,
   capabilityNamespace,
@@ -176,73 +194,23 @@ export class CapabilityRegistry {
 
 export const AI_SURFACE_BOUNDARY: AiSurfaceBoundary = CONTRACT_AI_SURFACE_BOUNDARY;
 export const BUILTIN_BOOTSTRAP_RESOURCE_KEYS: BootstrapResourceKey[] = [...BOOTSTRAP_RESOURCE_KEYS];
-
-export type BootstrapSummaryStatus = "healthy" | "degraded" | "empty";
-export type ConfigSummaryStatus = "ready" | "placeholder";
-
-export interface BootstrapActiveTabSummary {
-  tabId: number;
-  url: string;
-  title?: string;
-  world?: "content" | "main";
-}
-
-export interface RuntimeBootstrapSummary {
-  status: BootstrapSummaryStatus;
-  mode: "active-tab-only";
-  sessionId: string | null;
-  activeTab: BootstrapActiveTabSummary | null;
-  loopState: string | null;
-  lastError: {
-    code: string;
-    message: string;
-  } | null;
-  actionCapabilities: {
-    total: number;
-    namespaces: string[];
-  };
-}
-
-export interface SkillsBootstrapSummary {
-  status: "healthy" | "empty";
-  installedCount: number;
-  enabledCount: number;
-  trustedCount: number;
-  recentChange: string | null;
-}
-
-export interface HostBootstrapSummaryItem {
-  hostId: string;
-  kind: ExecutionHostKind;
-  connected: boolean;
-  state: ExecutionHostState;
-  isDefault: boolean;
-}
-
-export interface HostsBootstrapSummary {
-  status: BootstrapSummaryStatus;
-  defaultHostId: string | null;
-  totalCount: number;
-  connectedCount: number;
-  items: HostBootstrapSummaryItem[];
-}
-
-export interface ConfigBootstrapSummary {
-  status: ConfigSummaryStatus;
-  fields: ConfigResourceField[];
-  values: Partial<Record<ConfigResourceField, Record<string, unknown>>>;
-  note: string | null;
-  updatedAt: string | null;
-}
-
-export interface BootstrapSummary {
-  status: BootstrapSummaryStatus;
-  generatedAt: string;
-  runtime: RuntimeBootstrapSummary;
-  skills: SkillsBootstrapSummary;
-  hosts: HostsBootstrapSummary;
-  config: ConfigBootstrapSummary;
-}
+export type {
+  AuditTailResource,
+  AuditTailSummary,
+  BootstrapActiveTabSummary,
+  BootstrapSummary,
+  BootstrapSummaryStatus,
+  ConfigBootstrapSummary,
+  ConfigSummaryResource,
+  ConfigSummaryStatus,
+  HostBootstrapSummaryItem,
+  HostsBootstrapSummary,
+  HostsSummaryResource,
+  RuntimeBootstrapSummary,
+  RuntimeSummaryResource,
+  SkillsBootstrapSummary,
+  SkillsSummaryResource,
+} from "@bbl-next/contracts";
 
 export interface BootstrapSummaryInput {
   generatedAt?: string;
@@ -270,6 +238,19 @@ export interface BootstrapSummaryInput {
     updatedAt?: string | null;
   };
   capabilities?: CapabilityDescriptor[];
+}
+
+export interface BootstrapSummaryResources {
+  runtime: RuntimeSummaryResource;
+  config: ConfigSummaryResource;
+  skills: SkillsSummaryResource;
+  hosts: HostsSummaryResource;
+}
+
+export interface AuditTailResourceInput {
+  entries: HostAuditEntry[];
+  generatedAt?: string;
+  limit?: number;
 }
 
 export interface HostControlPlaneRecordInput {
@@ -1219,6 +1200,73 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
     hosts,
     config,
   };
+}
+
+function createResourceDocument<ResourceId extends AiSurfaceResourceId, Payload>(
+  id: ResourceId,
+  generatedAt: string,
+  data: Payload,
+): ResourceDocument<ResourceId, Payload> {
+  return {
+    id,
+    primitive: "resource",
+    generatedAt,
+    data,
+  };
+}
+
+export function createBootstrapSummaryResources(
+  input: BootstrapSummaryInput = {},
+): BootstrapSummaryResources {
+  const summary = createBootstrapSummary(input);
+
+  return {
+    runtime: createResourceDocument("runtime.summary", summary.generatedAt, summary.runtime),
+    config: createResourceDocument("config.summary", summary.generatedAt, summary.config),
+    skills: createResourceDocument("skills.summary", summary.generatedAt, summary.skills),
+    hosts: createResourceDocument("hosts.summary", summary.generatedAt, summary.hosts),
+  };
+}
+
+export function createRuntimeSummaryResource(
+  input: BootstrapSummaryInput = {},
+): RuntimeSummaryResource {
+  return createBootstrapSummaryResources(input).runtime;
+}
+
+export function createConfigSummaryResource(
+  input: BootstrapSummaryInput = {},
+): ConfigSummaryResource {
+  return createBootstrapSummaryResources(input).config;
+}
+
+export function createSkillsSummaryResource(
+  input: BootstrapSummaryInput = {},
+): SkillsSummaryResource {
+  return createBootstrapSummaryResources(input).skills;
+}
+
+export function createHostsSummaryResource(
+  input: BootstrapSummaryInput = {},
+): HostsSummaryResource {
+  return createBootstrapSummaryResources(input).hosts;
+}
+
+export function createAuditTailResource(input: AuditTailResourceInput): AuditTailResource {
+  const limit =
+    typeof input.limit === "number" && Number.isFinite(input.limit) && input.limit >= 0
+      ? Math.floor(input.limit)
+      : undefined;
+  const entries = typeof limit === "number" ? input.entries.slice(-limit) : [...input.entries];
+  const lastEntry = entries[entries.length - 1];
+  const generatedAt = input.generatedAt ?? lastEntry?.timestamp ?? new Date().toISOString();
+  const data: AuditTailSummary = {
+    status: entries.length > 0 ? "available" : "empty",
+    totalCount: entries.length,
+    entries,
+  };
+
+  return createResourceDocument("audit.tail", generatedAt, data);
 }
 
 export function getBuiltinsByNamespace(namespace: string): CapabilityDescriptor[] {

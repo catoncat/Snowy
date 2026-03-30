@@ -1,4 +1,5 @@
 import {
+  AI_SURFACE_RESOURCE_IDS,
   CONFIG_CONTROL_PLANE_ACTIONS,
   type CapabilityDescriptor,
   CapabilityError,
@@ -20,7 +21,9 @@ import {
   FamilyProviderRegistry,
   SkillInvocationService,
   connectExecutionHost,
+  createAuditTailResource,
   createBootstrapSummary,
+  createBootstrapSummaryResources,
   createHostControlPlaneSnapshot,
   createSkillRuntimeContext,
   disconnectExecutionHost,
@@ -235,6 +238,16 @@ describe("core", () => {
     ]);
   });
 
+  it("locks the lightweight resource ids used by core summary builders", () => {
+    expect(AI_SURFACE_RESOURCE_IDS).toEqual([
+      "runtime.summary",
+      "config.summary",
+      "skills.summary",
+      "hosts.summary",
+      "audit.tail",
+    ]);
+  });
+
   it("builds a healthy bootstrap summary bundle", () => {
     const summary = createBootstrapSummary({
       generatedAt: "2026-03-29T00:00:00.000Z",
@@ -299,6 +312,129 @@ describe("core", () => {
       },
       config: {
         status: "placeholder",
+      },
+    });
+  });
+
+  it("projects bootstrap summaries into lightweight resource documents", () => {
+    const resources = createBootstrapSummaryResources({
+      generatedAt: "2026-03-30T00:00:00.000Z",
+      activeTab: {
+        tabId: 7,
+        url: "https://x.com/home",
+        title: "Home",
+        world: "main",
+        active: true,
+      },
+      runtime: {
+        sessionId: "session-1",
+        loopState: "idle",
+      },
+      config: {
+        values: {
+          model: {
+            provider: "openai",
+          },
+        },
+        updatedAt: "2026-03-30T00:00:00.000Z",
+      },
+    });
+
+    expect(resources.runtime).toMatchObject({
+      id: "runtime.summary",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:00.000Z",
+      data: {
+        status: "healthy",
+        mode: "active-tab-only",
+        sessionId: "session-1",
+        activeTab: {
+          tabId: 7,
+          url: "https://x.com/home",
+          title: "Home",
+          world: "main",
+        },
+        loopState: "idle",
+        lastError: null,
+        actionCapabilities: {
+          total: BUILTIN_CAPABILITIES.length,
+        },
+      },
+    });
+    expect(resources.runtime.data.actionCapabilities.namespaces).toEqual(
+      expect.arrayContaining([...PUBLIC_CAPABILITY_NAMESPACES]),
+    );
+    expect(resources.config).toMatchObject({
+      id: "config.summary",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:00.000Z",
+      data: {
+        status: "ready",
+        fields: ["model", "automation", "permissions", "preferences"],
+        updatedAt: "2026-03-30T00:00:00.000Z",
+        values: {
+          model: {
+            provider: "openai",
+          },
+        },
+      },
+    });
+    expect(resources.skills.id).toBe("skills.summary");
+    expect(resources.hosts.id).toBe("hosts.summary");
+  });
+
+  it("builds an audit tail resource document from audit entries", () => {
+    const resource = createAuditTailResource({
+      generatedAt: "2026-03-30T00:00:03.000Z",
+      limit: 2,
+      entries: [
+        {
+          timestamp: "2026-03-30T00:00:01.000Z",
+          sessionId: "session-1",
+          kind: "hosts.connect",
+          hostId: "local",
+          status: "connected",
+        },
+        {
+          timestamp: "2026-03-30T00:00:02.000Z",
+          sessionId: "session-1",
+          kind: "hosts.set_default",
+          hostId: "local",
+          status: "default_set",
+        },
+        {
+          timestamp: "2026-03-30T00:00:03.000Z",
+          sessionId: "session-1",
+          kind: "hosts.disconnect",
+          hostId: "local",
+          status: "disconnected",
+        },
+      ],
+    });
+
+    expect(resource).toEqual({
+      id: "audit.tail",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:03.000Z",
+      data: {
+        status: "available",
+        totalCount: 2,
+        entries: [
+          {
+            timestamp: "2026-03-30T00:00:02.000Z",
+            sessionId: "session-1",
+            kind: "hosts.set_default",
+            hostId: "local",
+            status: "default_set",
+          },
+          {
+            timestamp: "2026-03-30T00:00:03.000Z",
+            sessionId: "session-1",
+            kind: "hosts.disconnect",
+            hostId: "local",
+            status: "disconnected",
+          },
+        ],
       },
     });
   });

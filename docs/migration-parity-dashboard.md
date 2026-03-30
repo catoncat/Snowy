@@ -21,14 +21,14 @@
 | MV3 shell substrate | `green` | offscreen bridge 与显式 page-hook bridge 已测 |
 | local execution host adapter | `yellow` | 默认 offscreen local adapter 已实现 read/write/edit（ISSUE-038）；exec 需 remote host；remote host path 仍未实现 |
 | site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
-| AI-native product control plane | `yellow` | 最小 `runtime/config/skills/hosts` bootstrap summary、`runtime.capture_diagnostics` / `runtime.clear_error`、本地 `hosts.*` control plane 与 `config.update` 已落地并有测试；`skills.*` lifecycle 与 `audit.*` 仍未实现 |
+| AI-native product control plane | `yellow` | 最小 `runtime/config/skills/hosts` bootstrap summary、轻量 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail` resource contract、`runtime.capture_diagnostics` / `runtime.clear_error`、本地 `hosts.*` control plane 与 `config.update` 已落地并有测试；`skills.*` lifecycle 与统一 northbound resource read path 仍未收口 |
 | old browser automation parity | `yellow` | Tier 1/2/3 cutover boundary 已锁定；`tabs.navigate`、`page.press_key`、`page.screenshot` 已落地；background mode / background-specific failure tracking 已明确后置（见 `docs/background-automation-mode-boundary.md`）；剩余 gap 主要是 `page.query/click/fill` production path 与 intervention |
 | old visual/download/intervention parity | `red` | screenshot/download 边界已锁定（见 `docs/screenshot-download-surface-boundary.md`）：`page.screenshot` 已由 `ISSUE-057` 落地，download 延后到 product/workflow 层，intervention 仍待 `ISSUE-041` |
 | skill SDK / authoring | `yellow` | typed facade 与文档已起步，完整 authoring/studio 不足 |
 | plugin -> executable skill migration | `yellow` | 方向明确，但还不是可替代旧 plugin 生态的状态 |
 | Skill Studio / lifecycle product surface | `red` | 生命周期模型有，产品 UI 没有 |
 | provider / profile routing | `red` | 新仓未迁旧 LLM provider/profile 层 |
-| diagnostics / debug / audit | `red` | 新仓没有旧仓同等级 debug/diagnostics 面 |
+| diagnostics / debug / audit | `red` | 轻量 `audit.tail` / summary resource contract 已落地，但新仓仍没有旧仓同等级 debug/diagnostics 主面 |
 | bridge-side MCP export | `yellow` | descriptor-derived handoff contract 已落地并有测试；真正 bridge-side MCP server/transport 仍未实现 |
 
 ## Current Gate View

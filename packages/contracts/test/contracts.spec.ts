@@ -1,6 +1,9 @@
 import {
   AI_SURFACE_BOUNDARY,
   AI_SURFACE_PRIMITIVES,
+  AI_SURFACE_RESOURCE_AUDIENCES,
+  AI_SURFACE_RESOURCE_IDS,
+  type AuditTailResource,
   BOOTSTRAP_RESOURCE_KEYS,
   COMPACTION_REASONS,
   CONFIG_CONTROL_PLANE_ACTIONS,
@@ -24,6 +27,7 @@ import {
   RUN_PHASES,
   RUN_PHASE_TRANSITIONS,
   type RunState,
+  type RuntimeSummaryResource,
   SESSION_ENTRY_TYPES,
   type SessionContext,
   type SessionContextMessage,
@@ -115,6 +119,62 @@ describe("contracts", () => {
     });
   });
 
+  it("locks the lightweight AI surface resource ids and audiences", () => {
+    expect(AI_SURFACE_RESOURCE_IDS).toEqual([
+      "runtime.summary",
+      "config.summary",
+      "skills.summary",
+      "hosts.summary",
+      "audit.tail",
+    ]);
+    expect(AI_SURFACE_RESOURCE_AUDIENCES).toEqual(["chat", "skill", "system", "mcp"]);
+  });
+
+  it("accepts typed resource documents for runtime summary and audit tail", () => {
+    const runtimeResource = {
+      id: "runtime.summary",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:00.000Z",
+      data: {
+        status: "healthy",
+        mode: "active-tab-only",
+        sessionId: "session-1",
+        activeTab: {
+          tabId: 1,
+          url: "https://example.com",
+        },
+        loopState: "idle",
+        lastError: null,
+        actionCapabilities: {
+          total: 4,
+          namespaces: ["runtime", "page"],
+        },
+      },
+    } satisfies RuntimeSummaryResource;
+
+    const auditResource = {
+      id: "audit.tail",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:00.000Z",
+      data: {
+        status: "available",
+        totalCount: 1,
+        entries: [
+          {
+            timestamp: "2026-03-30T00:00:00.000Z",
+            sessionId: "session-1",
+            kind: "hosts.connect",
+            hostId: "local",
+            status: "connected",
+          },
+        ],
+      },
+    } satisfies AuditTailResource;
+
+    expect(runtimeResource.id).toBe("runtime.summary");
+    expect(auditResource.data.entries[0]?.kind).toBe("hosts.connect");
+  });
+
   it("locks the minimal execution host control plane action set", () => {
     expect(HOST_CONTROL_PLANE_ACTIONS).toEqual([
       "hosts.list",
@@ -127,17 +187,8 @@ describe("contracts", () => {
   });
 
   it("locks the host audit vocabulary", () => {
-    expect(HOST_AUDIT_KINDS).toEqual([
-      "hosts.connect",
-      "hosts.disconnect",
-      "hosts.set_default",
-    ]);
-    expect(HOST_AUDIT_STATUSES).toEqual([
-      "connected",
-      "disconnected",
-      "default_set",
-      "failed",
-    ]);
+    expect(HOST_AUDIT_KINDS).toEqual(["hosts.connect", "hosts.disconnect", "hosts.set_default"]);
+    expect(HOST_AUDIT_STATUSES).toEqual(["connected", "disconnected", "default_set", "failed"]);
   });
 
   it("locks the minimal config control plane action set", () => {

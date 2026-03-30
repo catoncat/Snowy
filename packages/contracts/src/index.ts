@@ -5,6 +5,16 @@ export type AiSurfacePrimitive = (typeof AI_SURFACE_PRIMITIVES)[number];
 
 export const BOOTSTRAP_RESOURCE_KEYS = ["runtime", "config", "skills", "hosts"] as const;
 export type BootstrapResourceKey = (typeof BOOTSTRAP_RESOURCE_KEYS)[number];
+export const AI_SURFACE_RESOURCE_IDS = [
+  "runtime.summary",
+  "config.summary",
+  "skills.summary",
+  "hosts.summary",
+  "audit.tail",
+] as const;
+export type AiSurfaceResourceId = (typeof AI_SURFACE_RESOURCE_IDS)[number];
+export const AI_SURFACE_RESOURCE_AUDIENCES = ["chat", "skill", "system", "mcp"] as const;
+export type AiSurfaceResourceAudience = (typeof AI_SURFACE_RESOURCE_AUDIENCES)[number];
 export const CONFIG_RESOURCE_FIELDS = [
   "model",
   "automation",
@@ -12,10 +22,6 @@ export const CONFIG_RESOURCE_FIELDS = [
   "preferences",
 ] as const;
 export type ConfigResourceField = (typeof CONFIG_RESOURCE_FIELDS)[number];
-
-export type BootstrapResourceBundle = Partial<
-  Record<BootstrapResourceKey, Record<string, unknown>>
->;
 export const CONFIG_CONTROL_PLANE_ACTIONS = ["config.update"] as const;
 export type ConfigControlPlaneAction = (typeof CONFIG_CONTROL_PLANE_ACTIONS)[number];
 export const HOST_SUBSTRATE_ACTIONS = [
@@ -62,19 +68,10 @@ export interface HostControlPlaneSnapshot {
   hosts: ExecutionHostRecord[];
 }
 
-export const HOST_AUDIT_KINDS = [
-  "hosts.connect",
-  "hosts.disconnect",
-  "hosts.set_default",
-] as const;
+export const HOST_AUDIT_KINDS = ["hosts.connect", "hosts.disconnect", "hosts.set_default"] as const;
 export type HostAuditKind = (typeof HOST_AUDIT_KINDS)[number];
 
-export const HOST_AUDIT_STATUSES = [
-  "connected",
-  "disconnected",
-  "default_set",
-  "failed",
-] as const;
+export const HOST_AUDIT_STATUSES = ["connected", "disconnected", "default_set", "failed"] as const;
 export type HostAuditStatus = (typeof HOST_AUDIT_STATUSES)[number];
 
 export interface HostAuditEntry {
@@ -84,6 +81,99 @@ export interface HostAuditEntry {
   hostId: string;
   status: HostAuditStatus;
   error?: string;
+}
+
+export type BootstrapSummaryStatus = "healthy" | "degraded" | "empty";
+export type ConfigSummaryStatus = "ready" | "placeholder";
+
+export interface BootstrapActiveTabSummary {
+  tabId: number;
+  url: string;
+  title?: string;
+  world?: "content" | "main";
+}
+
+export interface RuntimeBootstrapSummary {
+  status: BootstrapSummaryStatus;
+  mode: "active-tab-only";
+  sessionId: string | null;
+  activeTab: BootstrapActiveTabSummary | null;
+  loopState: string | null;
+  lastError: {
+    code: string;
+    message: string;
+  } | null;
+  actionCapabilities: {
+    total: number;
+    namespaces: string[];
+  };
+}
+
+export interface SkillsBootstrapSummary {
+  status: "healthy" | "empty";
+  installedCount: number;
+  enabledCount: number;
+  trustedCount: number;
+  recentChange: string | null;
+}
+
+export interface HostBootstrapSummaryItem {
+  hostId: string;
+  kind: ExecutionHostKind;
+  connected: boolean;
+  state: ExecutionHostState;
+  isDefault: boolean;
+}
+
+export interface HostsBootstrapSummary {
+  status: BootstrapSummaryStatus;
+  defaultHostId: string | null;
+  totalCount: number;
+  connectedCount: number;
+  items: HostBootstrapSummaryItem[];
+}
+
+export interface ConfigBootstrapSummary {
+  status: ConfigSummaryStatus;
+  fields: ConfigResourceField[];
+  values: Partial<Record<ConfigResourceField, Record<string, unknown>>>;
+  note: string | null;
+  updatedAt: string | null;
+}
+
+export interface BootstrapSummary {
+  status: BootstrapSummaryStatus;
+  generatedAt: string;
+  runtime: RuntimeBootstrapSummary;
+  skills: SkillsBootstrapSummary;
+  hosts: HostsBootstrapSummary;
+  config: ConfigBootstrapSummary;
+}
+
+export interface AuditTailSummary {
+  status: "available" | "empty";
+  totalCount: number;
+  entries: HostAuditEntry[];
+}
+
+export interface ResourceDocument<ResourceId extends AiSurfaceResourceId, Payload> {
+  id: ResourceId;
+  primitive: "resource";
+  generatedAt: string;
+  data: Payload;
+}
+
+export type RuntimeSummaryResource = ResourceDocument<"runtime.summary", RuntimeBootstrapSummary>;
+export type ConfigSummaryResource = ResourceDocument<"config.summary", ConfigBootstrapSummary>;
+export type SkillsSummaryResource = ResourceDocument<"skills.summary", SkillsBootstrapSummary>;
+export type HostsSummaryResource = ResourceDocument<"hosts.summary", HostsBootstrapSummary>;
+export type AuditTailResource = ResourceDocument<"audit.tail", AuditTailSummary>;
+
+export interface BootstrapResourceBundle {
+  runtime?: RuntimeBootstrapSummary;
+  config?: ConfigBootstrapSummary;
+  skills?: SkillsBootstrapSummary;
+  hosts?: HostsBootstrapSummary;
 }
 
 export type CapabilityRisk = "low" | "medium" | "high";

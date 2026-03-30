@@ -50,6 +50,7 @@
 - JS Runner baseline
 - Site Runtime baseline
 - MV3 shell baseline
+- lightweight resource contracts/builders: `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary` / `audit.tail`
 - minimal product control-plane actions: `hosts.*`, `runtime.capture_diagnostics`, `runtime.clear_error`, `config.update`
 
 注意：
