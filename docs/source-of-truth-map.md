@@ -61,7 +61,7 @@
 | 本轮插件主线纠偏现在由哪些 issue 承载 | `docs/reviews/2026-03-30-plugin-mainline-correction-control.md` |
 | `packages/kernel` 该怎么做 | `docs/kernel-skeleton-design.md` |
 | 我现在该 claim 什么 | `docs/backlog/README.md` → `docs/workflow/live-queue.json` → `BBL_AGENT_NAME=<name> bun run workflow:claim:preview` |
-| 当前批次是什么 | `docs/next-development-slices-2026-03-29-batch-7.md` |
+| 当前批次是什么 | `docs/next-development-slices-2026-03-29-batch-9.md` |
 | 某个能力是否已经真正落地 | 对应 `packages/*/src/` + `packages/*/test/*.spec.ts` |
 | v0 已经做到哪 | `docs/v0-slice.md` |
 | 与旧仓的迁移差距还有哪些 | `docs/legacy-to-vnext-migration-matrix.md` → `docs/migration-parity-dashboard.md` → `docs/cutover-readiness-criteria.md` |
@@ -254,12 +254,13 @@
 
 当前默认 planning 快照是：
 
-- `docs/next-development-slices-2026-03-29-batch-7.md`
+- `docs/next-development-slices-2026-03-29-batch-9.md`
 
 当前默认主线排序是：
 
-1. `ISSUE-051`
-2. `ISSUE-052`
+1. `ISSUE-067`
+2. `ISSUE-070`
+3. `ISSUE-071`
 3. `ISSUE-053`
 4. 再看 `ISSUE-033` / `ISSUE-042` / `ISSUE-043`
 5. 再看 `ISSUE-036` / `ISSUE-045` / `ISSUE-038`

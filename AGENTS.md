@@ -320,7 +320,7 @@
 - backlog 规则：`docs/backlog/README.md`
 - live dispatch queue：`docs/workflow/live-queue.json`
 - live lease file：`~/.codex/workflow-leases/browser-brain-loop-next.json`
-- 当前 batch 指针：`docs/next-development-slices-2026-03-29-batch-7.md`
+- 当前 batch 指针：`docs/next-development-slices-2026-03-29-batch-9.md`
 - 历史批次索引：`docs/next-development-slices-2026-03-29.md`
 - Agent 工作流说明：`docs/multi-agent-workflow.md`
 - 统一 workflow skill：`.agents/skills/agent-workflow-next/`

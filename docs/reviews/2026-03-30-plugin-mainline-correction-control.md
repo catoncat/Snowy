@@ -51,7 +51,7 @@
 | Gate 0 | 恢复可信 runtime baseline | `mv3-shell` bridge 启动无未定义符号；相关测试重新可信；质量门禁能拦住同类回归 | `ISSUE-065` |
 | Gate 1 | 去掉 app-local truth | `background.js` 不再手写产品真相；公共 action/control-plane 走 package-upstream 路径 | `ISSUE-066` |
 | Gate 2 | 让 kernel 成为运行中枢 | app integration 至少一条 runner step 和一条 site step 由 kernel 编排，而不是 app 旁路直调 | `ISSUE-067` |
-| Gate 3 | 收口剩余 cutover gap | Tier 1 page automation、skills control plane、intervention lifecycle integration 进入 active correction queue；diagnostics resource contract 已补上 | `ISSUE-057`, `ISSUE-056`, `ISSUE-068` |
+| Gate 3 | 收口剩余 cutover gap | Tier 1 page automation、skills control plane、intervention durable/shared-surface integration 进入 active correction queue；diagnostics resource contract 已补上 | `ISSUE-057`, `ISSUE-056`, `ISSUE-071` |
 
 ## 4. Finding 到 Backlog 的映射
 
@@ -64,7 +64,7 @@
 | diagnostics 还是 action-only，缺资源读面 | `ISSUE-063` | 已完成轻量 resource contract 收口；统一 app integration read path 仍不替代 Gate 0 |
 | `skills.*` lifecycle control plane 仍未落地 | `ISSUE-056` | 继续承接 AI Surface control-plane 缺口 |
 | intervention / human handoff 仍未定性 | `ISSUE-041` | 已完成定性：cutover 前必需，但当前不新造 capability family，而是先落到 runtime handoff contract |
-| intervention request 仍未进入 kernel / app lifecycle | `ISSUE-068` | 定性已完成，但真正 resolve / cancel / timeout / audit 闭环还没接到主链 |
+| intervention lifecycle baseline 已接通，但 state/audit 仍是 MV3-private 且重启后不持久 | `ISSUE-071` | `ISSUE-068` 已补最小 lifecycle；剩余 shared resource surface + restart durability 继续收口 |
 
 ## 5. 已完成但不能误判为“纠偏完成”的基础件
 

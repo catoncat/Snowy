@@ -10,6 +10,7 @@ Batch 5 已在 `ISSUE-035` 收口。
 - 后续 open queue 先转到 `docs/next-development-slices-2026-03-29-batch-6.md`。
 - 经过 recovery report + kernel skeleton 重新定性后，当前主线已切到 `docs/next-development-slices-2026-03-29-batch-7.md`。
 - Batch 7 已收口，当前主线切到 `docs/next-development-slices-2026-03-29-batch-8.md`。
+- Batch 8 之后补入插件主线纠偏与 module coverage follow-up，当前主线切到 `docs/next-development-slices-2026-03-29-batch-9.md`。
 - 下一次领取请回到 live backlog frontmatter，并运行 `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview`。
 
 ## Historical Scope
