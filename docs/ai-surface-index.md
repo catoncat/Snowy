@@ -24,7 +24,7 @@
 3. skill/workflow
 4. audit
 
-## 2. 当前 action surface (39 actions)
+## 2. 当前 action surface (42 actions)
 
 ### Browser-local substrate (memfs / page / tabs / site)
 
@@ -67,9 +67,12 @@
 - `host.edit`
 - `host.exec`
 
-### Product control plane (config / hosts)
+### Product control plane (config / skills / hosts)
 
 - `config.update`
+- `skills.install`
+- `skills.enable`
+- `skills.disable`
 
 - `hosts.list`
 - `hosts.get`
@@ -82,10 +85,12 @@
 
 ### Skill lifecycle control plane
 
-- `skills.install`
-- `skills.enable`
-- `skills.disable`
 - `skills.uninstall`
+
+当前口径：
+
+- `skills.install/enable/disable` 已按 staged subset 落地
+- `skills.uninstall` 仍 deferred，等待卸载、archive、物理删除与版本回滚边界统一
 
 ## 4. 当前已落地的轻量 resources
 

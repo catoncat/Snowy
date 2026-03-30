@@ -24,6 +24,12 @@ export const CONFIG_RESOURCE_FIELDS = [
 export type ConfigResourceField = (typeof CONFIG_RESOURCE_FIELDS)[number];
 export const CONFIG_CONTROL_PLANE_ACTIONS = ["config.update"] as const;
 export type ConfigControlPlaneAction = (typeof CONFIG_CONTROL_PLANE_ACTIONS)[number];
+export const SKILL_CONTROL_PLANE_ACTIONS = [
+  "skills.install",
+  "skills.enable",
+  "skills.disable",
+] as const;
+export type SkillControlPlaneAction = (typeof SKILL_CONTROL_PLANE_ACTIONS)[number];
 export const HOST_SUBSTRATE_ACTIONS = [
   "host.read",
   "host.write",

@@ -34,6 +34,7 @@ import {
   type ResourceDocument,
   type RuntimeBootstrapSummary,
   type RuntimeSummaryResource,
+  type SkillControlPlaneAction,
   type SkillsBootstrapSummary,
   type SkillsSummaryResource,
   type ToolContract,
@@ -62,6 +63,12 @@ export interface SkillInvocationRequest {
   parentContext: SkillRuntimeContext;
 }
 
+export interface SkillManagementRequest {
+  skillId: string;
+  action: SkillControlPlaneAction;
+  parentContext: SkillRuntimeContext;
+}
+
 export interface SkillRuntimeContextOptions {
   registry: CapabilityRegistry;
   providers: FamilyProviderRegistry;
@@ -75,6 +82,7 @@ export interface SkillRuntimeContextOptions {
   confirm?: (descriptor: CapabilityDescriptor, input: unknown) => boolean | Promise<boolean>;
   invokeSkill?: (request: SkillInvocationRequest) => Promise<unknown>;
   listSkills?: () => Promise<string[]> | string[];
+  manageSkill?: (request: SkillManagementRequest) => Promise<unknown>;
 }
 
 export interface SkillRuntimeContext {
@@ -93,6 +101,9 @@ export interface SkillRuntimeContext {
   };
   skills: {
     invoke(skillId: string, action: string, args: unknown): Promise<unknown>;
+    install(skillId: string): Promise<unknown>;
+    enable(skillId: string): Promise<unknown>;
+    disable(skillId: string): Promise<unknown>;
   };
 }
 
@@ -110,6 +121,7 @@ export interface CapabilityDispatchOptions {
   confirm?: SkillRuntimeContextOptions["confirm"];
   invokeSkill?: SkillRuntimeContextOptions["invokeSkill"];
   listSkills?: SkillRuntimeContextOptions["listSkills"];
+  manageSkill?: SkillRuntimeContextOptions["manageSkill"];
 }
 
 export async function dispatchCapabilityCall(options: CapabilityDispatchOptions): Promise<unknown> {
@@ -125,6 +137,7 @@ export async function dispatchCapabilityCall(options: CapabilityDispatchOptions)
     confirm: options.confirm,
     invokeSkill: options.invokeSkill,
     listSkills: options.listSkills,
+    manageSkill: options.manageSkill,
   });
 
   return ctx.call(options.capabilityId, options.input);
@@ -778,6 +791,102 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       description: "List all installed skills",
       inputSchema: { type: "object" },
     }),
+    catalogEntry({
+      id: "skills.install",
+      family: "skills",
+      operation: "install",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["skills.install"],
+      description: "Install a staged skill into the product skill library",
+      inputSchema: {
+        type: "object",
+        properties: {
+          skillId: { type: "string" },
+        },
+        required: ["skillId"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          skill: {
+            type: "object",
+            properties: {
+              skillId: { type: "string" },
+              status: { type: "string" },
+              trusted: { type: "boolean" },
+              recentChange: { type: "string" },
+            },
+            required: ["skillId", "status", "trusted"],
+          },
+        },
+        required: ["skill"],
+      },
+    }),
+    catalogEntry({
+      id: "skills.enable",
+      family: "skills",
+      operation: "enable",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["skills.enable"],
+      description: "Enable an installed skill for runtime invocation",
+      inputSchema: {
+        type: "object",
+        properties: {
+          skillId: { type: "string" },
+        },
+        required: ["skillId"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          skill: {
+            type: "object",
+            properties: {
+              skillId: { type: "string" },
+              status: { type: "string" },
+              trusted: { type: "boolean" },
+              recentChange: { type: "string" },
+            },
+            required: ["skillId", "status", "trusted"],
+          },
+        },
+        required: ["skill"],
+      },
+    }),
+    catalogEntry({
+      id: "skills.disable",
+      family: "skills",
+      operation: "disable",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["skills.disable"],
+      description: "Disable an enabled skill without removing its installed package",
+      inputSchema: {
+        type: "object",
+        properties: {
+          skillId: { type: "string" },
+        },
+        required: ["skillId"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          skill: {
+            type: "object",
+            properties: {
+              skillId: { type: "string" },
+              status: { type: "string" },
+              trusted: { type: "boolean" },
+              recentChange: { type: "string" },
+            },
+            required: ["skillId", "status", "trusted"],
+          },
+        },
+        required: ["skill"],
+      },
+    }),
   ],
   runtime: [
     catalogEntry({
@@ -1419,6 +1528,23 @@ export function createSkillRuntimeContext(
       }
       case "list":
         return options.listSkills ? await options.listSkills() : [];
+      case "install":
+      case "enable":
+      case "disable": {
+        if (!options.manageSkill) {
+          throw new CapabilityError("E_RUNTIME", "No skill manager configured for runtime context");
+        }
+        const payload = asRecord(input);
+        const skillId = payload.skillId;
+        if (typeof skillId !== "string") {
+          throw new CapabilityError("E_BAD_INPUT", `skills.${operation} requires string skillId`);
+        }
+        return options.manageSkill({
+          skillId,
+          action: `skills.${operation}` as SkillControlPlaneAction,
+          parentContext: ctx,
+        });
+      }
       default:
         throw new CapabilityError("E_RUNTIME", `Unsupported skills operation: ${operation}`);
     }
@@ -1487,6 +1613,9 @@ export function createSkillRuntimeContext(
     },
     skills: {
       invoke: async (skillId, action, args) => call("skills.invoke", { skillId, action, args }),
+      install: async (skillId) => call("skills.install", { skillId }),
+      enable: async (skillId) => call("skills.enable", { skillId }),
+      disable: async (skillId) => call("skills.disable", { skillId }),
     },
   };
 
@@ -1505,6 +1634,7 @@ export interface SkillInvocationServiceOptions {
   registry: CapabilityRegistry;
   providers: FamilyProviderRegistry;
   confirm?: (descriptor: CapabilityDescriptor, input: unknown) => boolean | Promise<boolean>;
+  manageSkill?: (request: SkillManagementRequest) => Promise<unknown>;
 }
 
 export interface SkillInvocationResult {
@@ -1572,6 +1702,7 @@ export class SkillInvocationService {
       trace,
       confirm: this.#options.confirm,
       listSkills: async () => this.list().map((registeredSkill) => registeredSkill.id),
+      manageSkill: this.#options.manageSkill,
       invokeSkill: async (childRequest) => {
         const childResult = await this.invoke({
           sessionId: request.sessionId,
@@ -1644,6 +1775,9 @@ export interface BuiltinCapabilityMap {
   skills: {
     invoke: CapabilityFn;
     list: CapabilityFn;
+    install: CapabilityFn;
+    enable: CapabilityFn;
+    disable: CapabilityFn;
   };
   runtime: {
     listCapabilities: CapabilityFn;

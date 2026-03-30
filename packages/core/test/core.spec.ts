@@ -7,6 +7,7 @@ import {
   HOST_SUBSTRATE_ACTIONS,
   PUBLIC_CAPABILITY_NAMESPACES,
   RUNTIME_CONTROL_PLANE_ACTIONS,
+  SKILL_CONTROL_PLANE_ACTIONS,
   assertCapabilityDescriptor,
   capabilityNamespace,
 } from "@bbl-next/contracts";
@@ -103,6 +104,47 @@ describe("core", () => {
   it("keeps runtime control-plane actions aligned with canonical contracts", () => {
     expect(getBuiltinsByNamespace("runtime").map((entry) => entry.id)).toEqual([
       ...RUNTIME_CONTROL_PLANE_ACTIONS,
+    ]);
+  });
+
+  it("keeps staged skill lifecycle control-plane actions aligned with canonical contracts", () => {
+    expect(SKILL_CONTROL_PLANE_ACTIONS).toEqual([
+      "skills.install",
+      "skills.enable",
+      "skills.disable",
+    ]);
+    expect(getBuiltinsByNamespace("skills").map((entry) => entry.id)).toEqual([
+      "skills.invoke",
+      "skills.list",
+      ...SKILL_CONTROL_PLANE_ACTIONS,
+    ]);
+    expect(getBuiltinsByNamespace("skills")).toMatchObject([
+      {
+        id: "skills.invoke",
+        sideEffects: "writes",
+      },
+      {
+        id: "skills.list",
+        sideEffects: "reads",
+      },
+      {
+        id: "skills.install",
+        sideEffects: "writes",
+        inputSchema: {
+          required: ["skillId"],
+        },
+        outputSchema: {
+          required: ["skill"],
+        },
+      },
+      {
+        id: "skills.enable",
+        sideEffects: "writes",
+      },
+      {
+        id: "skills.disable",
+        sideEffects: "writes",
+      },
     ]);
   });
 
@@ -818,6 +860,38 @@ describe("core", () => {
     });
   });
 
+  it("dispatches staged skill lifecycle capabilities through the runtime helper", async () => {
+    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+    const providers = new FamilyProviderRegistry();
+
+    await expect(
+      dispatchCapabilityCall({
+        registry,
+        providers,
+        sessionId: "s1",
+        skillId: "kernel.loop",
+        capabilityId: "skills.enable",
+        input: { skillId: "skill.demo" },
+        permissions: ["skills.enable"],
+        manageSkill: async ({ action, skillId }) => ({
+          skill: {
+            skillId,
+            status: "enabled",
+            trusted: true,
+            recentChange: action,
+          },
+        }),
+      }),
+    ).resolves.toEqual({
+      skill: {
+        skillId: "skill.demo",
+        status: "enabled",
+        trusted: true,
+        recentChange: "skills.enable",
+      },
+    });
+  });
+
   it("blocks capabilities outside the declared permission set", async () => {
     const registry = new CapabilityRegistry([descriptor()]);
     const providers = new FamilyProviderRegistry();
@@ -871,6 +945,101 @@ describe("core", () => {
     );
     await expect(ctx.skills.invoke("skill.child", "run", {})).rejects.toMatchObject({
       code: "E_REENTRANCY_BLOCKED",
+    });
+  });
+
+  it("routes skills install/enable/disable through the runtime skill manager", async () => {
+    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+    const providers = new FamilyProviderRegistry();
+    const calls: string[] = [];
+
+    const ctx = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "s1",
+      skillId: "skill.page",
+      permissions: ["skills.install", "skills.enable", "skills.disable"],
+      manageSkill: async ({ action, skillId }) => {
+        calls.push(`${action}:${skillId}`);
+        return {
+          skill: {
+            skillId,
+            status:
+              action === "skills.disable"
+                ? "disabled"
+                : action === "skills.enable"
+                  ? "enabled"
+                  : "installed",
+            trusted: false,
+          },
+        };
+      },
+    });
+
+    await expect(ctx.skills.install("skill.demo")).resolves.toEqual({
+      skill: {
+        skillId: "skill.demo",
+        status: "installed",
+        trusted: false,
+      },
+    });
+    await expect(ctx.skills.enable("skill.demo")).resolves.toEqual({
+      skill: {
+        skillId: "skill.demo",
+        status: "enabled",
+        trusted: false,
+      },
+    });
+    await expect(ctx.skills.disable("skill.demo")).resolves.toEqual({
+      skill: {
+        skillId: "skill.demo",
+        status: "disabled",
+        trusted: false,
+      },
+    });
+    expect(calls).toEqual([
+      "skills.install:skill.demo",
+      "skills.enable:skill.demo",
+      "skills.disable:skill.demo",
+    ]);
+  });
+
+  it("fails staged skill lifecycle calls when no skill manager is configured", async () => {
+    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+    const providers = new FamilyProviderRegistry();
+    const ctx = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "s1",
+      skillId: "skill.page",
+      permissions: ["skills.install"],
+    });
+
+    await expect(ctx.skills.install("skill.demo")).rejects.toMatchObject({
+      code: "E_RUNTIME",
+    });
+  });
+
+  it("preserves permission checks for staged skill lifecycle calls", async () => {
+    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+    const providers = new FamilyProviderRegistry();
+    const ctx = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "s1",
+      skillId: "skill.page",
+      permissions: ["skills.install"],
+      manageSkill: async ({ action, skillId }) => ({
+        skill: {
+          skillId,
+          status: action,
+          trusted: false,
+        },
+      }),
+    });
+
+    await expect(ctx.skills.enable("skill.demo")).rejects.toMatchObject({
+      code: "E_PERMISSION_DENIED",
     });
   });
 
@@ -1461,6 +1630,54 @@ describe("core", () => {
       ).resolves.toEqual({
         operation: "stage",
         input: { entries: [{ uri: "mem://workspace/file.txt", content: "next" }] },
+      });
+    });
+
+    it("narrowed skills facade exposes install/enable/disable when declared", async () => {
+      const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+      const providers = new FamilyProviderRegistry();
+
+      const permissions = ["skills.install", "skills.enable", "skills.disable"] as const;
+      const ctx = createSkillRuntimeContext({
+        registry,
+        providers,
+        sessionId: "s1",
+        skillId: "skill.skills",
+        permissions: [...permissions],
+        manageSkill: async ({ action, skillId }) => ({
+          skill: {
+            skillId,
+            status: action,
+            trusted: false,
+          },
+        }),
+      });
+
+      const caps = typedCapabilitiesForPermissions(ctx, permissions);
+      const install: BuiltinCapabilityMap["skills"]["install"] = caps.skills.install;
+      const enable: BuiltinCapabilityMap["skills"]["enable"] = caps.skills.enable;
+      const disable: BuiltinCapabilityMap["skills"]["disable"] = caps.skills.disable;
+
+      await expect(install({ skillId: "skill.demo" })).resolves.toEqual({
+        skill: {
+          skillId: "skill.demo",
+          status: "skills.install",
+          trusted: false,
+        },
+      });
+      await expect(enable({ skillId: "skill.demo" })).resolves.toEqual({
+        skill: {
+          skillId: "skill.demo",
+          status: "skills.enable",
+          trusted: false,
+        },
+      });
+      await expect(disable({ skillId: "skill.demo" })).resolves.toEqual({
+        skill: {
+          skillId: "skill.demo",
+          status: "skills.disable",
+          trusted: false,
+        },
       });
     });
   });

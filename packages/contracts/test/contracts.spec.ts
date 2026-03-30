@@ -32,6 +32,7 @@ import {
   type RunState,
   type RuntimeSummaryResource,
   SESSION_ENTRY_TYPES,
+  SKILL_CONTROL_PLANE_ACTIONS,
   type SessionContext,
   type SessionContextMessage,
   type SessionEntry,
@@ -228,6 +229,15 @@ describe("contracts", () => {
       "runtime.capture_diagnostics",
       "runtime.clear_error",
     ]);
+  });
+
+  it("locks the staged skill lifecycle control-plane subset", () => {
+    expect(SKILL_CONTROL_PLANE_ACTIONS).toEqual([
+      "skills.install",
+      "skills.enable",
+      "skills.disable",
+    ]);
+    expect(SKILL_CONTROL_PLANE_ACTIONS).not.toContain("skills.uninstall");
   });
 
   it("locks the minimal execution host substrate action set", () => {
