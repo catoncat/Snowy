@@ -116,7 +116,13 @@
 
 - `runner.invoke`
 
-## 6. Host 原则
+## 6. 当前 intervention / human handoff 口径
+
+- intervention 是 cutover 前必需，但当前不作为新的 public action namespace
+- 当前最小形态是 `kernel/site-runtime` 之间的 runtime handoff contract
+- high-risk capability 的 pre-dispatch 确认继续走 core confirm gate
+- browser automation 的 verify failure / runtime blocked handoff 则产出结构化 intervention request
+## 7. Host 原则
 
 Host 已是一等执行面。
 
@@ -135,7 +141,7 @@ Host 已是一等执行面。
 
 - `host.xxx`
 
-## 7. 维护规则
+## 8. 维护规则
 
 以下变化发生时，必须回看本文件：
 

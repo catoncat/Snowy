@@ -63,7 +63,7 @@
 
 1. browser-side kernel（session / run / compaction）
 2. diagnostics / debug / audit 主面
-3. intervention / human handoff
+3. intervention / human handoff lifecycle integration
 4. browser automation parity
 5. provider / profile / routing 主层
 

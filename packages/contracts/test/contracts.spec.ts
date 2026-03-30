@@ -16,6 +16,9 @@ import {
   HOST_AUDIT_STATUSES,
   HOST_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
+  INTERVENTION_KINDS,
+  INTERVENTION_TRIGGERS,
+  type InterventionRequest,
   type KernelLlmAdapter,
   LOOP_TERMINAL_STATUSES,
   LOOP_TURN_STATUSES,
@@ -189,6 +192,29 @@ describe("contracts", () => {
   it("locks the host audit vocabulary", () => {
     expect(HOST_AUDIT_KINDS).toEqual(["hosts.connect", "hosts.disconnect", "hosts.set_default"]);
     expect(HOST_AUDIT_STATUSES).toEqual(["connected", "disconnected", "default_set", "failed"]);
+  });
+
+  it("locks the intervention vocabulary and request shape", () => {
+    expect(INTERVENTION_KINDS).toEqual(["confirm", "takeover", "input"]);
+    expect(INTERVENTION_TRIGGERS).toEqual(["confirm_policy", "verify_failed", "runtime_blocked"]);
+
+    const request = {
+      id: "ivr:twitter.login:complete_login:verify_failed:7:1",
+      kind: "takeover",
+      trigger: "verify_failed",
+      status: "requested",
+      title: "Need human takeover",
+      message: "CAPTCHA blocks the automation flow.",
+      skillId: "twitter.login",
+      action: "complete_login",
+      tabId: 7,
+      payload: {
+        verifier: "login_complete",
+      },
+    } satisfies InterventionRequest;
+
+    expect(request.kind).toBe("takeover");
+    expect(request.trigger).toBe("verify_failed");
   });
 
   it("locks the minimal config control plane action set", () => {

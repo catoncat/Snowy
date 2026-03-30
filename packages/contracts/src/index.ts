@@ -83,6 +83,30 @@ export interface HostAuditEntry {
   error?: string;
 }
 
+export const INTERVENTION_KINDS = ["confirm", "takeover", "input"] as const;
+export type InterventionKind = (typeof INTERVENTION_KINDS)[number];
+
+export const INTERVENTION_TRIGGERS = [
+  "confirm_policy",
+  "verify_failed",
+  "runtime_blocked",
+] as const;
+export type InterventionTrigger = (typeof INTERVENTION_TRIGGERS)[number];
+
+export interface InterventionRequest {
+  id: string;
+  kind: InterventionKind;
+  trigger: InterventionTrigger;
+  status: "requested";
+  title: string;
+  message: string;
+  skillId?: string;
+  action?: string;
+  sessionId?: string | null;
+  tabId?: number | null;
+  payload?: Record<string, unknown>;
+}
+
 export type BootstrapSummaryStatus = "healthy" | "degraded" | "empty";
 export type ConfigSummaryStatus = "ready" | "placeholder";
 
@@ -183,6 +207,7 @@ export type SkillStatus = "draft" | "staged" | "installed" | "enabled" | "disabl
 export type CapabilityErrorCode =
   | "E_BAD_INPUT"
   | "E_CAPABILITY_NOT_FOUND"
+  | "E_INTERVENTION_REQUIRED"
   | "E_PERMISSION_DENIED"
   | "E_REENTRANCY_BLOCKED"
   | "E_RUNTIME"

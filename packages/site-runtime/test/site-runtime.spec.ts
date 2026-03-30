@@ -4,13 +4,13 @@ import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { JsRunnerHost } from "@bbl-next/js-runner";
 import {
-  buildInjectionPlan,
-  SiteSkillRegistry,
-  SiteSkillRuntime,
   type ActiveTabMetadata,
   type InjectionStep,
-  type SiteSkillAction,
   type SiteScriptInstaller,
+  type SiteSkillAction,
+  SiteSkillRegistry,
+  SiteSkillRuntime,
+  buildInjectionPlan,
 } from "@bbl-next/site-runtime";
 // @ts-ignore source JS module has no declaration file yet
 import { createPageHookBridge } from "mv3-shell/background";
@@ -20,7 +20,7 @@ const tab: ActiveTabMetadata = {
   tabId: 7,
   url: "https://x.com/home",
   active: true,
-  title: "Home"
+  title: "Home",
 };
 
 interface PageHookBridgeState {
@@ -110,43 +110,45 @@ function createScriptingChromeHarness() {
   return {
     chromeApi: {
       scripting: {
-        executeScript: vi.fn(async (request: {
-          target: { tabId: number };
-          world?: string;
-          files?: string[];
-          func?: (...args: unknown[]) => unknown;
-          args?: unknown[];
-        }) => {
-          const world = request.world ?? "ISOLATED";
-          const context = getContext(request.target.tabId, world);
+        executeScript: vi.fn(
+          async (request: {
+            target: { tabId: number };
+            world?: string;
+            files?: string[];
+            func?: (...args: unknown[]) => unknown;
+            args?: unknown[];
+          }) => {
+            const world = request.world ?? "ISOLATED";
+            const context = getContext(request.target.tabId, world);
 
-          if (request.files) {
-            for (const file of request.files) {
-              const source = readFileSync(
-                resolve(testDir, "../../../apps/mv3-shell", file),
-                "utf8"
-              );
-              runInNewContext(source, context, {
-                filename: file
-              });
+            if (request.files) {
+              for (const file of request.files) {
+                const source = readFileSync(
+                  resolve(testDir, "../../../apps/mv3-shell", file),
+                  "utf8",
+                );
+                runInNewContext(source, context, {
+                  filename: file,
+                });
+              }
             }
-          }
 
-          if (request.func) {
-            context.__bblArgs = request.args ?? [];
-            const result = await Promise.resolve(
-              runInNewContext(`(${request.func.toString()})(...globalThis.__bblArgs)`, context, {
-                filename: "executeScript.js"
-              })
-            );
-            context.__bblArgs = undefined;
-            return [{ result }];
-          }
+            if (request.func) {
+              context.__bblArgs = request.args ?? [];
+              const result = await Promise.resolve(
+                runInNewContext(`(${request.func.toString()})(...globalThis.__bblArgs)`, context, {
+                  filename: "executeScript.js",
+                }),
+              );
+              context.__bblArgs = undefined;
+              return [{ result }];
+            }
 
-          return [];
-        })
-      }
-    }
+            return [];
+          },
+        ),
+      },
+    },
   };
 }
 
@@ -156,16 +158,16 @@ describe("site-runtime", () => {
       {
         skillId: "twitter.search",
         matches: ["https://x.com/*"],
-        actions: []
-      }
+        actions: [],
+      },
     ]);
 
     expect(registry.matchActiveTab(tab)).toHaveLength(1);
     expect(
       registry.matchActiveTab({
         ...tab,
-        active: false
-      })
+        active: false,
+      }),
     ).toHaveLength(0);
   });
 
@@ -184,11 +186,11 @@ describe("site-runtime", () => {
             module: {
               id: "twitter.search",
               source:
-                "exports.default = async ({ ctx, input }) => ({ url: ctx.tab.url, query: input.query });"
-            }
-          }
-        ]
-      }
+                "exports.default = async ({ ctx, input }) => ({ url: ctx.tab.url, query: input.query });",
+            },
+          },
+        ],
+      },
     ]);
     const runtime = new SiteSkillRuntime({
       registry,
@@ -196,14 +198,14 @@ describe("site-runtime", () => {
       installer: {
         install: async (step) => {
           installs.push(step);
-        }
+        },
       },
       verifier: {
         verify: async ({ action }) => {
           verifies.push(action);
           return true;
-        }
-      }
+        },
+      },
     });
 
     const result = await runtime.invoke({
@@ -211,8 +213,8 @@ describe("site-runtime", () => {
       action: "search_posts",
       tab,
       input: {
-        query: "browser brain loop"
-      }
+        query: "browser brain loop",
+      },
     });
 
     expect(installs.map((s) => s.world)).toEqual(["content", "main"]);
@@ -221,7 +223,7 @@ describe("site-runtime", () => {
       verified: true,
       result: {
         url: "https://x.com/home",
-        query: "browser brain loop"
+        query: "browser brain loop",
       },
       trace: [
         "match:twitter.search",
@@ -229,14 +231,14 @@ describe("site-runtime", () => {
         "install:content:twitter.search:search_posts:content",
         "install:main:twitter.search:search_posts:main",
         "invoke:search_posts",
-        "verify:results_visible"
-      ]
+        "verify:results_visible",
+      ],
     });
   });
 
   it("rejects invoke when the active tab does not match the skill", async () => {
     const installer = {
-      install: vi.fn(async () => undefined)
+      install: vi.fn(async () => undefined),
     };
     const registry = new SiteSkillRegistry([
       {
@@ -247,16 +249,16 @@ describe("site-runtime", () => {
             name: "search_posts",
             module: {
               id: "twitter.search",
-              source: "exports.default = async () => ({ ok: true });"
-            }
-          }
-        ]
-      }
+              source: "exports.default = async () => ({ ok: true });",
+            },
+          },
+        ],
+      },
     ]);
     const runtime = new SiteSkillRuntime({
       registry,
       runnerHost: new JsRunnerHost(),
-      installer
+      installer,
     });
 
     await expect(
@@ -265,19 +267,19 @@ describe("site-runtime", () => {
         action: "search_posts",
         tab: {
           ...tab,
-          url: "https://example.com/outside"
-        }
-      })
+          url: "https://example.com/outside",
+        },
+      }),
     ).rejects.toMatchObject({
       code: "E_BAD_INPUT",
-      message: "Active tab does not match twitter.search"
+      message: "Active tab does not match twitter.search",
     });
     expect(installer.install).not.toHaveBeenCalled();
   });
 
   it("rejects invoke when the tab is inactive even if the URL matches", async () => {
     const installer = {
-      install: vi.fn(async () => undefined)
+      install: vi.fn(async () => undefined),
     };
     const registry = new SiteSkillRegistry([
       {
@@ -288,16 +290,16 @@ describe("site-runtime", () => {
             name: "search_posts",
             module: {
               id: "twitter.search",
-              source: "exports.default = async () => ({ ok: true });"
-            }
-          }
-        ]
-      }
+              source: "exports.default = async () => ({ ok: true });",
+            },
+          },
+        ],
+      },
     ]);
     const runtime = new SiteSkillRuntime({
       registry,
       runnerHost: new JsRunnerHost(),
-      installer
+      installer,
     });
 
     await expect(
@@ -306,19 +308,19 @@ describe("site-runtime", () => {
         action: "search_posts",
         tab: {
           ...tab,
-          active: false
-        }
-      })
+          active: false,
+        },
+      }),
     ).rejects.toMatchObject({
       code: "E_BAD_INPUT",
-      message: "Active tab does not match twitter.search"
+      message: "Active tab does not match twitter.search",
     });
     expect(installer.install).not.toHaveBeenCalled();
   });
 
   it("does not install hooks before an explicit action invoke", () => {
     const installer = {
-      install: vi.fn(async () => undefined)
+      install: vi.fn(async () => undefined),
     };
     const registry = new SiteSkillRegistry([
       {
@@ -330,29 +332,27 @@ describe("site-runtime", () => {
             worlds: ["content"],
             module: {
               id: "twitter.search",
-              source: "exports.default = async () => ({ ok: true });"
-            }
-          }
-        ]
-      }
+              source: "exports.default = async () => ({ ok: true });",
+            },
+          },
+        ],
+      },
     ]);
 
     new SiteSkillRuntime({
       registry,
       runnerHost: new JsRunnerHost(),
-      installer
+      installer,
     });
 
-    expect(registry.matchActiveTab(tab).map((skill) => skill.skillId)).toEqual([
-      "twitter.search"
-    ]);
+    expect(registry.matchActiveTab(tab).map((skill) => skill.skillId)).toEqual(["twitter.search"]);
     expect(installer.install).not.toHaveBeenCalled();
   });
 
   it("runs a real page-hook file through the explicit injection bridge", async () => {
     const scriptingHarness = createScriptingChromeHarness();
     const pageHookBridge = createPageHookBridge({
-      chromeApi: scriptingHarness.chromeApi
+      chromeApi: scriptingHarness.chromeApi,
     });
     const registry = new SiteSkillRegistry([
       {
@@ -366,8 +366,8 @@ describe("site-runtime", () => {
                 world: "main",
                 scriptId: "bbl-next.page-hook.fixture",
                 jsPath: "src/page-hook.js",
-                runAt: "document_idle"
-              }
+                runAt: "document_idle",
+              },
             ],
             verifier: "page_hook_ok",
             module: {
@@ -388,11 +388,11 @@ describe("site-runtime", () => {
                     canInvoke: typeof installation.result.invoke
                   };
                 };
-              `
-            }
-          }
-        ]
-      }
+              `,
+            },
+          },
+        ],
+      },
     ]);
     const runtime = new SiteSkillRuntime({
       registry,
@@ -405,16 +405,16 @@ describe("site-runtime", () => {
             action,
             input,
             tab: currentTab,
-            ctx
+            ctx,
           }),
         verify: async ({ installation, action, result, tab: currentTab }) =>
           pageHookBridge.verify({
             installation,
             action,
             result,
-            tab: currentTab
-          })
-      }
+            tab: currentTab,
+          }),
+      },
     });
 
     const result = await runtime.invoke({
@@ -423,17 +423,17 @@ describe("site-runtime", () => {
       tab: {
         tabId: 11,
         url: "https://fixture.test/demo",
-        active: true
+        active: true,
       },
       input: {
-        query: "hello fixture"
-      }
+        query: "hello fixture",
+      },
     });
 
-    const snapshot = await pageHookBridge.snapshotState({
+    const snapshot = (await pageHookBridge.snapshotState({
       tabId: 11,
-      world: "main"
-    }) as PageHookBridgeState["state"] | null;
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
 
     expect(snapshot?.installs).toEqual([
       {
@@ -443,8 +443,8 @@ describe("site-runtime", () => {
         jsPath: "src/page-hook.js",
         runAt: "document_idle",
         tabId: 11,
-        url: "https://fixture.test/demo"
-      }
+        url: "https://fixture.test/demo",
+      },
     ]);
     expect(snapshot?.invocations).toEqual([
       expect.objectContaining({
@@ -453,14 +453,14 @@ describe("site-runtime", () => {
         installationId: "bbl-next.page-hook.fixture:1",
         installedScriptId: "bbl-next.page-hook.fixture",
         tabUrl: "https://fixture.test/demo",
-        installCount: 1
-      })
+        installCount: 1,
+      }),
     ]);
     expect(snapshot?.verifications).toEqual([
       {
         action: "execute_fixture",
-        verified: true
-      }
+        verified: true,
+      },
     ]);
     expect(result).toMatchObject({
       verified: true,
@@ -472,20 +472,20 @@ describe("site-runtime", () => {
           installationId: "bbl-next.page-hook.fixture:1",
           canRun: "undefined",
           canVerify: "undefined",
-          canInvoke: "undefined"
+          canInvoke: "undefined",
         },
         installationId: "bbl-next.page-hook.fixture:1",
         installedScriptId: "bbl-next.page-hook.fixture",
         tabUrl: "https://fixture.test/demo",
-        installCount: 1
+        installCount: 1,
       },
       trace: [
         "match:fixture.page",
         "plan:1_steps",
         "install:main:bbl-next.page-hook.fixture",
         "invoke:execute_fixture",
-        "verify:page_hook_ok"
-      ]
+        "verify:page_hook_ok",
+      ],
     });
   });
 
@@ -616,21 +616,21 @@ describe("site-runtime", () => {
     const actionWithWorlds: SiteSkillAction = {
       name: "search_posts",
       worlds: ["content", "main"],
-      module: { id: "twitter.search", source: "exports.default = async () => ({});" }
+      module: { id: "twitter.search", source: "exports.default = async () => ({});" },
     };
 
     const actionWithScripts: SiteSkillAction = {
       name: "like_post",
       injectionSteps: [
         { world: "content", scriptId: "twitter.dom-helper", jsPath: "src/page-hook.js" },
-        { world: "main", scriptId: "twitter.api-bridge", runAt: "document_idle" }
+        { world: "main", scriptId: "twitter.api-bridge", runAt: "document_idle" },
       ],
-      module: { id: "twitter.like", source: "exports.default = async () => ({});" }
+      module: { id: "twitter.like", source: "exports.default = async () => ({});" },
     };
 
     const actionNoInjection: SiteSkillAction = {
       name: "get_timeline",
-      module: { id: "twitter.timeline", source: "exports.default = async () => ({});" }
+      module: { id: "twitter.timeline", source: "exports.default = async () => ({});" },
     };
 
     it("builds plan from injectionSteps when provided", () => {
@@ -640,8 +640,8 @@ describe("site-runtime", () => {
         action: "like_post",
         steps: [
           { world: "content", scriptId: "twitter.dom-helper", jsPath: "src/page-hook.js" },
-          { world: "main", scriptId: "twitter.api-bridge", runAt: "document_idle" }
-        ]
+          { world: "main", scriptId: "twitter.api-bridge", runAt: "document_idle" },
+        ],
       });
     });
 
@@ -652,8 +652,8 @@ describe("site-runtime", () => {
         action: "search_posts",
         steps: [
           { world: "content", scriptId: "twitter.search:search_posts:content" },
-          { world: "main", scriptId: "twitter.search:search_posts:main" }
-        ]
+          { world: "main", scriptId: "twitter.search:search_posts:main" },
+        ],
       });
     });
 
@@ -662,7 +662,7 @@ describe("site-runtime", () => {
       expect(plan).toEqual({
         skillId: "twitter.timeline",
         action: "get_timeline",
-        steps: []
+        steps: [],
       });
     });
   });
@@ -679,36 +679,36 @@ describe("site-runtime", () => {
               name: "merge",
               injectionSteps: [
                 { world: "content", scriptId: "gh.dom-helper", jsPath: "src/page-hook.js" },
-                { world: "main", scriptId: "gh.api-hook", runAt: "document_idle" }
+                { world: "main", scriptId: "gh.api-hook", runAt: "document_idle" },
               ],
               module: {
                 id: "gh.merge",
-                source: "exports.default = async ({ ctx }) => ({ tab: ctx.tab.tabId });"
-              }
-            }
-          ]
-        }
+                source: "exports.default = async ({ ctx }) => ({ tab: ctx.tab.tabId });",
+              },
+            },
+          ],
+        },
       ]);
       const installer: SiteScriptInstaller = {
         install: async (step, _tab) => {
           installedSteps.push(step);
-        }
+        },
       };
       const runtime = new SiteSkillRuntime({
         registry,
         runnerHost: new JsRunnerHost(),
-        installer
+        installer,
       });
 
       await runtime.invoke({
         skillId: "github.pr",
         action: "merge",
-        tab: { tabId: 1, url: "https://github.com/foo/bar/pull/1", active: true }
+        tab: { tabId: 1, url: "https://github.com/foo/bar/pull/1", active: true },
       });
 
       expect(installedSteps).toEqual([
         { world: "content", scriptId: "gh.dom-helper", jsPath: "src/page-hook.js" },
-        { world: "main", scriptId: "gh.api-hook", runAt: "document_idle" }
+        { world: "main", scriptId: "gh.api-hook", runAt: "document_idle" },
       ]);
     });
 
@@ -725,11 +725,11 @@ describe("site-runtime", () => {
               verifier: "status_visible",
               module: {
                 id: "gh.check",
-                source: "exports.default = async () => ({ ok: true });"
-              }
-            }
-          ]
-        }
+                source: "exports.default = async () => ({ ok: true });",
+              },
+            },
+          ],
+        },
       ]);
       const runtime = new SiteSkillRuntime({
         registry,
@@ -737,23 +737,169 @@ describe("site-runtime", () => {
         installer: {
           install: async (step) => {
             installs.push(step.scriptId);
-          }
+          },
         },
         verifier: {
-          verify: async () => false
-        }
+          verify: async () => false,
+        },
       });
 
       await expect(
         runtime.invoke({
           skillId: "gh.check",
           action: "status",
-          tab: { tabId: 2, url: "https://github.com/a/b", active: true }
-        })
+          tab: { tabId: 2, url: "https://github.com/a/b", active: true },
+        }),
       ).rejects.toThrow(/Verifier failed/);
 
       // installer still ran before verifier
       expect(installs).toEqual(["gh.check:status:content"]);
+    });
+
+    it("returns a takeover intervention request instead of throwing when verify failure is marked for handoff", async () => {
+      const registry = new SiteSkillRegistry([
+        {
+          skillId: "github.login",
+          matches: ["https://github.com/*"],
+          actions: [
+            {
+              name: "complete_login",
+              worlds: ["content"],
+              verifier: "login_complete",
+              intervention: {
+                kind: "takeover",
+                title: "Need human takeover",
+                message: "Verification failed after the automated login step.",
+              },
+              module: {
+                id: "github.login",
+                source: 'exports.default = async () => ({ step: "submitted" });',
+              },
+            },
+          ],
+        },
+      ]);
+      const runtime = new SiteSkillRuntime({
+        registry,
+        runnerHost: new JsRunnerHost(),
+        installer: {
+          install: async () => undefined,
+        },
+        verifier: {
+          verify: async () => false,
+        },
+      });
+
+      const result = await runtime.invoke({
+        skillId: "github.login",
+        action: "complete_login",
+        tab: { tabId: 5, url: "https://github.com/login", active: true },
+      });
+
+      expect(result).toMatchObject({
+        verified: false,
+        result: {
+          step: "submitted",
+        },
+        intervention: {
+          kind: "takeover",
+          trigger: "verify_failed",
+          status: "requested",
+          title: "Need human takeover",
+          message: "Verification failed after the automated login step.",
+          skillId: "github.login",
+          action: "complete_login",
+          tabId: 5,
+          payload: {
+            tabUrl: "https://github.com/login",
+            verifier: "login_complete",
+            result: {
+              step: "submitted",
+            },
+          },
+        },
+        trace: [
+          "match:github.login",
+          "plan:1_steps",
+          "install:content:github.login:complete_login:content",
+          "invoke:complete_login",
+          "verify:login_complete",
+          "intervention:takeover:verify_failed",
+        ],
+      });
+      expect(result.intervention?.id).toMatch(
+        /^ivr:github\.login:complete_login:verify_failed:5:login_complete$/,
+      );
+    });
+
+    it("returns an input intervention request when runtime blocking errors are marked for handoff", async () => {
+      const registry = new SiteSkillRegistry([
+        {
+          skillId: "twitter.login",
+          matches: ["https://x.com/*"],
+          actions: [
+            {
+              name: "submit_2fa",
+              intervention: {
+                kind: "input",
+                trigger: "runtime_blocked",
+                title: "Need user input",
+                message: "2FA code is required before the flow can continue.",
+                payload: {
+                  inputKind: "otp",
+                },
+              },
+              module: {
+                id: "twitter.login.2fa",
+                source: 'exports.default = async () => { throw new Error("OTP required"); };',
+              },
+            },
+          ],
+        },
+      ]);
+      const runtime = new SiteSkillRuntime({
+        registry,
+        runnerHost: new JsRunnerHost(),
+      });
+
+      const result = await runtime.invoke({
+        skillId: "twitter.login",
+        action: "submit_2fa",
+        tab: { tabId: 6, url: "https://x.com/i/flow/login", active: true },
+        input: {
+          prompt: "enter code",
+        },
+      });
+
+      expect(result).toMatchObject({
+        verified: false,
+        result: null,
+        intervention: {
+          kind: "input",
+          trigger: "runtime_blocked",
+          status: "requested",
+          title: "Need user input",
+          message: "2FA code is required before the flow can continue.",
+          skillId: "twitter.login",
+          action: "submit_2fa",
+          tabId: 6,
+          payload: {
+            inputKind: "otp",
+            tabUrl: "https://x.com/i/flow/login",
+            input: {
+              prompt: "enter code",
+            },
+            error: {
+              name: "CapabilityError",
+              message: "OTP required",
+            },
+          },
+        },
+        trace: ["match:twitter.login", "intervention:input:runtime_blocked"],
+      });
+      expect(result.intervention?.id).toMatch(
+        /^ivr:twitter\.login:submit_2fa:runtime_blocked:6:request$/,
+      );
     });
 
     it("runner does not trigger install or verify when they are absent", async () => {
@@ -766,30 +912,27 @@ describe("site-runtime", () => {
               name: "ping",
               module: {
                 id: "simple.ping",
-                source: "exports.default = async () => ({ pong: true });"
-              }
-            }
-          ]
-        }
+                source: "exports.default = async () => ({ pong: true });",
+              },
+            },
+          ],
+        },
       ]);
       const runtime = new SiteSkillRuntime({
         registry,
-        runnerHost: new JsRunnerHost()
+        runnerHost: new JsRunnerHost(),
         // no installer, no verifier
       });
 
       const result = await runtime.invoke({
         skillId: "simple.skill",
         action: "ping",
-        tab: { tabId: 3, url: "https://example.com/test", active: true }
+        tab: { tabId: 3, url: "https://example.com/test", active: true },
       });
 
       expect(result.result).toEqual({ pong: true });
       expect(result.verified).toBe(true);
-      expect(result.trace).toEqual([
-        "match:simple.skill",
-        "invoke:ping"
-      ]);
+      expect(result.trace).toEqual(["match:simple.skill", "invoke:ping"]);
     });
 
     it("trace reflects plan/install/run/verify four phases", async () => {
@@ -802,28 +945,28 @@ describe("site-runtime", () => {
               name: "execute",
               injectionSteps: [
                 { world: "content", scriptId: "full.content-hook" },
-                { world: "main", scriptId: "full.main-hook" }
+                { world: "main", scriptId: "full.main-hook" },
               ],
               verifier: "post_check",
               module: {
                 id: "full.exec",
-                source: "exports.default = async () => ({ done: true });"
-              }
-            }
-          ]
-        }
+                source: "exports.default = async () => ({ done: true });",
+              },
+            },
+          ],
+        },
       ]);
       const runtime = new SiteSkillRuntime({
         registry,
         runnerHost: new JsRunnerHost(),
         installer: { install: async () => {} },
-        verifier: { verify: async () => true }
+        verifier: { verify: async () => true },
       });
 
       const result = await runtime.invoke({
         skillId: "full.flow",
         action: "execute",
-        tab: { tabId: 4, url: "https://full.test/page", active: true }
+        tab: { tabId: 4, url: "https://full.test/page", active: true },
       });
 
       expect(result.trace).toEqual([
@@ -832,7 +975,7 @@ describe("site-runtime", () => {
         "install:content:full.content-hook",
         "install:main:full.main-hook",
         "invoke:execute",
-        "verify:post_check"
+        "verify:post_check",
       ]);
     });
   });

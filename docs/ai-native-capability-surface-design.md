@@ -372,6 +372,25 @@ Skill 最适合承载：
 - UI 做状态刷新
 - debug / replay / diagnosis
 
+### 6.5 Intervention / Human Handoff
+
+当前 vNext 裁决：
+
+- intervention / human handoff 是 cutover 前必需
+- 它不是 UI 私有流程
+- 当前阶段也不升格成新的 public capability family
+
+最小落点应是：
+
+- `kernel/site-runtime` 之间的 runtime handoff contract
+- 由 automation failure path / verify failure 显式产出 request
+- 由上层 runtime 决定 resolve / cancel / timeout / audit
+
+与 confirm 的关系：
+
+- high-risk capability 的 pre-dispatch yes/no 仍走 core confirm gate
+- intervention 负责浏览器自动化执行过程中“需要人接管/补输入/确认继续”的 handoff
+
 ## 7. 产品到底该暴露哪些 namespace
 
 建议把 namespace 明确分成两层。

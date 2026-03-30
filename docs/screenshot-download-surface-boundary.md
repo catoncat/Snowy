@@ -155,7 +155,7 @@
 2. `docs/legacy-to-vnext-migration-matrix.md`
    - screenshot/download row 从“纯未开始”更新为“边界已裁决，且 `page.screenshot` 已由 ISSUE-057 落地”
 3. `docs/migration-parity-dashboard.md`
-   - visual/download/intervention parity 仍可保持红色，但需写清：screenshot boundary 已锁定，download 延后，intervention 未决
+   - visual/download/intervention parity 需写清：screenshot boundary 已锁定，download 延后，intervention 已定性但 lifecycle integration 仍未完成
 4. `docs/browser-automation-cutover-boundary.md`
    - 与本文件的 screenshot/download 分层保持一致
 
@@ -163,3 +163,4 @@
 
 - **Screenshot 要进 cutover 前主链，但只保留 `page.screenshot` 这一个最小视觉原语。**
 - **Download 不进 cutover 前主链，也不应进入 `page.*` substrate；最多在未来作为 product/workflow export ability 重做。**
+- **Intervention 已单独裁决为 cutover 前必需，但当前先落在 runtime handoff contract，不新造 screenshot/download 旁边的平行 capability family。**

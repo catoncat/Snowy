@@ -22,8 +22,8 @@
 | local execution host adapter | `yellow` | 默认 offscreen local adapter 已实现 read/write/edit（ISSUE-038）；exec 需 remote host；remote host path 仍未实现 |
 | site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
 | AI-native product control plane | `yellow` | 最小 `runtime/config/skills/hosts` bootstrap summary、轻量 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail` resource contract、`runtime.capture_diagnostics` / `runtime.clear_error`、本地 `hosts.*` control plane 与 `config.update` 已落地并有测试；`skills.*` lifecycle 与统一 northbound resource read path 仍未收口 |
-| old browser automation parity | `yellow` | Tier 1/2/3 cutover boundary 已锁定；`tabs.navigate`、`page.press_key`、`page.screenshot` 已落地；background mode / background-specific failure tracking 已明确后置（见 `docs/background-automation-mode-boundary.md`）；剩余 gap 主要是 `page.query/click/fill` production path 与 intervention |
-| old visual/download/intervention parity | `red` | screenshot/download 边界已锁定（见 `docs/screenshot-download-surface-boundary.md`）：`page.screenshot` 已由 `ISSUE-057` 落地，download 延后到 product/workflow 层，intervention 仍待 `ISSUE-041` |
+| old browser automation parity | `yellow` | Tier 1/2/3 cutover boundary 已锁定；`tabs.navigate`、`page.press_key`、`page.screenshot` 已落地；background mode / background-specific failure tracking 已明确后置（见 `docs/background-automation-mode-boundary.md`）；intervention 也已定性为 cutover 前必需的 runtime handoff contract；剩余 gap 主要是 `page.query/click/fill` production path 与 intervention lifecycle integration |
+| old visual/download/intervention parity | `yellow` | screenshot/download/intervention 边界已锁定：`page.screenshot` 已由 `ISSUE-057` 落地，download 延后到 product/workflow 层，intervention 已有最小 request contract，但 kernel / MV3 resolution lifecycle 仍未完成 |
 | skill SDK / authoring | `yellow` | typed facade 与文档已起步，完整 authoring/studio 不足 |
 | plugin -> executable skill migration | `yellow` | 方向明确，但还不是可替代旧 plugin 生态的状态 |
 | Skill Studio / lifecycle product surface | `red` | 生命周期模型有，产品 UI 没有 |

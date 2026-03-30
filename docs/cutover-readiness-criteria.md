@@ -78,7 +78,7 @@
 
 **状态：边界已裁决。** 详见 `docs/browser-automation-cutover-boundary.md`。
 
-Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tabs.navigate/get_active + verify + intervention。Tier 2（cutover 后可补）：scroll, select_option, hover, tabs.create/close, background mode 等。Tier 3（暂不纳入）：stealth tab, computer mode, batch download 等。当前阶段默认沿用 site-runtime / MV3 独立路径，不要求先补 page/tabs FamilyProvider bridge；其中 `tabs.navigate`、`page.press_key`、`page.screenshot` 已有最小 runtime path，剩余 Tier 1 gap 主要是 `page.query/click/fill` production path 与 intervention。
+Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tabs.navigate/get_active + verify + intervention。Tier 2（cutover 后可补）：scroll, select_option, hover, tabs.create/close, background mode 等。Tier 3（暂不纳入）：stealth tab, computer mode, batch download 等。当前阶段默认沿用 site-runtime / MV3 独立路径，不要求先补 page/tabs FamilyProvider bridge；其中 `tabs.navigate`、`page.press_key`、`page.screenshot` 已有最小 runtime path，intervention 的位置也已锁定为 runtime handoff contract；剩余 Tier 1 gap 主要是 `page.query/click/fill` production path 与 intervention lifecycle integration。
 
 补充裁决：background automation mode 与 background-specific failure tracking 不属于 cutover 前必需，详见 `docs/background-automation-mode-boundary.md`。cutover 前仅保留 kernel no-progress / diagnostics / verify 作为极简替代物。
 
@@ -86,13 +86,13 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 
 必须明确这些能力是核心主线还是可延后。
 
-**状态：screenshot / download 边界已裁决。** 详见 `docs/screenshot-download-surface-boundary.md`。
+**状态：screenshot / download / intervention 边界已裁决。** 详见 `docs/screenshot-download-surface-boundary.md` 与 `docs/browser-automation-cutover-boundary.md`。
 
 - `page.screenshot`：cutover 前必需的最小视觉原语，作为 substrate capability 保留；最小 active-tab runtime path 已由 `ISSUE-057` 落地
 - `screenshot_with_highlight`：cutover 后可补的 diagnostics composite
 - `download_image`：cutover 后可补的 product/workflow export ability
 - `download_chat_images`：暂不纳入主链
-- intervention / human handoff：仍待 `ISSUE-041` 裁决
+- intervention / human handoff：cutover 前必需，但当前先以 `kernel/site-runtime` runtime handoff contract 落地；真正 resolve / cancel / timeout / audit lifecycle 由 `ISSUE-068` 继续收口
 
 ## Not Enough To Claim Cutover
 
@@ -112,7 +112,7 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 
 1. 迁移控制面刚建立，还未长期维护
 2. AI-native product control plane 已有最小实现，但 `skills.*` / `audit.*` 仍未形成完整主链
-3. browser automation 主线仍未完整迁入：`tabs.navigate`、`page.press_key`、`page.screenshot` 已有最小路径，但 `page.query/click/fill` production path 与 intervention 仍未收口
+3. browser automation 主线仍未完整迁入：`tabs.navigate`、`page.press_key`、`page.screenshot` 已有最小路径，intervention 位置也已定性，但 `page.query/click/fill` production path 与 intervention lifecycle integration 仍未收口
 4. diagnostics / provider / studio / automation parity 仍未成体系
 
 ## Maintenance Rule

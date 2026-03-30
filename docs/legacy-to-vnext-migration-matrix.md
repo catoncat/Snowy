@@ -40,7 +40,7 @@
 | site activation / page hook / verifier | `dom-snapshot-collector.ts`, `dom-locator.ts`, runtime loop | `packages/site-runtime` + `apps/mv3-shell` | keep-and-rebuild | `v0-shipped` | active-tab boundary、explicit invoke、real injection chain 已有测试 |
 | browser automation / background mode | `automation-mode.ts`, `stealth-tab.ts`, `background-failure-tracker.ts` | future `page.*` / `site.*` substrate | keep-core-ability | `review-gap` | 边界已裁决（见 `docs/background-automation-mode-boundary.md`）：background mode 与 background-specific failure tracking 均后置到 cutover 后；cutover 前仅保留 kernel no-progress / diagnostics / verify 作为极简替代物 |
 | screenshot / visual / download utilities | old builtin tools | future capability families | keep-by-capability | `partial` | 边界已裁决且最小截图路径已落地（见 `docs/screenshot-download-surface-boundary.md`）：`page.screenshot` 已由 `ISSUE-057` 落地；`screenshot_with_highlight` 为 Tier 2 composite；download 延后到 product/workflow 层 |
-| interventions / human handoff | intervention tools + panel UI | future runtime / studio layer | decide-product-need | `not-started` | 还未在新仓决定主链位置 |
+| interventions / human handoff | intervention tools + panel UI | runtime handoff contract + future kernel / studio lifecycle | replace-and-phase | `partial` | cutover 前必需地位已锁定；`packages/site-runtime` 已能对 verify/runtime blocked 返回结构化 intervention request；剩余 gap 是 kernel / MV3 resolution lifecycle 与 audit |
 | tab / page interaction tools | old builtin page/tab tools | public namespaces `page.*`, `tabs.*` | replace-with-public-api | `partial` | 最小 public automation path 已锁定（见 `docs/page-tabs-public-automation-path.md`）：Tier 1 = page.query/click/fill/press_key/screenshot + tabs.get_active/navigate；`tabs.navigate` 已由 `ISSUE-058` 落地，`page.press_key` / `page.screenshot` 已由 `ISSUE-057` 落地；剩余 gap 是 `page.query/click/fill` production path |
 | LLM provider registry / profile routing | `llm-provider-registry.ts`, profile resolver | future provider layer | keep-core-idea | `not-started` | 新仓尚未迁旧 provider/profile 层 |
 | orchestration/session/run queue/compaction | `BrainOrchestrator`, session manager, loop | future mainline brain layer | keep-product-capability | `not-started` | 当前新仓只是 runtime substrate |
@@ -61,7 +61,7 @@
 
 ## 对完整迁移最关键的未收口区域
 
-1. browser automation / screenshot / download / intervention 是否纳入 cutover 前必需
+1. browser automation / screenshot / download 的剩余 runtime integration 与 intervention lifecycle 是否真正闭环
 2. provider / profile / diagnostics / observability 主链
 3. Skill Studio / lifecycle / versioning 产品面
 
