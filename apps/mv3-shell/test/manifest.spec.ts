@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import manifest from "../manifest.json";
+// biome-ignore format: keep ts-ignore attached to single-line JS import
 // @ts-ignore source JS module has no declaration file yet
 import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCREEN_REASONS, createBackgroundRunnerBridge, createPageHookBridge } from "../src/background.js";
 // @ts-ignore source JS module has no declaration file yet
@@ -2682,6 +2683,354 @@ describe("mv3-shell manifest", () => {
             ],
           },
         },
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("persists intervention lifecycle through runtime services, diagnostics, bootstrap, and audit", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "invoke") {
+          return {
+            kind: "invoke_result",
+            requestId: request.requestId,
+            ok: true,
+            result: {
+              result: {
+                ok: true,
+                echoedInput: request.invocation.input,
+              },
+              durationMs: 1,
+            },
+          };
+        }
+        return {
+          kind: "health_result",
+          requestId: request.requestId,
+          ok: true,
+          health: {
+            status: "idle",
+            inflightCount: 0,
+            consecutiveFailures: 0,
+          },
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0,
+      })),
+    };
+    const harness = createChromeHarness({
+      host,
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/login",
+      },
+    });
+    const pageHookBridge = {
+      install: vi.fn(async (step: { scriptId: string }) => ({
+        installationId: `${step.scriptId}:1`,
+      })),
+      invoke: vi.fn(
+        async ({
+          installation,
+          action,
+          input,
+          tab,
+        }: {
+          installation: { step: { scriptId: string }; result: { installationId: string } };
+          action: string;
+          input: unknown;
+          tab: { url: string };
+        }) => ({
+          ok: true,
+          action,
+          input,
+          installationId: installation.result.installationId,
+          installedScriptId: installation.step.scriptId,
+          tabUrl: tab.url,
+        }),
+      ),
+      verify: vi.fn(async () => false),
+      snapshotState: vi.fn(async ({ tabId, world }: { tabId: number; world: string }) => ({
+        tabId,
+        world,
+        installs: 1,
+        invocations: 1,
+        verifications: [{ action: "secure_login", verified: false }],
+      })),
+    };
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge,
+      interventionTimeoutMs: 10_000,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await bridge.ensureHost();
+
+    const firstInvoke = (await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "site.runtime.invoke",
+      skillId: "fixture.page",
+      action: "secure_login",
+      tab: {
+        tabId: 11,
+        url: "https://fixture.test/login",
+        active: true,
+      },
+      input: {
+        username: "alice",
+      },
+      plan: {
+        skillId: "fixture.page",
+        action: "secure_login",
+        steps: [
+          {
+            world: "main",
+            scriptId: "bbl-next.page-hook.fixture",
+          },
+        ],
+      },
+      module: {
+        id: "fixture.page.secure-login",
+        source: `
+          exports.default = async ({ input }) => ({
+            username: input.username
+          });
+        `,
+      },
+      verifier: "page_hook_ok",
+      intervention: {
+        kind: "takeover",
+        title: "Manual verify required",
+        message: "Finish the verification flow manually.",
+        trigger: "verify_failed",
+      },
+    })) as {
+      ok: boolean;
+      data: { intervention: { id: string; sessionId: string; status: string } };
+    };
+
+    expect(firstInvoke).toMatchObject({
+      ok: true,
+      data: {
+        verified: false,
+        intervention: {
+          id: "ivr:fixture.page:secure_login:verify_failed:11:page_hook_ok",
+          kind: "takeover",
+          trigger: "verify_failed",
+          status: "requested",
+          sessionId: expect.any(String),
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.diagnostics",
+        tabId: 11,
+        world: "main",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        interventions: {
+          status: "requested",
+          activeCount: 1,
+          active: [
+            expect.objectContaining({
+              id: firstInvoke.data.intervention.id,
+              status: "requested",
+            }),
+          ],
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.bootstrap",
+        world: "main",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        runtime: {
+          interventions: {
+            status: "requested",
+            activeCount: 1,
+            active: [
+              expect.objectContaining({
+                id: firstInvoke.data.intervention.id,
+                status: "requested",
+              }),
+            ],
+          },
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "audit.intervention",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        entries: [
+          expect.objectContaining({
+            interventionId: firstInvoke.data.intervention.id,
+            status: "requested",
+          }),
+        ],
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.resolve",
+        interventionId: firstInvoke.data.intervention.id,
+        resolution: {
+          resolution: "resume",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        intervention: {
+          id: firstInvoke.data.intervention.id,
+          status: "resolved",
+          resolution: {
+            resolution: "resume",
+          },
+        },
+      },
+    });
+
+    const secondInvoke = (await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "site.runtime.invoke",
+      skillId: "fixture.page",
+      action: "submit_code",
+      tab: {
+        tabId: 11,
+        url: "https://fixture.test/login",
+        active: true,
+      },
+      input: {
+        code: "123456",
+      },
+      plan: {
+        skillId: "fixture.page",
+        action: "submit_code",
+        steps: [
+          {
+            world: "main",
+            scriptId: "bbl-next.page-hook.fixture",
+          },
+        ],
+      },
+      module: {
+        id: "fixture.page.submit-code",
+        source: `
+          exports.default = async ({ input }) => ({
+            code: input.code
+          });
+        `,
+      },
+      verifier: "page_hook_ok",
+      intervention: {
+        kind: "input",
+        title: "Need code confirmation",
+        message: "Cancel or provide a new code.",
+        trigger: "verify_failed",
+      },
+    })) as {
+      ok: boolean;
+      data: { intervention: { id: string } };
+    };
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.cancel",
+        interventionId: secondInvoke.data.intervention.id,
+        reason: "user_cancelled",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        intervention: {
+          id: secondInvoke.data.intervention.id,
+          status: "cancelled",
+          resolution: {
+            reason: "user_cancelled",
+          },
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        summary: {
+          status: "settled",
+          activeCount: 0,
+        },
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            id: firstInvoke.data.intervention.id,
+            status: "resolved",
+          }),
+          expect.objectContaining({
+            id: secondInvoke.data.intervention.id,
+            status: "cancelled",
+          }),
+        ]),
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "audit.intervention",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        entries: expect.arrayContaining([
+          expect.objectContaining({
+            interventionId: firstInvoke.data.intervention.id,
+            status: "requested",
+          }),
+          expect.objectContaining({
+            interventionId: firstInvoke.data.intervention.id,
+            status: "resolved",
+          }),
+          expect.objectContaining({
+            interventionId: secondInvoke.data.intervention.id,
+            status: "requested",
+          }),
+          expect.objectContaining({
+            interventionId: secondInvoke.data.intervention.id,
+            status: "cancelled",
+          }),
+        ]),
       },
     });
 

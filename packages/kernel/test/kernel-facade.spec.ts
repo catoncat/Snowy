@@ -244,12 +244,135 @@ describe("KernelFacade (createKernel)", () => {
     });
   });
 
+  describe("interventions", () => {
+    it("tracks intervention request, resolve, cancel, and audit state", async () => {
+      const s = await kernel.createSession();
+
+      const requested = kernel.requestIntervention(s.id, {
+        id: "ivr:test:resolve",
+        kind: "takeover",
+        trigger: "verify_failed",
+        status: "requested",
+        title: "Manual verify required",
+        message: "Complete the step manually",
+        skillId: "fixture.site",
+        action: "login",
+        tabId: 9,
+      });
+
+      expect(requested.status).toBe("requested");
+      expect(requested.sessionId).toBe(s.id);
+      expect(kernel.getInterventionSummary({ sessionId: s.id })).toMatchObject({
+        status: "requested",
+        totalCount: 1,
+        activeCount: 1,
+      });
+
+      const resolved = kernel.resolveIntervention("ivr:test:resolve", {
+        resolution: "resume",
+      });
+      expect(resolved.status).toBe("resolved");
+
+      kernel.requestIntervention(s.id, {
+        id: "ivr:test:cancel",
+        kind: "input",
+        trigger: "runtime_blocked",
+        status: "requested",
+        title: "Need code",
+        message: "Input a verification code",
+      });
+      const cancelled = kernel.cancelIntervention("ivr:test:cancel", {
+        reason: "user_declined",
+      });
+      expect(cancelled.status).toBe("cancelled");
+
+      expect(kernel.listInterventions({ sessionId: s.id })).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "ivr:test:resolve",
+            status: "resolved",
+          }),
+          expect.objectContaining({
+            id: "ivr:test:cancel",
+            status: "cancelled",
+          }),
+        ]),
+      );
+
+      expect(kernel.readInterventionAudit({ sessionId: s.id })).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            interventionId: "ivr:test:resolve",
+            status: "requested",
+          }),
+          expect.objectContaining({
+            interventionId: "ivr:test:resolve",
+            status: "resolved",
+          }),
+          expect.objectContaining({
+            interventionId: "ivr:test:cancel",
+            status: "requested",
+          }),
+          expect.objectContaining({
+            interventionId: "ivr:test:cancel",
+            status: "cancelled",
+          }),
+        ]),
+      );
+    });
+
+    it("marks pending interventions as timed_out on read", async () => {
+      const s = await kernel.createSession();
+
+      kernel.requestIntervention(
+        s.id,
+        {
+          id: "ivr:test:timeout",
+          kind: "input",
+          trigger: "runtime_blocked",
+          status: "requested",
+          title: "Need input",
+          message: "Timed request",
+        },
+        {
+          now: 10,
+          timeoutMs: 5,
+        },
+      );
+
+      expect(
+        kernel.listInterventions({
+          sessionId: s.id,
+          now: 20,
+        }),
+      ).toEqual([
+        expect.objectContaining({
+          id: "ivr:test:timeout",
+          status: "timed_out",
+        }),
+      ]);
+      expect(kernel.getInterventionSummary({ sessionId: s.id, now: 20 })).toMatchObject({
+        status: "settled",
+        activeCount: 0,
+      });
+      expect(kernel.readInterventionAudit({ sessionId: s.id, now: 20 })).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            interventionId: "ivr:test:timeout",
+            status: "timed_out",
+          }),
+        ]),
+      );
+    });
+  });
+
   describe("subsystem access", () => {
-    it("exposes all four subsystems", () => {
+    it("exposes all five subsystems", () => {
       expect(kernel.sessions).toBeDefined();
       expect(kernel.runs).toBeDefined();
       expect(kernel.loop).toBeDefined();
       expect(kernel.compaction).toBeDefined();
+      expect(kernel.interventions).toBeDefined();
     });
   });
 });

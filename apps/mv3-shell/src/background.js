@@ -1,6 +1,6 @@
 import {
-  BOOTSTRAP_RESOURCE_KEYS as CONTRACT_BOOTSTRAP_RESOURCE_KEYS,
   CONFIG_RESOURCE_FIELDS,
+  BOOTSTRAP_RESOURCE_KEYS as CONTRACT_BOOTSTRAP_RESOURCE_KEYS,
   HOST_AUDIT_KINDS,
   HOST_AUDIT_STATUSES,
 } from "@bbl-next/contracts";
@@ -53,11 +53,11 @@ function normalizeAuditEntry(value) {
     return null;
   }
   if (
-    typeof value.kind !== "string"
-    || !HOST_AUDIT_KINDS.includes(value.kind)
-    || typeof value.status !== "string"
-    || !HOST_AUDIT_STATUSES.includes(value.status)
-    || typeof value.hostId !== "string"
+    typeof value.kind !== "string" ||
+    !HOST_AUDIT_KINDS.includes(value.kind) ||
+    typeof value.status !== "string" ||
+    !HOST_AUDIT_STATUSES.includes(value.status) ||
+    typeof value.hostId !== "string"
   ) {
     return null;
   }
@@ -110,6 +110,16 @@ function invalidPageAutomation(message) {
       code: "E_BAD_INPUT",
       message,
     },
+  };
+}
+
+function emptyInterventionState() {
+  return {
+    status: "empty",
+    totalCount: 0,
+    activeCount: 0,
+    recentCount: 0,
+    active: [],
   };
 }
 
@@ -271,6 +281,7 @@ export function createBackgroundRunnerBridge({
   listSkills = undefined,
   configSummary = undefined,
   runtimeServices = undefined,
+  interventionTimeoutMs = undefined,
   auditStore = undefined,
   auditStorageKey = AUDIT_STORAGE_KEY,
 } = {}) {
@@ -391,6 +402,7 @@ export function createBackgroundRunnerBridge({
         invokeRunner: invoke,
         pageHookBridge: effectivePageHookBridge,
         configSummary,
+        interventionTimeoutMs,
       });
       composedRuntimeServices = runtimeServices
         ? {
@@ -990,10 +1002,7 @@ export function createBackgroundRunnerBridge({
     }
 
     const activeTab = activeTabResult.data;
-    const dataUrl = await chromeApi.tabs.captureVisibleTab(
-      activeTab.windowId,
-      screenshotOptions,
-    );
+    const dataUrl = await chromeApi.tabs.captureVisibleTab(activeTab.windowId, screenshotOptions);
 
     return {
       ok: true,
@@ -1148,6 +1157,7 @@ export function createBackgroundRunnerBridge({
     plan,
     module,
     verifier,
+    intervention,
   } = {}) {
     if (!plan || !Array.isArray(plan.steps)) {
       return invalidSiteRuntimeInvoke("Site runtime invoke requires an injection plan");
@@ -1183,6 +1193,7 @@ export function createBackgroundRunnerBridge({
           plan,
           module,
           verifier,
+          intervention,
         }),
       };
     } catch (error) {
@@ -1196,6 +1207,10 @@ export function createBackgroundRunnerBridge({
   async function diagnostics({ tabId, world = "main" } = {}) {
     const capturedAt = isoNow();
     const offscreenPresent = await hasOffscreenDocument();
+    const interventionState =
+      typeof getRuntimeServices().getInterventionState === "function"
+        ? await getRuntimeServices().getInterventionState()
+        : emptyInterventionState();
 
     const runnerResponse = offscreenPresent
       ? await sendToOffscreen("runner.diagnostics")
@@ -1266,6 +1281,7 @@ export function createBackgroundRunnerBridge({
           offscreenPresent,
           offscreenPath,
         }),
+        interventions: interventionState,
         runner,
         site,
       },
@@ -1287,7 +1303,9 @@ export function createBackgroundRunnerBridge({
     const runnerHealth = runtimeDiagnostics.runner?.health;
     const activeTabSummary = activeTab ? toBootstrapActiveTab(activeTab, world) : null;
     const runtimeKernelState =
-      sessionId == null && runtimeServices ? await getRuntimeServices().getKernelRuntimeState() : null;
+      sessionId == null && runtimeServices
+        ? await getRuntimeServices().getKernelRuntimeState()
+        : null;
     const runtimeStatus =
       runtimeDiagnostics.status === "degraded"
         ? activeTabSummary || runtimeDiagnostics.bridge.offscreenPresent
@@ -1327,57 +1345,84 @@ export function createBackgroundRunnerBridge({
       ? rawSkillsSummary.map((entry) => normalizeSkillSummaryInput(entry)).filter(Boolean)
       : [];
     const resolvedConfigSummary = await resolveConfigBootstrapSummary();
+    const interventionState =
+      typeof getRuntimeServices().getInterventionState === "function"
+        ? await getRuntimeServices().getInterventionState()
+        : emptyInterventionState();
+
+    const summary = bootstrapSummaryBuilder({
+      generatedAt,
+      runtime: {
+        status: runtimeStatus,
+        mode: currentMode,
+        sessionId: sessionId ?? runtimeKernelState?.session.id ?? null,
+        activeTab: activeTabSummary,
+        loopState:
+          runtimeKernelState?.runState.phase ??
+          runnerHealth?.status ??
+          (activeTabSummary ? "idle" : null),
+        lastError: effectiveError
+          ? {
+              code: effectiveError.code,
+              message: effectiveError.message,
+            }
+          : null,
+        actionCapabilities: {
+          total: 0,
+          namespaces: [],
+        },
+      },
+      skills: {
+        status: skillEntries.length > 0 ? "healthy" : "empty",
+        installedCount: skillEntries.length,
+        enabledCount: skillEntries.filter((entry) => entry.enabled).length,
+        trustedCount: skillEntries.filter((entry) => entry.trusted).length,
+        recentChange: skillEntries.find((entry) => entry.recentChange)?.recentChange ?? null,
+      },
+      hosts: {
+        status: hostItems.some((entry) => entry.state === "degraded")
+          ? "degraded"
+          : hostItems.some((entry) => entry.connected)
+            ? "healthy"
+            : "empty",
+        defaultHostId: state.defaultHostId,
+        totalCount: hostItems.length,
+        connectedCount: hostItems.filter((entry) => entry.connected).length,
+        items: hostItems,
+      },
+      config: {
+        status: resolvedConfigSummary.status,
+        fields: resolvedConfigSummary.fields,
+        values: resolvedConfigSummary.values,
+        note: resolvedConfigSummary.note,
+        updatedAt: resolvedConfigSummary.updatedAt,
+      },
+    });
+
+    summary.runtime.interventions = {
+      status: interventionState.status,
+      totalCount: interventionState.totalCount,
+      activeCount: interventionState.activeCount,
+      recentCount: interventionState.recentCount,
+      active: interventionState.active.map((entry) => ({
+        id: entry.id,
+        kind: entry.kind,
+        trigger: entry.trigger,
+        status: entry.status,
+        title: entry.title,
+        message: entry.message,
+        skillId: entry.skillId ?? null,
+        action: entry.action ?? null,
+        tabId: entry.tabId ?? null,
+        requestedAt: entry.requestedAt,
+        updatedAt: entry.updatedAt,
+        expiresAt: entry.expiresAt,
+      })),
+    };
 
     return {
       ok: true,
-      data: bootstrapSummaryBuilder({
-        generatedAt,
-        runtime: {
-          status: runtimeStatus,
-          mode: currentMode,
-          sessionId: sessionId ?? runtimeKernelState?.session.id ?? null,
-          activeTab: activeTabSummary,
-          loopState:
-            runtimeKernelState?.runState.phase ??
-            runnerHealth?.status ??
-            (activeTabSummary ? "idle" : null),
-          lastError: effectiveError
-            ? {
-                code: effectiveError.code,
-                message: effectiveError.message,
-              }
-            : null,
-          actionCapabilities: {
-            total: 0,
-            namespaces: [],
-          },
-        },
-        skills: {
-          status: skillEntries.length > 0 ? "healthy" : "empty",
-          installedCount: skillEntries.length,
-          enabledCount: skillEntries.filter((entry) => entry.enabled).length,
-          trustedCount: skillEntries.filter((entry) => entry.trusted).length,
-          recentChange: skillEntries.find((entry) => entry.recentChange)?.recentChange ?? null,
-        },
-        hosts: {
-          status: hostItems.some((entry) => entry.state === "degraded")
-            ? "degraded"
-            : hostItems.some((entry) => entry.connected)
-              ? "healthy"
-              : "empty",
-          defaultHostId: state.defaultHostId,
-          totalCount: hostItems.length,
-          connectedCount: hostItems.filter((entry) => entry.connected).length,
-          items: hostItems,
-        },
-        config: {
-          status: resolvedConfigSummary.status,
-          fields: resolvedConfigSummary.fields,
-          values: resolvedConfigSummary.values,
-          note: resolvedConfigSummary.note,
-          updatedAt: resolvedConfigSummary.updatedAt,
-        },
-      }),
+      data: summary,
     };
   }
 
@@ -1463,6 +1508,50 @@ export function createBackgroundRunnerBridge({
           ok: true,
           data: {
             entries: await readAuditTail(message.limit),
+          },
+        };
+      case "audit.intervention":
+        return {
+          ok: true,
+          data: {
+            entries:
+              typeof getRuntimeServices().readInterventionAudit === "function"
+                ? await getRuntimeServices().readInterventionAudit(message.limit)
+                : [],
+          },
+        };
+      case "intervention.list":
+        return {
+          ok: true,
+          data: {
+            items:
+              typeof getRuntimeServices().listInterventions === "function"
+                ? await getRuntimeServices().listInterventions()
+                : [],
+            summary:
+              typeof getRuntimeServices().getInterventionState === "function"
+                ? await getRuntimeServices().getInterventionState()
+                : emptyInterventionState(),
+          },
+        };
+      case "intervention.resolve":
+        return {
+          ok: true,
+          data: {
+            intervention: await getRuntimeServices().resolveIntervention({
+              id: message.interventionId ?? message.id,
+              resolution: message.resolution,
+            }),
+          },
+        };
+      case "intervention.cancel":
+        return {
+          ok: true,
+          data: {
+            intervention: await getRuntimeServices().cancelIntervention({
+              id: message.interventionId ?? message.id,
+              reason: message.reason,
+            }),
           },
         };
       case "site.runtime.invoke":

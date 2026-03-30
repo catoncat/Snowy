@@ -13,6 +13,8 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+const DEFAULT_INTERVENTION_TIMEOUT_MS = 5 * 60 * 1000;
+
 function createBridgeRunnerHost({ invokeRunner }) {
   return {
     async invoke(request) {
@@ -140,16 +142,10 @@ function normalizeConfigPatch(patch) {
   const normalized = {};
   for (const [field, value] of Object.entries(patch)) {
     if (!CONFIG_RESOURCE_FIELDS.includes(field)) {
-      throw new CapabilityError(
-        "E_BAD_INPUT",
-        `config.update does not support field: ${field}`,
-      );
+      throw new CapabilityError("E_BAD_INPUT", `config.update does not support field: ${field}`);
     }
     if (!isPlainObject(value)) {
-      throw new CapabilityError(
-        "E_BAD_INPUT",
-        `config.update field ${field} must be an object`,
-      );
+      throw new CapabilityError("E_BAD_INPUT", `config.update field ${field} must be an object`);
     }
     normalized[field] = { ...value };
   }
@@ -184,7 +180,10 @@ function createTabsFamilyProvider({ chromeApi }) {
             throw new CapabilityError("E_BAD_INPUT", "tabs.navigate requires a non-empty url");
           }
           if (!chromeApi?.tabs?.update) {
-            throw new CapabilityError("E_RUNTIME", "chrome.tabs.update is required for tabs.navigate");
+            throw new CapabilityError(
+              "E_RUNTIME",
+              "chrome.tabs.update is required for tabs.navigate",
+            );
           }
 
           const nextUrl = input.url.trim();
@@ -204,7 +203,10 @@ function createTabsFamilyProvider({ chromeApi }) {
           );
         }
         default:
-          throw new CapabilityError("E_RUNTIME", `Unsupported tabs operation: ${binding.operation}`);
+          throw new CapabilityError(
+            "E_RUNTIME",
+            `Unsupported tabs operation: ${binding.operation}`,
+          );
       }
     },
   };
@@ -299,6 +301,7 @@ export function createBackgroundRuntimeServices({
   llmAdapter = undefined,
   configSummary = undefined,
   workspaceId = "mv3-shell",
+  interventionTimeoutMs = DEFAULT_INTERVENTION_TIMEOUT_MS,
 } = {}) {
   let servicesPromise = null;
   let sessionPromise = null;
@@ -358,7 +361,10 @@ export function createBackgroundRuntimeServices({
     skillId = "mv3-shell.background",
     permissions = ["*"],
   }) {
-    const [{ registry, providers }, session] = await Promise.all([ensureServices(), ensureSession()]);
+    const [{ registry, providers }, session] = await Promise.all([
+      ensureServices(),
+      ensureSession(),
+    ]);
     return dispatchCapabilityCall({
       registry,
       providers,
@@ -383,6 +389,67 @@ export function createBackgroundRuntimeServices({
     return configControlPlane.getBootstrapSummary();
   }
 
+  async function getInterventionState() {
+    if (!sessionPromise) {
+      return {
+        sessionId: null,
+        status: "empty",
+        totalCount: 0,
+        activeCount: 0,
+        recentCount: 0,
+        active: [],
+      };
+    }
+    const [{ kernel }, session] = await Promise.all([ensureServices(), sessionPromise]);
+    const summary = kernel.getInterventionSummary({
+      sessionId: session.id,
+    });
+    return {
+      sessionId: session.id,
+      ...summary,
+    };
+  }
+
+  async function listInterventions() {
+    if (!sessionPromise) {
+      return [];
+    }
+    const [{ kernel }, session] = await Promise.all([ensureServices(), sessionPromise]);
+    return kernel.listInterventions({
+      sessionId: session.id,
+    });
+  }
+
+  async function readInterventionAudit(limit) {
+    if (!sessionPromise) {
+      return [];
+    }
+    const [{ kernel }, session] = await Promise.all([ensureServices(), sessionPromise]);
+    return kernel.readInterventionAudit({
+      sessionId: session.id,
+      limit,
+    });
+  }
+
+  async function resolveIntervention({ id, resolution } = {}) {
+    if (typeof id !== "string" || !id.trim()) {
+      throw new CapabilityError("E_BAD_INPUT", "intervention.resolve requires a request id");
+    }
+    const { kernel } = await ensureServices();
+    return kernel.resolveIntervention(id, isPlainObject(resolution) ? resolution : undefined);
+  }
+
+  async function cancelIntervention({ id, reason } = {}) {
+    if (typeof id !== "string" || !id.trim()) {
+      throw new CapabilityError("E_BAD_INPUT", "intervention.cancel requires a request id");
+    }
+    const { kernel } = await ensureServices();
+    return kernel.cancelIntervention(
+      id,
+      typeof reason === "string" && reason.trim() ? { reason: reason.trim() } : undefined,
+    );
+  }
+
   async function invokeSiteSkill({
     skillId,
     action,
@@ -392,8 +459,12 @@ export function createBackgroundRuntimeServices({
     plan,
     module,
     verifier,
+    intervention,
   }) {
-    const { runnerHost } = await ensureServices();
+    const [{ kernel, runnerHost }, session] = await Promise.all([
+      ensureServices(),
+      ensureSession(),
+    ]);
     const runtime = new SiteSkillRuntime({
       registry: new SiteSkillRegistry([
         {
@@ -405,6 +476,7 @@ export function createBackgroundRuntimeServices({
               module,
               injectionSteps: plan.steps,
               ...(verifier ? { verifier } : {}),
+              ...(intervention ? { intervention } : {}),
             },
           ],
         },
@@ -417,13 +489,26 @@ export function createBackgroundRuntimeServices({
         : {}),
     });
 
-    return runtime.invoke({
+    const result = await runtime.invoke({
       skillId,
       action,
       tab,
       input,
       ctx,
     });
+
+    if (!result.intervention) {
+      return result;
+    }
+
+    const requested = kernel.requestIntervention(session.id, result.intervention, {
+      timeoutMs: interventionTimeoutMs,
+    });
+
+    return {
+      ...result,
+      intervention: requested,
+    };
   }
 
   return {
@@ -431,7 +516,12 @@ export function createBackgroundRuntimeServices({
     ensureServices,
     ensureSession,
     getConfigBootstrapSummary,
+    getInterventionState,
     getKernelRuntimeState,
     invokeSiteSkill,
+    listInterventions,
+    readInterventionAudit,
+    resolveIntervention,
+    cancelIntervention,
   };
 }

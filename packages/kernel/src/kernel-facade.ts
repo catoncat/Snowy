@@ -2,6 +2,7 @@ import { CapabilityError } from "@bbl-next/contracts";
 import type {
   CompactionDraft,
   CompactionReason,
+  InterventionRequest,
   KernelLlmAdapter,
   LoopTurn,
   MessagePayload,
@@ -19,6 +20,12 @@ import {
   dispatchCapabilityCall,
 } from "@bbl-next/core";
 import { CompactionManager, type CompactionOptions } from "./compaction-manager.js";
+import {
+  InterventionController,
+  type KernelInterventionEvent,
+  type KernelInterventionRecord,
+  type KernelInterventionSummary,
+} from "./intervention-controller.js";
 import {
   LoopEngine,
   type LoopEngineOptions,
@@ -84,11 +91,44 @@ export interface Kernel {
   shouldCompact(sessionId: string, contextWindow: number, currentTokens?: number): Promise<boolean>;
   triggerCompaction(sessionId: string, reason: CompactionReason): Promise<CompactionDraft>;
 
+  // Intervention lifecycle
+  requestIntervention(
+    sessionId: string,
+    request: InterventionRequest,
+    opts?: { timeoutMs?: number; now?: number },
+  ): KernelInterventionRecord;
+  resolveIntervention(
+    interventionId: string,
+    resolution?: Record<string, unknown>,
+    opts?: { now?: number },
+  ): KernelInterventionRecord;
+  cancelIntervention(
+    interventionId: string,
+    details?: Record<string, unknown>,
+    opts?: { now?: number },
+  ): KernelInterventionRecord;
+  listInterventions(opts?: {
+    sessionId?: string | null;
+    status?: KernelInterventionRecord["status"];
+    now?: number;
+  }): KernelInterventionRecord[];
+  readInterventionAudit(opts?: {
+    sessionId?: string | null;
+    limit?: number;
+    now?: number;
+  }): KernelInterventionEvent[];
+  getInterventionSummary(opts?: {
+    sessionId?: string | null;
+    auditLimit?: number;
+    now?: number;
+  }): KernelInterventionSummary;
+
   // Subsystem access (for advanced usage)
   readonly sessions: SessionStore;
   readonly runs: RunController;
   readonly loop: LoopEngine;
   readonly compaction: CompactionManager;
+  readonly interventions: InterventionController;
 }
 
 export function createKernel(opts: KernelOptions): Kernel {
@@ -96,6 +136,7 @@ export function createKernel(opts: KernelOptions): Kernel {
   const runs = new RunController();
   const loop = new LoopEngine(opts.loop);
   const compaction = new CompactionManager(sessions, opts.llm, opts.compaction);
+  const interventions = new InterventionController();
 
   const executeStep = async (
     sessionId: string,
@@ -206,10 +247,22 @@ export function createKernel(opts: KernelOptions): Kernel {
       }
     },
 
+    // Intervention lifecycle
+    requestIntervention: (sessionId, request, requestOpts) =>
+      interventions.request(sessionId, request, requestOpts),
+    resolveIntervention: (interventionId, resolution, requestOpts) =>
+      interventions.resolve(interventionId, resolution, requestOpts),
+    cancelIntervention: (interventionId, details, requestOpts) =>
+      interventions.cancel(interventionId, details, requestOpts),
+    listInterventions: (requestOpts) => interventions.list(requestOpts),
+    readInterventionAudit: (requestOpts) => interventions.readAudit(requestOpts),
+    getInterventionSummary: (requestOpts) => interventions.getSummary(requestOpts),
+
     // Subsystem access
     sessions,
     runs,
     loop,
     compaction,
+    interventions,
   };
 }
