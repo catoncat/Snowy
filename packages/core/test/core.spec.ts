@@ -107,11 +107,12 @@ describe("core", () => {
     ]);
   });
 
-  it("keeps staged skill lifecycle control-plane actions aligned with canonical contracts", () => {
+  it("keeps skill lifecycle control-plane actions aligned with canonical contracts", () => {
     expect(SKILL_CONTROL_PLANE_ACTIONS).toEqual([
       "skills.install",
       "skills.enable",
       "skills.disable",
+      "skills.uninstall",
     ]);
     expect(getBuiltinsByNamespace("skills").map((entry) => entry.id)).toEqual([
       "skills.invoke",
@@ -143,6 +144,10 @@ describe("core", () => {
       },
       {
         id: "skills.disable",
+        sideEffects: "writes",
+      },
+      {
+        id: "skills.uninstall",
         sideEffects: "writes",
       },
     ]);
@@ -948,7 +953,7 @@ describe("core", () => {
     });
   });
 
-  it("routes skills install/enable/disable through the runtime skill manager", async () => {
+  it("routes skills install/enable/disable/uninstall through the runtime skill manager", async () => {
     const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
     const providers = new FamilyProviderRegistry();
     const calls: string[] = [];
@@ -958,18 +963,20 @@ describe("core", () => {
       providers,
       sessionId: "s1",
       skillId: "skill.page",
-      permissions: ["skills.install", "skills.enable", "skills.disable"],
+      permissions: ["skills.install", "skills.enable", "skills.disable", "skills.uninstall"],
       manageSkill: async ({ action, skillId }) => {
         calls.push(`${action}:${skillId}`);
         return {
           skill: {
             skillId,
             status:
-              action === "skills.disable"
-                ? "disabled"
-                : action === "skills.enable"
-                  ? "enabled"
-                  : "installed",
+              action === "skills.uninstall"
+                ? "archived"
+                : action === "skills.disable"
+                  ? "disabled"
+                  : action === "skills.enable"
+                    ? "enabled"
+                    : "installed",
             trusted: false,
           },
         };
@@ -997,10 +1004,18 @@ describe("core", () => {
         trusted: false,
       },
     });
+    await expect(ctx.skills.uninstall("skill.demo")).resolves.toEqual({
+      skill: {
+        skillId: "skill.demo",
+        status: "archived",
+        trusted: false,
+      },
+    });
     expect(calls).toEqual([
       "skills.install:skill.demo",
       "skills.enable:skill.demo",
       "skills.disable:skill.demo",
+      "skills.uninstall:skill.demo",
     ]);
   });
 
@@ -1633,11 +1648,16 @@ describe("core", () => {
       });
     });
 
-    it("narrowed skills facade exposes install/enable/disable when declared", async () => {
+    it("narrowed skills facade exposes install/enable/disable/uninstall when declared", async () => {
       const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
       const providers = new FamilyProviderRegistry();
 
-      const permissions = ["skills.install", "skills.enable", "skills.disable"] as const;
+      const permissions = [
+        "skills.install",
+        "skills.enable",
+        "skills.disable",
+        "skills.uninstall",
+      ] as const;
       const ctx = createSkillRuntimeContext({
         registry,
         providers,
@@ -1657,6 +1677,7 @@ describe("core", () => {
       const install: BuiltinCapabilityMap["skills"]["install"] = caps.skills.install;
       const enable: BuiltinCapabilityMap["skills"]["enable"] = caps.skills.enable;
       const disable: BuiltinCapabilityMap["skills"]["disable"] = caps.skills.disable;
+      const uninstall: BuiltinCapabilityMap["skills"]["uninstall"] = caps.skills.uninstall;
 
       await expect(install({ skillId: "skill.demo" })).resolves.toEqual({
         skill: {
@@ -1676,6 +1697,13 @@ describe("core", () => {
         skill: {
           skillId: "skill.demo",
           status: "skills.disable",
+          trusted: false,
+        },
+      });
+      await expect(uninstall({ skillId: "skill.demo" })).resolves.toEqual({
+        skill: {
+          skillId: "skill.demo",
+          status: "skills.uninstall",
           trusted: false,
         },
       });

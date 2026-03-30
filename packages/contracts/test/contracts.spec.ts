@@ -231,13 +231,13 @@ describe("contracts", () => {
     ]);
   });
 
-  it("locks the staged skill lifecycle control-plane subset", () => {
+  it("locks the skill lifecycle control-plane action set", () => {
     expect(SKILL_CONTROL_PLANE_ACTIONS).toEqual([
       "skills.install",
       "skills.enable",
       "skills.disable",
+      "skills.uninstall",
     ]);
-    expect(SKILL_CONTROL_PLANE_ACTIONS).not.toContain("skills.uninstall");
   });
 
   it("locks the minimal execution host substrate action set", () => {

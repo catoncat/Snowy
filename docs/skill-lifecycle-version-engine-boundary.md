@@ -25,6 +25,8 @@
 
 - `draft -> staged -> installed -> enabled <-> disabled -> archived`
 - `trusted` 只能作为 `enabled` 状态上的 flag
+- northbound `skills.uninstall` 统一映射到 `archived`
+- 该动作表示从 active product skill library 移除，不表示物理删除 skill 包或版本历史
 - transition actor 边界：
   - Agent：`draft -> staged -> installed`
   - User/System：`installed -> enabled`、`enabled <-> disabled`
@@ -57,6 +59,7 @@
 
 - Skill Studio UI
 - catalog / versions / permissions 的可视化管理界面
+- skill 包物理删除或 `@versions` purge 语义
 - 发布审批与交互式 rollback UX
 - 任何需要用户面板或产品流程编排的功能
 

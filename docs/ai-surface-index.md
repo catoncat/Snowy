@@ -24,7 +24,7 @@
 3. skill/workflow
 4. audit
 
-## 2. 当前 action surface (42 actions)
+## 2. 当前 action surface (43 actions)
 
 ### Browser-local substrate (memfs / page / tabs / site)
 
@@ -73,6 +73,7 @@
 - `skills.install`
 - `skills.enable`
 - `skills.disable`
+- `skills.uninstall`
 
 - `hosts.list`
 - `hosts.get`
@@ -81,16 +82,12 @@
 - `hosts.set_default`
 - `hosts.health`
 
-## 3. 当前明显缺失但应优先补的 action surface
+## 3. 当前已锁定的 skill lifecycle control-plane 边界
 
-### Skill lifecycle control plane
-
-- `skills.uninstall`
-
-当前口径：
-
-- `skills.install/enable/disable` 已按 staged subset 落地
-- `skills.uninstall` 仍 deferred，等待卸载、archive、物理删除与版本回滚边界统一
+- `skills.install/enable/disable/uninstall` 现在都属于 northbound product control plane
+- `skills.uninstall` 的语义是把 skill 从 active product library 归档到 `archived`
+- `skills.uninstall` 不等于物理删除 `mem://skills/...` 包内容
+- `skills.uninstall` 不等于清空 `@versions` 历史，也不改变 rollback / trusted version contract
 
 ## 4. 当前已落地的轻量 resources
 

@@ -104,6 +104,7 @@ export interface SkillRuntimeContext {
     install(skillId: string): Promise<unknown>;
     enable(skillId: string): Promise<unknown>;
     disable(skillId: string): Promise<unknown>;
+    uninstall(skillId: string): Promise<unknown>;
   };
 }
 
@@ -887,6 +888,39 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
         required: ["skill"],
       },
     }),
+    catalogEntry({
+      id: "skills.uninstall",
+      family: "skills",
+      operation: "uninstall",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["skills.uninstall"],
+      description:
+        "Archive a skill out of the active product library without deleting version history",
+      inputSchema: {
+        type: "object",
+        properties: {
+          skillId: { type: "string" },
+        },
+        required: ["skillId"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          skill: {
+            type: "object",
+            properties: {
+              skillId: { type: "string" },
+              status: { type: "string" },
+              trusted: { type: "boolean" },
+              recentChange: { type: "string" },
+            },
+            required: ["skillId", "status", "trusted"],
+          },
+        },
+        required: ["skill"],
+      },
+    }),
   ],
   runtime: [
     catalogEntry({
@@ -1530,7 +1564,8 @@ export function createSkillRuntimeContext(
         return options.listSkills ? await options.listSkills() : [];
       case "install":
       case "enable":
-      case "disable": {
+      case "disable":
+      case "uninstall": {
         if (!options.manageSkill) {
           throw new CapabilityError("E_RUNTIME", "No skill manager configured for runtime context");
         }
@@ -1616,6 +1651,7 @@ export function createSkillRuntimeContext(
       install: async (skillId) => call("skills.install", { skillId }),
       enable: async (skillId) => call("skills.enable", { skillId }),
       disable: async (skillId) => call("skills.disable", { skillId }),
+      uninstall: async (skillId) => call("skills.uninstall", { skillId }),
     },
   };
 
@@ -1778,6 +1814,7 @@ export interface BuiltinCapabilityMap {
     install: CapabilityFn;
     enable: CapabilityFn;
     disable: CapabilityFn;
+    uninstall: CapabilityFn;
   };
   runtime: {
     listCapabilities: CapabilityFn;

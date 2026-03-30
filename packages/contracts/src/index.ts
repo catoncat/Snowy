@@ -28,6 +28,7 @@ export const SKILL_CONTROL_PLANE_ACTIONS = [
   "skills.install",
   "skills.enable",
   "skills.disable",
+  "skills.uninstall",
 ] as const;
 export type SkillControlPlaneAction = (typeof SKILL_CONTROL_PLANE_ACTIONS)[number];
 export const HOST_SUBSTRATE_ACTIONS = [
