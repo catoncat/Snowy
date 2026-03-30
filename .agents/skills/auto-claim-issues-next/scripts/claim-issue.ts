@@ -10,6 +10,7 @@ import {
   type ModuleLedger,
   type ModuleStage
 } from "./module-ledger";
+import { takeTicket, type QueueEntry } from "./ticket-machine";
 
 export type Status = "open" | "in-progress" | "done";
 export type Priority = "p0" | "p1" | "p2";
@@ -623,38 +624,60 @@ function printResult(result: ClaimResult, asJson: boolean): void {
 export function main() {
   const args = parseArgs(process.argv.slice(2));
   const repoRoot = process.cwd();
-  const moduleLedger = loadModuleLedger(repoRoot);
-  const issues = loadAllIssues(repoRoot, {
-    moduleLedger,
-    validateModuleMetadata: true
-  });
-  const result = chooseIssue(issues, args, { moduleLedger });
-
-  if (result.kind === "claimed") {
-    if (!isNamedAgentAssignee(args.assignee)) {
-      fail(
-        "真正 claim 时必须写 Agent 自己的名字，使用 --name=<your-name>、--assignee=<your-name>，或设置 BBL_AGENT_NAME；不要用 agent/human/unassigned"
-      );
-    }
-    const target = findById(issues, result.issue.id);
-    if (!target) {
-      fail(`claim 目标不存在: ${result.issue.id}`);
-    }
-    claimIssueFile(target, args.assignee);
-    const refreshed = loadIssueFile(target.path);
-    printResult(
-      {
-        ...result,
-        issue: toIssueSummary(refreshed)
-      },
-      args.json
+  if (!args.dryRun && !isNamedAgentAssignee(args.assignee)) {
+    fail(
+      "真正 claim 时必须写 Agent 自己的名字，使用 --name=<your-name>、--assignee=<your-name>，或设置 BBL_AGENT_NAME；不要用 agent/human/unassigned"
     );
-    return;
   }
 
-  printResult(result, args.json);
+  const sessionId = `cli:${args.assignee || "preview"}`;
+  takeTicket({
+    repoRoot,
+    sessionId,
+    agentName: args.assignee || "preview",
+    dryRun: args.dryRun,
+    issueId: args.issueId
+  })
+    .then((ticket) => {
+      if (args.json) {
+        console.log(JSON.stringify(ticket, null, 2));
+        return;
+      }
+
+      if (ticket.kind === "queue_empty") {
+        console.log("result: blocked");
+        console.log(`reason: ${ticket.reason}`);
+        return;
+      }
+
+      printTicketEntry(ticket.entry, args.dryRun ? "preview" : "claimed", ticket.reason, args.assignee);
+    })
+    .catch((error) => {
+      fail(error instanceof Error ? error.message : String(error));
+    });
 }
 
 if (import.meta.main) {
   main();
+}
+
+function printTicketEntry(
+  entry: QueueEntry,
+  result: "preview" | "claimed",
+  reason: string,
+  assignee: string
+): void {
+  console.log(`result: ${result}`);
+  console.log(`reason: ${reason}`);
+  console.log(`id: ${entry.issue_id}`);
+  console.log(`title: ${entry.title}`);
+  console.log(`assignee: ${assignee || "(none)"}`);
+  console.log(`parallel_group: ${entry.parallel_group}`);
+  console.log(`module_id: ${entry.module_id}`);
+  console.log(`module_stage: ${entry.module_stage}`);
+  console.log(`tracking_kind: ${entry.tracking_kind}`);
+  console.log(`path: ${entry.issue_path}`);
+  console.log(`depends_on: ${entry.depends_on.join(", ") || "(none)"}`);
+  console.log(`write_scope: ${entry.write_scope.join(", ") || "(none)"}`);
+  console.log(`check_cmd: ${entry.check_cmd || "(none)"}`);
 }

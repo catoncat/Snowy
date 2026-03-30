@@ -1092,6 +1092,105 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("updates config via config.update and keeps runtime.bootstrap in sync", async () => {
+    const harness = createChromeHarness({
+      host: {
+        dispatch: vi.fn(),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0
+        }))
+      }
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "config.update",
+        patch: {
+          model: {
+            provider: "openai",
+            defaultModel: "gpt-5.4"
+          },
+          automation: {
+            activeTabOnly: true
+          }
+        }
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        config: {
+          status: "ready",
+          fields: ["model", "automation", "permissions", "preferences"],
+          values: {
+            model: {
+              provider: "openai",
+              defaultModel: "gpt-5.4"
+            },
+            automation: {
+              activeTabOnly: true
+            }
+          },
+          note: null,
+          updatedAt: expect.any(String)
+        }
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.bootstrap"
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        config: {
+          status: "ready",
+          fields: ["model", "automation", "permissions", "preferences"],
+          values: {
+            model: {
+              provider: "openai",
+              defaultModel: "gpt-5.4"
+            },
+            automation: {
+              activeTabOnly: true
+            }
+          },
+          note: null,
+          updatedAt: expect.any(String)
+        }
+      }
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "config.update",
+        patch: {
+          unknown: {
+            enabled: true
+          }
+        }
+      })
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_BAD_INPUT"
+      }
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("lists and gets the local host without auto-connecting it", async () => {
     const harness = createChromeHarness({
       host: {

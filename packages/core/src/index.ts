@@ -1,6 +1,7 @@
 import {
   AI_SURFACE_BOUNDARY as CONTRACT_AI_SURFACE_BOUNDARY,
   BOOTSTRAP_RESOURCE_KEYS,
+  CONFIG_RESOURCE_FIELDS,
   assertCapabilityDescriptor,
   descriptorsToCapabilityExportHandoffs,
   descriptorToToolContract,
@@ -20,7 +21,8 @@ import {
   type JsonSchema,
   type ToolContract,
   type AiSurfaceBoundary,
-  type BootstrapResourceKey
+  type BootstrapResourceKey,
+  type ConfigResourceField
 } from "@bbl-next/contracts";
 
 export interface CapabilityProviderRequest {
@@ -198,8 +200,10 @@ export interface HostsBootstrapSummary {
 
 export interface ConfigBootstrapSummary {
   status: ConfigSummaryStatus;
-  fields: string[];
-  note: string;
+  fields: ConfigResourceField[];
+  values: Partial<Record<ConfigResourceField, Record<string, unknown>>>;
+  note: string | null;
+  updatedAt: string | null;
 }
 
 export interface BootstrapSummary {
@@ -231,8 +235,10 @@ export interface BootstrapSummaryInput {
   };
   config?: {
     status?: ConfigSummaryStatus;
-    fields?: string[];
-    note?: string;
+    fields?: ConfigResourceField[];
+    values?: Partial<Record<ConfigResourceField, Record<string, unknown>>>;
+    note?: string | null;
+    updatedAt?: string | null;
   };
   capabilities?: CapabilityDescriptor[];
 }
@@ -295,7 +301,70 @@ function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
   };
 }
 
+function normalizeConfigValues(
+  values: Partial<Record<ConfigResourceField, Record<string, unknown>>> | undefined
+): Partial<Record<ConfigResourceField, Record<string, unknown>>> {
+  const out: Partial<Record<ConfigResourceField, Record<string, unknown>>> = {};
+  if (!values) {
+    return out;
+  }
+
+  for (const field of CONFIG_RESOURCE_FIELDS) {
+    const value = values[field];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      out[field] = { ...value };
+    }
+  }
+
+  return out;
+}
+
+function buildConfigBootstrapSummary(
+  input: BootstrapSummaryInput["config"]
+): ConfigBootstrapSummary {
+  const values = normalizeConfigValues(input?.values);
+  const hasValues = Object.keys(values).length > 0;
+  const status = input?.status ?? (hasValues ? "ready" : "placeholder");
+
+  return {
+    status,
+    fields: input?.fields ?? [...CONFIG_RESOURCE_FIELDS],
+    values,
+    note: input?.note ?? (status === "ready" ? null : "Config control plane is not implemented yet."),
+    updatedAt: input?.updatedAt ?? null
+  };
+}
+
 export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> = {
+  config: [
+    catalogEntry({
+      id: "config.update", family: "config", operation: "update",
+      risk: "medium", sideEffects: "writes", permissions: ["config.update"],
+      description: "Apply a structured patch to the product config control plane",
+      inputSchema: {
+        type: "object",
+        properties: {
+          patch: {
+            type: "object",
+            properties: {
+              model: { type: "object" },
+              automation: { type: "object" },
+              permissions: { type: "object" },
+              preferences: { type: "object" }
+            }
+          }
+        },
+        required: ["patch"]
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          config: { type: "object" }
+        },
+        required: ["config"]
+      }
+    }),
+  ],
   memfs: [
     catalogEntry({
       id: "memfs.read", family: "memfs", operation: "read",
@@ -772,11 +841,7 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
     items: hostItems
   };
 
-  const config: ConfigBootstrapSummary = {
-    status: input.config?.status ?? "placeholder",
-    fields: input.config?.fields ?? ["model", "automation", "permissions", "preferences"],
-    note: input.config?.note ?? "Config control plane is not implemented yet."
-  };
+  const config = buildConfigBootstrapSummary(input.config);
 
   const status =
     runtime.status === "degraded" || hosts.status === "degraded"

@@ -21,6 +21,7 @@ import {
   type BuiltinCapabilityMap
 } from "@bbl-next/core";
 import {
+  CONFIG_CONTROL_PLANE_ACTIONS,
   HOST_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
   RUNTIME_CONTROL_PLANE_ACTIONS,
@@ -87,6 +88,21 @@ describe("core", () => {
       "host.write",
       "host.edit",
       "host.exec"
+    ]);
+  });
+
+  it("keeps config control-plane actions aligned with canonical contracts", () => {
+    expect(CONFIG_CONTROL_PLANE_ACTIONS).toEqual([
+      "config.update"
+    ]);
+    expect(getBuiltinsByNamespace("config").map((entry) => entry.id)).toEqual([
+      "config.update"
+    ]);
+    expect(getBuiltinsByNamespace("config")).toMatchObject([
+      {
+        id: "config.update",
+        sideEffects: "writes"
+      }
     ]);
   });
 
@@ -248,6 +264,41 @@ describe("core", () => {
         status: "degraded",
         connectedCount: 0
       }
+    });
+  });
+
+  it("builds a ready config bootstrap summary bundle when config values exist", () => {
+    const summary = createBootstrapSummary({
+      generatedAt: "2026-03-30T00:00:00.000Z",
+      config: {
+        status: "ready",
+        values: {
+          model: {
+            provider: "openai",
+            defaultModel: "gpt-5.4"
+          },
+          automation: {
+            activeTabOnly: true
+          }
+        },
+        updatedAt: "2026-03-30T00:00:00.000Z"
+      }
+    });
+
+    expect(summary.config).toEqual({
+      status: "ready",
+      fields: ["model", "automation", "permissions", "preferences"],
+      values: {
+        model: {
+          provider: "openai",
+          defaultModel: "gpt-5.4"
+        },
+        automation: {
+          activeTabOnly: true
+        }
+      },
+      note: null,
+      updatedAt: "2026-03-30T00:00:00.000Z"
     });
   });
 

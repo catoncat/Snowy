@@ -1,7 +1,7 @@
 # Kernel 骨架设计
 
 > design-date: 2026-03-29
-> status: locked-decisions + open-slices
+> status: locked-decisions; slices B-1/B-2/B-3 delivered
 > scope: packages/kernel 整体设计、与现有模块关系、三个 slice 的实施计划
 > prerequisite: docs/reviews/2026-03-29-vnext-architecture-recovery-report.md
 

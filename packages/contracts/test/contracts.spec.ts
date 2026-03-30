@@ -2,6 +2,7 @@ import {
   AI_SURFACE_BOUNDARY,
   AI_SURFACE_PRIMITIVES,
   BOOTSTRAP_RESOURCE_KEYS,
+  CONFIG_CONTROL_PLANE_ACTIONS,
   HOST_CONTROL_PLANE_ACTIONS,
   RUNTIME_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
@@ -120,6 +121,12 @@ describe("contracts", () => {
       "hosts.disconnect",
       "hosts.set_default",
       "hosts.health"
+    ]);
+  });
+
+  it("locks the minimal config control plane action set", () => {
+    expect(CONFIG_CONTROL_PLANE_ACTIONS).toEqual([
+      "config.update"
     ]);
   });
 

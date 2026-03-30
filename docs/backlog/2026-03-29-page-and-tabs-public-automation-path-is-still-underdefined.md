@@ -1,11 +1,11 @@
 ---
 id: ISSUE-037
 title: "Review: page and tabs public automation path is still underdefined"
-status: open
+status: in-progress
 priority: p1
 source: "browser automation follow-up planning 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: copilot
 tags:
   - review
   - site-runtime

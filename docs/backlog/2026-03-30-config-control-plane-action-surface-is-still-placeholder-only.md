@@ -1,11 +1,11 @@
 ---
 id: ISSUE-055
 title: "Review: config control-plane action surface is still placeholder-only"
-status: open
+status: in-progress
 priority: p1
 source: "ISSUE-054 ai-surface control-plane follow-up 2026-03-30"
 created: 2026-03-30
-assignee: unassigned
+assignee: codex-019d3c89
 tags:
   - review
   - core
@@ -25,11 +25,16 @@ write_scope:
   - packages/core/src/index.ts
   - packages/core/test/core.spec.ts
   - apps/mv3-shell/src/background.js
+  - apps/mv3-shell/test/manifest.spec.ts
+  - docs/agent-bootstrap-context-pack.md
   - docs/ai-surface-index.md
+  - docs/legacy-to-vnext-migration-matrix.md
+  - docs/migration-parity-dashboard.md
   - docs/backlog/README.md
   - docs/backlog
 acceptance_ref: docs/ai-native-capability-surface-design.md
 check_cmd: "bun run check"
+claimed_at: 2026-03-30T02:34:41.204Z
 ---
 
 ## Goal

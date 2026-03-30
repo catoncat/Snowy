@@ -5,8 +5,19 @@ export type AiSurfacePrimitive = (typeof AI_SURFACE_PRIMITIVES)[number];
 
 export const BOOTSTRAP_RESOURCE_KEYS = ["runtime", "config", "skills", "hosts"] as const;
 export type BootstrapResourceKey = (typeof BOOTSTRAP_RESOURCE_KEYS)[number];
+export const CONFIG_RESOURCE_FIELDS = [
+  "model",
+  "automation",
+  "permissions",
+  "preferences"
+] as const;
+export type ConfigResourceField = (typeof CONFIG_RESOURCE_FIELDS)[number];
 
 export type BootstrapResourceBundle = Partial<Record<BootstrapResourceKey, Record<string, unknown>>>;
+export const CONFIG_CONTROL_PLANE_ACTIONS = [
+  "config.update"
+] as const;
+export type ConfigControlPlaneAction = (typeof CONFIG_CONTROL_PLANE_ACTIONS)[number];
 export const HOST_SUBSTRATE_ACTIONS = [
   "host.read",
   "host.write",
@@ -211,6 +222,7 @@ export const DEFAULT_SKILL_ROLLBACK_TRIGGERS: readonly SkillRollbackTrigger[] = 
 ];
 
 export const PUBLIC_CAPABILITY_NAMESPACES = [
+  "config",
   "memfs",
   "page",
   "site",

@@ -26,6 +26,7 @@ import {
   type ModuleRecord,
   type ModuleStage
 } from "../../auto-claim-issues-next/scripts/module-ledger";
+import { activeLeases, type TicketLease } from "../../auto-claim-issues-next/scripts/ticket-machine";
 
 export interface PlanArgs {
   repoRoot: string;
@@ -64,6 +65,7 @@ export type PlanResult =
       kind: "blocked";
       reason: string;
       inProgress: IssueSummary[];
+      activeLeases: TicketLease[];
       open: IssueSummary[];
       missingModules: ModuleCoverageSummary[];
       unmappedIssues: string[];
@@ -359,6 +361,7 @@ export function planNextBatch(args: PlanArgs): PlanResult {
   const moduleCoverage = collectModuleCoverage(moduleLedger, issues);
   const missingModules = findMissingModules(moduleCoverage);
   const inProgressIssues = issues.filter((issue) => issueStatus(issue) === "in-progress");
+  const liveLeases = activeLeases(args.repoRoot);
   const openIssues = issues.filter((issue) => issueStatus(issue) === "open");
   const doneCount = issues.filter((issue) => issueStatus(issue) === "done").length;
 
@@ -367,6 +370,7 @@ export function planNextBatch(args: PlanArgs): PlanResult {
       kind: "blocked",
       reason: "Backlog issue metadata is missing module mappings",
       inProgress: [],
+      activeLeases: liveLeases,
       open: [],
       missingModules,
       unmappedIssues: metadataProblems,
@@ -379,6 +383,20 @@ export function planNextBatch(args: PlanArgs): PlanResult {
       kind: "blocked",
       reason: "Cannot plan a new batch while issues are still in-progress",
       inProgress: inProgressIssues.map(toIssueSummary),
+      activeLeases: liveLeases,
+      open: openIssues.map(toIssueSummary),
+      missingModules,
+      unmappedIssues: [],
+      moduleCoverage
+    };
+  }
+
+  if (liveLeases.length > 0) {
+    return {
+      kind: "blocked",
+      reason: "Cannot plan a new batch while workflow tickets are still leased",
+      inProgress: [],
+      activeLeases: liveLeases,
       open: openIssues.map(toIssueSummary),
       missingModules,
       unmappedIssues: [],
@@ -391,6 +409,7 @@ export function planNextBatch(args: PlanArgs): PlanResult {
       kind: "blocked",
       reason: "Missing live backlog coverage for tracked modules",
       inProgress: [],
+      activeLeases: liveLeases,
       open: openIssues.map(toIssueSummary),
       missingModules,
       unmappedIssues: [],
@@ -403,6 +422,7 @@ export function planNextBatch(args: PlanArgs): PlanResult {
       kind: "blocked",
       reason: "No open issues available; create review backlog items first",
       inProgress: [],
+      activeLeases: liveLeases,
       open: [],
       missingModules,
       unmappedIssues: [],
@@ -459,6 +479,12 @@ function printResult(result: PlanResult, asJson: boolean): void {
   if (result.kind === "blocked") {
     console.log(`result: ${result.kind}`);
     console.log(`reason: ${result.reason}`);
+    if (result.activeLeases.length > 0) {
+      console.log("activeLeases:");
+      for (const lease of result.activeLeases) {
+        console.log(`- ${lease.session_id} ${lease.issue_id} ${lease.issue_title}`);
+      }
+    }
     if (result.unmappedIssues.length > 0) {
       console.log("unmappedIssues:");
       for (const item of result.unmappedIssues) {

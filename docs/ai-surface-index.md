@@ -24,17 +24,20 @@
 3. skill/workflow
 4. audit
 
-## 2. 当前 action surface
+## 2. 当前 action surface (35 actions)
 
-### Browser-local substrate
+### Browser-local substrate (memfs / page / tabs / site)
 
 - `memfs.read`
 - `memfs.write`
+- `memfs.edit`
+- `memfs.stat`
 - `memfs.list`
 - `memfs.mkdir`
 - `memfs.rm`
 - `memfs.mv`
 - `memfs.copy`
+- `memfs.stage`
 - `memfs.snapshot`
 - `memfs.rehydrate`
 - `page.query`
@@ -44,41 +47,44 @@
 - `tabs.get_active`
 - `site.fetch_with_session`
 
-### Runtime substrate
+### Runtime substrate (runner / skills / runtime)
 
 - `runner.invoke`
 - `skills.invoke`
 - `skills.list`
 - `runtime.list_capabilities`
 - `runtime.get_capability`
+- `runtime.capture_diagnostics`
+- `runtime.clear_error`
 
-### Execution host substrate
+### Execution host substrate (host)
 
+- `host.read`
+- `host.write`
+- `host.edit`
 - `host.exec`
 
-## 3. 当前明显缺失但应优先补的 action surface
+### Product control plane (hosts)
 
-### Product control plane
-
-- `config.update`
-- `skills.install`
-- `skills.enable`
-- `skills.disable`
-- `skills.uninstall`
 - `hosts.list`
 - `hosts.get`
 - `hosts.connect`
 - `hosts.disconnect`
 - `hosts.set_default`
 - `hosts.health`
-- `runtime.capture_diagnostics`
-- `runtime.clear_error`
 
-### Execution host coarse primitives
+## 3. 当前明显缺失但应优先补的 action surface
 
-- `host.read`
-- `host.write`
-- `host.edit`
+### Config control plane
+
+- `config.update`
+
+### Skill lifecycle control plane
+
+- `skills.install`
+- `skills.enable`
+- `skills.disable`
+- `skills.uninstall`
 
 ## 4. 当前应优先有的 resources
 
