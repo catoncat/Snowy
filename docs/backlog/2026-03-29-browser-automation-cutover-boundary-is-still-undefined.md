@@ -1,11 +1,11 @@
 ---
 id: ISSUE-036
 title: "Review: browser automation cutover boundary is still undefined"
-status: open
+status: done
 priority: p1
 source: "next-batch planning 2026-03-29"
 created: 2026-03-29
-assignee: unassigned
+assignee: copilot
 tags:
   - review
   - site-runtime
@@ -28,6 +28,7 @@ write_scope:
   - packages/site-runtime/test/site-runtime.spec.ts
 acceptance_ref: docs/cutover-readiness-criteria.md
 check_cmd: "bun run check"
+claimed_at: 2026-03-30T02:30:18.859Z
 ---
 
 ## Goal
@@ -51,3 +52,21 @@ check_cmd: "bun run check"
 - `page.*` / `tabs.*` / `site.*` 的最小 production path 与 site runtime 当前已实现部分建立清晰映射。
 - 若结论要求新增 public capability 或 site runtime contract，必须明确落到 backlog follow-up，而不是只停留在口头建议。
 - 文档结论与 `migration matrix` / `parity dashboard` / `cutover criteria` 三处口径保持一致。
+
+## 工作总结
+
+### 完成内容
+
+1. **创建 `docs/browser-automation-cutover-boundary.md`**
+   - 旧仓 ~39 tools 全面分析（页面交互、DOM 检查、Tab 管理、视觉捕获、自动化控制、验证、人工干预）
+   - 三层裁决：
+     - **Tier 1 (cutover 前必需)**: page.query/click/fill/press_key/screenshot + tabs.navigate/get_active + verify + intervention（8 原语 + verify + intervention）
+     - **Tier 2 (cutover 后可补)**: scroll, select_option, hover, tabs.create/close, fetch_with_session, background mode, highlight
+     - **Tier 3 (暂不纳入)**: stealth tab, computer mode, batch download, fill_form, lease policy
+   - 新增 descriptor 需求：page.press_key, page.screenshot, tabs.navigate
+   - 实现路径映射到具体 package
+
+2. **更新 migration-matrix**: browser automation `not-started` → `review-gap`
+3. **更新 parity-dashboard**: browser automation parity `red` → `yellow`
+4. **更新 cutover-readiness-criteria**: Soft Gate 2 标注"边界已裁决"
+5. **Follow-up 确认**: 现有 ISSUE-037/040/041 已覆盖全部 Tier 1 实现需求，无需新建 issue

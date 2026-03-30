@@ -76,6 +76,10 @@
 
 必须明确哪些旧 automation 能力属于 cutover 前必需。
 
+**状态：边界已裁决。** 详见 `docs/browser-automation-cutover-boundary.md`。
+
+Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tabs.navigate/get_active + verify + intervention。Tier 2（cutover 后可补）：scroll, select_option, hover, tabs.create/close, background mode 等。Tier 3（暂不纳入）：stealth tab, computer mode, batch download 等。Tier 1 实现仍待推进。
+
 ### Soft Gate 3: Visual / Download / Intervention Surface
 
 必须明确这些能力是核心主线还是可延后。
