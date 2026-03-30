@@ -1,11 +1,11 @@
 ---
 id: ISSUE-061
 title: "kernel: real loop orchestration integration with js-runner and site-runtime"
-status: open
+status: done
 priority: p1
 source: review
 created: 2026-03-30
-assignee: unassigned
+assignee: copilot-opus
 tags:
   - review
   - gap

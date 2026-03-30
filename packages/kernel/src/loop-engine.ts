@@ -4,10 +4,41 @@ import type {
   NoProgressReason
 } from "@bbl-next/contracts";
 
-export interface StepRequest {
+export interface CapabilityStepRequest {
+  kind?: "capability";
   capabilityId?: string;
   input?: unknown;
 }
+
+export interface RunnerStepRequest {
+  kind: "runner";
+  capabilityId?: string;
+  module: {
+    id: string;
+    source: string;
+    exportName?: string;
+  };
+  input?: unknown;
+  ctx?: Record<string, unknown>;
+  timeoutMs?: number;
+}
+
+export interface SiteStepRequest {
+  kind: "site";
+  capabilityId?: string;
+  skillId: string;
+  action: string;
+  tab: {
+    tabId: number;
+    url: string;
+    active: boolean;
+    title?: string;
+  };
+  input?: unknown;
+  ctx?: Record<string, unknown>;
+}
+
+export type StepRequest = CapabilityStepRequest | RunnerStepRequest | SiteStepRequest;
 
 export interface StepResult {
   ok: boolean;
@@ -18,10 +49,17 @@ export interface StepResult {
   timeout?: boolean;
 }
 
+export type StepExecutor = (request: {
+  sessionId: string;
+  turn: LoopTurn;
+  step: StepRequest;
+}) => Promise<StepResult> | StepResult;
+
 export interface LoopEngineOptions {
   maxSteps?: number;
   noProgressSignatureHistoryLimit?: number;
   noProgressContinueBudget?: Partial<Record<NoProgressReason, number>>;
+  executor?: StepExecutor;
 }
 
 const DEFAULT_MAX_STEPS = 50;
@@ -39,6 +77,7 @@ export class LoopEngine {
   readonly #maxSteps: number;
   readonly #signatureHistoryLimit: number;
   readonly #noProgressBudget: Record<NoProgressReason, number>;
+  readonly #executor?: StepExecutor;
   readonly #noProgressCounts = new Map<string, Record<NoProgressReason, number>>();
   readonly #stepCounts = new Map<string, number>();
   readonly #signatureHistory = new Map<string, string[]>();
@@ -50,6 +89,7 @@ export class LoopEngine {
       ...DEFAULT_NO_PROGRESS_BUDGET,
       ...opts?.noProgressContinueBudget
     };
+    this.#executor = opts?.executor;
   }
 
   createTurn(sessionId: string, step: StepRequest): LoopTurn {
@@ -59,10 +99,49 @@ export class LoopEngine {
       turnId: generateTurnId(),
       sessionId,
       stepIndex,
-      capabilityId: step.capabilityId,
+      capabilityId: this.#resolveCapabilityId(step),
       status: "pending",
       startedAt: new Date().toISOString()
     };
+  }
+
+  async executeTurn(
+    sessionId: string,
+    step: StepRequest,
+  ): Promise<{ turn: LoopTurn; result: StepResult }> {
+    const turn = this.createTurn(sessionId, step);
+
+    if (!this.#executor) {
+      const result: StepResult = {
+        ok: false,
+        error: "LoopEngine has no step executor configured",
+      };
+      return {
+        turn: this.recordTurnResult(turn, result),
+        result,
+      };
+    }
+
+    try {
+      const result = await this.#executor({
+        sessionId,
+        turn,
+        step,
+      });
+      return {
+        turn: this.recordTurnResult(turn, result),
+        result,
+      };
+    } catch (error) {
+      const result: StepResult = {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      return {
+        turn: this.recordTurnResult(turn, result),
+        result,
+      };
+    }
   }
 
   recordTurnResult(turn: LoopTurn, result: StepResult): LoopTurn {
@@ -181,5 +260,20 @@ export class LoopEngine {
       return null; // budget not exhausted, continue
     }
     return reason;
+  }
+
+  #resolveCapabilityId(step: StepRequest): string | undefined {
+    if (step.capabilityId) {
+      return step.capabilityId;
+    }
+
+    switch (step.kind) {
+      case "runner":
+        return "runner.invoke";
+      case "site":
+        return `site.invoke:${step.skillId}.${step.action}`;
+      default:
+        return undefined;
+    }
   }
 }

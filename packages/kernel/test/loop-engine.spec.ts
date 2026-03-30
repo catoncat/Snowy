@@ -24,6 +24,88 @@ describe("LoopEngine", () => {
       expect(t2.turnId).not.toBe(t1.turnId);
       expect(t2.stepIndex).toBe(1);
     });
+
+    it("derives a synthetic capability id for runner and site steps", () => {
+      const runnerTurn = engine.createTurn(sid, {
+        kind: "runner",
+        module: {
+          id: "runner.demo",
+          source: "exports.default = async () => 'ok';",
+        },
+      });
+      const siteTurn = engine.createTurn(sid, {
+        kind: "site",
+        skillId: "fixture.site",
+        action: "echo",
+        tab: {
+          tabId: 1,
+          url: "https://fixture.test/demo",
+          active: true,
+        },
+      });
+
+      expect(runnerTurn.capabilityId).toBe("runner.invoke");
+      expect(siteTurn.capabilityId).toBe("site.invoke:fixture.site.echo");
+    });
+  });
+
+  describe("turn execution", () => {
+    it("executes a step through the injected executor and records the result", async () => {
+      const executingEngine = new LoopEngine({
+        executor: async ({ sessionId, turn, step }) => ({
+          ok: true,
+          data: {
+            sessionId,
+            turnId: turn.turnId,
+            kind: step.kind ?? "capability",
+          },
+        }),
+      });
+
+      const executed = await executingEngine.executeTurn(sid, {
+        kind: "runner",
+        module: {
+          id: "runner.demo",
+          source: "exports.default = async () => 'ok';",
+        },
+      });
+
+      expect(executed.turn.status).toBe("succeeded");
+      expect(executed.result).toEqual({
+        ok: true,
+        data: {
+          sessionId: sid,
+          turnId: executed.turn.turnId,
+          kind: "runner",
+        },
+      });
+    });
+
+    it("records a failed turn when the executor throws", async () => {
+      const executingEngine = new LoopEngine({
+        executor: async () => {
+          throw new Error("runner unavailable");
+        },
+      });
+
+      const executed = await executingEngine.executeTurn(sid, {
+        kind: "site",
+        skillId: "fixture.site",
+        action: "echo",
+        tab: {
+          tabId: 1,
+          url: "https://fixture.test/demo",
+          active: true,
+        },
+      });
+
+      expect(executed.turn.status).toBe("failed");
+      expect(executed.turn.lastError).toBe("runner unavailable");
+      expect(executed.result).toEqual({
+        ok: false,
+        error: "runner unavailable",
+      });
+    });
   });
 
   describe("turn result recording", () => {
