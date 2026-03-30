@@ -3,7 +3,13 @@ import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import manifest from "../manifest.json";
 // @ts-ignore source JS module has no declaration file yet
-import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCREEN_REASONS, createBackgroundRunnerBridge, createPageHookBridge } from "../src/background.js";
+import {
+  RUNNER_BACKGROUND_TARGET,
+  RUNNER_OFFSCREEN_DOCUMENT_PATH,
+  RUNNER_OFFSCREEN_REASONS,
+  createBackgroundRunnerBridge,
+  createPageHookBridge,
+} from "../src/background.js";
 // @ts-ignore source JS module has no declaration file yet
 import { createOffscreenRunnerBridge } from "../src/offscreen.js";
 
