@@ -1,6 +1,9 @@
 import { CapabilityError, type CapabilityErrorCode } from "@bbl-next/contracts";
 import { createRunnerHostCore } from "./runner-host-core.js";
 
+export { createRunnerHostCore } from "./runner-host-core.js";
+export type { RunnerHostCore } from "./runner-host-core.js";
+
 export interface RunnerModule {
   id: string;
   source: string;
@@ -189,19 +192,19 @@ export interface JsRunnerHostOptions {
   hostAdapter?: RunnerHostAdapter;
 }
 
-interface RunnerHostCore {
+interface RunnerHostCoreLike {
   dispatch(request: RunnerRpcRequest): Promise<RunnerRpcResponse>;
   getHealth(): RunnerHostHealth;
 }
 
 export class JsRunnerHost {
-  readonly #core: RunnerHostCore;
+  readonly #core: RunnerHostCoreLike;
   #requestSequence = 0;
 
   constructor(options: JsRunnerHostOptions = {}) {
     this.#core = createRunnerHostCore({
       hostAdapter: options.hostAdapter
-    }) as RunnerHostCore;
+    }) as RunnerHostCoreLike;
   }
 
   async invoke(request: RunnerInvocation): Promise<RunnerInvocationResult> {

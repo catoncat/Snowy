@@ -1,16 +1,26 @@
 # mv3-shell
 
-Minimal Chrome MV3 extension shell — background service worker, offscreen document, and page hook injection.
+Minimal Chrome MV3 extension shell — buildable extension packaging, background service worker, offscreen document, and page hook injection.
+
+## Development
+
+```bash
+bun run ext:build
+```
+
+Build output is emitted to `apps/mv3-shell/dist/` and is the directory intended to be loaded into Chrome.
 
 ## Structure
 
 ```
+dist/               Built extension payload
 src/
-  background.js    Background worker — message routing hub
+  background.js    Background worker — composition root + message routing
   offscreen.html   Offscreen document container
   offscreen.js     Runner host / offscreen entry
-  page-hook.js     MAIN world injection script
+  page-hook.js     MAIN world injection script (single-file)
 manifest.json      Chrome MV3 manifest
+vite.config.js     Extension packaging config
 ```
 
 ## Key Exports
@@ -21,7 +31,7 @@ import { createBackgroundRunnerBridge, createPageHookBridge } from "mv3-shell/ba
 
 | Function | Purpose |
 |----------|---------|
-| `createBackgroundRunnerBridge()` | Offscreen lifecycle, runner invoke/cancel/health, site runtime bridge, bootstrap |
+| `createBackgroundRunnerBridge()` | Offscreen lifecycle, package-backed runner/site bridge, bootstrap |
 | `createPageHookBridge()` | Page hook install/invoke/verify/snapshotState |
 | `startBackgroundRunnerBridge()` | Auto-start bridge + register runtime listener |
 

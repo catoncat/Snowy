@@ -33,50 +33,12 @@ type KernelDispatchConfig = Pick<
   "confirm" | "invokeSkill" | "listSkills" | "permissions" | "skillId"
 >;
 
-export interface KernelRunnerHostLike {
-  invoke(request: {
-    module: {
-      id: string;
-      source: string;
-      exportName?: string;
-    };
-    input: unknown;
-    ctx: Record<string, unknown>;
-    timeoutMs?: number;
-    signal?: AbortSignal;
-  }): Promise<{
-    result: unknown;
-    durationMs: number;
-  }>;
-}
-
-export interface KernelSiteRuntimeLike {
-  invoke(request: {
-    skillId: string;
-    action: string;
-    tab: {
-      tabId: number;
-      url: string;
-      active: boolean;
-      title?: string;
-    };
-    input?: unknown;
-    ctx?: Record<string, unknown>;
-  }): Promise<{
-    result: unknown;
-    verified: boolean;
-    trace: string[];
-  }>;
-}
-
 export interface KernelOptions {
   storage: SessionStorage;
   llm: KernelLlmAdapter;
   registry?: CapabilityRegistry;
   providers?: FamilyProviderRegistry;
   dispatch?: KernelDispatchConfig;
-  runnerHost?: KernelRunnerHostLike;
-  siteRuntime?: KernelSiteRuntimeLike;
   loop?: LoopEngineOptions;
   compaction?: CompactionOptions;
 }
@@ -132,106 +94,67 @@ export interface Kernel {
 export function createKernel(opts: KernelOptions): Kernel {
   const sessions = new SessionStore(opts.storage);
   const runs = new RunController();
+  const loop = new LoopEngine(opts.loop);
   const compaction = new CompactionManager(sessions, opts.llm, opts.compaction);
-
-  const executeLoopStep = async ({ sessionId, step }: {
-    sessionId: string;
-    turn: LoopTurn;
-    step: StepRequest;
-  }): Promise<StepResult> => {
-    try {
-      switch (step.kind) {
-        case "runner": {
-          if (!opts.runnerHost) {
-            return {
-              ok: false,
-              error: "Kernel is not wired with runner host",
-            };
-          }
-          const invocation = await opts.runnerHost.invoke({
-            module: step.module,
-            input: step.input,
-            ctx: step.ctx ?? {},
-            timeoutMs: step.timeoutMs,
-          });
-          return {
-            ok: true,
-            data: invocation.result,
-          };
-        }
-
-        case "site": {
-          if (!opts.siteRuntime) {
-            return {
-              ok: false,
-              error: "Kernel is not wired with site runtime",
-            };
-          }
-          const invocation = await opts.siteRuntime.invoke({
-            skillId: step.skillId,
-            action: step.action,
-            tab: step.tab,
-            input: step.input,
-            ctx: step.ctx,
-          });
-          return {
-            ok: true,
-            data: invocation,
-            verified: invocation.verified,
-          };
-        }
-
-        default: {
-          if (!step.capabilityId) {
-            return {
-              ok: false,
-              error: "Kernel step requires capabilityId",
-            };
-          }
-
-          if (!opts.registry || !opts.providers) {
-            return {
-              ok: false,
-              error: "Kernel is not wired with capability registry/providers",
-            };
-          }
-
-          const data = await dispatchCapabilityCall({
-            registry: opts.registry,
-            providers: opts.providers,
-            sessionId,
-            capabilityId: step.capabilityId,
-            input: step.input,
-            skillId: opts.dispatch?.skillId ?? "kernel.loop",
-            permissions: opts.dispatch?.permissions ?? ["*"],
-            confirm: opts.dispatch?.confirm,
-            invokeSkill: opts.dispatch?.invokeSkill,
-            listSkills: opts.dispatch?.listSkills,
-          });
-          return {
-            ok: true,
-            data,
-          };
-        }
-      }
-    } catch (error) {
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-        retryable: error instanceof CapabilityError && error.code === "E_RUNTIME",
-      };
-    }
-  };
-
-  const loop = new LoopEngine({
-    ...opts.loop,
-    executor: executeLoopStep,
-  });
 
   const executeStep = async (
     sessionId: string,
     step: StepRequest,
-  ): Promise<{ turn: LoopTurn; result: StepResult }> => loop.executeTurn(sessionId, step);
+  ): Promise<{ turn: LoopTurn; result: StepResult }> => {
+    const turn = loop.createTurn(sessionId, step);
+
+    if (!step.capabilityId) {
+      const result: StepResult = {
+        ok: false,
+        error: "Kernel step requires capabilityId",
+      };
+      return {
+        turn: loop.recordTurnResult(turn, result),
+        result,
+      };
+    }
+
+    if (!opts.registry || !opts.providers) {
+      const result: StepResult = {
+        ok: false,
+        error: "Kernel is not wired with capability registry/providers",
+      };
+      return {
+        turn: loop.recordTurnResult(turn, result),
+        result,
+      };
+    }
+
+    try {
+      const data = await dispatchCapabilityCall({
+        registry: opts.registry,
+        providers: opts.providers,
+        sessionId,
+        capabilityId: step.capabilityId,
+        input: step.input,
+        skillId: opts.dispatch?.skillId ?? "kernel.loop",
+        permissions: opts.dispatch?.permissions ?? ["*"],
+        confirm: opts.dispatch?.confirm,
+        invokeSkill: opts.dispatch?.invokeSkill,
+        listSkills: opts.dispatch?.listSkills,
+      });
+      const result: StepResult = { ok: true, data };
+      return {
+        turn: loop.recordTurnResult(turn, result),
+        result,
+      };
+    } catch (error) {
+      const result: StepResult = {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+        retryable: error instanceof CapabilityError && error.code === "E_RUNTIME",
+      };
+      return {
+        turn: loop.recordTurnResult(turn, result),
+        result,
+      };
+    }
+  };
 
   return {
     // Session

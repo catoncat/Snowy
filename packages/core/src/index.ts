@@ -78,6 +78,40 @@ export interface SkillRuntimeContext {
   };
 }
 
+export interface CapabilityDispatchOptions {
+  registry: CapabilityRegistry;
+  providers: FamilyProviderRegistry;
+  sessionId: string;
+  capabilityId: string;
+  input: unknown;
+  skillId?: string;
+  permissions?: string[];
+  traceId?: string;
+  parentTraceId?: string;
+  trace?: CapabilityTraceEntry[];
+  confirm?: SkillRuntimeContextOptions["confirm"];
+  invokeSkill?: SkillRuntimeContextOptions["invokeSkill"];
+  listSkills?: SkillRuntimeContextOptions["listSkills"];
+}
+
+export async function dispatchCapabilityCall(options: CapabilityDispatchOptions): Promise<unknown> {
+  const ctx = createSkillRuntimeContext({
+    registry: options.registry,
+    providers: options.providers,
+    sessionId: options.sessionId,
+    skillId: options.skillId ?? "runtime.dispatch",
+    permissions: options.permissions ?? ["*"],
+    traceId: options.traceId,
+    parentTraceId: options.parentTraceId,
+    trace: options.trace,
+    confirm: options.confirm,
+    invokeSkill: options.invokeSkill,
+    listSkills: options.listSkills,
+  });
+
+  return ctx.call(options.capabilityId, options.input);
+}
+
 export class FamilyProviderRegistry {
   readonly #providers = new Map<string, CapabilityFamilyProvider>();
 
@@ -271,6 +305,8 @@ interface CatalogEntryInput {
   inputSchema: JsonSchema;
   outputSchema?: JsonSchema;
   supportsVerify?: boolean;
+  exportable?: boolean;
+  exportRisk?: CapabilityDescriptor["risk"];
 }
 
 function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
@@ -285,6 +321,8 @@ function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
     inputSchema,
     outputSchema = { type: "object" },
     supportsVerify = family === "page" || family === "site",
+    exportable = sideEffects === "reads" || sideEffects === "none",
+    exportRisk,
   } = input;
   return {
     id,
@@ -297,9 +335,9 @@ function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
     permissions,
     supportsVerify,
     supportsStreaming: false,
-    exportable: sideEffects === "reads" || sideEffects === "none",
+    exportable,
     exportName: id,
-    exportRisk: risk,
+    exportRisk: exportRisk ?? risk,
     executionBinding: { family, operation },
   };
 }
@@ -573,6 +611,69 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
         properties: { uid: { type: "string" }, value: { type: "string" } },
         required: ["uid", "value"],
       },
+    }),
+    catalogEntry({
+      id: "page.press_key",
+      family: "page",
+      operation: "press_key",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["page.press_key"],
+      description: "Press a keyboard key on the active page",
+      inputSchema: {
+        type: "object",
+        properties: {
+          key: {
+            type: "string",
+            description: "Key to press (e.g. 'Enter', 'Tab', 'Escape', 'a')",
+          },
+        },
+        required: ["key"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+        },
+        required: ["ok"],
+      },
+      supportsVerify: true,
+    }),
+    catalogEntry({
+      id: "page.screenshot",
+      family: "page",
+      operation: "screenshot",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["page.screenshot"],
+      description: "Capture a screenshot of the active page",
+      inputSchema: {
+        type: "object",
+        properties: {
+          format: {
+            type: "string",
+            enum: ["png", "jpeg"],
+            default: "png",
+          },
+          quality: {
+            type: "number",
+            minimum: 0,
+            maximum: 100,
+          },
+        },
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          dataUrl: { type: "string" },
+          format: { type: "string" },
+          width: { type: "number" },
+          height: { type: "number" },
+        },
+        required: ["dataUrl", "format"],
+      },
+      supportsVerify: false,
+      exportable: false,
     }),
   ],
   site: [
@@ -1472,6 +1573,9 @@ export interface BuiltinCapabilityMap {
     query: CapabilityFn;
     click: CapabilityFn;
     fill: CapabilityFn;
+    pressKey: CapabilityFn;
+    press_key: CapabilityFn;
+    screenshot: CapabilityFn;
   };
   site: {
     fetchWithSession: CapabilityFn;

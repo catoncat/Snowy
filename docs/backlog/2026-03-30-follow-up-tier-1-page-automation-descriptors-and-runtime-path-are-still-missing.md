@@ -1,11 +1,11 @@
 ---
 id: ISSUE-057
 title: "Follow-up: Tier 1 page automation descriptors and runtime path are still missing"
-status: open
+status: in-progress
 priority: p1
 source: "ISSUE-036 cutover boundary 2026-03-30"
 created: 2026-03-30
-assignee: unassigned
+assignee: copilot
 tags:
   - review
   - follow-up

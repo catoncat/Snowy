@@ -72,7 +72,7 @@
 | canonical surface | **`page.screenshot`** |
 | 语义 | active-tab-only 最小视觉原语 |
 | 作用 | visual diagnostics / evidence / LLM 补充输入；不作为 strict verify canonical path |
-| 实现 follow-up | **ISSUE-057** |
+| 实现 issue | **ISSUE-057（已完成）** |
 
 **保留原因：**
 - Tier 1 闭环需要最小视觉原语
@@ -132,10 +132,10 @@
 
 ## 对 follow-up backlog 的影响
 
-### 已覆盖的 follow-up
+### 已完成的 follow-up
 
 - **ISSUE-057**
-  - 已覆盖 `page.screenshot` descriptor + 最小 runtime path
+   - 已落地 `page.screenshot` descriptor + `chrome.tabs.captureVisibleTab` 最小 runtime path
   - 无需为 screenshot 另建新 issue
 
 ### 当前不新增 follow-up 的部分
@@ -153,7 +153,7 @@
 1. `docs/cutover-readiness-criteria.md`
    - Soft Gate 3 标记为边界已裁决
 2. `docs/legacy-to-vnext-migration-matrix.md`
-   - screenshot/download row 从“纯未开始”更新为“边界已裁决、实现部分待 ISSUE-057”
+   - screenshot/download row 从“纯未开始”更新为“边界已裁决，且 `page.screenshot` 已由 ISSUE-057 落地”
 3. `docs/migration-parity-dashboard.md`
    - visual/download/intervention parity 仍可保持红色，但需写清：screenshot boundary 已锁定，download 延后，intervention 未决
 4. `docs/browser-automation-cutover-boundary.md`

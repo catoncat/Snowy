@@ -68,8 +68,8 @@
 | `page.query` | **已声明** | `{ selector: string }` | low | reads | content script injection → DOM snapshot |
 | `page.click` | **已声明** | `{ uid: string }` | medium | writes | `chrome.scripting.executeScript` → DomLocator click |
 | `page.fill` | **已声明** | `{ uid: string, value: string }` | medium | writes | `chrome.scripting.executeScript` → DomLocator fill |
-| `page.press_key` | **待新增** | `{ key: string }` | medium | writes | `chrome.scripting.executeScript` → tab-level key dispatch |
-| `page.screenshot` | **待新增** | `{ format?: string, quality?: number }` | low | reads | `chrome.tabs.captureVisibleTab` 或 CDP `Page.captureScreenshot` |
+| `page.press_key` | **已实现** | `{ key: string }` | medium | writes | `chrome.scripting.executeScript` → site-runtime invoke pipe → tab-level key dispatch |
+| `page.screenshot` | **已实现** | `{ format?: string, quality?: number }` | low | reads | `chrome.tabs.captureVisibleTab` |
 
 ### `tabs.*` — Tab 管理原语
 
@@ -280,24 +280,22 @@ ISSUE-045 已锁定：
 
 ## 实现路径
 
-### Phase 1: Descriptor 补全（本 issue 范围外，ISSUE-057 覆盖）
+### Phase 1: Descriptor 补全（已完成）
 
 1. 在 `packages/contracts/src/index.ts` 无需改动（descriptor 类型已通用）
-2. 在 `packages/core/src/index.ts` 的 `BUILTIN_CATALOG.page` 中新增 `page.press_key` 和 `page.screenshot`
+2. 在 `packages/core/src/index.ts` 的 `BUILTIN_CATALOG.page` 中新增 `page.press_key` 和 `page.screenshot`（已由 `ISSUE-057` 完成）
 3. 在 `packages/core/src/index.ts` 的 `BUILTIN_CATALOG.tabs` 中新增 `tabs.navigate`（已由 `ISSUE-058` 完成）
 4. 补测试确认 descriptor validity 和 tool projection
 
-### Phase 2: MV3 Shell 执行层（后续批次）
+### Phase 2: MV3 Shell 执行层（已完成最小 Tier 1 路径）
 
 1. `apps/mv3-shell/src/page-hook.js` — 扩展为真实 DOM action executor
-   - 接收 `{ action: "click"|"fill"|"press_key"|"query", ... }` 消息
-   - query：实现 DOM snapshot collector（UID 标注 + tree 序列化）
-   - click/fill：实现 DomLocator（`queryByUid` + event dispatch）
-   - press_key：实现 tab-level key dispatch（`KeyboardEvent` 构造 + dispatch）
+  - `press_key` 已由 `ISSUE-057` 落成最小 tab-level key dispatch（`KeyboardEvent` 构造 + dispatch）
+  - query/click/fill 的真实 DOM executor 仍是后续批次
 2. `apps/mv3-shell/src/background.js` — 扩展 tab 管理
-   - navigate：`chrome.tabs.update(tabId, { url })`
-   - screenshot：`chrome.tabs.captureVisibleTab` 或 CDP
-   - get_active：`chrome.tabs.query({ active: true, currentWindow: true })`
+  - navigate：`chrome.tabs.update(tabId, { url })`（已由 `ISSUE-058` 完成）
+  - screenshot：`chrome.tabs.captureVisibleTab`（已由 `ISSUE-057` 完成）
+  - get_active：`chrome.tabs.query({ active: true, currentWindow: true })`（已由 `ISSUE-058` 完成）
 
 ### Phase 3: Capability Bridge（后续批次，非 cutover blocker）
 
@@ -309,7 +307,7 @@ ISSUE-045 已锁定：
 
 已有的 follow-up 完全覆盖本 review 的结论：
 
-- **ISSUE-057**：Tier 1 page automation descriptors and runtime path — 新增 `page.press_key` / `page.screenshot` descriptor + MV3 page-hook 执行层
+- **ISSUE-057**：Tier 1 page automation descriptors and runtime path — 已完成 `page.press_key` / `page.screenshot` descriptor，补齐 `page.press_key` site-runtime invoke path 与 `page.screenshot` MV3 capture path
 - **ISSUE-058**：tabs.navigate active-tab automation path — 已完成 `tabs.navigate` descriptor + MV3 background navigate 执行层
 - **ISSUE-040**：screenshot/download surfaces — 与 `page.screenshot` descriptor 有交叉，但 ISSUE-040 侧重"surface 边界审查"而非实现
 

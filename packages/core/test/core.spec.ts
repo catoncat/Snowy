@@ -24,6 +24,7 @@ import {
   createHostControlPlaneSnapshot,
   createSkillRuntimeContext,
   disconnectExecutionHost,
+  dispatchCapabilityCall,
   getBuiltinsByNamespace,
   hasPublicNamespaceCoverage,
   resolveHostSubstrateTarget,
@@ -131,6 +132,54 @@ describe("core", () => {
         },
         outputSchema: {
           required: ["tabId", "url", "active"],
+        },
+      },
+    ]);
+  });
+
+  it("keeps page automation actions aligned with the Tier 1 browser boundary", () => {
+    expect(getBuiltinsByNamespace("page").map((entry) => entry.id)).toEqual([
+      "page.query",
+      "page.click",
+      "page.fill",
+      "page.press_key",
+      "page.screenshot",
+    ]);
+    expect(getBuiltinsByNamespace("page")).toMatchObject([
+      {
+        id: "page.query",
+        sideEffects: "reads",
+        supportsVerify: true,
+        exportable: true,
+      },
+      {
+        id: "page.click",
+        sideEffects: "writes",
+        supportsVerify: true,
+      },
+      {
+        id: "page.fill",
+        sideEffects: "writes",
+        supportsVerify: true,
+      },
+      {
+        id: "page.press_key",
+        sideEffects: "writes",
+        supportsVerify: true,
+        inputSchema: {
+          required: ["key"],
+        },
+        outputSchema: {
+          required: ["ok"],
+        },
+      },
+      {
+        id: "page.screenshot",
+        sideEffects: "reads",
+        supportsVerify: false,
+        exportable: false,
+        outputSchema: {
+          required: ["dataUrl", "format"],
         },
       },
     ]);
@@ -608,6 +657,29 @@ describe("core", () => {
     });
   });
 
+  it("dispatches a registered capability through the runtime helper", async () => {
+    const registry = new CapabilityRegistry([descriptor()]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "page",
+      invoke: ({ binding, input }) => ({ operation: binding.operation, input }),
+    });
+
+    await expect(
+      dispatchCapabilityCall({
+        registry,
+        providers,
+        sessionId: "s1",
+        capabilityId: "page.click",
+        input: { uid: "u1" },
+        skillId: "kernel.loop",
+      }),
+    ).resolves.toEqual({
+      operation: "click",
+      input: { uid: "u1" },
+    });
+  });
+
   it("blocks capabilities outside the declared permission set", async () => {
     const registry = new CapabilityRegistry([descriptor()]);
     const providers = new FamilyProviderRegistry();
@@ -796,12 +868,15 @@ describe("core", () => {
       }
     });
 
-    it("read-only capabilities are exportable", () => {
+    it("read-only capabilities are exportable unless explicitly opted out", () => {
       for (const d of BUILTIN_CAPABILITIES) {
-        if (d.sideEffects === "reads" || d.sideEffects === "none") {
+        if ((d.sideEffects === "reads" || d.sideEffects === "none") && d.id !== "page.screenshot") {
           expect(d.exportable, `${d.id} should be exportable`).toBe(true);
         }
       }
+      expect(
+        BUILTIN_CAPABILITIES.find((descriptor) => descriptor.id === "page.screenshot")?.exportable,
+      ).toBe(false);
     });
 
     it("derives bridge-side MCP handoff data only from exportable builtins", () => {
@@ -818,6 +893,7 @@ describe("core", () => {
       expect(BUILTIN_EXPORT_HANDOFFS.map((entry) => entry.capabilityId)).not.toEqual(
         expect.arrayContaining([
           "page.click",
+          "page.screenshot",
           "memfs.write",
           "runner.invoke",
           "host.exec",

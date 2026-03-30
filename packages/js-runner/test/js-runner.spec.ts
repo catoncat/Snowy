@@ -1,6 +1,4 @@
-import { JsRunnerHost, type RunnerRpcRequest } from "@bbl-next/js-runner";
-// @ts-ignore source JS module has no declaration file yet
-import { createRunnerHostCore } from "../src/runner-host-core.js";
+import { JsRunnerHost, createRunnerHostCore, type RunnerRpcRequest } from "@bbl-next/js-runner";
 import { describe, expect, it, vi } from "vitest";
 
 describe("js-runner", () => {

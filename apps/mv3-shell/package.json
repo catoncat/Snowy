@@ -3,6 +3,22 @@
   "description": "Minimal Chrome MV3 extension shell",
   "private": true,
   "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@bbl-next/browser-vfs": "workspace:*",
+    "@bbl-next/contracts": "workspace:*",
+    "@bbl-next/core": "workspace:*",
+    "@bbl-next/js-runner": "workspace:*",
+    "@bbl-next/kernel": "workspace:*",
+    "@bbl-next/site-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^7.1.8"
+  },
   "exports": {
     "./background": "./src/background.js"
   }

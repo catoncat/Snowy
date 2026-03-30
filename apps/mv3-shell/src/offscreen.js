@@ -1,6 +1,6 @@
+import { createRunnerHostCore } from "@bbl-next/js-runner";
 import { RUNNER_OFFSCREEN_TARGET } from "./background.js";
 import { createLocalHostAdapter } from "./local-host-adapter.js";
-import { createRunnerHostCore } from "./runner-host-core.js";
 
 function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   if (error && typeof error === "object" && "code" in error && "message" in error) {

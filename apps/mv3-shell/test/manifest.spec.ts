@@ -13,6 +13,55 @@ type MessageListener = (
   sendResponse: (value: unknown) => void,
 ) => unknown;
 
+function createDomSandbox() {
+  const dispatchLog: Array<{ target: string; type: string; key?: string }> = [];
+
+  function createTarget(target: string) {
+    return {
+      dispatchEvent(event: { type: string; key?: string }) {
+        dispatchLog.push({
+          target,
+          type: event.type,
+          ...(typeof event.key === "string" ? { key: event.key } : {}),
+        });
+        return true;
+      },
+    };
+  }
+
+  class KeyboardEvent {
+    readonly type: string;
+    readonly key: string;
+    readonly bubbles: boolean;
+    readonly cancelable: boolean;
+    readonly composed: boolean;
+
+    constructor(type: string, init: Record<string, unknown> = {}) {
+      this.type = type;
+      this.key = typeof init.key === "string" ? init.key : "";
+      this.bubbles = init.bubbles === true;
+      this.cancelable = init.cancelable === true;
+      this.composed = init.composed === true;
+    }
+  }
+
+  const activeElement = createTarget("activeElement");
+  const body = createTarget("body");
+  const documentElement = createTarget("documentElement");
+  const document = {
+    activeElement,
+    body,
+    documentElement,
+    dispatchEvent: createTarget("document").dispatchEvent,
+    __dispatchLog: dispatchLog,
+  };
+
+  return {
+    document,
+    KeyboardEvent,
+  };
+}
+
 function createMessageBus() {
   const listeners: MessageListener[] = [];
 
@@ -167,6 +216,23 @@ function createChromeHarness({
         ...currentActiveTab,
       };
     }),
+    captureVisibleTab: vi.fn(
+      async (windowId: number | undefined, options?: { format?: string; quality?: number }) => {
+        if (!currentActiveTab) {
+          throw new Error("Active tab is unavailable");
+        }
+        const format = options?.format === "jpeg" ? "jpeg" : "png";
+        const payload = Buffer.from(
+          JSON.stringify({
+            tabId: currentActiveTab.id,
+            url: currentActiveTab.url,
+            windowId: windowId ?? null,
+            quality: options?.quality ?? null,
+          }),
+        ).toString("base64");
+        return `data:image/${format};base64,${payload}`;
+      },
+    ),
   };
 
   const offscreenApi = {
@@ -223,6 +289,7 @@ function createScriptingHarness() {
     }
     const sandbox: Record<string, unknown> = {
       console,
+      ...createDomSandbox(),
     };
     sandbox.globalThis = sandbox;
     worlds.set(key, sandbox);
@@ -1282,6 +1349,203 @@ describe("mv3-shell manifest", () => {
         code: "E_BAD_INPUT",
         message: "tabs.navigate requires an active tab with url metadata",
       },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("routes page.press_key through the MV3 bridge and only injects on explicit invoke", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/demo",
+      },
+      host: {
+        dispatch: vi.fn(async (request) => {
+          if (request.kind === "invoke") {
+            return {
+              kind: "invoke_result",
+              requestId: request.requestId,
+              ok: true,
+              result: {
+                result: request.invocation.input,
+                durationMs: 1,
+              },
+            };
+          }
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0,
+            },
+          };
+        }),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0,
+        })),
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.diagnostics",
+        tabId: 11,
+        world: "main",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        site: {
+          status: "empty",
+          tabId: 11,
+          world: "main",
+          snapshot: null,
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "page.press_key",
+        key: "Enter",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        ok: true,
+        action: "press_key",
+        key: "Enter",
+        installationId: "bbl-next.page-hook.page:1",
+        installedScriptId: "bbl-next.page-hook.page",
+        dispatchCount: 2,
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.diagnostics",
+        tabId: 11,
+        world: "main",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        site: {
+          status: "healthy",
+          tabId: 11,
+          world: "main",
+          snapshot: {
+            installs: [
+              expect.objectContaining({
+                installationId: "bbl-next.page-hook.page:1",
+              }),
+            ],
+            invocations: [
+              expect.objectContaining({
+                action: "press_key",
+                key: "Enter",
+              }),
+            ],
+            verifications: [
+              {
+                action: "press_key",
+                verified: true,
+              },
+            ],
+            keyEvents: [
+              expect.objectContaining({
+                type: "keydown",
+                key: "Enter",
+              }),
+              expect.objectContaining({
+                type: "keyup",
+                key: "Enter",
+              }),
+            ],
+          },
+        },
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("rejects page.press_key when active tab metadata is unavailable", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: null,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "page.press_key",
+        key: "Enter",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_BAD_INPUT",
+        message: "page.press_key requires an active tab with url metadata",
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("captures a screenshot of the active tab through the MV3 bridge", async () => {
+    const harness = createChromeHarness({
+      activeTab: {
+        id: 21,
+        url: "https://fixture.test/home",
+        title: "Fixture Home",
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "page.screenshot",
+        format: "jpeg",
+        quality: 80,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        format: "jpeg",
+        dataUrl: expect.stringMatching(/^data:image\/jpeg;base64,/),
+      },
+    });
+
+    expect(harness.tabsApi.captureVisibleTab).toHaveBeenCalledWith(undefined, {
+      format: "jpeg",
+      quality: 80,
     });
 
     dispose();

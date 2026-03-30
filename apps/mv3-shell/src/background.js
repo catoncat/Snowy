@@ -1,11 +1,14 @@
 import {
   BOOTSTRAP_RESOURCE_KEYS as CONTRACT_BOOTSTRAP_RESOURCE_KEYS,
+  CONFIG_RESOURCE_FIELDS,
   HOST_AUDIT_KINDS,
   HOST_AUDIT_STATUSES,
 } from "@bbl-next/contracts";
 import { createBootstrapSummary } from "@bbl-next/core";
-export { createPageHookBridge } from "./page-hook-bridge.js";
+import { createPageHookBridge } from "./page-hook-bridge.js";
 import { createBackgroundRuntimeServices } from "./runtime-services.js";
+
+export { createPageHookBridge } from "./page-hook-bridge.js";
 
 export const RUNNER_BACKGROUND_TARGET = "bbl-next.runner.background";
 export const RUNNER_OFFSCREEN_TARGET = "bbl-next.runner.offscreen";
@@ -100,6 +103,16 @@ function invalidSiteRuntimeInvoke(message) {
   };
 }
 
+function invalidPageAutomation(message) {
+  return {
+    ok: false,
+    error: {
+      code: "E_BAD_INPUT",
+      message,
+    },
+  };
+}
+
 function invalidHostControlPlane(message) {
   return {
     ok: false,
@@ -118,6 +131,20 @@ function invalidHostSubstrate(message) {
       message,
     },
   };
+}
+
+function invalidConfigControlPlane(message) {
+  return {
+    ok: false,
+    error: {
+      code: "E_BAD_INPUT",
+      message,
+    },
+  };
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function toExecutionHostHealthStatus(localState) {
@@ -247,6 +274,11 @@ export function createBackgroundRunnerBridge({
   auditStore = undefined,
   auditStorageKey = AUDIT_STORAGE_KEY,
 } = {}) {
+  const effectivePageHookBridge =
+    pageHookBridge ??
+    (typeof chromeApi?.scripting?.executeScript === "function"
+      ? createPageHookBridge({ chromeApi })
+      : undefined);
   let creating = null;
   let requestSequence = 0;
   const AUDIT_MAX_ENTRIES = 64;
@@ -260,6 +292,8 @@ export function createBackgroundRunnerBridge({
     hostRecoveryReason: undefined,
     lastRuntimeError: null,
     lastRuntimeErrorClearedAt: null,
+    configValues: {},
+    configUpdatedAt: null,
   };
   let composedRuntimeServices = null;
 
@@ -355,7 +389,7 @@ export function createBackgroundRunnerBridge({
       const baseRuntimeServices = createBackgroundRuntimeServices({
         chromeApi,
         invokeRunner: invoke,
-        pageHookBridge,
+        pageHookBridge: effectivePageHookBridge,
         configSummary,
       });
       composedRuntimeServices = runtimeServices
@@ -431,11 +465,136 @@ export function createBackgroundRunnerBridge({
     return activeTab;
   }
 
+  async function readActiveTabMetadata(actionKind) {
+    if (!chromeApi?.tabs?.query) {
+      return {
+        ok: false,
+        error: {
+          code: "E_RUNTIME",
+          message: "chrome.tabs.query is required for active tab metadata",
+        },
+      };
+    }
+    const activeTab = await queryActiveTab();
+    if (!activeTab) {
+      return invalidPageAutomation(`${actionKind} requires an active tab with url metadata`);
+    }
+    return {
+      ok: true,
+      data: activeTab,
+    };
+  }
+
   async function resolveMaybe(value) {
     if (typeof value === "function") {
       return value();
     }
     return value;
+  }
+
+  function normalizeConfigValues(values) {
+    const out = {};
+    if (!isPlainObject(values)) {
+      return out;
+    }
+    for (const field of CONFIG_RESOURCE_FIELDS) {
+      if (isPlainObject(values[field])) {
+        out[field] = { ...values[field] };
+      }
+    }
+    return out;
+  }
+
+  function mergeConfigValues(baseValues, patchValues) {
+    const next = normalizeConfigValues(baseValues);
+    for (const field of CONFIG_RESOURCE_FIELDS) {
+      if (isPlainObject(patchValues[field])) {
+        next[field] = {
+          ...(next[field] ?? {}),
+          ...patchValues[field],
+        };
+      }
+    }
+    return next;
+  }
+
+  function normalizeConfigPatch(patch) {
+    if (!isPlainObject(patch)) {
+      return invalidConfigControlPlane("config.update requires a patch object");
+    }
+
+    const normalized = {};
+    for (const [field, value] of Object.entries(patch)) {
+      if (!CONFIG_RESOURCE_FIELDS.includes(field)) {
+        return invalidConfigControlPlane(`config.update does not support field: ${field}`);
+      }
+      if (!isPlainObject(value)) {
+        return invalidConfigControlPlane(`config.update field ${field} must be an object`);
+      }
+      normalized[field] = { ...value };
+    }
+
+    if (Object.keys(normalized).length === 0) {
+      return invalidConfigControlPlane("config.update requires at least one config field");
+    }
+
+    return normalized;
+  }
+
+  async function resolveConfigBootstrapSummary() {
+    const resolved = (await resolveMaybe(configSummary)) ?? {};
+    const baseValues = normalizeConfigValues(resolved.values);
+    const values = mergeConfigValues(baseValues, state.configValues);
+    const hasValues = Object.keys(values).length > 0;
+    const status = hasValues || resolved.status === "ready" ? "ready" : "placeholder";
+    const fields =
+      Array.isArray(resolved.fields) && resolved.fields.length > 0
+        ? resolved.fields.filter((field) => CONFIG_RESOURCE_FIELDS.includes(field))
+        : [...CONFIG_RESOURCE_FIELDS];
+
+    return {
+      status,
+      fields: fields.length > 0 ? fields : [...CONFIG_RESOURCE_FIELDS],
+      values,
+      note:
+        status === "ready"
+          ? null
+          : typeof resolved.note === "string"
+            ? resolved.note
+            : "Config control plane is not implemented yet.",
+      updatedAt:
+        typeof state.configUpdatedAt === "string"
+          ? state.configUpdatedAt
+          : typeof resolved.updatedAt === "string"
+            ? resolved.updatedAt
+            : null,
+    };
+  }
+
+  async function updateConfig({ patch }) {
+    const normalizedPatch = normalizeConfigPatch(patch);
+    if (normalizedPatch.ok === false) {
+      return normalizedPatch;
+    }
+
+    const current = await resolveConfigBootstrapSummary();
+    const values = mergeConfigValues(current.values, normalizedPatch);
+    const updatedAt = isoNow();
+    state.configValues = values;
+    state.configUpdatedAt = updatedAt;
+
+    return {
+      ok: true,
+      data: {
+        config: {
+          status: "ready",
+          fields: current.fields,
+          values,
+          note: null,
+          updatedAt,
+        },
+      },
+    };
   }
 
   function resolveHostId(hostId, action) {
@@ -610,7 +769,11 @@ export function createBackgroundRunnerBridge({
       return resolvedHostId;
     }
     state.defaultHostId = resolvedHostId;
-    await appendAudit({ kind: "hosts.set_default", hostId: resolvedHostId, status: "default_set" });
+    await appendAudit({
+      kind: "hosts.set_default",
+      hostId: resolvedHostId,
+      status: "default_set",
+    });
     return {
       ok: true,
       data: {
@@ -733,6 +896,111 @@ export function createBackgroundRunnerBridge({
               active: true,
             },
       ),
+    };
+  }
+
+  function createPageAutomationPlan(action) {
+    return {
+      skillId: "bbl.page",
+      action,
+      steps: [
+        {
+          world: "main",
+          scriptId: "bbl-next.page-hook.page",
+          jsPath: PAGE_HOOK_DEFAULT_FILE,
+          runAt: "document_idle",
+        },
+      ],
+    };
+  }
+
+  async function pressActiveTabKey({ key } = {}) {
+    if (typeof key !== "string" || key.length === 0) {
+      return invalidPageAutomation("page.press_key requires a non-empty key");
+    }
+
+    const activeTabResult = await readActiveTabMetadata("page.press_key");
+    if (!activeTabResult.ok) {
+      return activeTabResult;
+    }
+
+    const invokeResult = await invokeSiteRuntime({
+      skillId: "bbl.page",
+      action: "press_key",
+      tab: toCanonicalTab(activeTabResult.data),
+      input: { key },
+      plan: createPageAutomationPlan("press_key"),
+      module: {
+        id: "bbl.page.press_key",
+        source: "exports.default = async ({ input }) => ({ key: input.key });",
+      },
+      verifier: "page_press_key",
+    });
+
+    if (!invokeResult.ok) {
+      return invokeResult;
+    }
+
+    return {
+      ok: true,
+      data: invokeResult.data.result,
+    };
+  }
+
+  function normalizeScreenshotRequest({ format, quality } = {}) {
+    const normalizedFormat = format == null ? "png" : format;
+    if (normalizedFormat !== "png" && normalizedFormat !== "jpeg") {
+      return invalidPageAutomation("page.screenshot format must be png or jpeg");
+    }
+    if (quality != null) {
+      if (
+        typeof quality !== "number" ||
+        !Number.isFinite(quality) ||
+        quality < 0 ||
+        quality > 100
+      ) {
+        return invalidPageAutomation("page.screenshot quality must be between 0 and 100");
+      }
+    }
+    return {
+      format: normalizedFormat,
+      ...(normalizedFormat === "jpeg" && quality != null ? { quality } : {}),
+    };
+  }
+
+  async function captureActiveTabScreenshot({ format, quality } = {}) {
+    if (!chromeApi?.tabs?.captureVisibleTab) {
+      return {
+        ok: false,
+        error: {
+          code: "E_RUNTIME",
+          message: "chrome.tabs.captureVisibleTab is required for page.screenshot",
+        },
+      };
+    }
+
+    const activeTabResult = await readActiveTabMetadata("page.screenshot");
+    if (!activeTabResult.ok) {
+      return activeTabResult;
+    }
+
+    const screenshotOptions = normalizeScreenshotRequest({ format, quality });
+    if (screenshotOptions.ok === false) {
+      return screenshotOptions;
+    }
+
+    const activeTab = activeTabResult.data;
+    const dataUrl = await chromeApi.tabs.captureVisibleTab(
+      activeTab.windowId,
+      screenshotOptions,
+    );
+
+    return {
+      ok: true,
+      data: {
+        dataUrl,
+        format: screenshotOptions.format,
+      },
     };
   }
 
@@ -893,7 +1161,7 @@ export function createBackgroundRunnerBridge({
     }
     const resolvedTab = resolvedTabResponse.data;
 
-    if (plan.steps.length > 0 && !pageHookBridge) {
+    if (plan.steps.length > 0 && !effectivePageHookBridge) {
       return {
         ok: false,
         error: {
@@ -954,9 +1222,9 @@ export function createBackgroundRunnerBridge({
         };
 
     let site;
-    if (pageHookBridge && typeof tabId === "number") {
+    if (effectivePageHookBridge && typeof tabId === "number") {
       try {
-        const snapshot = await pageHookBridge.snapshotState({ tabId, world });
+        const snapshot = await effectivePageHookBridge.snapshotState({ tabId, world });
         site = {
           status: snapshot == null ? "empty" : "healthy",
           tabId,
@@ -1174,6 +1442,15 @@ export function createBackgroundRunnerBridge({
       case "config.update":
         return updateConfig({
           patch: message.patch,
+        });
+      case "page.press_key":
+        return pressActiveTabKey({
+          key: message.key,
+        });
+      case "page.screenshot":
+        return captureActiveTabScreenshot({
+          format: message.format,
+          quality: message.quality,
         });
       case "tabs.get_active":
         return getActiveTabMetadata();

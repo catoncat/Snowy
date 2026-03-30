@@ -367,6 +367,12 @@ stopped    →  idle             (reset)
 暴露: brain.* control plane
 ```
 
+loop step 执行边界：
+
+- facade 接收 `registry` / `providers`
+- step 先由 kernel 创建 turn，再通过 core runtime context / provider dispatch 调 capability
+- 结果仍由 `LoopEngine` 统一记录为 `StepResult`
+
 构造参数:
 - `registry: CapabilityRegistry`
 - `providers: FamilyProviderRegistry`
@@ -442,9 +448,9 @@ stopped    →  idle             (reset)
 
 实际产出:
 - `packages/kernel/src/compaction-manager.ts` — threshold-based trigger + prepare→execute(LLM)→apply cycle + iterative compaction with `<previous-summary>` (pi-mono pattern)
-- `packages/kernel/src/kernel-facade.ts` — `createKernel()` unified facade, 组合 4 子系统，暴露 session/run/queue/loop/compaction 统一 API + 子系统直接访问
+- `packages/kernel/src/kernel-facade.ts` — `createKernel()` unified facade, 组合 4 子系统，暴露 session/run/queue/loop/compaction 统一 API + 子系统直接访问；后续 follow-up 已补回 registry/providers 注入与 loop capability dispatch
 - `packages/kernel/test/compaction-manager.spec.ts` — 5 测试（threshold, full cycle, iterative compaction）
-- `packages/kernel/test/kernel-facade.spec.ts` — 10 测试（session/run/queue/loop/compaction 端到端集成）
+- `packages/kernel/test/kernel-facade.spec.ts` — 13 测试（session/run/queue/loop/compaction 端到端集成 + capability dispatch）
 
 ### 总计
 

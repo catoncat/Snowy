@@ -24,7 +24,7 @@
 3. skill/workflow
 4. audit
 
-## 2. 当前 action surface (36 actions)
+## 2. 当前 action surface (39 actions)
 
 ### Browser-local substrate (memfs / page / tabs / site)
 
@@ -43,8 +43,11 @@
 - `page.query`
 - `page.click`
 - `page.fill`
+- `page.press_key`
+- `page.screenshot`
 - `tabs.list`
 - `tabs.get_active`
+- `tabs.navigate`
 - `site.fetch_with_session`
 
 ### Runtime substrate (runner / skills / runtime)

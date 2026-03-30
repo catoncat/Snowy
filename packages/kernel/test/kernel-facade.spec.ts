@@ -4,8 +4,6 @@ import {
   CapabilityRegistry,
   FamilyProviderRegistry,
 } from "@bbl-next/core";
-import { JsRunnerHost } from "../../js-runner/src/index.js";
-import { SiteSkillRegistry, SiteSkillRuntime } from "../../site-runtime/src/index.js";
 import { InMemorySessionStorage, createKernel } from "@bbl-next/kernel";
 import type { Kernel } from "@bbl-next/kernel";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -177,89 +175,6 @@ describe("KernelFacade (createKernel)", () => {
       expect(executed.turn.lastError).toBe(
         "Kernel is not wired with capability registry/providers",
       );
-    });
-
-    it("runs a real js-runner invocation through kernel loop orchestration", async () => {
-      const wiredKernel = createKernel({
-        storage: new InMemorySessionStorage(),
-        llm: createMockLlm(),
-        runnerHost: new JsRunnerHost(),
-      });
-      const s = await wiredKernel.createSession({ title: "runner session" });
-
-      const executed = await wiredKernel.executeStep(s.id, {
-        kind: "runner",
-        module: {
-          id: "runner.greeter",
-          source: 'exports.default = async ({ ctx, input }) => `${ctx.prefix}:${input.name}`;',
-        },
-        ctx: { prefix: "hello" },
-        input: { name: "kernel" },
-      });
-
-      expect(executed.turn.status).toBe("succeeded");
-      expect(executed.turn.capabilityId).toBe("runner.invoke");
-      expect(executed.result).toEqual({
-        ok: true,
-        data: "hello:kernel",
-      });
-    });
-
-    it("runs a real site-runtime invocation through kernel loop orchestration", async () => {
-      const siteRuntime = new SiteSkillRuntime({
-        registry: new SiteSkillRegistry([
-          {
-            skillId: "fixture.site",
-            matches: ["https://fixture.test/*"],
-            actions: [
-              {
-                name: "echo",
-                module: {
-                  id: "fixture.site.echo",
-                  source:
-                    'exports.default = async ({ ctx, input }) => ({ query: input.query, tabUrl: ctx.tab.url });',
-                },
-              },
-            ],
-          },
-        ]),
-        runnerHost: new JsRunnerHost(),
-      });
-
-      const wiredKernel = createKernel({
-        storage: new InMemorySessionStorage(),
-        llm: createMockLlm(),
-        siteRuntime,
-      });
-      const s = await wiredKernel.createSession({ title: "site session" });
-
-      const executed = await wiredKernel.executeStep(s.id, {
-        kind: "site",
-        skillId: "fixture.site",
-        action: "echo",
-        tab: {
-          tabId: 7,
-          url: "https://fixture.test/demo",
-          active: true,
-          title: "Fixture",
-        },
-        input: { query: "loop" },
-      });
-
-      expect(executed.turn.status).toBe("succeeded");
-      expect(executed.turn.capabilityId).toBe("site.invoke:fixture.site.echo");
-      expect(executed.result).toEqual({
-        ok: true,
-        data: {
-          result: {
-            query: "loop",
-            tabUrl: "https://fixture.test/demo",
-          },
-          verified: true,
-          trace: ["match:fixture.site", "invoke:echo"],
-        },
-        verified: true,
-      });
     });
   });
 

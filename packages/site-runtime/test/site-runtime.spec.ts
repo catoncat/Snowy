@@ -3,19 +3,17 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { JsRunnerHost } from "@bbl-next/js-runner";
-// @ts-ignore source JS module has no declaration file yet
-import { createPageHookBridge } from "mv3-shell/background";
 import {
+  buildInjectionPlan,
   SiteSkillRegistry,
   SiteSkillRuntime,
-  buildInjectionPlan,
   type ActiveTabMetadata,
-  type InjectionPlan,
   type InjectionStep,
   type SiteSkillAction,
   type SiteScriptInstaller,
-  type SiteActionVerifier
 } from "@bbl-next/site-runtime";
+// @ts-ignore source JS module has no declaration file yet
+import { createPageHookBridge } from "mv3-shell/background";
 import { describe, expect, it, vi } from "vitest";
 
 const tab: ActiveTabMetadata = {
@@ -41,6 +39,55 @@ interface PageHookBridgeState {
   };
 }
 
+function createDomSandbox() {
+  const dispatchLog: Array<{ target: string; type: string; key?: string }> = [];
+
+  function createTarget(target: string) {
+    return {
+      dispatchEvent(event: { type: string; key?: string }) {
+        dispatchLog.push({
+          target,
+          type: event.type,
+          ...(typeof event.key === "string" ? { key: event.key } : {}),
+        });
+        return true;
+      },
+    };
+  }
+
+  class KeyboardEvent {
+    readonly type: string;
+    readonly key: string;
+    readonly bubbles: boolean;
+    readonly cancelable: boolean;
+    readonly composed: boolean;
+
+    constructor(type: string, init: Record<string, unknown> = {}) {
+      this.type = type;
+      this.key = typeof init.key === "string" ? init.key : "";
+      this.bubbles = init.bubbles === true;
+      this.cancelable = init.cancelable === true;
+      this.composed = init.composed === true;
+    }
+  }
+
+  const activeElement = createTarget("activeElement");
+  const body = createTarget("body");
+  const documentElement = createTarget("documentElement");
+  const document = {
+    activeElement,
+    body,
+    documentElement,
+    dispatchEvent: createTarget("document").dispatchEvent,
+    __dispatchLog: dispatchLog,
+  };
+
+  return {
+    document,
+    KeyboardEvent,
+  };
+}
+
 function createScriptingChromeHarness() {
   const testDir = dirname(fileURLToPath(import.meta.url));
   const worlds = new Map<string, Record<string, unknown>>();
@@ -52,7 +99,8 @@ function createScriptingChromeHarness() {
       return existing;
     }
     const sandbox: Record<string, unknown> = {
-      console
+      console,
+      ...createDomSandbox(),
     };
     sandbox.globalThis = sandbox;
     worlds.set(key, sandbox);
@@ -91,7 +139,7 @@ function createScriptingChromeHarness() {
                 filename: "executeScript.js"
               })
             );
-            delete context.__bblArgs;
+            context.__bblArgs = undefined;
             return [{ result }];
           }
 
@@ -438,6 +486,129 @@ describe("site-runtime", () => {
         "invoke:execute_fixture",
         "verify:page_hook_ok"
       ]
+    });
+  });
+
+  it("dispatches press_key through the real page-hook bridge only on explicit invoke", async () => {
+    const scriptingHarness = createScriptingChromeHarness();
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: scriptingHarness.chromeApi,
+    });
+    const registry = new SiteSkillRegistry([
+      {
+        skillId: "fixture.page",
+        matches: ["https://fixture.test/*"],
+        actions: [
+          {
+            name: "press_key",
+            injectionSteps: [
+              {
+                world: "main",
+                scriptId: "bbl-next.page-hook.page",
+                jsPath: "src/page-hook.js",
+                runAt: "document_idle",
+              },
+            ],
+            verifier: "page_press_key",
+            module: {
+              id: "fixture.page.press_key",
+              source: "exports.default = async ({ input }) => ({ key: input.key });",
+            },
+          },
+        ],
+      },
+    ]);
+    const runtime = new SiteSkillRuntime({
+      registry,
+      runnerHost: new JsRunnerHost(),
+      installer: {
+        install: async (step, currentTab) => pageHookBridge.install(step, currentTab),
+        invoke: async ({ installation, action, input, tab: currentTab, ctx }) =>
+          pageHookBridge.invoke({
+            installation,
+            action,
+            input,
+            tab: currentTab,
+            ctx,
+          }),
+        verify: async ({ installation, action, result, tab: currentTab }) =>
+          pageHookBridge.verify({
+            installation,
+            action,
+            result,
+            tab: currentTab,
+          }),
+      },
+    });
+
+    const beforeSnapshot = (await pageHookBridge.snapshotState({
+      tabId: 13,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+
+    expect(beforeSnapshot).toBeNull();
+
+    const result = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "press_key",
+      tab: {
+        tabId: 13,
+        url: "https://fixture.test/demo",
+        active: true,
+      },
+      input: {
+        key: "Enter",
+      },
+    });
+
+    const afterSnapshot = (await pageHookBridge.snapshotState({
+      tabId: 13,
+      world: "main",
+    })) as
+      | (PageHookBridgeState["state"] & {
+          keyEvents?: Array<{ type: string; key: string }>;
+        })
+      | null;
+
+    expect(afterSnapshot?.keyEvents).toEqual([
+      {
+        installationId: "bbl-next.page-hook.page:1",
+        scriptId: "bbl-next.page-hook.page",
+        type: "keydown",
+        key: "Enter",
+        tabUrl: "https://fixture.test/demo",
+      },
+      {
+        installationId: "bbl-next.page-hook.page:1",
+        scriptId: "bbl-next.page-hook.page",
+        type: "keyup",
+        key: "Enter",
+        tabUrl: "https://fixture.test/demo",
+      },
+    ]);
+    expect(afterSnapshot?.verifications).toEqual([
+      {
+        action: "press_key",
+        verified: true,
+      },
+    ]);
+    expect(result).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "press_key",
+        key: "Enter",
+        installationId: "bbl-next.page-hook.page:1",
+        installedScriptId: "bbl-next.page-hook.page",
+        dispatchCount: 2,
+      },
+      trace: [
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:press_key",
+        "verify:page_press_key",
+      ],
     });
   });
 

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@bbl-next/core": "workspace:*",
     "@bbl-next/contracts": "workspace:*"
   },
   "exports": {
