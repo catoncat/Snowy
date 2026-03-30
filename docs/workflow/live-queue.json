@@ -1,28 +1,29 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-30T14:45:53.322Z",
+  "generated_at": "2026-03-30T14:51:54.020Z",
   "repo_root": "/Users/envvar/work/repos/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-066",
-      "issue_path": "docs/backlog/2026-03-30-apps-mv3-shell-still-owns-app-local-truth-instead-of-package-upstream-runtime-surfaces.md",
-      "title": "Review: apps/mv3-shell still owns app-local truth instead of package-upstream runtime surfaces",
-      "parallel_group": "mv3-shell",
-      "module_id": "execution-host-bridge",
-      "module_stage": "secondary",
+      "issue_id": "ISSUE-067",
+      "issue_path": "docs/backlog/2026-03-30-kernel-is-still-not-the-runtime-center-in-app-integration.md",
+      "title": "Review: kernel is still not the runtime center in app integration",
+      "parallel_group": "kernel",
+      "module_id": "kernel",
+      "module_stage": "mainline",
       "tracking_kind": "gap",
       "check_cmd": "bun run check",
       "depends_on": [
-        "ISSUE-065"
+        "ISSUE-066"
       ],
       "write_scope": [
-        "apps/mv3-shell/src/background.js",
-        "apps/mv3-shell/src/runtime-services.js",
-        "apps/mv3-shell/test/manifest.spec.ts",
-        "packages/core/src/index.ts",
-        "packages/core/test/core.spec.ts",
+        "packages/kernel/src/kernel-facade.ts",
+        "packages/kernel/test/kernel-facade.spec.ts",
         "packages/site-runtime/src/index.ts",
         "packages/site-runtime/test/site-runtime.spec.ts",
+        "packages/js-runner/src/index.ts",
+        "packages/js-runner/test/js-runner.spec.ts",
+        "apps/mv3-shell/src/runtime-services.js",
+        "apps/mv3-shell/test/manifest.spec.ts",
         "docs/"
       ]
     }
