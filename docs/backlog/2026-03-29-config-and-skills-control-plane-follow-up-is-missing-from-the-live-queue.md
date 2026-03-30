@@ -55,3 +55,7 @@ claimed_at: 2026-03-30T02:19:07.042Z
 
 - `ISSUE-055` `Review: config control-plane action surface is still placeholder-only`
 - `ISSUE-056` `Review: skill lifecycle control-plane actions are not exposed beyond invoke/list`
+
+## 相关 commits
+
+- `6ebc2a5` `docs(backlog): split ai-surface control-plane follow-ups`
