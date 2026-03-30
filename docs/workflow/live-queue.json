@@ -1,21 +1,44 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-30T05:29:15.625Z",
+  "generated_at": "2026-03-30T07:34:15.917Z",
   "repo_root": "/Users/envvar/work/repos/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-063",
-      "issue_path": "docs/backlog/2026-03-30-observability-diagnostics-resource-read-surface.md",
-      "title": "observability: diagnostics resource read surface",
-      "parallel_group": "mv3-shell",
-      "module_id": "observability-audit",
+      "issue_id": "ISSUE-041",
+      "issue_path": "docs/backlog/2026-03-29-intervention-and-human-handoff-surface-is-still-undecided.md",
+      "title": "Review: intervention and human handoff surface is still undecided",
+      "parallel_group": "site-runtime",
+      "module_id": "intervention-handoff",
       "module_stage": "mainline",
       "tracking_kind": "gap",
       "check_cmd": "bun run check",
+      "depends_on": [
+        "ISSUE-036"
+      ],
+      "write_scope": [
+        "docs/",
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
+        "packages/site-runtime/src/index.ts",
+        "packages/site-runtime/test/site-runtime.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-065",
+      "issue_path": "docs/backlog/2026-03-30-mv3-bridge-regressions-can-bypass-runtime-and-quality-gates.md",
+      "title": "Review: mv3-shell bridge regressions can bypass runtime and quality gates",
+      "parallel_group": "mv3-shell",
+      "module_id": "execution-host-bridge",
+      "module_stage": "secondary",
+      "tracking_kind": "gap",
+      "check_cmd": "bun run test -- apps/mv3-shell/test/manifest.spec.ts packages/core/test/core.spec.ts && bun run typecheck",
       "depends_on": [],
       "write_scope": [
-        "packages/contracts/src/index.ts",
-        "packages/core/src/index.ts"
+        "apps/mv3-shell/src/background.js",
+        "apps/mv3-shell/test/manifest.spec.ts",
+        "packages/core/test/core.spec.ts",
+        "package.json",
+        "tsconfig.json"
       ]
     }
   ]
