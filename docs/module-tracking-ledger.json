@@ -10,10 +10,7 @@
       "stage": "mainline",
       "status": "partial",
       "depends_on_modules": [],
-      "code_roots": [
-        "packages/kernel/",
-        "packages/contracts/src/index.ts"
-      ],
+      "code_roots": ["packages/kernel/", "packages/contracts/src/index.ts"],
       "source_docs": [
         "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md",
         "docs/kernel-skeleton-design.md"
@@ -28,9 +25,7 @@
       "tracking_order": 20,
       "stage": "mainline",
       "status": "partial",
-      "depends_on_modules": [
-        "kernel"
-      ],
+      "depends_on_modules": ["kernel"],
       "code_roots": [
         "packages/contracts/src/index.ts",
         "packages/core/src/index.ts",
@@ -50,10 +45,7 @@
       "tracking_order": 30,
       "stage": "mainline",
       "status": "partial",
-      "depends_on_modules": [
-        "kernel",
-        "observability-audit"
-      ],
+      "depends_on_modules": ["kernel", "observability-audit"],
       "code_roots": [
         "packages/contracts/src/index.ts",
         "packages/core/src/index.ts",
@@ -73,18 +65,13 @@
       "tracking_order": 40,
       "stage": "secondary",
       "status": "partial",
-      "depends_on_modules": [
-        "kernel"
-      ],
+      "depends_on_modules": ["kernel"],
       "code_roots": [
         "packages/contracts/src/index.ts",
         "packages/core/src/index.ts",
         "docs/ai-native-capability-surface-design.md"
       ],
-      "source_docs": [
-        "docs/ai-native-capability-surface-design.md",
-        "docs/ai-surface-index.md"
-      ],
+      "source_docs": ["docs/ai-native-capability-surface-design.md", "docs/ai-surface-index.md"],
       "cutover_gate": "Gate G",
       "default_parallel_group": "contracts-core"
     },
@@ -95,10 +82,7 @@
       "tracking_order": 50,
       "stage": "secondary",
       "status": "partial",
-      "depends_on_modules": [
-        "kernel",
-        "intervention-handoff"
-      ],
+      "depends_on_modules": ["kernel", "intervention-handoff"],
       "code_roots": [
         "packages/site-runtime/",
         "apps/mv3-shell/src/page-hook.js",
@@ -118,18 +102,13 @@
       "tracking_order": 60,
       "stage": "secondary",
       "status": "partial",
-      "depends_on_modules": [
-        "kernel"
-      ],
+      "depends_on_modules": ["kernel"],
       "code_roots": [
         "packages/js-runner/",
         "apps/mv3-shell/src/offscreen.js",
         "apps/mv3-shell/src/background.js"
       ],
-      "source_docs": [
-        "docs/migration-parity-dashboard.md",
-        "docs/cutover-readiness-criteria.md"
-      ],
+      "source_docs": ["docs/migration-parity-dashboard.md", "docs/cutover-readiness-criteria.md"],
       "cutover_gate": "Gate C",
       "default_parallel_group": "js-runner"
     },
@@ -140,14 +119,8 @@
       "tracking_order": 70,
       "stage": "deferred",
       "status": "not-started",
-      "depends_on_modules": [
-        "kernel",
-        "ai-surface-control-plane"
-      ],
-      "code_roots": [
-        "packages/core/src/index.ts",
-        "packages/kernel/"
-      ],
+      "depends_on_modules": ["kernel", "ai-surface-control-plane"],
+      "code_roots": ["packages/core/src/index.ts", "packages/kernel/"],
       "source_docs": [
         "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md",
         "docs/legacy-to-vnext-migration-matrix.md"
@@ -163,9 +136,7 @@
       "stage": "deferred",
       "status": "partial",
       "depends_on_modules": [],
-      "code_roots": [
-        "packages/browser-vfs/"
-      ],
+      "code_roots": ["packages/browser-vfs/"],
       "source_docs": [
         "docs/legacy-to-vnext-migration-matrix.md",
         "docs/migration-parity-dashboard.md"
@@ -180,9 +151,7 @@
       "tracking_order": 90,
       "stage": "deferred",
       "status": "partial",
-      "depends_on_modules": [
-        "ai-surface-control-plane"
-      ],
+      "depends_on_modules": ["ai-surface-control-plane"],
       "code_roots": [
         "packages/skill-sdk/",
         "docs/skill-authoring-guide.md",
@@ -203,15 +172,8 @@
       "stage": "deferred",
       "status": "partial",
       "depends_on_modules": [],
-      "code_roots": [
-        ".agents/skills/",
-        "docs/",
-        ".github/workflows/"
-      ],
-      "source_docs": [
-        "docs/source-of-truth-map.md",
-        "docs/multi-agent-workflow.md"
-      ],
+      "code_roots": [".agents/skills/", "docs/", ".github/workflows/"],
+      "source_docs": ["docs/source-of-truth-map.md", "docs/multi-agent-workflow.md"],
       "cutover_gate": null,
       "default_parallel_group": "sdk-docs"
     }

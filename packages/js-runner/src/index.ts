@@ -164,17 +164,29 @@ export interface RunnerHostErrorResponse {
 
 export interface RunnerHostAdapter {
   read?: (
-    request: RunnerHostReadRequest
-  ) => Promise<RunnerHostReadResponse | RunnerHostErrorResponse> | RunnerHostReadResponse | RunnerHostErrorResponse;
+    request: RunnerHostReadRequest,
+  ) =>
+    | Promise<RunnerHostReadResponse | RunnerHostErrorResponse>
+    | RunnerHostReadResponse
+    | RunnerHostErrorResponse;
   write?: (
-    request: RunnerHostWriteRequest
-  ) => Promise<RunnerHostWriteResponse | RunnerHostErrorResponse> | RunnerHostWriteResponse | RunnerHostErrorResponse;
+    request: RunnerHostWriteRequest,
+  ) =>
+    | Promise<RunnerHostWriteResponse | RunnerHostErrorResponse>
+    | RunnerHostWriteResponse
+    | RunnerHostErrorResponse;
   edit?: (
-    request: RunnerHostEditRequest
-  ) => Promise<RunnerHostEditResponse | RunnerHostErrorResponse> | RunnerHostEditResponse | RunnerHostErrorResponse;
+    request: RunnerHostEditRequest,
+  ) =>
+    | Promise<RunnerHostEditResponse | RunnerHostErrorResponse>
+    | RunnerHostEditResponse
+    | RunnerHostErrorResponse;
   exec?: (
-    request: RunnerHostExecRequest
-  ) => Promise<RunnerHostExecResponse | RunnerHostErrorResponse> | RunnerHostExecResponse | RunnerHostErrorResponse;
+    request: RunnerHostExecRequest,
+  ) =>
+    | Promise<RunnerHostExecResponse | RunnerHostErrorResponse>
+    | RunnerHostExecResponse
+    | RunnerHostErrorResponse;
 }
 
 export type RunnerRpcResponse =
@@ -203,7 +215,7 @@ export class JsRunnerHost {
 
   constructor(options: JsRunnerHostOptions = {}) {
     this.#core = createRunnerHostCore({
-      hostAdapter: options.hostAdapter
+      hostAdapter: options.hostAdapter,
     }) as RunnerHostCoreLike;
   }
 
@@ -211,7 +223,7 @@ export class JsRunnerHost {
     const response = await this.dispatch({
       kind: "invoke",
       requestId: this.#nextRequestId(),
-      invocation: request
+      invocation: request,
     });
     if (!("kind" in response) || response.kind !== "invoke_result") {
       throw new CapabilityError("E_RUNTIME", "Unexpected RPC response for invoke");
@@ -234,13 +246,13 @@ export class JsRunnerHost {
     const response = await this.dispatch({
       kind: "cancel",
       requestId: this.#nextRequestId(),
-      targetRequestId
+      targetRequestId,
     });
     if (!("kind" in response) || response.kind !== "cancel_result") {
       throw new CapabilityError("E_RUNTIME", "Unexpected RPC response for cancel");
     }
     return {
-      cancelled: response.cancelled
+      cancelled: response.cancelled,
     };
   }
 

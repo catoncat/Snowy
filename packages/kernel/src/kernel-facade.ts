@@ -46,6 +46,16 @@ export interface KernelOptions {
   registry?: CapabilityRegistry;
   providers?: FamilyProviderRegistry;
   dispatch?: KernelDispatchConfig;
+  executeRunnerStep?: (request: {
+    sessionId: string;
+    turn: LoopTurn;
+    step: Extract<StepRequest, { kind: "runner" }>;
+  }) => Promise<StepResult> | StepResult;
+  executeSiteStep?: (request: {
+    sessionId: string;
+    turn: LoopTurn;
+    step: Extract<StepRequest, { kind: "site" }>;
+  }) => Promise<StepResult> | StepResult;
   loop?: LoopEngineOptions;
   compaction?: CompactionOptions;
 }
@@ -144,26 +154,73 @@ export function createKernel(opts: KernelOptions): Kernel {
   ): Promise<{ turn: LoopTurn; result: StepResult }> => {
     const turn = loop.createTurn(sessionId, step);
 
+    const record = (result: StepResult) => ({
+      turn: loop.recordTurnResult(turn, result),
+      result,
+    });
+
+    if (step.kind === "runner") {
+      if (!opts.executeRunnerStep) {
+        return record({
+          ok: false,
+          error: "Kernel is not wired with a runner step executor",
+        });
+      }
+
+      try {
+        return record(
+          await opts.executeRunnerStep({
+            sessionId,
+            turn,
+            step,
+          }),
+        );
+      } catch (error) {
+        return record({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+          retryable: error instanceof CapabilityError && error.code === "E_RUNTIME",
+        });
+      }
+    }
+
+    if (step.kind === "site") {
+      if (!opts.executeSiteStep) {
+        return record({
+          ok: false,
+          error: "Kernel is not wired with a site step executor",
+        });
+      }
+
+      try {
+        return record(
+          await opts.executeSiteStep({
+            sessionId,
+            turn,
+            step,
+          }),
+        );
+      } catch (error) {
+        return record({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+          retryable: error instanceof CapabilityError && error.code === "E_RUNTIME",
+        });
+      }
+    }
+
     if (!step.capabilityId) {
-      const result: StepResult = {
+      return record({
         ok: false,
         error: "Kernel step requires capabilityId",
-      };
-      return {
-        turn: loop.recordTurnResult(turn, result),
-        result,
-      };
+      });
     }
 
     if (!opts.registry || !opts.providers) {
-      const result: StepResult = {
+      return record({
         ok: false,
         error: "Kernel is not wired with capability registry/providers",
-      };
-      return {
-        turn: loop.recordTurnResult(turn, result),
-        result,
-      };
+      });
     }
 
     try {
@@ -179,21 +236,13 @@ export function createKernel(opts: KernelOptions): Kernel {
         invokeSkill: opts.dispatch?.invokeSkill,
         listSkills: opts.dispatch?.listSkills,
       });
-      const result: StepResult = { ok: true, data };
-      return {
-        turn: loop.recordTurnResult(turn, result),
-        result,
-      };
+      return record({ ok: true, data });
     } catch (error) {
-      const result: StepResult = {
+      return record({
         ok: false,
         error: error instanceof Error ? error.message : String(error),
         retryable: error instanceof CapabilityError && error.code === "E_RUNTIME",
-      };
-      return {
-        turn: loop.recordTurnResult(turn, result),
-        result,
-      };
+      });
     }
   };
 

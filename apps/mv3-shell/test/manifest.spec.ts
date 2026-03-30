@@ -7,6 +7,8 @@ import manifest from "../manifest.json";
 import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCREEN_REASONS, createBackgroundRunnerBridge, createPageHookBridge } from "../src/background.js";
 // @ts-ignore source JS module has no declaration file yet
 import { createOffscreenRunnerBridge } from "../src/offscreen.js";
+// @ts-ignore source JS module has no declaration file yet
+import { createBackgroundRuntimeServices } from "../src/runtime-services.js";
 
 type MessageListener = (
   message: unknown,
@@ -1646,6 +1648,69 @@ describe("mv3-shell manifest", () => {
     });
 
     dispose();
+    harness.cleanup();
+  });
+
+  it("routes page.press_key through kernel-owned runner and site steps in runtime services", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/demo",
+      },
+    });
+    const invokeRunner = vi.fn(async (invocation: { input: { key: string } }) => ({
+      ok: true,
+      data: {
+        ok: true,
+        result: {
+          result: invocation.input,
+          durationMs: 1,
+        },
+      },
+    }));
+    const services = createBackgroundRuntimeServices({
+      chromeApi: harness.chromeApi,
+      invokeRunner,
+      pageHookBridge: createPageHookBridge({
+        chromeApi: harness.chromeApi,
+      }),
+    });
+
+    const result = await services.invokePageAction({
+      action: "press_key",
+      input: {
+        key: "Enter",
+      },
+    });
+    const [{ kernel }, session] = await Promise.all([
+      services.ensureServices(),
+      services.ensureSession(),
+    ]);
+
+    expect(result).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "press_key",
+        key: "Enter",
+        installationId: "bbl-next.page-hook.page:1",
+        installedScriptId: "bbl-next.page-hook.page",
+        dispatchCount: 2,
+      },
+    });
+    expect(invokeRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        module: expect.objectContaining({
+          id: "bbl.page.press_key",
+        }),
+        input: {
+          key: "Enter",
+        },
+      }),
+    );
+    expect(kernel.getStepCount(session.id)).toBe(2);
+    expect(kernel.getRunState(session.id).phase).toBe("paused");
+
     harness.cleanup();
   });
 
@@ -3343,6 +3408,103 @@ describe("mv3-shell manifest", () => {
     );
 
     dispose();
+    harness.cleanup();
+  });
+
+  it("routes site.runtime.invoke through kernel-owned runner and site steps in runtime services", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/demo",
+      },
+    });
+    const invokeRunner = vi.fn(
+      async (invocation: {
+        input: { query: string };
+        ctx: { tab: { url: string }; site: { installations: unknown[] } };
+      }) => ({
+        ok: true,
+        data: {
+          ok: true,
+          result: {
+            result: {
+              query: invocation.input.query,
+              tabUrl: invocation.ctx.tab.url,
+              installationCount: invocation.ctx.site.installations.length,
+            },
+            durationMs: 1,
+          },
+        },
+      }),
+    );
+    const services = createBackgroundRuntimeServices({
+      chromeApi: harness.chromeApi,
+      invokeRunner,
+      pageHookBridge: createPageHookBridge({
+        chromeApi: harness.chromeApi,
+      }),
+    });
+
+    const result = await services.invokeSiteSkill({
+      skillId: "fixture.page",
+      action: "execute_fixture",
+      tab: {
+        tabId: 11,
+        url: "https://fixture.test/demo",
+        active: true,
+      },
+      input: {
+        query: "hello runtime",
+      },
+      plan: {
+        skillId: "fixture.page",
+        action: "execute_fixture",
+        steps: [
+          {
+            world: "main",
+            scriptId: "bbl-next.page-hook.fixture",
+            jsPath: "src/page-hook.js",
+            runAt: "document_idle",
+          },
+        ],
+      },
+      module: {
+        id: "fixture.page.execute",
+        source: `
+          exports.default = async ({ ctx, input }) => ({
+            query: input.query,
+            tabUrl: ctx.tab.url,
+            installationCount: ctx.site.installations.length
+          });
+        `,
+      },
+      verifier: "page_hook_ok",
+    });
+    const [{ kernel }, session] = await Promise.all([
+      services.ensureServices(),
+      services.ensureSession(),
+    ]);
+
+    expect(result).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "execute_fixture",
+        input: {
+          query: "hello runtime",
+          tabUrl: "https://fixture.test/demo",
+          installationCount: 1,
+        },
+        installationId: "bbl-next.page-hook.fixture:1",
+        installedScriptId: "bbl-next.page-hook.fixture",
+        tabUrl: "https://fixture.test/demo",
+        installCount: 1,
+      },
+    });
+    expect(invokeRunner).toHaveBeenCalledTimes(1);
+    expect(kernel.getStepCount(session.id)).toBe(2);
+    expect(kernel.getRunState(session.id).phase).toBe("paused");
+
     harness.cleanup();
   });
 

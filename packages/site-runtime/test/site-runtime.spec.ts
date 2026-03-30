@@ -238,6 +238,94 @@ describe("site-runtime", () => {
     });
   });
 
+  it("allows app integration to inject kernel-owned runner execution", async () => {
+    const runtime = new SiteSkillRuntime({
+      registry: new SiteSkillRegistry([
+        {
+          skillId: "fixture.page",
+          matches: ["https://x.com/*"],
+          actions: [
+            {
+              name: "execute_fixture",
+              injectionSteps: [
+                {
+                  world: "main",
+                  scriptId: "fixture.page:execute_fixture:main",
+                },
+              ],
+              module: {
+                id: "fixture.page.execute",
+                source: "exports.default = async () => ({ ok: true });",
+              },
+            },
+          ],
+        },
+      ]),
+      runnerHost: {
+        invoke: vi.fn(async () => {
+          throw new Error("runner host should not be called");
+        }),
+      } as unknown as JsRunnerHost,
+      installer: {
+        install: async (step) => ({
+          installationId: `${step.scriptId}:1`,
+        }),
+        invoke: async ({ input, installation, tab }) => {
+          const installationResult =
+            installation.result &&
+            typeof installation.result === "object" &&
+            "installationId" in installation.result
+              ? installation.result
+              : null;
+
+          return {
+            installationId: installationResult?.installationId,
+            input,
+            tabUrl: tab.url,
+          };
+        },
+      },
+    });
+
+    const executeRunner = vi.fn(async ({ input, ctx, site }) => ({
+      echoed: input,
+      tabUrl: ctx.tab.url,
+      installationCount: site.installations.length,
+    }));
+
+    const result = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "execute_fixture",
+      tab,
+      input: {
+        query: "browser brain loop",
+      },
+      executeRunner,
+    });
+
+    expect(executeRunner).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      verified: true,
+      result: {
+        installationId: "fixture.page:execute_fixture:main:1",
+        input: {
+          echoed: {
+            query: "browser brain loop",
+          },
+          tabUrl: "https://x.com/home",
+          installationCount: 1,
+        },
+        tabUrl: "https://x.com/home",
+      },
+      trace: [
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:fixture.page:execute_fixture:main",
+        "invoke:execute_fixture",
+      ],
+    });
+  });
+
   it("rejects invoke when the active tab does not match the skill", async () => {
     const installer = {
       install: vi.fn(async () => undefined),

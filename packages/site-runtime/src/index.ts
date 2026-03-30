@@ -93,6 +93,20 @@ export interface SiteActionInterventionPolicy {
   payload?: Record<string, unknown>;
 }
 
+export interface SiteActionRunnerExecutionRequest {
+  skillId: string;
+  action: string;
+  module: RunnerModule;
+  input: unknown;
+  ctx: Record<string, unknown>;
+  tab: ActiveTabMetadata;
+  site: SiteInvokeContext;
+}
+
+export type SiteActionRunnerExecutor = (
+  request: SiteActionRunnerExecutionRequest,
+) => Promise<unknown> | unknown;
+
 export interface SiteInvocationSuccess {
   result: unknown;
   verified: boolean;
@@ -119,6 +133,7 @@ export interface SingleActionSiteSkillRequest {
   module: RunnerModule;
   verifier?: string;
   intervention?: SiteActionInterventionPolicy;
+  executeRunner?: SiteActionRunnerExecutor;
 }
 
 export function buildInjectionPlan(skillId: string, action: SiteSkillAction): InjectionPlan {
@@ -230,6 +245,7 @@ export async function invokeSingleActionSiteSkill(options: {
     tab: options.request.tab,
     input: options.request.input,
     ctx: options.request.ctx,
+    executeRunner: options.request.executeRunner,
   });
 }
 
@@ -280,6 +296,7 @@ export class SiteSkillRuntime {
     tab: ActiveTabMetadata;
     input?: unknown;
     ctx?: Record<string, unknown>;
+    executeRunner?: SiteActionRunnerExecutor;
   }): Promise<SiteInvocationResult> {
     const skill = this.#registry.get(request.skillId);
     if (!skill) {
@@ -357,17 +374,29 @@ export class SiteSkillRuntime {
     };
 
     try {
-      const invocation = await this.#runnerHost.invoke({
-        module: action.module,
-        input: request.input ?? {},
-        ctx: runnerContext,
-      });
-      let result = invocation.result;
+      const runnerResult = request.executeRunner
+        ? await request.executeRunner({
+            skillId: request.skillId,
+            action: request.action,
+            module: action.module,
+            input: request.input ?? {},
+            ctx: runnerContext,
+            tab: request.tab,
+            site,
+          })
+        : (
+            await this.#runnerHost.invoke({
+              module: action.module,
+              input: request.input ?? {},
+              ctx: runnerContext,
+            })
+          ).result;
+      let result = runnerResult;
       if (targetInstallation && this.#installer?.invoke) {
         result = await this.#installer.invoke({
           installation: targetInstallation,
           action: request.action,
-          input: invocation.result,
+          input: runnerResult,
           tab: request.tab,
           ctx: runnerContext,
         });

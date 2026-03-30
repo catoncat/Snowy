@@ -58,6 +58,56 @@ function createSiteRuntimeInstaller(pageHookBridge) {
   };
 }
 
+function toKernelStepFailure(error) {
+  const code = error instanceof CapabilityError ? error.code : "E_RUNTIME";
+  const message = error instanceof Error ? error.message : String(error);
+  const details = error instanceof CapabilityError ? error.details : undefined;
+  return {
+    ok: false,
+    error: message,
+    retryable: code === "E_RUNTIME",
+    data: {
+      code,
+      details,
+    },
+  };
+}
+
+function unwrapKernelStepResult(executed, fallbackMessage) {
+  if (executed.result?.ok) {
+    return executed.result.data;
+  }
+
+  const failure = isPlainObject(executed.result?.data) ? executed.result.data : {};
+  throw new CapabilityError(
+    typeof failure.code === "string" ? failure.code : "E_RUNTIME",
+    executed.result?.error ?? fallbackMessage,
+    failure.details,
+  );
+}
+
+function activateKernelRun(kernel, sessionId) {
+  const state = kernel.getRunState(sessionId);
+  switch (state.phase) {
+    case "idle":
+      kernel.startRun(sessionId);
+      break;
+    case "paused":
+      kernel.resume(sessionId);
+      break;
+    case "running":
+      break;
+    default:
+      throw new CapabilityError("E_RUNTIME", `Kernel run is unavailable while ${state.phase}`);
+  }
+}
+
+function settleKernelRun(kernel, sessionId) {
+  if (kernel.getRunState(sessionId).phase === "running") {
+    kernel.pause(sessionId);
+  }
+}
+
 async function createSessionStorage({ sessionStorage, workspaceId }) {
   if (sessionStorage) {
     return sessionStorage;
@@ -220,6 +270,95 @@ export function createBackgroundRuntimeServices({
         providers.register(createConfigCapabilityProvider(configControlPlane));
 
         const runnerHost = createBridgeRunnerHost({ invokeRunner });
+        let kernelRef = null;
+        const executeRunnerStep = async ({ step }) => {
+          try {
+            const invocation = await runnerHost.invoke({
+              module: step.module,
+              input: step.input,
+              ctx: step.ctx ?? {},
+              ...(typeof step.timeoutMs === "number" ? { timeoutMs: step.timeoutMs } : {}),
+            });
+            return {
+              ok: true,
+              data: invocation.result,
+            };
+          } catch (error) {
+            return toKernelStepFailure(error);
+          }
+        };
+        const executeSiteStep = async ({ sessionId, step }) => {
+          if (!kernelRef) {
+            return toKernelStepFailure(
+              new CapabilityError("E_RUNTIME", "Kernel site executor is not ready"),
+            );
+          }
+          if (!isPlainObject(step.input)) {
+            return toKernelStepFailure(
+              new CapabilityError("E_BAD_INPUT", "Kernel site step requires structured input"),
+            );
+          }
+
+          const payload = step.input;
+          if (
+            !payload.plan ||
+            !Array.isArray(payload.plan.steps) ||
+            !payload.module ||
+            typeof payload.module.id !== "string" ||
+            typeof payload.module.source !== "string"
+          ) {
+            return toKernelStepFailure(
+              new CapabilityError("E_BAD_INPUT", "Kernel site step requires plan and module"),
+            );
+          }
+
+          try {
+            const result = await invokeSingleActionSiteSkill({
+              request: {
+                skillId: step.skillId,
+                action: step.action,
+                tab: step.tab,
+                input: payload.input ?? {},
+                ctx: isPlainObject(payload.ctx) ? payload.ctx : {},
+                plan: payload.plan,
+                module: payload.module,
+                ...(typeof payload.verifier === "string" ? { verifier: payload.verifier } : {}),
+                ...(isPlainObject(payload.intervention)
+                  ? { intervention: payload.intervention }
+                  : {}),
+                executeRunner: async (request) => {
+                  const runnerExecuted = await kernelRef.executeStep(sessionId, {
+                    kind: "runner",
+                    capabilityId: step.capabilityId
+                      ? `${step.capabilityId}.runner`
+                      : `site.runner.${step.skillId}.${step.action}`,
+                    module: request.module,
+                    input: request.input,
+                    ctx: request.ctx,
+                  });
+                  return unwrapKernelStepResult(
+                    runnerExecuted,
+                    `Kernel runner step failed for ${step.skillId}.${step.action}`,
+                  );
+                },
+              },
+              runnerHost,
+              ...(pageHookBridge
+                ? {
+                    installer: createSiteRuntimeInstaller(pageHookBridge),
+                  }
+                : {}),
+            });
+
+            return {
+              ok: true,
+              data: result,
+              verified: result.verified,
+            };
+          } catch (error) {
+            return toKernelStepFailure(error);
+          }
+        };
         const kernel = createKernel({
           storage,
           llm: llmAdapter ?? {
@@ -227,8 +366,10 @@ export function createBackgroundRuntimeServices({
           },
           registry,
           providers,
-          runnerHost,
+          executeRunnerStep,
+          executeSiteStep,
         });
+        kernelRef = kernel;
 
         return {
           configControlPlane,
@@ -370,29 +511,30 @@ export function createBackgroundRuntimeServices({
       throw new CapabilityError("E_RUNTIME", "Page hook bridge is not configured");
     }
 
-    const [{ kernel, runnerHost }, session] = await Promise.all([
-      ensureServices(),
-      ensureSession(),
-    ]);
-    const result = await invokeSingleActionSiteSkill({
-      request: {
+    const [{ kernel }, session] = await Promise.all([ensureServices(), ensureSession()]);
+    const resolvedTab = await resolveRuntimeInvokeTab(chromeApi, tab, "Site runtime invoke");
+    activateKernelRun(kernel, session.id);
+    let executed;
+    try {
+      executed = await kernel.executeStep(session.id, {
+        kind: "site",
+        capabilityId: "site.runtime.invoke",
         skillId,
         action,
-        tab: await resolveRuntimeInvokeTab(chromeApi, tab, "Site runtime invoke"),
-        input,
-        ctx,
-        plan,
-        module,
-        ...(verifier ? { verifier } : {}),
-        ...(intervention ? { intervention } : {}),
-      },
-      runnerHost,
-      ...(pageHookBridge
-        ? {
-            installer: createSiteRuntimeInstaller(pageHookBridge),
-          }
-        : {}),
-    });
+        tab: resolvedTab,
+        input: {
+          input,
+          ctx,
+          plan,
+          module,
+          ...(verifier ? { verifier } : {}),
+          ...(intervention ? { intervention } : {}),
+        },
+      });
+    } finally {
+      settleKernelRun(kernel, session.id);
+    }
+    const result = unwrapKernelStepResult(executed, `Site runtime invoke failed for ${skillId}`);
 
     if (!result.intervention) {
       return result;
@@ -413,24 +555,34 @@ export function createBackgroundRuntimeServices({
       throw new CapabilityError("E_RUNTIME", "Page hook bridge is not configured");
     }
 
-    const [{ kernel, runnerHost }, session] = await Promise.all([
-      ensureServices(),
-      ensureSession(),
-    ]);
+    const [{ kernel }, session] = await Promise.all([ensureServices(), ensureSession()]);
     const request = buildPageActionRequest({
       action,
       input,
       tab: toCanonicalTab(await requireActiveTab(chromeApi, `page.${action}`)),
       scriptPath: pageHookScriptPath,
     });
-    const result = await invokeSingleActionSiteSkill({
-      request: {
-        ...request,
-        ctx,
-      },
-      runnerHost,
-      installer: createSiteRuntimeInstaller(pageHookBridge),
-    });
+    activateKernelRun(kernel, session.id);
+    let executed;
+    try {
+      executed = await kernel.executeStep(session.id, {
+        kind: "site",
+        capabilityId: `page.${action}`,
+        skillId: request.skillId,
+        action: request.action,
+        tab: request.tab,
+        input: {
+          input: request.input,
+          ctx,
+          plan: request.plan,
+          module: request.module,
+          ...(request.verifier ? { verifier: request.verifier } : {}),
+        },
+      });
+    } finally {
+      settleKernelRun(kernel, session.id);
+    }
+    const result = unwrapKernelStepResult(executed, `Page action failed for page.${action}`);
 
     if (!result.intervention) {
       return result;

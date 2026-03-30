@@ -1,4 +1,4 @@
-import { JsRunnerHost, createRunnerHostCore, type RunnerRpcRequest } from "@bbl-next/js-runner";
+import { JsRunnerHost, type RunnerRpcRequest, createRunnerHostCore } from "@bbl-next/js-runner";
 import { describe, expect, it, vi } from "vitest";
 
 describe("js-runner", () => {
@@ -9,13 +9,13 @@ describe("js-runner", () => {
       host.invoke({
         module: {
           id: "demo",
-          source: 'exports.default = async ({ ctx, input }) => `${ctx.prefix}:${input}`;'
+          source: "exports.default = async ({ ctx, input }) => `${ctx.prefix}:${input}`;",
         },
         ctx: { prefix: "ok" },
-        input: "run"
-      })
+        input: "run",
+      }),
     ).resolves.toMatchObject({
-      result: "ok:run"
+      result: "ok:run",
     });
   });
 
@@ -29,19 +29,19 @@ describe("js-runner", () => {
         invocation: {
           module: {
             id: "demo",
-            source: 'exports.default = async ({ ctx, input }) => `${ctx.prefix}:${input}`;'
+            source: "exports.default = async ({ ctx, input }) => `${ctx.prefix}:${input}`;",
           },
           ctx: { prefix: "rpc" },
-          input: "call"
-        }
-      })
+          input: "call",
+        },
+      }),
     ).resolves.toMatchObject({
       kind: "invoke_result",
       requestId: "req-1",
       ok: true,
       result: {
-        result: "rpc:call"
-      }
+        result: "rpc:call",
+      },
     });
   });
 
@@ -49,7 +49,7 @@ describe("js-runner", () => {
     const host = new JsRunnerHost();
     const module = {
       id: "counter",
-      source: "let counter = 0; exports.default = async () => ++counter;"
+      source: "let counter = 0; exports.default = async () => ++counter;",
     };
 
     const first = await host.invoke({ module, ctx: {}, input: null });
@@ -66,15 +66,14 @@ describe("js-runner", () => {
       host.invoke({
         module: {
           id: "slow",
-          source:
-            "exports.default = async () => new Promise(() => {});"
+          source: "exports.default = async () => new Promise(() => {});",
         },
         ctx: {},
         input: null,
-        timeoutMs: 5
-      })
+        timeoutMs: 5,
+      }),
     ).rejects.toMatchObject({
-      code: "E_TIMEOUT"
+      code: "E_TIMEOUT",
     });
   });
 
@@ -84,16 +83,16 @@ describe("js-runner", () => {
     await expect(
       host.dispatch({
         kind: "health",
-        requestId: "health-1"
-      })
+        requestId: "health-1",
+      }),
     ).resolves.toMatchObject({
       kind: "health_result",
       ok: true,
       health: {
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }
+        consecutiveFailures: 0,
+      },
     });
   });
 
@@ -105,18 +104,17 @@ describe("js-runner", () => {
       invocation: {
         module: {
           id: "slow",
-          source:
-            "exports.default = async () => new Promise(() => {});"
+          source: "exports.default = async () => new Promise(() => {});",
         },
         ctx: {},
         input: null,
-        timeoutMs: 50
-      }
+        timeoutMs: 50,
+      },
     });
 
     expect(host.getHealth()).toMatchObject({
       status: "busy",
-      inflightCount: 1
+      inflightCount: 1,
     });
 
     await inflight;
@@ -132,14 +130,13 @@ describe("js-runner", () => {
         invocation: {
           module: {
             id: "slow",
-            source:
-              "exports.default = async () => new Promise(() => {});"
+            source: "exports.default = async () => new Promise(() => {});",
           },
           ctx: {},
           input: null,
-          timeoutMs: 5
-        }
-      })
+          timeoutMs: 5,
+        },
+      }),
     ).resolves.toMatchObject({
       kind: "invoke_result",
       requestId: "req-timeout",
@@ -147,9 +144,9 @@ describe("js-runner", () => {
       error: {
         code: "E_TIMEOUT",
         details: {
-          reason: "deadline_exceeded"
-        }
-      }
+          reason: "deadline_exceeded",
+        },
+      },
     });
   });
 
@@ -161,13 +158,12 @@ describe("js-runner", () => {
       invocation: {
         module: {
           id: "slow",
-          source:
-            "exports.default = async () => new Promise(() => {});"
+          source: "exports.default = async () => new Promise(() => {});",
         },
         ctx: {},
         input: null,
-        timeoutMs: 100
-      }
+        timeoutMs: 100,
+      },
     });
 
     await expect(host.cancel("req-cancel")).resolves.toEqual({ cancelled: true });
@@ -178,9 +174,9 @@ describe("js-runner", () => {
       error: {
         code: "E_TIMEOUT",
         details: {
-          reason: "cancelled"
-        }
-      }
+          reason: "cancelled",
+        },
+      },
     });
   });
 
@@ -191,14 +187,14 @@ describe("js-runner", () => {
       host.dispatch({
         kind: "cancel",
         requestId: "cancel-unknown",
-        targetRequestId: "missing"
-      })
+        targetRequestId: "missing",
+      }),
     ).resolves.toEqual({
       kind: "cancel_result",
       requestId: "cancel-unknown",
       ok: true,
       targetRequestId: "missing",
-      cancelled: false
+      cancelled: false,
     });
   });
 
@@ -207,25 +203,25 @@ describe("js-runner", () => {
       read: vi.fn(async (request) => ({
         hostId: request.hostId,
         path: request.path,
-        content: "hello"
+        content: "hello",
       })),
       write: vi.fn(async (request) => ({
         hostId: request.hostId,
         path: request.path,
-        content: request.content
+        content: request.content,
       })),
       edit: vi.fn(async (request) => ({
         hostId: request.hostId,
         path: request.path,
-        content: `patched:${request.patch}`
+        content: `patched:${request.patch}`,
       })),
       exec: vi.fn(async (request) => ({
         hostId: request.hostId,
         command: request.command,
         exitCode: 0,
         stdout: `ran:${request.command}`,
-        stderr: ""
-      }))
+        stderr: "",
+      })),
     };
     const core = createRunnerHostCore({ hostAdapter });
 
@@ -234,12 +230,12 @@ describe("js-runner", () => {
         kind: "read",
         requestId: "read-1",
         hostId: "local",
-        path: "/workspace/demo.txt"
-      })
+        path: "/workspace/demo.txt",
+      }),
     ).resolves.toEqual({
       hostId: "local",
       path: "/workspace/demo.txt",
-      content: "hello"
+      content: "hello",
     });
 
     await expect(
@@ -248,12 +244,12 @@ describe("js-runner", () => {
         requestId: "write-1",
         hostId: "local",
         path: "/workspace/demo.txt",
-        content: "hello"
-      })
+        content: "hello",
+      }),
     ).resolves.toEqual({
       hostId: "local",
       path: "/workspace/demo.txt",
-      content: "hello"
+      content: "hello",
     });
 
     await expect(
@@ -262,12 +258,12 @@ describe("js-runner", () => {
         requestId: "edit-1",
         hostId: "local",
         path: "/workspace/demo.txt",
-        patch: "\nworld"
-      })
+        patch: "\nworld",
+      }),
     ).resolves.toEqual({
       hostId: "local",
       path: "/workspace/demo.txt",
-      content: "patched:\nworld"
+      content: "patched:\nworld",
     });
 
     await expect(
@@ -276,42 +272,42 @@ describe("js-runner", () => {
         requestId: "exec-1",
         hostId: "local",
         command: "pwd",
-        timeoutMs: 25
-      })
+        timeoutMs: 25,
+      }),
     ).resolves.toEqual({
       hostId: "local",
       command: "pwd",
       exitCode: 0,
       stdout: "ran:pwd",
-      stderr: ""
+      stderr: "",
     });
 
     expect(hostAdapter.read).toHaveBeenCalledWith({
       kind: "read",
       requestId: "read-1",
       hostId: "local",
-      path: "/workspace/demo.txt"
+      path: "/workspace/demo.txt",
     });
     expect(hostAdapter.write).toHaveBeenCalledWith({
       kind: "write",
       requestId: "write-1",
       hostId: "local",
       path: "/workspace/demo.txt",
-      content: "hello"
+      content: "hello",
     });
     expect(hostAdapter.edit).toHaveBeenCalledWith({
       kind: "edit",
       requestId: "edit-1",
       hostId: "local",
       path: "/workspace/demo.txt",
-      patch: "\nworld"
+      patch: "\nworld",
     });
     expect(hostAdapter.exec).toHaveBeenCalledWith({
       kind: "exec",
       requestId: "exec-1",
       hostId: "local",
       command: "pwd",
-      timeoutMs: 25
+      timeoutMs: 25,
     });
   });
 
@@ -322,8 +318,8 @@ describe("js-runner", () => {
         command: request.command,
         exitCode: 0,
         stdout: `ran:${request.command}`,
-        stderr: ""
-      }))
+        stderr: "",
+      })),
     };
     const host = new JsRunnerHost({ hostAdapter });
 
@@ -333,14 +329,14 @@ describe("js-runner", () => {
         requestId: "exec-public",
         hostId: "local",
         command: "pwd",
-        timeoutMs: 25
-      })
+        timeoutMs: 25,
+      }),
     ).resolves.toEqual({
       hostId: "local",
       command: "pwd",
       exitCode: 0,
       stdout: "ran:pwd",
-      stderr: ""
+      stderr: "",
     });
 
     expect(hostAdapter.exec).toHaveBeenCalledWith({
@@ -348,7 +344,7 @@ describe("js-runner", () => {
       requestId: "exec-public",
       hostId: "local",
       command: "pwd",
-      timeoutMs: 25
+      timeoutMs: 25,
     });
   });
 
@@ -359,29 +355,29 @@ describe("js-runner", () => {
         kind: "read",
         requestId: "read-missing",
         hostId: "local",
-        path: "/workspace/demo.txt"
+        path: "/workspace/demo.txt",
       },
       {
         kind: "write",
         requestId: "write-missing",
         hostId: "local",
         path: "/workspace/demo.txt",
-        content: "hello"
+        content: "hello",
       },
       {
         kind: "edit",
         requestId: "edit-missing",
         hostId: "local",
         path: "/workspace/demo.txt",
-        patch: "\nworld"
+        patch: "\nworld",
       },
       {
         kind: "exec",
         requestId: "exec-missing",
         hostId: "local",
         command: "pwd",
-        timeoutMs: 25
-      }
+        timeoutMs: 25,
+      },
     ];
 
     for (const request of requests) {
@@ -393,9 +389,9 @@ describe("js-runner", () => {
           details: {
             kind: request.kind,
             hostId: "local",
-            reason: "adapter_missing"
-          }
-        }
+            reason: "adapter_missing",
+          },
+        },
       });
     }
   });
@@ -409,8 +405,8 @@ describe("js-runner", () => {
         requestId: "exec-missing-public",
         hostId: "local",
         command: "pwd",
-        timeoutMs: 25
-      })
+        timeoutMs: 25,
+      }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
@@ -419,9 +415,9 @@ describe("js-runner", () => {
         details: {
           kind: "exec",
           hostId: "local",
-          reason: "adapter_missing"
-        }
-      }
+          reason: "adapter_missing",
+        },
+      },
     });
   });
 
@@ -430,8 +426,8 @@ describe("js-runner", () => {
       read: vi.fn(async (request) => ({
         hostId: request.hostId,
         path: request.path,
-        content: "data"
-      }))
+        content: "data",
+      })),
     };
     const host = new JsRunnerHost({ hostAdapter });
 
@@ -440,12 +436,12 @@ describe("js-runner", () => {
         kind: "read",
         requestId: "read-partial",
         hostId: "local",
-        path: "/demo.txt"
-      })
+        path: "/demo.txt",
+      }),
     ).resolves.toMatchObject({
       hostId: "local",
       path: "/demo.txt",
-      content: "data"
+      content: "data",
     });
 
     await expect(
@@ -453,8 +449,8 @@ describe("js-runner", () => {
         kind: "exec",
         requestId: "exec-partial",
         hostId: "local",
-        command: "pwd"
-      })
+        command: "pwd",
+      }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
@@ -463,9 +459,9 @@ describe("js-runner", () => {
         details: {
           kind: "exec",
           hostId: "local",
-          reason: "operation_not_supported"
-        }
-      }
+          reason: "operation_not_supported",
+        },
+      },
     });
   });
 
@@ -479,45 +475,45 @@ describe("js-runner", () => {
         invocation: {
           module: {
             id: "boom",
-            source: "exports.default = async () => { throw new Error('boom'); };"
+            source: "exports.default = async () => { throw new Error('boom'); };",
           },
           ctx: {},
-          input: null
-        }
-      })
+          input: null,
+        },
+      }),
     ).resolves.toMatchObject({
       kind: "invoke_result",
       requestId: "req-fail",
       ok: false,
       error: {
         code: "E_RUNTIME",
-        message: "boom"
-      }
+        message: "boom",
+      },
     });
 
     expect(host.getHealth()).toMatchObject({
       status: "degraded",
       inflightCount: 0,
-      consecutiveFailures: 1
+      consecutiveFailures: 1,
     });
 
     await expect(
       host.invoke({
         module: {
           id: "ok",
-          source: "exports.default = async () => 'ok';"
+          source: "exports.default = async () => 'ok';",
         },
         ctx: {},
-        input: null
-      })
+        input: null,
+      }),
     ).resolves.toMatchObject({
-      result: "ok"
+      result: "ok",
     });
 
     expect(host.getHealth()).toMatchObject({
       status: "idle",
       inflightCount: 0,
-      consecutiveFailures: 0
+      consecutiveFailures: 0,
     });
   });
 });

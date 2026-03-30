@@ -159,6 +159,87 @@ describe("KernelFacade (createKernel)", () => {
       expect(wiredKernel.getStepCount(s.id)).toBe(1);
     });
 
+    it("dispatches runner steps through an explicit kernel-owned runner executor", async () => {
+      const wiredKernel = createKernel({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        executeRunnerStep: async ({ step, turn }) => ({
+          ok: true,
+          data: {
+            turnId: turn.turnId,
+            moduleId: step.module.id,
+            echoed: step.input,
+          },
+        }),
+      });
+      const s = await wiredKernel.createSession();
+
+      const executed = await wiredKernel.executeStep(s.id, {
+        kind: "runner",
+        capabilityId: "runtime.runner.echo",
+        module: {
+          id: "fixture.runner",
+          source: "exports.default = async () => ({ ok: true });",
+        },
+        input: { value: "hello" },
+      });
+
+      expect(executed.result).toEqual({
+        ok: true,
+        data: {
+          turnId: executed.turn.turnId,
+          moduleId: "fixture.runner",
+          echoed: { value: "hello" },
+        },
+      });
+      expect(executed.turn.status).toBe("succeeded");
+      expect(executed.turn.capabilityId).toBe("runtime.runner.echo");
+      expect(wiredKernel.getStepCount(s.id)).toBe(1);
+    });
+
+    it("dispatches site steps through an explicit kernel-owned site executor", async () => {
+      const wiredKernel = createKernel({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        executeSiteStep: async ({ step }) => ({
+          ok: true,
+          verified: true,
+          data: {
+            skillId: step.skillId,
+            action: step.action,
+            tabId: step.tab.tabId,
+          },
+        }),
+      });
+      const s = await wiredKernel.createSession();
+
+      const executed = await wiredKernel.executeStep(s.id, {
+        kind: "site",
+        capabilityId: "site.runtime.invoke",
+        skillId: "fixture.site",
+        action: "run_fixture",
+        tab: {
+          tabId: 7,
+          url: "https://fixture.test/demo",
+          active: true,
+        },
+      });
+
+      expect(executed.result).toEqual({
+        ok: true,
+        verified: true,
+        data: {
+          skillId: "fixture.site",
+          action: "run_fixture",
+          tabId: 7,
+        },
+      });
+      expect(executed.turn.status).toBe("succeeded");
+      expect(executed.turn.verified).toBe(true);
+      expect(executed.turn.capabilityId).toBe("site.runtime.invoke");
+      expect(wiredKernel.getStepCount(s.id)).toBe(1);
+    });
+
     it("records a failed turn when kernel is not wired with registry/providers", async () => {
       const s = await kernel.createSession();
 
