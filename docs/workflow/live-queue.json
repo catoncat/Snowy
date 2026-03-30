@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-30T14:51:54.020Z",
+  "generated_at": "2026-03-30T15:12:12.057Z",
   "repo_root": "/Users/envvar/work/repos/browser-brain-loop-next",
   "entries": [
     {
@@ -25,6 +25,51 @@
         "apps/mv3-shell/src/runtime-services.js",
         "apps/mv3-shell/test/manifest.spec.ts",
         "docs/"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-077",
+      "issue_path": "docs/backlog/2026-03-30-executable-skill-setup-hooks-still-have-no-vnext-slice.md",
+      "title": "Review: executable skill setup hooks still have no vNext slice",
+      "parallel_group": "sdk-docs",
+      "module_id": "skill-runtime-sdk-studio",
+      "module_stage": "deferred",
+      "tracking_kind": "gap",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "packages/skill-sdk/src/index.ts",
+        "packages/skill-sdk/test/skill-sdk.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-076",
+      "issue_path": "docs/backlog/2026-03-30-follow-up-repo-wide-biome-baseline-drift-is-blocking-bun-run-check-again.md",
+      "title": "Follow-up: repo-wide Biome baseline drift is blocking bun run check again",
+      "parallel_group": "sdk-docs",
+      "module_id": "repo-workflow-dx",
+      "module_stage": "deferred",
+      "tracking_kind": "follow-up",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "package.json",
+        "biome.json",
+        "tsconfig.json",
+        "vitest.config.ts",
+        "packages/browser-vfs/package.json",
+        "packages/contracts/package.json",
+        "packages/core/package.json",
+        "packages/js-runner/package.json",
+        "packages/site-runtime/package.json",
+        "packages/skill-sdk/package.json",
+        "apps/mv3-shell/manifest.json",
+        ".agents/skills/auto-claim-issues-next/scripts/claim-issue.test.ts",
+        ".agents/skills/auto-claim-issues-next/scripts/module-ledger.ts",
+        ".agents/skills/next-batch-planner/scripts/create-review-issue.ts",
+        ".agents/skills/next-batch-planner/scripts/create-review-issue.test.ts",
+        ".codex/hooks/workflow-ticket.test.ts",
+        ".vscode/mcp.json"
       ]
     }
   ]
