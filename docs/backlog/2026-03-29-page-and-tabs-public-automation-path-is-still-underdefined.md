@@ -1,7 +1,7 @@
 ---
 id: ISSUE-037
 title: "Review: page and tabs public automation path is still underdefined"
-status: in-progress
+status: done
 priority: p1
 source: "browser automation follow-up planning 2026-03-29"
 created: 2026-03-29
@@ -46,3 +46,26 @@ check_cmd: "bun run check"
 - 明确这些能力与 site runtime / verifier / active-tab 边界的关系。
 - 若结论需要新增或收紧 public capability contract，必须落为明确的 follow-up implementation slice。
 - 不把截图/下载/人工接管混进本 issue 范围。
+
+## 工作总结
+
+### 完成内容
+
+1. **创建 `docs/page-tabs-public-automation-path.md`**
+   - 旧仓 page/tabs 工具全面映射（element actions、tab-level actions、snapshot、tab management、screenshot）
+   - 最小 cutover 前集合锁定：
+     - `page.query` / `page.click` / `page.fill`（已声明）
+     - `page.press_key` / `page.screenshot`（待新增，完整 descriptor 设计已定义）
+     - `tabs.get_active`（已声明）/ `tabs.navigate`（待新增，完整 descriptor 设计已定义）
+   - 明确 Tier 2 排除项：scroll, hover, select_option, tabs.list/create/close
+   - 明确与 site-runtime invoke pipe 的双轨关系（capability path vs site skill path）
+   - UID-based selector strategy 设计决策记录
+   - 三阶段实现路径：descriptor 补全 → MV3 shell 执行层 → capability bridge
+
+2. **更新 migration-matrix**
+   - tab/page interaction tools 备注更新：最小 public automation path 已锁定，实现落 ISSUE-057/058
+
+3. **Follow-up 确认**
+   - ISSUE-057 (Tier 1 page descriptors + runtime path) 和 ISSUE-058 (tabs.navigate) 已覆盖全部实现需求
+   - ISSUE-040 (screenshot/download) 侧重 surface 边界审查，与本 review 互补
+   - 无需新建额外 issue
