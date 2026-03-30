@@ -2,47 +2,47 @@ import {
   AI_SURFACE_BOUNDARY,
   AI_SURFACE_PRIMITIVES,
   BOOTSTRAP_RESOURCE_KEYS,
+  COMPACTION_REASONS,
   CONFIG_CONTROL_PLANE_ACTIONS,
+  type CapabilityDescriptor,
+  type CapabilityTraceEntry,
+  type CompactionDraft,
+  type CompactionPayload,
+  DEFAULT_SKILL_VERSION_RETENTION,
   HOST_CONTROL_PLANE_ACTIONS,
-  RUNTIME_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
-  assertCapabilityDescriptor,
+  type KernelLlmAdapter,
+  LOOP_TERMINAL_STATUSES,
+  LOOP_TURN_STATUSES,
+  type LoopTurn,
+  type MessagePayload,
+  NO_PROGRESS_REASONS,
+  PUBLIC_CAPABILITY_NAMESPACES,
+  RUNTIME_CONTROL_PLANE_ACTIONS,
+  RUN_PHASES,
+  RUN_PHASE_TRANSITIONS,
+  type RunState,
+  SESSION_ENTRY_TYPES,
+  type SessionContext,
+  type SessionContextMessage,
+  type SessionEntry,
+  type SessionHeader,
+  type SessionStorage,
   allowedActorsForSkillTransition,
+  assertCapabilityDescriptor,
   canActorGrantSkillTrusted,
   canActorTransitionSkillState,
-  canTransitionSkillState,
   canTransitionRunPhase,
+  canTransitionSkillState,
   capabilityNamespace,
   createSkillLifecycleVersionSurface,
   descriptorToToolContract,
-  DEFAULT_SKILL_VERSION_RETENTION,
   grantSkillTrusted,
   isPublicCapabilityNamespace,
-  PUBLIC_CAPABILITY_NAMESPACES,
-  RUN_PHASES,
-  RUN_PHASE_TRANSITIONS,
-  SESSION_ENTRY_TYPES,
-  LOOP_TERMINAL_STATUSES,
-  LOOP_TURN_STATUSES,
-  NO_PROGRESS_REASONS,
-  COMPACTION_REASONS,
   selectLatestTrustedSkillVersion,
   skillVersionRootUri,
   skillVersionUri,
   transitionSkillState,
-  type CapabilityTraceEntry,
-  type CapabilityDescriptor,
-  type SessionHeader,
-  type SessionEntry,
-  type MessagePayload,
-  type CompactionPayload,
-  type RunState,
-  type LoopTurn,
-  type CompactionDraft,
-  type SessionContext,
-  type SessionContextMessage,
-  type KernelLlmAdapter,
-  type SessionStorage
 } from "@bbl-next/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -61,9 +61,9 @@ function buildDescriptor(overrides: Partial<CapabilityDescriptor> = {}): Capabil
     exportable: false,
     executionBinding: {
       family: "page",
-      operation: "click"
+      operation: "click",
     },
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -75,9 +75,9 @@ describe("contracts", () => {
   });
 
   it("rejects invalid capability ids", () => {
-    expect(() =>
-      assertCapabilityDescriptor(buildDescriptor({ id: "page-click" }))
-    ).toThrow("Invalid capability id");
+    expect(() => assertCapabilityDescriptor(buildDescriptor({ id: "page-click" }))).toThrow(
+      "Invalid capability id",
+    );
   });
 
   it("projects a tool contract from a descriptor", () => {
@@ -90,8 +90,8 @@ describe("contracts", () => {
         risk: "medium",
         sideEffects: "writes",
         supportsVerify: true,
-        supportsStreaming: false
-      }
+        supportsStreaming: false,
+      },
     });
   });
 
@@ -102,14 +102,14 @@ describe("contracts", () => {
       actions: {
         primitive: "action",
         descriptorModel: "CapabilityDescriptor",
-        toolProjection: "ToolContract"
+        toolProjection: "ToolContract",
       },
       bootstrapResources: ["runtime", "config", "skills", "hosts"],
       workflows: {
         primitive: "workflow",
         packaging: "skill-package",
-        invocation: "skills.invoke"
-      }
+        invocation: "skills.invoke",
+      },
     });
   });
 
@@ -120,14 +120,12 @@ describe("contracts", () => {
       "hosts.connect",
       "hosts.disconnect",
       "hosts.set_default",
-      "hosts.health"
+      "hosts.health",
     ]);
   });
 
   it("locks the minimal config control plane action set", () => {
-    expect(CONFIG_CONTROL_PLANE_ACTIONS).toEqual([
-      "config.update"
-    ]);
+    expect(CONFIG_CONTROL_PLANE_ACTIONS).toEqual(["config.update"]);
   });
 
   it("locks the minimal runtime control plane action set", () => {
@@ -135,26 +133,22 @@ describe("contracts", () => {
       "runtime.list_capabilities",
       "runtime.get_capability",
       "runtime.capture_diagnostics",
-      "runtime.clear_error"
+      "runtime.clear_error",
     ]);
   });
 
   it("locks the minimal execution host substrate action set", () => {
-    expect(HOST_SUBSTRATE_ACTIONS).toEqual([
-      "host.read",
-      "host.write",
-      "host.edit",
-      "host.exec"
-    ]);
+    expect(HOST_SUBSTRATE_ACTIONS).toEqual(["host.read", "host.write", "host.edit", "host.exec"]);
   });
 
   it("enforces the lifecycle state machine", () => {
     expect(canTransitionSkillState("draft", "staged")).toBe(true);
     expect(canTransitionSkillState("draft", "enabled")).toBe(false);
 
-    expect(
-      transitionSkillState({ status: "installed", trusted: false }, "enabled")
-    ).toEqual({ status: "enabled", trusted: false });
+    expect(transitionSkillState({ status: "installed", trusted: false }, "enabled")).toEqual({
+      status: "enabled",
+      trusted: false,
+    });
   });
 
   it("allows all legal skill status transitions", () => {
@@ -178,14 +172,24 @@ describe("contracts", () => {
 
   it("blocks all illegal skill status transitions", () => {
     const allStatuses: string[] = [
-      "draft", "staged", "installed", "enabled", "disabled", "archived"
+      "draft",
+      "staged",
+      "installed",
+      "enabled",
+      "disabled",
+      "archived",
     ];
     const legalSet = new Set([
-      "draft->staged", "draft->archived",
-      "staged->installed", "staged->archived",
-      "installed->enabled", "installed->archived",
-      "enabled->disabled", "enabled->archived",
-      "disabled->enabled", "disabled->archived",
+      "draft->staged",
+      "draft->archived",
+      "staged->installed",
+      "staged->archived",
+      "installed->enabled",
+      "installed->archived",
+      "enabled->disabled",
+      "enabled->archived",
+      "disabled->enabled",
+      "disabled->archived",
     ]);
     const illegalTransitions: [string, string][] = [];
     for (const from of allStatuses) {
@@ -213,37 +217,33 @@ describe("contracts", () => {
     ];
     for (const [from, to] of illegals) {
       expect(() =>
-        transitionSkillState({ status: from as any, trusted: false }, to as any)
+        transitionSkillState({ status: from as any, trusted: false }, to as any),
       ).toThrow(`Illegal skill transition: ${from} -> ${to}`);
     }
   });
 
   it("resets trusted flag on transitions away from enabled", () => {
-    const result = transitionSkillState(
-      { status: "enabled", trusted: true },
-      "disabled"
-    );
+    const result = transitionSkillState({ status: "enabled", trusted: true }, "disabled");
     expect(result).toEqual({ status: "disabled", trusted: false });
 
-    const archived = transitionSkillState(
-      { status: "enabled", trusted: true },
-      "archived"
-    );
+    const archived = transitionSkillState({ status: "enabled", trusted: true }, "archived");
     expect(archived).toEqual({ status: "archived", trusted: false });
   });
 
   it("preserves trusted flag when transitioning to enabled", () => {
     // disabled→enabled preserves the existing trusted value
-    const result = transitionSkillState(
-      { status: "disabled", trusted: false },
-      "enabled"
-    );
+    const result = transitionSkillState({ status: "disabled", trusted: false }, "enabled");
     expect(result).toEqual({ status: "enabled", trusted: false });
   });
 
   it("archived is a terminal state with no outgoing transitions", () => {
     const allStatuses: string[] = [
-      "draft", "staged", "installed", "enabled", "disabled", "archived"
+      "draft",
+      "staged",
+      "installed",
+      "enabled",
+      "disabled",
+      "archived",
     ];
     for (const to of allStatuses) {
       if (to === "archived") continue;
@@ -256,32 +256,30 @@ describe("contracts", () => {
 
     expect(trusted).toEqual({ status: "enabled", trusted: true });
     expect(() => grantSkillTrusted({ status: "installed", trusted: false })).toThrow(
-      "Trusted flag can only be granted while enabled"
+      "Trusted flag can only be granted while enabled",
     );
   });
 
   it("rejects descriptors whose inputSchema lacks a type declaration", () => {
-    expect(() =>
-      assertCapabilityDescriptor(buildDescriptor({ inputSchema: {} }))
-    ).toThrow("inputSchema must declare a type");
+    expect(() => assertCapabilityDescriptor(buildDescriptor({ inputSchema: {} }))).toThrow(
+      "inputSchema must declare a type",
+    );
   });
 
   it("rejects descriptors whose outputSchema lacks a type declaration", () => {
-    expect(() =>
-      assertCapabilityDescriptor(buildDescriptor({ outputSchema: {} }))
-    ).toThrow("outputSchema must declare a type");
+    expect(() => assertCapabilityDescriptor(buildDescriptor({ outputSchema: {} }))).toThrow(
+      "outputSchema must declare a type",
+    );
   });
 
   it("accepts schemas using $ref or combinators instead of type", () => {
     expect(() =>
-      assertCapabilityDescriptor(
-        buildDescriptor({ inputSchema: { $ref: "#/definitions/Foo" } })
-      )
+      assertCapabilityDescriptor(buildDescriptor({ inputSchema: { $ref: "#/definitions/Foo" } })),
     ).not.toThrow();
     expect(() =>
       assertCapabilityDescriptor(
-        buildDescriptor({ outputSchema: { oneOf: [{ type: "string" }, { type: "number" }] } })
-      )
+        buildDescriptor({ outputSchema: { oneOf: [{ type: "string" }, { type: "number" }] } }),
+      ),
     ).not.toThrow();
   });
 
@@ -299,7 +297,16 @@ describe("contracts", () => {
 
   it("exports all expected public namespaces", () => {
     expect(PUBLIC_CAPABILITY_NAMESPACES).toEqual([
-      "memfs", "page", "site", "tabs", "runner", "skills", "runtime", "host", "hosts"
+      "config",
+      "memfs",
+      "page",
+      "site",
+      "tabs",
+      "runner",
+      "skills",
+      "runtime",
+      "host",
+      "hosts",
     ]);
   });
 
@@ -313,8 +320,8 @@ describe("contracts", () => {
       status: "started",
       input: {
         skillId: "skill.child",
-        action: "run"
-      }
+        action: "run",
+      },
     };
 
     expect(entry.traceId).toBe("trace-root");
@@ -345,24 +352,24 @@ describe("contracts", () => {
       versionId: "2026-03-29T00:00:00.000Z",
       uri: skillVersionUri("twitter", "2026-03-29T00:00:00.000Z"),
       createdAt: "2026-03-29T00:00:00.000Z",
-      trusted: true
+      trusted: true,
     };
     const untrustedVersion = {
       versionId: "2026-03-29T00:01:00.000Z",
       uri: skillVersionUri("twitter", "2026-03-29T00:01:00.000Z"),
       createdAt: "2026-03-29T00:01:00.000Z",
-      trusted: false
+      trusted: false,
     };
 
     expect(selectLatestTrustedSkillVersion([untrustedVersion, trustedVersion])).toEqual(
-      trustedVersion
+      trustedVersion,
     );
 
     const surface = createSkillLifecycleVersionSurface({
       skillId: "twitter",
       lifecycle: { status: "enabled", trusted: true },
       activeVersion: untrustedVersion,
-      versions: [untrustedVersion, trustedVersion]
+      versions: [untrustedVersion, trustedVersion],
     });
 
     expect(surface).toEqual({
@@ -375,11 +382,8 @@ describe("contracts", () => {
         versionFormat: "iso-timestamp",
         retention: DEFAULT_SKILL_VERSION_RETENTION,
         rollbackTarget: "latest_trusted",
-        rollbackTriggers: [
-          "verifier_failed_with_confirmation",
-          "release_gate_failed"
-        ]
-      }
+        rollbackTriggers: ["verifier_failed_with_confirmation", "release_gate_failed"],
+      },
     });
   });
 
@@ -388,8 +392,12 @@ describe("contracts", () => {
   describe("session model", () => {
     it("exports all session entry types", () => {
       expect(SESSION_ENTRY_TYPES).toEqual([
-        "message", "compaction", "thinking_level_change",
-        "model_change", "label", "session_info"
+        "message",
+        "compaction",
+        "thinking_level_change",
+        "model_change",
+        "label",
+        "session_info",
       ]);
     });
 
@@ -397,7 +405,7 @@ describe("contracts", () => {
       const header: SessionHeader = {
         id: "s-001",
         createdAt: "2026-03-29T00:00:00.000Z",
-        title: "Test session"
+        title: "Test session",
       };
       expect(header.id).toBe("s-001");
       expect(header.parentSessionId).toBeUndefined();
@@ -406,13 +414,13 @@ describe("contracts", () => {
     it("accepts a valid SessionEntry with message payload", () => {
       const payload: MessagePayload = {
         role: "user",
-        text: "Hello"
+        text: "Hello",
       };
       const entry: SessionEntry = {
         entryId: "e-001",
         type: "message",
         timestamp: "2026-03-29T00:00:00.000Z",
-        payload
+        payload,
       };
       expect(entry.type).toBe("message");
       expect((entry.payload as MessagePayload).role).toBe("user");
@@ -424,13 +432,13 @@ describe("contracts", () => {
         summary: "User discussed project setup.",
         firstKeptEntryId: "e-005",
         tokensBefore: 12000,
-        tokensAfter: 3000
+        tokensAfter: 3000,
       };
       const entry: SessionEntry = {
         entryId: "e-010",
         type: "compaction",
         timestamp: "2026-03-29T00:01:00.000Z",
-        payload
+        payload,
       };
       expect(entry.type).toBe("compaction");
       expect((entry.payload as CompactionPayload).reason).toBe("threshold");
@@ -440,12 +448,12 @@ describe("contracts", () => {
       const msg: SessionContextMessage = {
         role: "compactionSummary",
         content: "Previously: user discussed setup.",
-        entryId: "e-010"
+        entryId: "e-010",
       };
       const ctx: SessionContext = {
         sessionId: "s-001",
         entries: [],
-        messages: [msg]
+        messages: [msg],
       };
       expect(ctx.messages[0].role).toBe("compactionSummary");
     });
@@ -476,7 +484,7 @@ describe("contracts", () => {
         sessionId: "s-001",
         phase: "idle",
         retry: { active: false, attempt: 0, maxAttempts: 2 },
-        queue: { steer: [], followUp: [] }
+        queue: { steer: [], followUp: [] },
       };
       expect(state.phase).toBe("idle");
     });
@@ -487,7 +495,7 @@ describe("contracts", () => {
         running: ["paused", "compacting", "stopped"],
         paused: ["running"],
         compacting: ["running", "idle"],
-        stopped: ["idle"]
+        stopped: ["idle"],
       });
     });
   });
@@ -495,14 +503,23 @@ describe("contracts", () => {
   describe("loop turn model", () => {
     it("exports all loop terminal statuses", () => {
       expect(LOOP_TERMINAL_STATUSES).toEqual([
-        "done", "failed_execute", "failed_verify",
-        "progress_uncertain", "max_steps", "stopped", "timeout"
+        "done",
+        "failed_execute",
+        "failed_verify",
+        "progress_uncertain",
+        "max_steps",
+        "stopped",
+        "timeout",
       ]);
     });
 
     it("exports all loop turn statuses", () => {
       expect(LOOP_TURN_STATUSES).toEqual([
-        "pending", "executing", "succeeded", "failed", "skipped"
+        "pending",
+        "executing",
+        "succeeded",
+        "failed",
+        "skipped",
       ]);
     });
 
@@ -517,7 +534,7 @@ describe("contracts", () => {
         stepIndex: 0,
         capabilityId: "page.click",
         status: "executing",
-        startedAt: "2026-03-29T00:00:00.000Z"
+        startedAt: "2026-03-29T00:00:00.000Z",
       };
       expect(turn.status).toBe("executing");
       expect(turn.terminalStatus).toBeUndefined();
@@ -535,7 +552,7 @@ describe("contracts", () => {
         summary: "Context was too long, summarized.",
         firstKeptEntryId: "e-005",
         tokensBefore: 20000,
-        tokensAfter: 4000
+        tokensAfter: 4000,
       };
       expect(draft.reason).toBe("overflow");
       expect(draft.previousSummary).toBeUndefined();
@@ -548,7 +565,7 @@ describe("contracts", () => {
         firstKeptEntryId: "e-010",
         previousSummary: "Previous context summary.",
         tokensBefore: 15000,
-        tokensAfter: 3500
+        tokensAfter: 3500,
       };
       expect(draft.previousSummary).toBe("Previous context summary.");
     });
@@ -557,7 +574,7 @@ describe("contracts", () => {
   describe("kernel adapter interfaces", () => {
     it("accepts a KernelLlmAdapter shape", () => {
       const adapter: KernelLlmAdapter = {
-        complete: async () => "summary"
+        complete: async () => "summary",
       };
       expect(typeof adapter.complete).toBe("function");
     });
@@ -568,7 +585,7 @@ describe("contracts", () => {
         appendEntry: async () => {},
         getEntries: async () => [],
         listSessions: async () => [],
-        deleteSession: async () => {}
+        deleteSession: async () => {},
       };
       expect(typeof storage.createSession).toBe("function");
       expect(typeof storage.appendEntry).toBe("function");

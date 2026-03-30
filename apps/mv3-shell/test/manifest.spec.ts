@@ -1,16 +1,16 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import { describe, expect, it, vi } from "vitest";
 import manifest from "../manifest.json";
 // @ts-ignore source JS module has no declaration file yet
 import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCREEN_REASONS, createBackgroundRunnerBridge, createPageHookBridge } from "../src/background.js";
 // @ts-ignore source JS module has no declaration file yet
 import { createOffscreenRunnerBridge } from "../src/offscreen.js";
-import { describe, expect, it, vi } from "vitest";
 
 type MessageListener = (
   message: unknown,
   sender: unknown,
-  sendResponse: (value: unknown) => void
+  sendResponse: (value: unknown) => void,
 ) => unknown;
 
 function createMessageBus() {
@@ -25,7 +25,7 @@ function createMessageBus() {
       if (index >= 0) {
         listeners.splice(index, 1);
       }
-    }
+    },
   };
 
   async function sendMessage(message: unknown) {
@@ -62,7 +62,7 @@ function createMessageBus() {
 
   return {
     onMessage,
-    sendMessage
+    sendMessage,
   };
 }
 
@@ -71,7 +71,7 @@ function createChromeHarness({
   createHost,
   autoRegisterOffscreen = true,
   hangOffscreen = false,
-  activeTab
+  activeTab,
 }: {
   host?: {
     dispatch: (request: unknown) => Promise<unknown>;
@@ -97,7 +97,7 @@ function createChromeHarness({
   const runtimeApi = {
     ...messageBus,
     onInstalled: {
-      addListener: vi.fn()
+      addListener: vi.fn(),
     },
     getURL(path: string) {
       return `chrome-extension://test/${path}`;
@@ -110,7 +110,7 @@ function createChromeHarness({
       return documentUrls?.includes(offscreenUrl)
         ? [{ contextType: "OFFSCREEN_DOCUMENT", documentUrl: offscreenUrl }]
         : [];
-    }
+    },
   };
 
   if (hangOffscreen) {
@@ -120,16 +120,16 @@ function createChromeHarness({
   }
 
   const tabsApi = {
-    query: vi.fn(async () => (
+    query: vi.fn(async () =>
       activeTab
         ? [
             {
               ...activeTab,
-              active: activeTab.active ?? true
-            }
+              active: activeTab.active ?? true,
+            },
           ]
-        : []
-    ))
+        : [],
+    ),
   };
 
   const offscreenApi = {
@@ -141,11 +141,11 @@ function createChromeHarness({
           hostFactory
             ? {
                 runtimeApi,
-                createHost: () => hostFactory()
+                createHost: () => hostFactory(),
               }
             : {
-                runtimeApi
-              }
+                runtimeApi,
+              },
         ).registerRuntimeListener();
       }
     }),
@@ -153,14 +153,14 @@ function createChromeHarness({
       hasOffscreen = false;
       disposeOffscreen?.();
       disposeOffscreen = null;
-    })
+    }),
   };
 
   return {
     chromeApi: {
       runtime: runtimeApi,
       offscreen: offscreenApi,
-      tabs: tabsApi
+      tabs: tabsApi,
     },
     runtimeApi,
     offscreenApi,
@@ -171,7 +171,7 @@ function createChromeHarness({
     },
     cleanup() {
       disposeOffscreen?.();
-    }
+    },
   };
 }
 
@@ -185,7 +185,7 @@ function createScriptingHarness() {
       return existing;
     }
     const sandbox: Record<string, unknown> = {
-      console
+      console,
     };
     sandbox.globalThis = sandbox;
     worlds.set(key, sandbox);
@@ -195,61 +195,65 @@ function createScriptingHarness() {
   return {
     chromeApi: {
       scripting: {
-        executeScript: vi.fn(async (request: {
-          target: { tabId: number };
-          world?: string;
-          files?: string[];
-          func?: (...args: unknown[]) => unknown;
-          args?: unknown[];
-        }) => {
-          const world = request.world ?? "ISOLATED";
-          const context = getContext(request.target.tabId, world);
+        executeScript: vi.fn(
+          async (request: {
+            target: { tabId: number };
+            world?: string;
+            files?: string[];
+            func?: (...args: unknown[]) => unknown;
+            args?: unknown[];
+          }) => {
+            const world = request.world ?? "ISOLATED";
+            const context = getContext(request.target.tabId, world);
 
-          if (request.files) {
-            for (const file of request.files) {
-              const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
-              runInNewContext(source, context, {
-                filename: file
-              });
+            if (request.files) {
+              for (const file of request.files) {
+                const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+                runInNewContext(source, context, {
+                  filename: file,
+                });
+              }
             }
-          }
 
-          if (request.func) {
-            context.__bblArgs = request.args ?? [];
-            const result = await Promise.resolve(
-              runInNewContext(`(${request.func.toString()})(...globalThis.__bblArgs)`, context, {
-                filename: "executeScript.js"
-              })
-            );
-            delete context.__bblArgs;
-            return [{ result }];
-          }
+            if (request.func) {
+              context.__bblArgs = request.args ?? [];
+              const result = await Promise.resolve(
+                runInNewContext(`(${request.func.toString()})(...globalThis.__bblArgs)`, context, {
+                  filename: "executeScript.js",
+                }),
+              );
+              context.__bblArgs = undefined;
+              return [{ result }];
+            }
 
-          return [];
-        })
-      }
-    }
+            return [];
+          },
+        ),
+      },
+    },
   };
 }
 
-function createIntegratedChromeHarness(options: {
-  host?: {
-    dispatch: (request: unknown) => Promise<unknown>;
-    getHealth: () => unknown;
-  };
-  createHost?: () => {
-    dispatch: (request: unknown) => Promise<unknown>;
-    getHealth: () => unknown;
-  };
-  autoRegisterOffscreen?: boolean;
-  hangOffscreen?: boolean;
-  activeTab?: {
-    id: number;
-    url: string;
-    active?: boolean;
-    title?: string;
-  } | null;
-} = {}) {
+function createIntegratedChromeHarness(
+  options: {
+    host?: {
+      dispatch: (request: unknown) => Promise<unknown>;
+      getHealth: () => unknown;
+    };
+    createHost?: () => {
+      dispatch: (request: unknown) => Promise<unknown>;
+      getHealth: () => unknown;
+    };
+    autoRegisterOffscreen?: boolean;
+    hangOffscreen?: boolean;
+    activeTab?: {
+      id: number;
+      url: string;
+      active?: boolean;
+      title?: string;
+    } | null;
+  } = {},
+) {
   const runtimeHarness = createChromeHarness(options);
   const scriptingHarness = createScriptingHarness();
 
@@ -257,8 +261,8 @@ function createIntegratedChromeHarness(options: {
     ...runtimeHarness,
     chromeApi: {
       ...runtimeHarness.chromeApi,
-      scripting: scriptingHarness.chromeApi.scripting
-    }
+      scripting: scriptingHarness.chromeApi.scripting,
+    },
   };
 }
 
@@ -276,10 +280,10 @@ describe("mv3-shell manifest", () => {
     expect(webAccessibleResources).toEqual([]);
     expect(manifest.background).toMatchObject({
       service_worker: "src/background.js",
-      type: "module"
+      type: "module",
     });
     expect(manifest.side_panel).toMatchObject({
-      default_path: "src/sidepanel.html"
+      default_path: "src/sidepanel.html",
     });
   });
 
@@ -292,7 +296,7 @@ describe("mv3-shell manifest", () => {
   it("keeps the offscreen runner core synced with packages/js-runner", () => {
     const packageCore = readFileSync(
       new URL("../../../packages/js-runner/src/runner-host-core.js", import.meta.url),
-      "utf8"
+      "utf8",
     );
     const appCore = readFileSync(new URL("../src/runner-host-core.js", import.meta.url), "utf8");
 
@@ -310,8 +314,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }
         return {
@@ -320,20 +324,20 @@ describe("mv3-shell manifest", () => {
           ok: true,
           result: {
             result: "ok",
-            durationMs: 1
-          }
+            durationMs: 1,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
 
     await expect(bridge.ensureHost()).resolves.toMatchObject({
@@ -341,19 +345,19 @@ describe("mv3-shell manifest", () => {
       data: {
         ready: true,
         bridge: {
-          hostReady: true
-        }
-      }
+          hostReady: true,
+        },
+      },
     });
     await expect(bridge.ensureHost()).resolves.toMatchObject({
-      ok: true
+      ok: true,
     });
 
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(1);
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledWith({
       url: RUNNER_OFFSCREEN_DOCUMENT_PATH,
       reasons: RUNNER_OFFSCREEN_REASONS,
-      justification: expect.any(String)
+      justification: expect.any(String),
     });
     harness.cleanup();
   });
@@ -368,8 +372,8 @@ describe("mv3-shell manifest", () => {
             ok: true,
             result: {
               result: request.invocation.input,
-              durationMs: 1
-            }
+              durationMs: 1,
+            },
           };
         }
         if (request.kind === "cancel") {
@@ -378,7 +382,7 @@ describe("mv3-shell manifest", () => {
             requestId: request.requestId,
             ok: true,
             targetRequestId: request.targetRequestId,
-            cancelled: true
+            cancelled: true,
           };
         }
         return {
@@ -388,60 +392,60 @@ describe("mv3-shell manifest", () => {
           health: {
             status: "idle",
             inflightCount: 0,
-            consecutiveFailures: 0
-          }
+            consecutiveFailures: 0,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
 
     await expect(
       bridge.invoke({
         module: {
           id: "demo",
-          source: "exports.default = async () => 'ok';"
+          source: "exports.default = async () => 'ok';",
         },
         ctx: {},
-        input: "payload"
-      })
+        input: "payload",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         kind: "invoke_result",
         ok: true,
         result: {
-          result: "payload"
-        }
-      }
+          result: "payload",
+        },
+      },
     });
     await expect(bridge.cancel("req-123")).resolves.toMatchObject({
       ok: true,
       data: {
         kind: "cancel_result",
         cancelled: true,
-        targetRequestId: "req-123"
-      }
+        targetRequestId: "req-123",
+      },
     });
 
     expect(host.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: "invoke"
-      })
+        kind: "invoke",
+      }),
     );
     expect(host.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "cancel",
-        targetRequestId: "req-123"
-      })
+        targetRequestId: "req-123",
+      }),
     );
     harness.cleanup();
   });
@@ -457,8 +461,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }
         return {
@@ -467,28 +471,28 @@ describe("mv3-shell manifest", () => {
           ok: true,
           result: {
             result: "ok",
-            durationMs: 1
-          }
+            durationMs: 1,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
-        kind: "runner.health"
-      })
+        kind: "runner.health",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -496,12 +500,12 @@ describe("mv3-shell manifest", () => {
         ok: true,
         health: {
           status: "idle",
-          inflightCount: 0
+          inflightCount: 0,
         },
         bridge: {
-          hostReady: true
-        }
-      }
+          hostReady: true,
+        },
+      },
     });
 
     dispose();
@@ -519,8 +523,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }
         return {
@@ -529,15 +533,15 @@ describe("mv3-shell manifest", () => {
           ok: true,
           result: {
             result: "ok",
-            durationMs: 1
-          }
+            durationMs: 1,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({ host });
     const pageHookBridge = {
@@ -545,13 +549,13 @@ describe("mv3-shell manifest", () => {
         tabId,
         world,
         installs: 1,
-        invocations: 2
-      }))
+        invocations: 2,
+      })),
     };
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
-      pageHookBridge
+      pageHookBridge,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -562,22 +566,22 @@ describe("mv3-shell manifest", () => {
         target: RUNNER_BACKGROUND_TARGET,
         kind: "runtime.diagnostics",
         tabId: 21,
-        world: "main"
-      })
+        world: "main",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         status: "healthy",
         bridge: {
           hostReady: true,
-          offscreenPresent: true
+          offscreenPresent: true,
         },
         runner: {
           reachable: true,
           health: {
             status: "idle",
-            inflightCount: 0
-          }
+            inflightCount: 0,
+          },
         },
         site: {
           status: "healthy",
@@ -585,15 +589,15 @@ describe("mv3-shell manifest", () => {
           world: "main",
           snapshot: {
             installs: 1,
-            invocations: 2
-          }
-        }
-      }
+            invocations: 2,
+          },
+        },
+      },
     });
 
     expect(pageHookBridge.snapshotState).toHaveBeenCalledWith({
       tabId: 21,
-      world: "main"
+      world: "main",
     });
 
     dispose();
@@ -611,8 +615,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }
         return {
@@ -621,20 +625,20 @@ describe("mv3-shell manifest", () => {
           ok: true,
           result: {
             result: "ok",
-            durationMs: 1
-          }
+            durationMs: 1,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -647,23 +651,23 @@ describe("mv3-shell manifest", () => {
         target: RUNNER_BACKGROUND_TARGET,
         kind: "runtime.capture_diagnostics",
         tabId: 21,
-        world: "main"
-      })
+        world: "main",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         status: "healthy",
         bridge: {
           hostReady: true,
-          offscreenPresent: true
+          offscreenPresent: true,
         },
         runner: {
           reachable: true,
           health: {
-            status: "idle"
-          }
-        }
-      }
+            status: "idle",
+          },
+        },
+      },
     });
 
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(offscreenCreatesBefore);
@@ -683,8 +687,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "degraded",
               inflightCount: 0,
-              consecutiveFailures: 2
-            }
+              consecutiveFailures: 2,
+            },
           };
         }
         return {
@@ -693,26 +697,26 @@ describe("mv3-shell manifest", () => {
           ok: true,
           result: {
             result: "ok",
-            durationMs: 1
-          }
+            durationMs: 1,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "degraded",
         inflightCount: 0,
-        consecutiveFailures: 2
-      }))
+        consecutiveFailures: 2,
+      })),
     };
     const harness = createChromeHarness({ host });
     const pageHookBridge = {
       snapshotState: vi.fn(async () => {
         throw new Error("page hook unavailable");
-      })
+      }),
     };
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
-      pageHookBridge
+      pageHookBridge,
     });
 
     await bridge.ensureHost();
@@ -722,38 +726,38 @@ describe("mv3-shell manifest", () => {
     await expect(
       bridge.diagnostics({
         tabId: 21,
-        world: "main"
-      })
+        world: "main",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         status: "degraded",
         bridge: {
           hostReady: true,
-          offscreenPresent: true
+          offscreenPresent: true,
         },
         runner: {
           reachable: true,
           health: {
             status: "degraded",
-            consecutiveFailures: 2
-          }
+            consecutiveFailures: 2,
+          },
         },
         site: {
           status: "degraded",
           error: {
             code: "E_RUNTIME",
-            message: "page hook unavailable"
-          }
-        }
-      }
+            message: "page hook unavailable",
+          },
+        },
+      },
     });
 
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(
-      offscreenCreatesBeforeDiagnostics
+      offscreenCreatesBeforeDiagnostics,
     );
     expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(
-      offscreenClosesBeforeDiagnostics
+      offscreenClosesBeforeDiagnostics,
     );
     harness.cleanup();
   });
@@ -769,8 +773,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }
         return {
@@ -779,26 +783,26 @@ describe("mv3-shell manifest", () => {
           ok: true,
           result: {
             result: "ok",
-            durationMs: 1
-          }
+            durationMs: 1,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createIntegratedChromeHarness({
-      host
+      host,
     });
     const pageHookBridge = createPageHookBridge({
-      chromeApi: harness.chromeApi
+      chromeApi: harness.chromeApi,
     });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
-      pageHookBridge
+      pageHookBridge,
     });
 
     await bridge.ensureHost();
@@ -806,8 +810,8 @@ describe("mv3-shell manifest", () => {
     await expect(
       bridge.diagnostics({
         tabId: 21,
-        world: "main"
-      })
+        world: "main",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -816,9 +820,9 @@ describe("mv3-shell manifest", () => {
           status: "empty",
           tabId: 21,
           world: "main",
-          snapshot: null
-        }
-      }
+          snapshot: null,
+        },
+      },
     });
 
     harness.cleanup();
@@ -835,8 +839,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }
         return {
@@ -845,23 +849,23 @@ describe("mv3-shell manifest", () => {
           ok: true,
           result: {
             result: "ok",
-            durationMs: 1
-          }
+            durationMs: 1,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({
       host,
       activeTab: {
         id: 21,
         url: "https://x.com/home",
-        title: "Home"
-      }
+        title: "Home",
+      },
     });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
@@ -872,14 +876,14 @@ describe("mv3-shell manifest", () => {
           id: "skill.twitter",
           state: "enabled",
           trusted: true,
-          recentChange: "skill.twitter enabled"
+          recentChange: "skill.twitter enabled",
         },
         {
           id: "skill.notes",
           state: "disabled",
-          trusted: false
-        }
-      ]
+          trusted: false,
+        },
+      ],
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -890,8 +894,8 @@ describe("mv3-shell manifest", () => {
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "runtime.bootstrap",
-        world: "main"
-      })
+        world: "main",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -904,15 +908,15 @@ describe("mv3-shell manifest", () => {
           activeTab: {
             tabId: 21,
             url: "https://x.com/home",
-            world: "main"
+            world: "main",
           },
-          loopState: "idle"
+          loopState: "idle",
         },
         skills: {
           status: "healthy",
           installedCount: 2,
           enabledCount: 1,
-          trustedCount: 1
+          trustedCount: 1,
         },
         hosts: {
           status: "healthy",
@@ -925,22 +929,22 @@ describe("mv3-shell manifest", () => {
               kind: "local",
               connected: true,
               state: "connected",
-              isDefault: false
-            }
-          ]
+              isDefault: false,
+            },
+          ],
         },
         config: {
-          status: "placeholder"
-        }
-      }
+          status: "placeholder",
+        },
+      },
     });
 
     expect(harness.tabsApi.query).toHaveBeenCalledWith({
       active: true,
-      lastFocusedWindow: true
+      lastFocusedWindow: true,
     });
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(
-      offscreenCreatesBeforeBootstrap
+      offscreenCreatesBeforeBootstrap,
     );
     dispose();
     harness.cleanup();
@@ -957,8 +961,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "degraded",
               inflightCount: 0,
-              consecutiveFailures: 2
-            }
+              consecutiveFailures: 2,
+            },
           };
         }
         return {
@@ -967,20 +971,20 @@ describe("mv3-shell manifest", () => {
           ok: true,
           result: {
             result: "ok",
-            durationMs: 1
-          }
+            durationMs: 1,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "degraded",
         inflightCount: 0,
-        consecutiveFailures: 2
-      }))
+        consecutiveFailures: 2,
+      })),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -989,8 +993,8 @@ describe("mv3-shell manifest", () => {
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
-        kind: "runtime.bootstrap"
-      })
+        kind: "runtime.bootstrap",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -998,7 +1002,7 @@ describe("mv3-shell manifest", () => {
         runtime: {
           status: "degraded",
           loopState: "degraded",
-          lastError: null
+          lastError: null,
         },
         hosts: {
           status: "degraded",
@@ -1010,16 +1014,16 @@ describe("mv3-shell manifest", () => {
               hostId: "local",
               connected: true,
               state: "degraded",
-              isDefault: false
-            }
-          ]
-        }
-      }
+              isDefault: false,
+            },
+          ],
+        },
+      },
     });
 
     expect(harness.tabsApi.query).toHaveBeenCalledWith({
       active: true,
-      lastFocusedWindow: true
+      lastFocusedWindow: true,
     });
     dispose();
     harness.cleanup();
@@ -1032,21 +1036,21 @@ describe("mv3-shell manifest", () => {
         getHealth: vi.fn(() => ({
           status: "idle",
           inflightCount: 0,
-          consecutiveFailures: 0
-        }))
-      }
+          consecutiveFailures: 0,
+        })),
+      },
     });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
-        kind: "runtime.bootstrap"
-      })
+        kind: "runtime.bootstrap",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -1056,11 +1060,11 @@ describe("mv3-shell manifest", () => {
           status: "empty",
           sessionId: null,
           loopState: null,
-          activeTab: null
+          activeTab: null,
         },
         skills: {
           status: "empty",
-          installedCount: 0
+          installedCount: 0,
         },
         hosts: {
           status: "empty",
@@ -1073,19 +1077,19 @@ describe("mv3-shell manifest", () => {
               kind: "local",
               connected: false,
               state: "disconnected",
-              isDefault: false
-            }
-          ]
+              isDefault: false,
+            },
+          ],
         },
         config: {
-          status: "placeholder"
-        }
-      }
+          status: "placeholder",
+        },
+      },
     });
 
     expect(harness.tabsApi.query).toHaveBeenCalledWith({
       active: true,
-      lastFocusedWindow: true
+      lastFocusedWindow: true,
     });
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
     dispose();
@@ -1099,13 +1103,13 @@ describe("mv3-shell manifest", () => {
         getHealth: vi.fn(() => ({
           status: "idle",
           inflightCount: 0,
-          consecutiveFailures: 0
-        }))
-      }
+          consecutiveFailures: 0,
+        })),
+      },
     });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -1116,13 +1120,13 @@ describe("mv3-shell manifest", () => {
         patch: {
           model: {
             provider: "openai",
-            defaultModel: "gpt-5.4"
+            defaultModel: "gpt-5.4",
           },
           automation: {
-            activeTabOnly: true
-          }
-        }
-      })
+            activeTabOnly: true,
+          },
+        },
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -1132,23 +1136,23 @@ describe("mv3-shell manifest", () => {
           values: {
             model: {
               provider: "openai",
-              defaultModel: "gpt-5.4"
+              defaultModel: "gpt-5.4",
             },
             automation: {
-              activeTabOnly: true
-            }
+              activeTabOnly: true,
+            },
           },
           note: null,
-          updatedAt: expect.any(String)
-        }
-      }
+          updatedAt: expect.any(String),
+        },
+      },
     });
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
-        kind: "runtime.bootstrap"
-      })
+        kind: "runtime.bootstrap",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -1158,16 +1162,16 @@ describe("mv3-shell manifest", () => {
           values: {
             model: {
               provider: "openai",
-              defaultModel: "gpt-5.4"
+              defaultModel: "gpt-5.4",
             },
             automation: {
-              activeTabOnly: true
-            }
+              activeTabOnly: true,
+            },
           },
           note: null,
-          updatedAt: expect.any(String)
-        }
-      }
+          updatedAt: expect.any(String),
+        },
+      },
     });
 
     await expect(
@@ -1176,15 +1180,15 @@ describe("mv3-shell manifest", () => {
         kind: "config.update",
         patch: {
           unknown: {
-            enabled: true
-          }
-        }
-      })
+            enabled: true,
+          },
+        },
+      }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
-        code: "E_BAD_INPUT"
-      }
+        code: "E_BAD_INPUT",
+      },
     });
 
     dispose();
@@ -1198,21 +1202,21 @@ describe("mv3-shell manifest", () => {
         getHealth: vi.fn(() => ({
           status: "idle",
           inflightCount: 0,
-          consecutiveFailures: 0
-        }))
-      }
+          consecutiveFailures: 0,
+        })),
+      },
     });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
-        kind: "hosts.list"
-      })
+        kind: "hosts.list",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -1223,18 +1227,18 @@ describe("mv3-shell manifest", () => {
             kind: "local",
             connected: false,
             state: "disconnected",
-            isDefault: false
-          }
-        ]
-      }
+            isDefault: false,
+          },
+        ],
+      },
     });
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "hosts.get",
-        hostId: "local"
-      })
+        hostId: "local",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -1242,8 +1246,8 @@ describe("mv3-shell manifest", () => {
         kind: "local",
         connected: false,
         state: "disconnected",
-        isDefault: false
-      }
+        isDefault: false,
+      },
     });
 
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
@@ -1273,21 +1277,21 @@ describe("mv3-shell manifest", () => {
               health: {
                 status: "idle",
                 inflightCount: 0,
-                consecutiveFailures: 0
-              }
+                consecutiveFailures: 0,
+              },
             };
           case "read":
             return {
               hostId: typedRequest.hostId,
               path: typedRequest.path,
-              content: files.get(typedRequest.path!) ?? null
+              content: files.get(typedRequest.path!) ?? null,
             };
           case "write":
             files.set(typedRequest.path!, typedRequest.content ?? "");
             return {
               hostId: typedRequest.hostId,
               path: typedRequest.path,
-              content: typedRequest.content
+              content: typedRequest.content,
             };
           case "edit": {
             const next = `${files.get(typedRequest.path!) ?? ""}${typedRequest.patch ?? ""}`;
@@ -1295,7 +1299,7 @@ describe("mv3-shell manifest", () => {
             return {
               hostId: typedRequest.hostId,
               path: typedRequest.path,
-              content: next
+              content: next,
             };
           }
           case "exec":
@@ -1304,28 +1308,28 @@ describe("mv3-shell manifest", () => {
               command: typedRequest.command,
               exitCode: 0,
               stdout: `executed:${typedRequest.command}`,
-              stderr: ""
+              stderr: "",
             };
           default:
             return {
               ok: false,
               error: {
                 code: "E_RUNTIME",
-                message: `Unknown host request: ${typedRequest.kind}`
-              }
+                message: `Unknown host request: ${typedRequest.kind}`,
+              },
             };
         }
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -1335,15 +1339,15 @@ describe("mv3-shell manifest", () => {
         kind: "host.write",
         hostId: "local",
         path: "/workspace/notes.txt",
-        content: "hello"
-      })
+        content: "hello",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         hostId: "local",
         path: "/workspace/notes.txt",
-        content: "hello"
-      }
+        content: "hello",
+      },
     });
 
     await expect(
@@ -1351,15 +1355,15 @@ describe("mv3-shell manifest", () => {
         target: RUNNER_BACKGROUND_TARGET,
         kind: "host.read",
         hostId: "local",
-        path: "/workspace/notes.txt"
-      })
+        path: "/workspace/notes.txt",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         hostId: "local",
         path: "/workspace/notes.txt",
-        content: "hello"
-      }
+        content: "hello",
+      },
     });
 
     await expect(
@@ -1368,15 +1372,15 @@ describe("mv3-shell manifest", () => {
         kind: "host.edit",
         hostId: "local",
         path: "/workspace/notes.txt",
-        patch: "\nworld"
-      })
+        patch: "\nworld",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         hostId: "local",
         path: "/workspace/notes.txt",
-        content: "hello\nworld"
-      }
+        content: "hello\nworld",
+      },
     });
 
     await expect(
@@ -1384,16 +1388,16 @@ describe("mv3-shell manifest", () => {
         target: RUNNER_BACKGROUND_TARGET,
         kind: "host.exec",
         hostId: "local",
-        command: "echo hi"
-      })
+        command: "echo hi",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         hostId: "local",
         command: "echo hi",
         exitCode: 0,
-        stdout: "executed:echo hi"
-      }
+        stdout: "executed:echo hi",
+      },
     });
 
     dispose();
@@ -1417,8 +1421,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }
         if (typedRequest.kind === "exec") {
@@ -1427,27 +1431,27 @@ describe("mv3-shell manifest", () => {
             command: typedRequest.command,
             exitCode: 0,
             stdout: `default:${typedRequest.command}`,
-            stderr: ""
+            stderr: "",
           };
         }
         return {
           ok: false,
           error: {
             code: "E_RUNTIME",
-            message: `Unknown host request: ${typedRequest.kind}`
-          }
+            message: `Unknown host request: ${typedRequest.kind}`,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -1455,43 +1459,43 @@ describe("mv3-shell manifest", () => {
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "host.exec",
-        command: "pwd"
-      })
+        command: "pwd",
+      }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
         code: "E_BAD_INPUT",
-        message: "host.exec requires hostId or a default host"
-      }
+        message: "host.exec requires hostId or a default host",
+      },
     });
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "hosts.set_default",
-        hostId: "local"
-      })
+        hostId: "local",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
-        defaultHostId: "local"
-      }
+        defaultHostId: "local",
+      },
     });
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "host.exec",
-        command: "pwd"
-      })
+        command: "pwd",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         hostId: "local",
         command: "pwd",
         exitCode: 0,
-        stdout: "default:pwd"
-      }
+        stdout: "default:pwd",
+      },
     });
 
     dispose();
@@ -1502,7 +1506,7 @@ describe("mv3-shell manifest", () => {
     const harness = createChromeHarness({});
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -1510,13 +1514,13 @@ describe("mv3-shell manifest", () => {
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "hosts.set_default",
-        hostId: "local"
-      })
+        hostId: "local",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
-        defaultHostId: "local"
-      }
+        defaultHostId: "local",
+      },
     });
 
     await expect(
@@ -1524,30 +1528,30 @@ describe("mv3-shell manifest", () => {
         target: RUNNER_BACKGROUND_TARGET,
         kind: "host.write",
         path: "/workspace/demo.txt",
-        content: "hello from local adapter"
-      })
+        content: "hello from local adapter",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         hostId: "local",
         path: "/workspace/demo.txt",
-        content: "hello from local adapter"
-      }
+        content: "hello from local adapter",
+      },
     });
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "host.read",
-        path: "/workspace/demo.txt"
-      })
+        path: "/workspace/demo.txt",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         hostId: "local",
         path: "/workspace/demo.txt",
-        content: "hello from local adapter"
-      }
+        content: "hello from local adapter",
+      },
     });
 
     await expect(
@@ -1555,23 +1559,23 @@ describe("mv3-shell manifest", () => {
         target: RUNNER_BACKGROUND_TARGET,
         kind: "host.edit",
         path: "/workspace/demo.txt",
-        patch: " world"
-      })
+        patch: " world",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         hostId: "local",
         path: "/workspace/demo.txt",
-        content: "hello from local adapter world"
-      }
+        content: "hello from local adapter world",
+      },
     });
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "host.exec",
-        command: "pwd"
-      })
+        command: "pwd",
+      }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
@@ -1580,9 +1584,9 @@ describe("mv3-shell manifest", () => {
         details: {
           kind: "exec",
           hostId: "local",
-          reason: "operation_not_supported"
-        }
-      }
+          reason: "operation_not_supported",
+        },
+      },
     });
 
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(1);
@@ -1601,8 +1605,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }
         return {
@@ -1611,20 +1615,20 @@ describe("mv3-shell manifest", () => {
           ok: true,
           result: {
             result: "ok",
-            durationMs: 1
-          }
+            durationMs: 1,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -1632,8 +1636,8 @@ describe("mv3-shell manifest", () => {
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "hosts.connect",
-        hostId: "local"
-      })
+        hostId: "local",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -1645,18 +1649,18 @@ describe("mv3-shell manifest", () => {
           state: "connected",
           isDefault: true,
           health: {
-            status: "healthy"
-          }
-        }
-      }
+            status: "healthy",
+          },
+        },
+      },
     });
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "hosts.health",
-        hostId: "local"
-      })
+        hostId: "local",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -1664,34 +1668,34 @@ describe("mv3-shell manifest", () => {
         connected: true,
         state: "connected",
         health: {
-          status: "healthy"
-        }
-      }
+          status: "healthy",
+        },
+      },
     });
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "hosts.set_default",
-        hostId: "local"
-      })
+        hostId: "local",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         defaultHostId: "local",
         host: {
           hostId: "local",
-          isDefault: true
-        }
-      }
+          isDefault: true,
+        },
+      },
     });
 
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "hosts.disconnect",
-        hostId: "local"
-      })
+        hostId: "local",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -1702,10 +1706,10 @@ describe("mv3-shell manifest", () => {
           state: "disconnected",
           isDefault: true,
           health: {
-            status: "unknown"
-          }
-        }
-      }
+            status: "unknown",
+          },
+        },
+      },
     });
 
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(1);
@@ -1725,27 +1729,27 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }
         return {
           kind: "invoke_result",
           requestId: request.requestId,
           ok: true,
-          result: { result: "ok", durationMs: 1 }
+          result: { result: "ok", durationMs: 1 },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -1753,28 +1757,31 @@ describe("mv3-shell manifest", () => {
     await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
       kind: "hosts.connect",
-      hostId: "local"
+      hostId: "local",
     });
 
     // set_default
     await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
       kind: "hosts.set_default",
-      hostId: "local"
+      hostId: "local",
     });
 
     // disconnect
     await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
       kind: "hosts.disconnect",
-      hostId: "local"
+      hostId: "local",
     });
 
     // read audit tail via route
-    const auditResult = await harness.runtimeApi.sendMessage({
+    const auditResult = (await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "audit.host"
-    }) as { ok: boolean; data: { entries: Array<{ timestamp: string; kind: string; hostId: string; status: string }> } };
+      kind: "audit.host",
+    })) as {
+      ok: boolean;
+      data: { entries: Array<{ timestamp: string; kind: string; hostId: string; status: string }> };
+    };
 
     expect(auditResult.ok).toBe(true);
     const entries = auditResult.data.entries;
@@ -1783,20 +1790,20 @@ describe("mv3-shell manifest", () => {
     expect(entries[0]).toMatchObject({
       kind: "hosts.connect",
       hostId: "local",
-      status: "connected"
+      status: "connected",
     });
     expect(typeof entries[0].timestamp).toBe("string");
 
     expect(entries[1]).toMatchObject({
       kind: "hosts.set_default",
       hostId: "local",
-      status: "default_set"
+      status: "default_set",
     });
 
     expect(entries[2]).toMatchObject({
       kind: "hosts.disconnect",
       hostId: "local",
-      status: "disconnected"
+      status: "disconnected",
     });
 
     // also verify direct API
@@ -1817,45 +1824,45 @@ describe("mv3-shell manifest", () => {
             kind: "health_result",
             requestId: request.requestId,
             ok: true,
-            health: { status: "idle", inflightCount: 0, consecutiveFailures: 0 }
+            health: { status: "idle", inflightCount: 0, consecutiveFailures: 0 },
           };
         }
         return {
           kind: "invoke_result",
           requestId: request.requestId,
           ok: true,
-          result: { result: "ok", durationMs: 1 }
+          result: { result: "ok", durationMs: 1 },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
 
     // Bootstrap without connecting — offscreen is absent, so runner diagnostics reports an error.
     // This captures a runtime error in the bridge state.
-    const firstBootstrap = await harness.runtimeApi.sendMessage({
+    const firstBootstrap = (await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "runtime.bootstrap"
-    }) as { ok: boolean; data: { runtime: { lastError: unknown } } };
+      kind: "runtime.bootstrap",
+    })) as { ok: boolean; data: { runtime: { lastError: unknown } } };
     expect(firstBootstrap.ok).toBe(true);
     expect(firstBootstrap.data.runtime.lastError).toMatchObject({
-      code: "E_RUNTIME"
+      code: "E_RUNTIME",
     });
 
     // Clear the error
-    const clearResult = await harness.runtimeApi.sendMessage({
+    const clearResult = (await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "runtime.clear_error"
-    }) as { ok: boolean; data: { cleared: boolean } };
+      kind: "runtime.clear_error",
+    })) as { ok: boolean; data: { cleared: boolean } };
     expect(clearResult).toMatchObject({ ok: true, data: { cleared: true } });
 
     // Bootstrap again — lastError should be null (error was cleared, and the live error
@@ -1863,18 +1870,18 @@ describe("mv3-shell manifest", () => {
     // the "acknowledged" state. A fresh bootstrap will re-capture the live error.)
     // To properly test the clear path, connect the host first so there's no live error.
     await bridge.ensureHost();
-    const secondBootstrap = await harness.runtimeApi.sendMessage({
+    const secondBootstrap = (await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "runtime.bootstrap"
-    }) as { ok: boolean; data: { runtime: { lastError: unknown } } };
+      kind: "runtime.bootstrap",
+    })) as { ok: boolean; data: { runtime: { lastError: unknown } } };
     expect(secondBootstrap.ok).toBe(true);
     expect(secondBootstrap.data.runtime.lastError).toBeNull();
 
     // Idempotent clear when no error
-    const idempotentClear = await harness.runtimeApi.sendMessage({
+    const idempotentClear = (await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "runtime.clear_error"
-    }) as { ok: boolean; data: { cleared: boolean } };
+      kind: "runtime.clear_error",
+    })) as { ok: boolean; data: { cleared: boolean } };
     expect(idempotentClear).toMatchObject({ ok: true, data: { cleared: false } });
 
     // Direct API also works
@@ -1888,7 +1895,7 @@ describe("mv3-shell manifest", () => {
     const harness = createIntegratedChromeHarness({
       activeTab: {
         id: 11,
-        url: "https://fixture.test/demo"
+        url: "https://fixture.test/demo",
       },
       host: {
         dispatch: vi.fn(async (request) => {
@@ -1901,10 +1908,10 @@ describe("mv3-shell manifest", () => {
                 result: {
                   query: request.invocation.input.query,
                   tabUrl: request.invocation.ctx.tab.url,
-                  installationCount: request.invocation.ctx.site.installations.length
+                  installationCount: request.invocation.ctx.site.installations.length,
                 },
-                durationMs: 1
-              }
+                durationMs: 1,
+              },
             };
           }
           return {
@@ -1914,24 +1921,24 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }),
         getHealth: vi.fn(() => ({
           status: "idle",
           inflightCount: 0,
-          consecutiveFailures: 0
-        }))
-      }
+          consecutiveFailures: 0,
+        })),
+      },
     });
     const pageHookBridge = createPageHookBridge({
-      chromeApi: harness.chromeApi
+      chromeApi: harness.chromeApi,
     });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
-      pageHookBridge
+      pageHookBridge,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -1944,10 +1951,10 @@ describe("mv3-shell manifest", () => {
         tab: {
           tabId: 11,
           url: "https://fixture.test/demo",
-          active: true
+          active: true,
         },
         input: {
-          query: "hello runtime"
+          query: "hello runtime",
         },
         plan: {
           skillId: "fixture.page",
@@ -1957,9 +1964,9 @@ describe("mv3-shell manifest", () => {
               world: "main",
               scriptId: "bbl-next.page-hook.fixture",
               jsPath: "src/page-hook.js",
-              runAt: "document_idle"
-            }
-          ]
+              runAt: "document_idle",
+            },
+          ],
         },
         module: {
           id: "fixture.page.execute",
@@ -1969,10 +1976,10 @@ describe("mv3-shell manifest", () => {
               tabUrl: ctx.tab.url,
               installationCount: ctx.site.installations.length
             });
-          `
+          `,
         },
-        verifier: "page_hook_ok"
-      })
+        verifier: "page_hook_ok",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
@@ -1983,26 +1990,26 @@ describe("mv3-shell manifest", () => {
           input: {
             query: "hello runtime",
             tabUrl: "https://fixture.test/demo",
-            installationCount: 1
+            installationCount: 1,
           },
           installationId: "bbl-next.page-hook.fixture:1",
           installedScriptId: "bbl-next.page-hook.fixture",
           tabUrl: "https://fixture.test/demo",
-          installCount: 1
+          installCount: 1,
         },
         trace: [
           "match:fixture.page",
           "plan:1_steps",
           "install:main:bbl-next.page-hook.fixture",
           "invoke:execute_fixture",
-          "verify:page_hook_ok"
-        ]
-      }
+          "verify:page_hook_ok",
+        ],
+      },
     });
 
     expect(harness.tabsApi.query).toHaveBeenCalledWith({
       active: true,
-      lastFocusedWindow: true
+      lastFocusedWindow: true,
     });
 
     await expect(
@@ -2010,15 +2017,15 @@ describe("mv3-shell manifest", () => {
         target: RUNNER_BACKGROUND_TARGET,
         kind: "runtime.diagnostics",
         tabId: 11,
-        world: "main"
-      })
+        world: "main",
+      }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
         status: "healthy",
         bridge: {
           hostReady: true,
-          offscreenPresent: true
+          offscreenPresent: true,
         },
         site: {
           status: "healthy",
@@ -2027,24 +2034,24 @@ describe("mv3-shell manifest", () => {
           snapshot: {
             installs: [
               expect.objectContaining({
-                installationId: "bbl-next.page-hook.fixture:1"
-              })
+                installationId: "bbl-next.page-hook.fixture:1",
+              }),
             ],
             invocations: [
               expect.objectContaining({
                 action: "execute_fixture",
-                installationId: "bbl-next.page-hook.fixture:1"
-              })
+                installationId: "bbl-next.page-hook.fixture:1",
+              }),
             ],
             verifications: [
               {
                 action: "execute_fixture",
-                verified: true
-              }
-            ]
-          }
-        }
-      }
+                verified: true,
+              },
+            ],
+          },
+        },
+      },
     });
 
     dispose();
@@ -2055,7 +2062,7 @@ describe("mv3-shell manifest", () => {
     const harness = createIntegratedChromeHarness({
       activeTab: {
         id: 12,
-        url: "https://fixture.test/other"
+        url: "https://fixture.test/other",
       },
       host: {
         dispatch: vi.fn(async () => ({
@@ -2064,22 +2071,22 @@ describe("mv3-shell manifest", () => {
           health: {
             status: "idle",
             inflightCount: 0,
-            consecutiveFailures: 0
-          }
+            consecutiveFailures: 0,
+          },
         })),
         getHealth: vi.fn(() => ({
           status: "idle",
           inflightCount: 0,
-          consecutiveFailures: 0
-        }))
-      }
+          consecutiveFailures: 0,
+        })),
+      },
     });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
       pageHookBridge: createPageHookBridge({
-        chromeApi: harness.chromeApi
-      })
+        chromeApi: harness.chromeApi,
+      }),
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -2092,30 +2099,30 @@ describe("mv3-shell manifest", () => {
         tab: {
           tabId: 11,
           url: "https://fixture.test/demo",
-          active: true
+          active: true,
         },
         input: {},
         plan: {
           skillId: "fixture.page",
           action: "execute_fixture",
-          steps: []
+          steps: [],
         },
         module: {
           id: "fixture.page.execute",
-          source: "exports.default = async () => ({ ok: true });"
-        }
-      })
+          source: "exports.default = async () => ({ ok: true });",
+        },
+      }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
         code: "E_BAD_INPUT",
-        message: "Site runtime invoke target must be the active tab"
-      }
+        message: "Site runtime invoke target must be the active tab",
+      },
     });
 
     expect(harness.tabsApi.query).toHaveBeenCalledWith({
       active: true,
-      lastFocusedWindow: true
+      lastFocusedWindow: true,
     });
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
     dispose();
@@ -2130,20 +2137,20 @@ describe("mv3-shell manifest", () => {
           getHealth: vi.fn(() => ({
             status: "idle",
             inflightCount: 0,
-            consecutiveFailures: 0
-          }))
+            consecutiveFailures: 0,
+          })),
         },
         autoRegisterOffscreen: false,
-        hangOffscreen: true
+        hangOffscreen: true,
       }).chromeApi,
-      timeoutMs: 5
+      timeoutMs: 5,
     });
 
     await expect(bridge.ensureHost()).resolves.toMatchObject({
       ok: false,
       error: {
-        code: "E_TIMEOUT"
-      }
+        code: "E_TIMEOUT",
+      },
     });
   });
 
@@ -2158,8 +2165,8 @@ describe("mv3-shell manifest", () => {
             health: {
               status: "idle",
               inflightCount: 0,
-              consecutiveFailures: 0
-            }
+              consecutiveFailures: 0,
+            },
           };
         }
         return {
@@ -2168,20 +2175,20 @@ describe("mv3-shell manifest", () => {
           ok: true,
           result: {
             result: "ok",
-            durationMs: 1
-          }
+            durationMs: 1,
+          },
         };
       }),
       getHealth: vi.fn(() => ({
         status: "idle",
         inflightCount: 0,
-        consecutiveFailures: 0
-      }))
+        consecutiveFailures: 0,
+      })),
     }));
     const harness = createChromeHarness({ createHost });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
 
     await expect(bridge.ensureHost()).resolves.toMatchObject({
@@ -2189,9 +2196,9 @@ describe("mv3-shell manifest", () => {
       data: {
         bridge: {
           recovered: false,
-          hostReady: true
-        }
-      }
+          hostReady: true,
+        },
+      },
     });
 
     harness.dropOffscreenListener();
@@ -2203,9 +2210,9 @@ describe("mv3-shell manifest", () => {
         bridge: {
           recovered: true,
           recoveryReason: "ensure_failed",
-          hostReady: true
-        }
-      }
+          hostReady: true,
+        },
+      },
     });
 
     expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(1);
@@ -2227,8 +2234,8 @@ describe("mv3-shell manifest", () => {
               health: {
                 status: "degraded",
                 inflightCount: 0,
-                consecutiveFailures: 1
-              }
+                consecutiveFailures: 1,
+              },
             };
           }
           return {
@@ -2237,15 +2244,15 @@ describe("mv3-shell manifest", () => {
             ok: true,
             result: {
               result: "ok",
-              durationMs: 1
-            }
+              durationMs: 1,
+            },
           };
         }),
         getHealth: vi.fn(() => ({
           status: "degraded",
           inflightCount: 0,
-          consecutiveFailures: 1
-        }))
+          consecutiveFailures: 1,
+        })),
       }))
       .mockImplementationOnce(() => ({
         dispatch: vi.fn(async (request) => {
@@ -2257,8 +2264,8 @@ describe("mv3-shell manifest", () => {
               health: {
                 status: "idle",
                 inflightCount: 0,
-                consecutiveFailures: 0
-              }
+                consecutiveFailures: 0,
+              },
             };
           }
           return {
@@ -2267,34 +2274,34 @@ describe("mv3-shell manifest", () => {
             ok: true,
             result: {
               result: "ok",
-              durationMs: 1
-            }
+              durationMs: 1,
+            },
           };
         }),
         getHealth: vi.fn(() => ({
           status: "idle",
           inflightCount: 0,
-          consecutiveFailures: 0
-        }))
+          consecutiveFailures: 0,
+        })),
       }));
     const harness = createChromeHarness({ createHost });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
-      timeoutMs: 50
+      timeoutMs: 50,
     });
 
     await expect(bridge.ensureHost()).resolves.toMatchObject({
       ok: true,
       data: {
         health: {
-          status: "idle"
+          status: "idle",
         },
         bridge: {
           recovered: true,
           recoveryReason: "unhealthy_host",
-          hostReady: true
-        }
-      }
+          hostReady: true,
+        },
+      },
     });
 
     expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(1);
@@ -2306,47 +2313,47 @@ describe("mv3-shell manifest", () => {
   it("injects, invokes, and verifies the page hook through chrome.scripting", async () => {
     const harness = createScriptingHarness();
     const bridge = createPageHookBridge({
-      chromeApi: harness.chromeApi
+      chromeApi: harness.chromeApi,
     });
     const step = {
       world: "main" as const,
       scriptId: "bbl-next.page-hook.fixture",
       jsPath: "src/page-hook.js",
-      runAt: "document_idle" as const
+      runAt: "document_idle" as const,
     };
     const activeTab = {
       tabId: 21,
       url: "https://fixture.test/demo",
-      active: true
+      active: true,
     };
 
     const installation = await bridge.install(step, activeTab);
     const result = await bridge.invoke({
       installation: {
         step,
-        result: installation
+        result: installation,
       },
       action: "execute_fixture",
       input: {
-        query: "bridge"
+        query: "bridge",
       },
       tab: activeTab,
       ctx: {
-        tab: activeTab
-      }
+        tab: activeTab,
+      },
     });
     const verified = await bridge.verify({
       installation: {
         step,
-        result: installation
+        result: installation,
       },
       action: "execute_fixture",
       result,
-      tab: activeTab
+      tab: activeTab,
     });
     const state = await bridge.snapshotState({
       tabId: activeTab.tabId,
-      world: "main"
+      world: "main",
     });
 
     expect((installation as { run?: unknown }).run).toBeUndefined();
@@ -2359,8 +2366,8 @@ describe("mv3-shell manifest", () => {
         jsPath: "src/page-hook.js",
         runAt: "document_idle",
         tabId: 21,
-        url: "https://fixture.test/demo"
-      }
+        url: "https://fixture.test/demo",
+      },
     });
     expect(result).toMatchObject({
       ok: true,
@@ -2368,29 +2375,29 @@ describe("mv3-shell manifest", () => {
       installationId: "bbl-next.page-hook.fixture:1",
       installedScriptId: "bbl-next.page-hook.fixture",
       input: {
-        query: "bridge"
-      }
+        query: "bridge",
+      },
     });
     expect(verified).toBe(true);
     expect(state).toMatchObject({
       installs: [
         expect.objectContaining({
           installationId: "bbl-next.page-hook.fixture:1",
-          scriptId: "bbl-next.page-hook.fixture"
-        })
+          scriptId: "bbl-next.page-hook.fixture",
+        }),
       ],
       invocations: [
         expect.objectContaining({
           installationId: "bbl-next.page-hook.fixture:1",
-          action: "execute_fixture"
-        })
+          action: "execute_fixture",
+        }),
       ],
       verifications: [
         {
           action: "execute_fixture",
-          verified: true
-        }
-      ]
+          verified: true,
+        },
+      ],
     });
     expect(harness.chromeApi.scripting.executeScript).toHaveBeenCalled();
   });

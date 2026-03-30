@@ -9,25 +9,26 @@ export const PAGE_HOOK_GLOBAL_KEY = "__BBL_NEXT_PAGE_HOOK__";
 export const PAGE_HOOK_DEFAULT_FILE = "src/page-hook.js";
 export const BOOTSTRAP_RESOURCE_KEYS = ["runtime", "config", "skills", "hosts"];
 const LOCAL_HOST_ID = "local";
+const CONFIG_RESOURCE_FIELDS = ["model", "automation", "permissions", "preferences"];
 
 function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   if (error && typeof error === "object" && "code" in error && "message" in error) {
     return {
       code: error.code,
       message: error.message,
-      details: "details" in error ? error.details : undefined
+      details: "details" in error ? error.details : undefined,
     };
   }
   if (error instanceof Error) {
     return {
       code: fallbackCode,
-      message: error.message
+      message: error.message,
     };
   }
   return {
     code: fallbackCode,
     message: "Unknown bridge error",
-    details: error
+    details: error,
   };
 }
 
@@ -51,8 +52,8 @@ function invalidSiteRuntimeInvoke(message) {
     ok: false,
     error: {
       code: "E_BAD_INPUT",
-      message
-    }
+      message,
+    },
   };
 }
 
@@ -61,8 +62,8 @@ function invalidHostControlPlane(message) {
     ok: false,
     error: {
       code: "E_BAD_INPUT",
-      message
-    }
+      message,
+    },
   };
 }
 
@@ -71,9 +72,23 @@ function invalidHostSubstrate(message) {
     ok: false,
     error: {
       code: "E_BAD_INPUT",
-      message
-    }
+      message,
+    },
   };
+}
+
+function invalidConfigControlPlane(message) {
+  return {
+    ok: false,
+    error: {
+      code: "E_BAD_INPUT",
+      message,
+    },
+  };
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function toExecutionHostHealthStatus(localState) {
@@ -99,7 +114,7 @@ function defaultBootstrapSummaryBuilder({
   runtime,
   skills,
   hosts,
-  config
+  config,
 }) {
   const summary = {
     status:
@@ -113,7 +128,7 @@ function defaultBootstrapSummaryBuilder({
     runtime,
     skills,
     hosts,
-    config
+    config,
   };
   return summary;
 }
@@ -122,7 +137,7 @@ function toCanonicalTab(activeTab) {
   return {
     tabId: activeTab.id,
     url: activeTab.url,
-    active: activeTab.active === true
+    active: activeTab.active === true,
   };
 }
 
@@ -131,7 +146,7 @@ function toBootstrapActiveTab(activeTab, world = "main") {
     tabId: activeTab.id,
     url: activeTab.url,
     title: typeof activeTab.title === "string" ? activeTab.title : undefined,
-    world
+    world,
   };
 }
 
@@ -141,7 +156,7 @@ function normalizeSkillSummaryInput(entry) {
       id: entry,
       enabled: false,
       trusted: false,
-      recentChange: null
+      recentChange: null,
     };
   }
   if (!entry || typeof entry !== "object" || typeof entry.id !== "string") {
@@ -156,7 +171,7 @@ function normalizeSkillSummaryInput(entry) {
         ? entry.recentChange
         : typeof entry.lastChangedAt === "string"
           ? entry.lastChangedAt
-          : null
+          : null,
   };
 }
 
@@ -169,8 +184,8 @@ function createTimeoutPromise(kind, requestId, timeoutMs) {
         message: `Runner bridge timed out for ${kind}`,
         details: {
           kind,
-          requestId
-        }
+          requestId,
+        },
       });
     }, timeoutMs);
   });
@@ -180,7 +195,7 @@ function createTimeoutPromise(kind, requestId, timeoutMs) {
       if (timerId != null) {
         clearTimeout(timerId);
       }
-    }
+    },
   };
 }
 
@@ -195,7 +210,7 @@ export function createBackgroundRunnerBridge({
   sessionId = null,
   currentMode = "active-tab-only",
   listSkills = undefined,
-  configSummary = undefined
+  configSummary = undefined,
 } = {}) {
   let creating = null;
   let requestSequence = 0;
@@ -208,13 +223,15 @@ export function createBackgroundRunnerBridge({
     hostRecoveredAt: undefined,
     hostRecoveryReason: undefined,
     lastRuntimeError: null,
-    lastRuntimeErrorClearedAt: null
+    lastRuntimeErrorClearedAt: null,
+    configValues: {},
+    configUpdatedAt: null,
   };
 
   function appendAudit({ kind, hostId, status, error }) {
     const entry = { timestamp: isoNow(), kind, hostId, status };
     if (error) {
-      entry.error = typeof error === "string" ? error : error.message ?? String(error);
+      entry.error = typeof error === "string" ? error : (error.message ?? String(error));
     }
     auditEntries.push(entry);
     if (auditEntries.length > AUDIT_MAX_ENTRIES) {
@@ -232,7 +249,7 @@ export function createBackgroundRunnerBridge({
       state.lastRuntimeError = {
         code: error.code ?? "E_RUNTIME",
         message: error.message ?? String(error),
-        capturedAt: isoNow()
+        capturedAt: isoNow(),
       };
     }
   }
@@ -260,7 +277,7 @@ export function createBackgroundRunnerBridge({
     if (typeof chromeApi.runtime.getContexts === "function") {
       const contexts = await chromeApi.runtime.getContexts({
         contextTypes: ["OFFSCREEN_DOCUMENT"],
-        documentUrls: [offscreenUrl]
+        documentUrls: [offscreenUrl],
       });
       return contexts.length > 0;
     }
@@ -272,21 +289,21 @@ export function createBackgroundRunnerBridge({
     if (await hasOffscreenDocument()) {
       return {
         created: false,
-        offscreenUrl
+        offscreenUrl,
       };
     }
     if (!creating) {
       creating = chromeApi.offscreen.createDocument({
         url: offscreenPath,
         reasons,
-        justification
+        justification,
       });
     }
     try {
       await creating;
       return {
         created: true,
-        offscreenUrl
+        offscreenUrl,
       };
     } finally {
       creating = null;
@@ -299,7 +316,7 @@ export function createBackgroundRunnerBridge({
       hostLastSeenAt: state.hostLastSeenAt,
       hostRecoveredAt: state.hostRecoveredAt,
       hostRecoveryReason: state.hostRecoveryReason,
-      ...extra
+      ...extra,
     };
   }
 
@@ -309,7 +326,7 @@ export function createBackgroundRunnerBridge({
     }
     const activeTabs = await chromeApi.tabs.query({
       active: true,
-      lastFocusedWindow: true
+      lastFocusedWindow: true,
     });
     const activeTab = Array.isArray(activeTabs) ? activeTabs[0] : undefined;
     if (!activeTab || typeof activeTab.id !== "number" || typeof activeTab.url !== "string") {
@@ -323,6 +340,111 @@ export function createBackgroundRunnerBridge({
       return value();
     }
     return value;
+  }
+
+  function normalizeConfigValues(values) {
+    const out = {};
+    if (!isPlainObject(values)) {
+      return out;
+    }
+    for (const field of CONFIG_RESOURCE_FIELDS) {
+      if (isPlainObject(values[field])) {
+        out[field] = { ...values[field] };
+      }
+    }
+    return out;
+  }
+
+  function mergeConfigValues(baseValues, patchValues) {
+    const next = normalizeConfigValues(baseValues);
+    for (const field of CONFIG_RESOURCE_FIELDS) {
+      if (isPlainObject(patchValues[field])) {
+        next[field] = {
+          ...(next[field] ?? {}),
+          ...patchValues[field],
+        };
+      }
+    }
+    return next;
+  }
+
+  function normalizeConfigPatch(patch) {
+    if (!isPlainObject(patch)) {
+      return invalidConfigControlPlane("config.update requires a patch object");
+    }
+
+    const normalized = {};
+    for (const [field, value] of Object.entries(patch)) {
+      if (!CONFIG_RESOURCE_FIELDS.includes(field)) {
+        return invalidConfigControlPlane(`config.update does not support field: ${field}`);
+      }
+      if (!isPlainObject(value)) {
+        return invalidConfigControlPlane(`config.update field ${field} must be an object`);
+      }
+      normalized[field] = { ...value };
+    }
+
+    if (Object.keys(normalized).length === 0) {
+      return invalidConfigControlPlane("config.update requires at least one config field");
+    }
+
+    return normalized;
+  }
+
+  async function resolveConfigBootstrapSummary() {
+    const resolved = (await resolveMaybe(configSummary)) ?? {};
+    const baseValues = normalizeConfigValues(resolved.values);
+    const values = mergeConfigValues(baseValues, state.configValues);
+    const hasValues = Object.keys(values).length > 0;
+    const status = hasValues || resolved.status === "ready" ? "ready" : "placeholder";
+    const fields =
+      Array.isArray(resolved.fields) && resolved.fields.length > 0
+        ? resolved.fields.filter((field) => CONFIG_RESOURCE_FIELDS.includes(field))
+        : [...CONFIG_RESOURCE_FIELDS];
+
+    return {
+      status,
+      fields: fields.length > 0 ? fields : [...CONFIG_RESOURCE_FIELDS],
+      values,
+      note:
+        status === "ready"
+          ? null
+          : typeof resolved.note === "string"
+            ? resolved.note
+            : "Config control plane is not implemented yet.",
+      updatedAt:
+        typeof state.configUpdatedAt === "string"
+          ? state.configUpdatedAt
+          : typeof resolved.updatedAt === "string"
+            ? resolved.updatedAt
+            : null,
+    };
+  }
+
+  async function updateConfig({ patch }) {
+    const normalizedPatch = normalizeConfigPatch(patch);
+    if (normalizedPatch.ok === false) {
+      return normalizedPatch;
+    }
+
+    const current = await resolveConfigBootstrapSummary();
+    const values = mergeConfigValues(current.values, normalizedPatch);
+    const updatedAt = isoNow();
+    state.configValues = values;
+    state.configUpdatedAt = updatedAt;
+
+    return {
+      ok: true,
+      data: {
+        config: {
+          status: "ready",
+          fields: current.fields,
+          values,
+          note: null,
+          updatedAt,
+        },
+      },
+    };
   }
 
   function resolveHostId(hostId, action) {
@@ -354,7 +476,7 @@ export function createBackgroundRunnerBridge({
         offscreenPresent,
         reachable: false,
         health: null,
-        error: null
+        error: null,
       };
     }
 
@@ -367,8 +489,8 @@ export function createBackgroundRunnerBridge({
         health: null,
         error: response.error ?? {
           code: "E_RUNTIME",
-          message: "Runner diagnostics unavailable"
-        }
+          message: "Runner diagnostics unavailable",
+        },
       };
     }
 
@@ -377,7 +499,7 @@ export function createBackgroundRunnerBridge({
       offscreenPresent,
       reachable: response.data?.ready === true,
       health: response.data?.health ?? null,
-      error: null
+      error: null,
     };
   }
 
@@ -385,7 +507,7 @@ export function createBackgroundRunnerBridge({
     const connected = localState.reachable === true;
     const health = {
       status: toExecutionHostHealthStatus(localState),
-      ...(localState.checkedAt ? { checkedAt: localState.checkedAt } : {})
+      ...(localState.checkedAt ? { checkedAt: localState.checkedAt } : {}),
     };
     const snapshot = {
       hostId: LOCAL_HOST_ID,
@@ -393,12 +515,12 @@ export function createBackgroundRunnerBridge({
       connected,
       state: toExecutionHostState(localState),
       isDefault: state.defaultHostId === LOCAL_HOST_ID,
-      health
+      health,
     };
     if (localState.error) {
       return {
         ...snapshot,
-        error: localState.error
+        error: localState.error,
       };
     }
     return snapshot;
@@ -413,8 +535,8 @@ export function createBackgroundRunnerBridge({
       ok: true,
       data: {
         defaultHostId: state.defaultHostId,
-        items: [await describeLocalHost()]
-      }
+        items: [await describeLocalHost()],
+      },
     };
   }
 
@@ -425,7 +547,7 @@ export function createBackgroundRunnerBridge({
     }
     return {
       ok: true,
-      data: await describeLocalHost()
+      data: await describeLocalHost(),
     };
   }
 
@@ -436,7 +558,12 @@ export function createBackgroundRunnerBridge({
     }
     const ensured = await ensureHost();
     if (!ensured.ok) {
-      appendAudit({ kind: "hosts.connect", hostId: resolvedHostId, status: "failed", error: ensured.error?.message });
+      appendAudit({
+        kind: "hosts.connect",
+        hostId: resolvedHostId,
+        status: "failed",
+        error: ensured.error?.message,
+      });
       return ensured;
     }
     if (!state.defaultHostId) {
@@ -452,9 +579,9 @@ export function createBackgroundRunnerBridge({
           offscreenPresent: true,
           reachable: ensured.data?.ready === true,
           health: ensured.data?.health ?? null,
-          error: null
-        })
-      }
+          error: null,
+        }),
+      },
     };
   }
 
@@ -463,14 +590,14 @@ export function createBackgroundRunnerBridge({
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    if ((await hasOffscreenDocument())) {
+    if (await hasOffscreenDocument()) {
       if (typeof chromeApi.offscreen?.closeDocument !== "function") {
         return {
           ok: false,
           error: {
             code: "E_RUNTIME",
-            message: "chrome.offscreen.closeDocument is required for hosts.disconnect"
-          }
+            message: "chrome.offscreen.closeDocument is required for hosts.disconnect",
+          },
         };
       }
       await chromeApi.offscreen.closeDocument();
@@ -481,8 +608,8 @@ export function createBackgroundRunnerBridge({
       ok: true,
       data: {
         defaultHostId: state.defaultHostId,
-        host: await describeLocalHost()
-      }
+        host: await describeLocalHost(),
+      },
     };
   }
 
@@ -497,8 +624,8 @@ export function createBackgroundRunnerBridge({
       ok: true,
       data: {
         defaultHostId: state.defaultHostId,
-        host: await describeLocalHost()
-      }
+        host: await describeLocalHost(),
+      },
     };
   }
 
@@ -510,7 +637,7 @@ export function createBackgroundRunnerBridge({
     const host = await describeLocalHost();
     return {
       ok: true,
-      data: host
+      data: host,
     };
   }
 
@@ -525,14 +652,14 @@ export function createBackgroundRunnerBridge({
     }
     const response = await sendToOffscreen(kind, {
       ...payload,
-      hostId: resolvedHostId
+      hostId: resolvedHostId,
     });
     if (!response.ok) {
       return response;
     }
     return {
       ok: true,
-      data: response.data
+      data: response.data,
     };
   }
 
@@ -545,8 +672,8 @@ export function createBackgroundRunnerBridge({
         ok: false,
         error: {
           code: "E_RUNTIME",
-          message: "chrome.tabs.query is required for active tab metadata"
-        }
+          message: "chrome.tabs.query is required for active tab metadata",
+        },
       };
     }
 
@@ -563,7 +690,7 @@ export function createBackgroundRunnerBridge({
 
     return {
       ok: true,
-      data: toCanonicalTab(activeTab)
+      data: toCanonicalTab(activeTab),
     };
   }
 
@@ -578,7 +705,10 @@ export function createBackgroundRunnerBridge({
   }
 
   async function recoverHost(reason) {
-    if ((await hasOffscreenDocument()) && typeof chromeApi.offscreen?.closeDocument === "function") {
+    if (
+      (await hasOffscreenDocument()) &&
+      typeof chromeApi.offscreen?.closeDocument === "function"
+    ) {
       await chromeApi.offscreen.closeDocument();
     }
     const documentState = await ensureOffscreenDocument();
@@ -595,9 +725,9 @@ export function createBackgroundRunnerBridge({
         bridge: buildBridgeState({
           offscreenUrl: documentState.offscreenUrl,
           recovered: true,
-          recoveryReason: reason
-        })
-      }
+          recoveryReason: reason,
+        }),
+      },
     };
   }
 
@@ -610,9 +740,9 @@ export function createBackgroundRunnerBridge({
           target: RUNNER_OFFSCREEN_TARGET,
           kind,
           requestId,
-          ...payload
+          ...payload,
         }),
-        timeout.promise
+        timeout.promise,
       ]);
       if (!response || response.ok !== true) {
         state.hostReady = false;
@@ -624,9 +754,9 @@ export function createBackgroundRunnerBridge({
               message: `Runner bridge unavailable for ${kind}`,
               details: {
                 kind,
-                requestId
-              }
-            }
+                requestId,
+              },
+            },
           }
         );
       }
@@ -637,7 +767,7 @@ export function createBackgroundRunnerBridge({
       state.hostReady = false;
       return {
         ok: false,
-        error: toBridgeError(error, "E_TIMEOUT")
+        error: toBridgeError(error, "E_TIMEOUT"),
       };
     } finally {
       timeout.clear();
@@ -657,9 +787,9 @@ export function createBackgroundRunnerBridge({
         ...response.data,
         bridge: buildBridgeState({
           offscreenUrl: documentState.offscreenUrl,
-          recovered: false
-        })
-      }
+          recovered: false,
+        }),
+      },
     };
   }
 
@@ -693,9 +823,9 @@ export function createBackgroundRunnerBridge({
       data: {
         ...response.data,
         bridge: buildBridgeState({
-          recovered: false
-        })
-      }
+          recovered: false,
+        }),
+      },
     };
   }
 
@@ -707,7 +837,7 @@ export function createBackgroundRunnerBridge({
     ctx = {},
     plan,
     module,
-    verifier
+    verifier,
   } = {}) {
     if (!plan || !Array.isArray(plan.steps)) {
       return invalidSiteRuntimeInvoke("Site runtime invoke requires an injection plan");
@@ -724,7 +854,7 @@ export function createBackgroundRunnerBridge({
     const trace = [`match:${skillId}`];
     const site = {
       plan,
-      installations: []
+      installations: [],
     };
 
     if (plan.steps.length > 0) {
@@ -733,8 +863,8 @@ export function createBackgroundRunnerBridge({
           ok: false,
           error: {
             code: "E_RUNTIME",
-            message: "Page hook bridge is not configured"
-          }
+            message: "Page hook bridge is not configured",
+          },
         };
       }
       trace.push(`plan:${plan.steps.length}_steps`);
@@ -742,7 +872,7 @@ export function createBackgroundRunnerBridge({
         const installation = await pageHookBridge.install(step, resolvedTab);
         site.installations.push({
           step,
-          result: installation
+          result: installation,
         });
         trace.push(`install:${step.world}:${step.scriptId}`);
       }
@@ -754,8 +884,8 @@ export function createBackgroundRunnerBridge({
       ctx: {
         ...ctx,
         tab: resolvedTab,
-        site
-      }
+        site,
+      },
     });
     if (!runnerResponse.ok) {
       return runnerResponse;
@@ -765,8 +895,8 @@ export function createBackgroundRunnerBridge({
         ok: false,
         error: runnerResponse.data?.error ?? {
           code: "E_RUNTIME",
-          message: "Runner invocation failed"
-        }
+          message: "Runner invocation failed",
+        },
       };
     }
 
@@ -781,8 +911,8 @@ export function createBackgroundRunnerBridge({
         ctx: {
           ...ctx,
           tab: resolvedTab,
-          site
-        }
+          site,
+        },
       });
     }
     trace.push(`invoke:${action}`);
@@ -794,8 +924,8 @@ export function createBackgroundRunnerBridge({
           installation: targetInstallation,
           action,
           result,
-          tab: resolvedTab
-        })
+          tab: resolvedTab,
+        }),
       );
       trace.push(`verify:${verifier}`);
       if (!verified) {
@@ -803,8 +933,8 @@ export function createBackgroundRunnerBridge({
           ok: false,
           error: {
             code: "E_VERIFY_FAILED",
-            message: `Verifier failed for ${skillId}.${action}`
-          }
+            message: `Verifier failed for ${skillId}.${action}`,
+          },
         };
       }
     }
@@ -814,15 +944,12 @@ export function createBackgroundRunnerBridge({
       data: {
         result,
         verified,
-        trace
-      }
+        trace,
+      },
     };
   }
 
-  async function diagnostics({
-    tabId,
-    world = "main"
-  } = {}) {
+  async function diagnostics({ tabId, world = "main" } = {}) {
     const capturedAt = isoNow();
     const offscreenPresent = await hasOffscreenDocument();
 
@@ -832,22 +959,22 @@ export function createBackgroundRunnerBridge({
           ok: false,
           error: {
             code: "E_RUNTIME",
-            message: "Offscreen document is not available"
-          }
+            message: "Offscreen document is not available",
+          },
         };
 
     const runner = runnerResponse.ok
       ? {
           reachable: true,
           ready: runnerResponse.data?.ready === true,
-          health: runnerResponse.data?.health ?? null
+          health: runnerResponse.data?.health ?? null,
         }
       : {
           reachable: false,
           error: runnerResponse.error ?? {
             code: "E_RUNTIME",
-            message: "Runner diagnostics unavailable"
-          }
+            message: "Runner diagnostics unavailable",
+          },
         };
 
     let site;
@@ -858,33 +985,33 @@ export function createBackgroundRunnerBridge({
           status: snapshot == null ? "empty" : "healthy",
           tabId,
           world,
-          snapshot
+          snapshot,
         };
       } catch (error) {
         site = {
           status: "degraded",
           tabId,
           world,
-          error: toBridgeError(error)
+          error: toBridgeError(error),
         };
       }
     } else if (typeof tabId === "number") {
       site = {
         status: "unavailable",
         tabId,
-        world
+        world,
       };
     } else {
       site = {
-        status: "skipped"
+        status: "skipped",
       };
     }
 
     const degraded =
-      !offscreenPresent
-      || !runner.reachable
-      || runner.health?.status === "degraded"
-      || site.status === "degraded";
+      !offscreenPresent ||
+      !runner.reachable ||
+      runner.health?.status === "degraded" ||
+      site.status === "degraded";
 
     return {
       ok: true,
@@ -893,22 +1020,20 @@ export function createBackgroundRunnerBridge({
         status: degraded ? "degraded" : "healthy",
         bridge: buildBridgeState({
           offscreenPresent,
-          offscreenPath
+          offscreenPath,
         }),
         runner,
-        site
-      }
+        site,
+      },
     };
   }
 
-  async function bootstrap({
-    world = "main"
-  } = {}) {
+  async function bootstrap({ world = "main" } = {}) {
     const generatedAt = isoNow();
     const activeTab = await queryActiveTab();
     const diagnosticsResult = await diagnostics({
       tabId: activeTab?.id,
-      world
+      world,
     });
     if (!diagnosticsResult.ok) {
       return diagnosticsResult;
@@ -937,10 +1062,9 @@ export function createBackgroundRunnerBridge({
       offscreenPresent: runtimeDiagnostics.bridge.offscreenPresent,
       reachable: Boolean(runtimeDiagnostics.runner?.reachable),
       health: runnerHealth ?? null,
-      error:
-        runtimeDiagnostics.bridge.offscreenPresent
-          ? runtimeDiagnostics.runner?.error ?? null
-          : null
+      error: runtimeDiagnostics.bridge.offscreenPresent
+        ? (runtimeDiagnostics.runner?.error ?? null)
+        : null,
     });
     const hostItems = [
       {
@@ -948,17 +1072,15 @@ export function createBackgroundRunnerBridge({
         kind: localHost.kind,
         connected: localHost.connected,
         state: localHost.state,
-        isDefault: localHost.isDefault
-      }
+        isDefault: localHost.isDefault,
+      },
     ];
 
     const rawSkillsSummary = await resolveMaybe(listSkills);
     const skillEntries = Array.isArray(rawSkillsSummary)
-      ? rawSkillsSummary
-          .map((entry) => normalizeSkillSummaryInput(entry))
-          .filter(Boolean)
+      ? rawSkillsSummary.map((entry) => normalizeSkillSummaryInput(entry)).filter(Boolean)
       : [];
-    const resolvedConfigSummary = (await resolveMaybe(configSummary)) ?? {};
+    const resolvedConfigSummary = await resolveConfigBootstrapSummary();
 
     return {
       ok: true,
@@ -974,42 +1096,40 @@ export function createBackgroundRunnerBridge({
           lastError: effectiveError
             ? {
                 code: effectiveError.code,
-                message: effectiveError.message
+                message: effectiveError.message,
               }
             : null,
           actionCapabilities: {
             total: 0,
-            namespaces: []
-          }
+            namespaces: [],
+          },
         },
         skills: {
           status: skillEntries.length > 0 ? "healthy" : "empty",
           installedCount: skillEntries.length,
           enabledCount: skillEntries.filter((entry) => entry.enabled).length,
           trustedCount: skillEntries.filter((entry) => entry.trusted).length,
-          recentChange: skillEntries.find((entry) => entry.recentChange)?.recentChange ?? null
+          recentChange: skillEntries.find((entry) => entry.recentChange)?.recentChange ?? null,
         },
         hosts: {
-          status:
-            hostItems.some((entry) => entry.state === "degraded")
-              ? "degraded"
-              : hostItems.some((entry) => entry.connected)
-                ? "healthy"
-                : "empty",
+          status: hostItems.some((entry) => entry.state === "degraded")
+            ? "degraded"
+            : hostItems.some((entry) => entry.connected)
+              ? "healthy"
+              : "empty",
           defaultHostId: state.defaultHostId,
           totalCount: hostItems.length,
           connectedCount: hostItems.filter((entry) => entry.connected).length,
-          items: hostItems
+          items: hostItems,
         },
         config: {
-          status: resolvedConfigSummary.status ?? "placeholder",
-          fields:
-            resolvedConfigSummary.fields
-            ?? ["model", "automation", "permissions", "preferences"],
-          note:
-            resolvedConfigSummary.note ?? "Config control plane is not implemented yet."
-        }
-      })
+          status: resolvedConfigSummary.status,
+          fields: resolvedConfigSummary.fields,
+          values: resolvedConfigSummary.values,
+          note: resolvedConfigSummary.note,
+          updatedAt: resolvedConfigSummary.updatedAt,
+        },
+      }),
     };
   }
 
@@ -1029,54 +1149,58 @@ export function createBackgroundRunnerBridge({
       case "host.read":
         return routeHostSubstrate("host.read", {
           hostId: message.hostId,
-          path: message.path
+          path: message.path,
         });
       case "host.write":
         return routeHostSubstrate("host.write", {
           hostId: message.hostId,
           path: message.path,
-          content: message.content
+          content: message.content,
         });
       case "host.edit":
         return routeHostSubstrate("host.edit", {
           hostId: message.hostId,
           path: message.path,
-          patch: message.patch
+          patch: message.patch,
         });
       case "host.exec":
         return routeHostSubstrate("host.exec", {
           hostId: message.hostId,
           command: message.command,
-          timeoutMs: message.timeoutMs
+          timeoutMs: message.timeoutMs,
         });
       case "hosts.list":
         return listHosts();
       case "hosts.get":
         return getHost({
-          hostId: message.hostId
+          hostId: message.hostId,
         });
       case "hosts.connect":
         return connectHost({
-          hostId: message.hostId
+          hostId: message.hostId,
         });
       case "hosts.disconnect":
         return disconnectHost({
-          hostId: message.hostId
+          hostId: message.hostId,
         });
       case "hosts.set_default":
         return setDefaultHost({
-          hostId: message.hostId
+          hostId: message.hostId,
         });
       case "hosts.health":
         return hostHealth({
-          hostId: message.hostId
+          hostId: message.hostId,
+        });
+      case "config.update":
+        return updateConfig({
+          patch: message.patch,
         });
       case "audit.host":
         return {
           ok: true,
           data: {
-            entries: getAuditTail(message.limit)
-          }
+            entries: getAuditTail(message.limit),
+          },
         };
       case "site.runtime.invoke":
         return invokeSiteRuntime(message);
@@ -1084,24 +1208,24 @@ export function createBackgroundRunnerBridge({
       case "runtime.capture_diagnostics":
         return diagnostics({
           tabId: message.tabId,
-          world: message.world
+          world: message.world,
         });
       case "runtime.clear_error":
         return {
           ok: true,
-          data: clearRuntimeError()
+          data: clearRuntimeError(),
         };
       case "runtime.bootstrap":
         return bootstrap({
-          world: message.world
+          world: message.world,
         });
       default:
         return {
           ok: false,
           error: {
             code: "E_RUNTIME",
-            message: `Unknown runner bridge message: ${message.kind}`
-          }
+            message: `Unknown runner bridge message: ${message.kind}`,
+          },
         };
     }
   }
@@ -1118,7 +1242,7 @@ export function createBackgroundRunnerBridge({
         .catch((error) => {
           sendResponse({
             ok: false,
-            error: toBridgeError(error)
+            error: toBridgeError(error),
           });
         });
       return true;
@@ -1142,18 +1266,19 @@ export function createBackgroundRunnerBridge({
     health,
     diagnostics,
     bootstrap,
+    updateConfig,
     getAuditTail,
     clearRuntimeError,
     route,
     registerRuntimeListener,
-    getBridgeState
+    getBridgeState,
   };
 }
 
 export function createPageHookBridge({
   chromeApi = globalThis.chrome,
   hookKey = PAGE_HOOK_GLOBAL_KEY,
-  defaultFile = PAGE_HOOK_DEFAULT_FILE
+  defaultFile = PAGE_HOOK_DEFAULT_FILE,
 } = {}) {
   if (!chromeApi?.scripting?.executeScript) {
     throw new Error("chrome.scripting.executeScript is required for page hook injection");
@@ -1163,7 +1288,7 @@ export function createPageHookBridge({
     const executionResult = await chromeApi.scripting.executeScript({
       target: { tabId },
       world: siteWorldToExecutionWorld(world),
-      ...(files ? { files } : { func, args })
+      ...(files ? { files } : { func, args }),
     });
     return unwrapExecuteScriptResult(executionResult);
   }
@@ -1177,7 +1302,7 @@ export function createPageHookBridge({
     await executeInTab({
       tabId: tab.tabId,
       world: step.world,
-      files: [jsPath]
+      files: [jsPath],
     });
     return executeInTab({
       tabId: tab.tabId,
@@ -1189,7 +1314,7 @@ export function createPageHookBridge({
         }
         return api.install(installedStep, installedTab);
       },
-      args: [hookKey, { ...step, jsPath }, tab]
+      args: [hookKey, { ...step, jsPath }, tab],
     });
   }
 
@@ -1208,7 +1333,7 @@ export function createPageHookBridge({
         }
         return api.invoke(installedId, installedAction, installedInput, installedCtx);
       },
-      args: [hookKey, installationId, action, input, ctx]
+      args: [hookKey, installationId, action, input, ctx],
     });
   }
 
@@ -1228,8 +1353,8 @@ export function createPageHookBridge({
           }
           return api.verify(installedId, installedAction, installedResult);
         },
-        args: [hookKey, installationId, action, result]
-      })
+        args: [hookKey, installationId, action, result],
+      }),
     );
   }
 
@@ -1241,7 +1366,7 @@ export function createPageHookBridge({
         const api = globalThis[installedHookKey];
         return api?.state ?? null;
       },
-      args: [hookKey]
+      args: [hookKey],
     });
   }
 
@@ -1249,7 +1374,7 @@ export function createPageHookBridge({
     install,
     invoke,
     verify,
-    snapshotState
+    snapshotState,
   };
 }
 
@@ -1267,7 +1392,7 @@ export function startBackgroundRunnerBridge(options = {}) {
   }
   return {
     bridge,
-    dispose
+    dispose,
   };
 }
 

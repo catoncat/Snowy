@@ -24,7 +24,7 @@
 3. skill/workflow
 4. audit
 
-## 2. 当前 action surface (35 actions)
+## 2. 当前 action surface (36 actions)
 
 ### Browser-local substrate (memfs / page / tabs / site)
 
@@ -64,7 +64,9 @@
 - `host.edit`
 - `host.exec`
 
-### Product control plane (hosts)
+### Product control plane (config / hosts)
+
+- `config.update`
 
 - `hosts.list`
 - `hosts.get`
@@ -74,10 +76,6 @@
 - `hosts.health`
 
 ## 3. 当前明显缺失但应优先补的 action surface
-
-### Config control plane
-
-- `config.update`
 
 ### Skill lifecycle control plane
 

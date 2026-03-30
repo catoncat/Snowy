@@ -101,7 +101,7 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 主要原因：
 
 1. 迁移控制面刚建立，还未长期维护
-2. AI-native product control plane 仍是设计口径，未形成最小实现
+2. AI-native product control plane 已有最小实现，但 `skills.*` / `audit.*` 仍未形成完整主链
 3. browser automation / screenshot / download / intervention 仍未迁入主线
 4. diagnostics / provider / studio / automation parity 仍未成体系
 

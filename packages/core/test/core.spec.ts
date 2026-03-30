@@ -1,9 +1,21 @@
 import {
+  CONFIG_CONTROL_PLANE_ACTIONS,
+  type CapabilityDescriptor,
+  CapabilityError,
+  HOST_CONTROL_PLANE_ACTIONS,
+  HOST_SUBSTRATE_ACTIONS,
+  PUBLIC_CAPABILITY_NAMESPACES,
+  RUNTIME_CONTROL_PLANE_ACTIONS,
+  assertCapabilityDescriptor,
+  capabilityNamespace,
+} from "@bbl-next/contracts";
+import {
   AI_SURFACE_BOUNDARY,
+  BUILTIN_BOOTSTRAP_RESOURCE_KEYS,
   BUILTIN_CAPABILITIES,
   BUILTIN_CATALOG,
-  BUILTIN_BOOTSTRAP_RESOURCE_KEYS,
   BUILTIN_EXPORT_HANDOFFS,
+  type BuiltinCapabilityMap,
   CapabilityRegistry,
   FamilyProviderRegistry,
   SkillInvocationService,
@@ -18,20 +30,7 @@ import {
   setDefaultExecutionHost,
   typedCapabilities,
   typedCapabilitiesForPermissions,
-  type BuiltinCapabilityMap
 } from "@bbl-next/core";
-import {
-  CONFIG_CONTROL_PLANE_ACTIONS,
-  HOST_CONTROL_PLANE_ACTIONS,
-  HOST_SUBSTRATE_ACTIONS,
-  RUNTIME_CONTROL_PLANE_ACTIONS,
-  assertCapabilityDescriptor,
-  CapabilityError,
-  capabilityNamespace,
-  MAX_SKILL_CALL_DEPTH,
-  PUBLIC_CAPABILITY_NAMESPACES,
-  type CapabilityDescriptor
-} from "@bbl-next/contracts";
 import { describe, expect, it } from "vitest";
 
 function descriptor(overrides: Partial<CapabilityDescriptor> = {}): CapabilityDescriptor {
@@ -49,9 +48,9 @@ function descriptor(overrides: Partial<CapabilityDescriptor> = {}): CapabilityDe
     exportable: false,
     executionBinding: {
       family: "page",
-      operation: "click"
+      operation: "click",
     },
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -67,49 +66,40 @@ describe("core", () => {
       "hosts.connect",
       "hosts.disconnect",
       "hosts.set_default",
-      "hosts.health"
+      "hosts.health",
     ]);
-    expect(HOST_SUBSTRATE_ACTIONS).toEqual([
-      "host.read",
-      "host.write",
-      "host.edit",
-      "host.exec"
-    ]);
+    expect(HOST_SUBSTRATE_ACTIONS).toEqual(["host.read", "host.write", "host.edit", "host.exec"]);
     expect(getBuiltinsByNamespace("hosts").map((entry) => entry.id)).toEqual([
       "hosts.list",
       "hosts.get",
       "hosts.connect",
       "hosts.disconnect",
       "hosts.set_default",
-      "hosts.health"
+      "hosts.health",
     ]);
     expect(getBuiltinsByNamespace("host").map((entry) => entry.id)).toEqual([
       "host.read",
       "host.write",
       "host.edit",
-      "host.exec"
+      "host.exec",
     ]);
   });
 
   it("keeps config control-plane actions aligned with canonical contracts", () => {
-    expect(CONFIG_CONTROL_PLANE_ACTIONS).toEqual([
-      "config.update"
-    ]);
-    expect(getBuiltinsByNamespace("config").map((entry) => entry.id)).toEqual([
-      "config.update"
-    ]);
+    expect(CONFIG_CONTROL_PLANE_ACTIONS).toEqual(["config.update"]);
+    expect(getBuiltinsByNamespace("config").map((entry) => entry.id)).toEqual(["config.update"]);
     expect(getBuiltinsByNamespace("config")).toMatchObject([
       {
         id: "config.update",
-        sideEffects: "writes"
-      }
+        sideEffects: "writes",
+      },
     ]);
   });
 
   it("keeps runtime control-plane actions aligned with canonical contracts", () => {
-    expect(getBuiltinsByNamespace("runtime").map((entry) => entry.id)).toEqual(
-      [...RUNTIME_CONTROL_PLANE_ACTIONS]
-    );
+    expect(getBuiltinsByNamespace("runtime").map((entry) => entry.id)).toEqual([
+      ...RUNTIME_CONTROL_PLANE_ACTIONS,
+    ]);
   });
 
   it("projects tools from the registry", () => {
@@ -118,43 +108,47 @@ describe("core", () => {
     expect(registry.projectTools()).toMatchObject([
       {
         name: "page_click",
-        capabilityId: "page.click"
-      }
+        capabilityId: "page.click",
+      },
     ]);
   });
 
   it("keeps bootstrap resources and workflows outside the action capability catalog", () => {
     expect(AI_SURFACE_BOUNDARY).toMatchObject({
       actions: {
-        primitive: "action"
+        primitive: "action",
       },
       bootstrapResources: ["runtime", "config", "skills", "hosts"],
       workflows: {
         primitive: "workflow",
-        invocation: "skills.invoke"
-      }
+        invocation: "skills.invoke",
+      },
     });
     expect(BUILTIN_BOOTSTRAP_RESOURCE_KEYS).toEqual(["runtime", "config", "skills", "hosts"]);
-    expect(BUILTIN_CAPABILITIES.some((entry) =>
-      BUILTIN_BOOTSTRAP_RESOURCE_KEYS.includes(entry.id as typeof BUILTIN_BOOTSTRAP_RESOURCE_KEYS[number])
-    )).toBe(false);
+    expect(
+      BUILTIN_CAPABILITIES.some((entry) =>
+        BUILTIN_BOOTSTRAP_RESOURCE_KEYS.includes(
+          entry.id as (typeof BUILTIN_BOOTSTRAP_RESOURCE_KEYS)[number],
+        ),
+      ),
+    ).toBe(false);
     expect(getBuiltinsByNamespace("runtime")).toMatchObject([
       {
         id: "runtime.list_capabilities",
-        description: "List all registered action capabilities"
+        description: "List all registered action capabilities",
       },
       {
         id: "runtime.get_capability",
-        description: "Get an action capability descriptor by id"
+        description: "Get an action capability descriptor by id",
       },
       {
         id: "runtime.capture_diagnostics",
-        description: "Capture a read-only runtime diagnostics snapshot without triggering recovery"
+        description: "Capture a read-only runtime diagnostics snapshot without triggering recovery",
       },
       {
         id: "runtime.clear_error",
-        description: "Clear the current runtime error state, idempotent if no error is present"
-      }
+        description: "Clear the current runtime error state, idempotent if no error is present",
+      },
     ]);
   });
 
@@ -166,17 +160,17 @@ describe("core", () => {
         url: "https://x.com/home",
         title: "Home",
         world: "main",
-        active: true
+        active: true,
       },
       runtime: {
         sessionId: "session-1",
-        loopState: "idle"
+        loopState: "idle",
       },
       skills: {
         installedCount: 2,
         enabledCount: 1,
         trustedCount: 1,
-        recentChange: "skill.twitter enabled"
+        recentChange: "skill.twitter enabled",
       },
       hosts: {
         items: [
@@ -185,10 +179,10 @@ describe("core", () => {
             kind: "local",
             connected: true,
             state: "connected",
-            isDefault: true
-          }
-        ]
-      }
+            isDefault: true,
+          },
+        ],
+      },
     });
 
     expect(summary).toMatchObject({
@@ -201,28 +195,28 @@ describe("core", () => {
         activeTab: {
           tabId: 7,
           url: "https://x.com/home",
-          world: "main"
+          world: "main",
         },
         loopState: "idle",
         actionCapabilities: {
-          total: BUILTIN_CAPABILITIES.length
-        }
+          total: BUILTIN_CAPABILITIES.length,
+        },
       },
       skills: {
         status: "healthy",
         installedCount: 2,
         enabledCount: 1,
-        trustedCount: 1
+        trustedCount: 1,
       },
       hosts: {
         status: "healthy",
         defaultHostId: "local",
         totalCount: 1,
-        connectedCount: 1
+        connectedCount: 1,
       },
       config: {
-        status: "placeholder"
-      }
+        status: "placeholder",
+      },
     });
   });
 
@@ -234,8 +228,8 @@ describe("core", () => {
         loopState: "degraded",
         lastError: {
           code: "E_RUNTIME",
-          message: "runner unavailable"
-        }
+          message: "runner unavailable",
+        },
       },
       hosts: {
         items: [
@@ -244,10 +238,10 @@ describe("core", () => {
             kind: "local",
             connected: false,
             state: "degraded",
-            isDefault: true
-          }
-        ]
-      }
+            isDefault: true,
+          },
+        ],
+      },
     });
 
     expect(summary).toMatchObject({
@@ -257,13 +251,13 @@ describe("core", () => {
         sessionId: "session-2",
         loopState: "degraded",
         lastError: {
-          code: "E_RUNTIME"
-        }
+          code: "E_RUNTIME",
+        },
       },
       hosts: {
         status: "degraded",
-        connectedCount: 0
-      }
+        connectedCount: 0,
+      },
     });
   });
 
@@ -275,14 +269,14 @@ describe("core", () => {
         values: {
           model: {
             provider: "openai",
-            defaultModel: "gpt-5.4"
+            defaultModel: "gpt-5.4",
           },
           automation: {
-            activeTabOnly: true
-          }
+            activeTabOnly: true,
+          },
         },
-        updatedAt: "2026-03-30T00:00:00.000Z"
-      }
+        updatedAt: "2026-03-30T00:00:00.000Z",
+      },
     });
 
     expect(summary.config).toEqual({
@@ -291,14 +285,14 @@ describe("core", () => {
       values: {
         model: {
           provider: "openai",
-          defaultModel: "gpt-5.4"
+          defaultModel: "gpt-5.4",
         },
         automation: {
-          activeTabOnly: true
-        }
+          activeTabOnly: true,
+        },
       },
       note: null,
-      updatedAt: "2026-03-30T00:00:00.000Z"
+      updatedAt: "2026-03-30T00:00:00.000Z",
     });
   });
 
@@ -307,13 +301,13 @@ describe("core", () => {
       hosts: [
         {
           hostId: "local",
-          kind: "local"
+          kind: "local",
         },
         {
           hostId: "ssh-prod",
-          kind: "remote"
-        }
-      ]
+          kind: "remote",
+        },
+      ],
     });
 
     expect(seed).toMatchObject({
@@ -325,8 +319,8 @@ describe("core", () => {
           state: "disconnected",
           isDefault: false,
           health: {
-            status: "unknown"
-          }
+            status: "unknown",
+          },
         },
         {
           hostId: "ssh-prod",
@@ -334,18 +328,18 @@ describe("core", () => {
           state: "disconnected",
           isDefault: false,
           health: {
-            status: "unknown"
-          }
-        }
-      ]
+            status: "unknown",
+          },
+        },
+      ],
     });
 
     const connected = connectExecutionHost(seed, "ssh-prod", {
-      checkedAt: "2026-03-29T00:00:00.000Z"
+      checkedAt: "2026-03-29T00:00:00.000Z",
     });
     const defaulted = setDefaultExecutionHost(connected, "ssh-prod");
     const disconnected = disconnectExecutionHost(defaulted, "ssh-prod", {
-      checkedAt: "2026-03-29T00:01:00.000Z"
+      checkedAt: "2026-03-29T00:01:00.000Z",
     });
 
     expect(connected).toMatchObject({
@@ -358,8 +352,8 @@ describe("core", () => {
           state: "disconnected",
           isDefault: false,
           health: {
-            status: "unknown"
-          }
+            status: "unknown",
+          },
         },
         {
           hostId: "ssh-prod",
@@ -369,30 +363,30 @@ describe("core", () => {
           isDefault: false,
           health: {
             status: "healthy",
-            checkedAt: "2026-03-29T00:00:00.000Z"
-          }
-        }
-      ]
+            checkedAt: "2026-03-29T00:00:00.000Z",
+          },
+        },
+      ],
     });
     expect(defaulted).toMatchObject({
       defaultHostId: "ssh-prod",
       hosts: [
         {
           hostId: "local",
-          isDefault: false
+          isDefault: false,
         },
         {
           hostId: "ssh-prod",
-          isDefault: true
-        }
-      ]
+          isDefault: true,
+        },
+      ],
     });
     expect(disconnected).toMatchObject({
       defaultHostId: "ssh-prod",
       hosts: [
         {
           hostId: "local",
-          isDefault: false
+          isDefault: false,
         },
         {
           hostId: "ssh-prod",
@@ -401,10 +395,10 @@ describe("core", () => {
           isDefault: true,
           health: {
             status: "unknown",
-            checkedAt: "2026-03-29T00:01:00.000Z"
-          }
-        }
-      ]
+            checkedAt: "2026-03-29T00:01:00.000Z",
+          },
+        },
+      ],
     });
   });
 
@@ -416,20 +410,20 @@ describe("core", () => {
       runtime: {
         status: "empty",
         sessionId: null,
-        activeTab: null
+        activeTab: null,
       },
       skills: {
         status: "empty",
-        installedCount: 0
+        installedCount: 0,
       },
       hosts: {
         status: "empty",
-        totalCount: 0
+        totalCount: 0,
       },
       config: {
         status: "placeholder",
-        fields: ["model", "automation", "permissions", "preferences"]
-      }
+        fields: ["model", "automation", "permissions", "preferences"],
+      },
     });
   });
 
@@ -438,7 +432,7 @@ describe("core", () => {
       "host.read",
       "host.write",
       "host.edit",
-      "host.exec"
+      "host.exec",
     ]);
     expect(getBuiltinsByNamespace("hosts").map((entry) => entry.id)).toEqual([
       "hosts.list",
@@ -446,26 +440,18 @@ describe("core", () => {
       "hosts.connect",
       "hosts.disconnect",
       "hosts.set_default",
-      "hosts.health"
+      "hosts.health",
     ]);
     expect(
       getBuiltinsByNamespace("hosts")
         .filter((entry) => entry.sideEffects === "reads")
-        .map((entry) => entry.id)
-    ).toEqual([
-      "hosts.list",
-      "hosts.get",
-      "hosts.health"
-    ]);
+        .map((entry) => entry.id),
+    ).toEqual(["hosts.list", "hosts.get", "hosts.health"]);
     expect(
       getBuiltinsByNamespace("hosts")
         .filter((entry) => entry.sideEffects === "writes")
-        .map((entry) => entry.id)
-    ).toEqual([
-      "hosts.connect",
-      "hosts.disconnect",
-      "hosts.set_default"
-    ]);
+        .map((entry) => entry.id),
+    ).toEqual(["hosts.connect", "hosts.disconnect", "hosts.set_default"]);
   });
 
   it("routes host substrate requests through explicit hostId or default host", () => {
@@ -475,23 +461,23 @@ describe("core", () => {
         {
           hostId: "local",
           kind: "local",
-          connected: true
+          connected: true,
         },
         {
           hostId: "ssh-prod",
           kind: "remote",
-          connected: true
-        }
-      ]
+          connected: true,
+        },
+      ],
     });
 
     expect(resolveHostSubstrateTarget(snapshot, { hostId: "ssh-prod" })).toEqual({
       hostId: "ssh-prod",
-      via: "explicit"
+      via: "explicit",
     });
     expect(resolveHostSubstrateTarget(snapshot, {})).toEqual({
       hostId: "local",
-      via: "default"
+      via: "default",
     });
     expect(() =>
       resolveHostSubstrateTarget(
@@ -499,12 +485,12 @@ describe("core", () => {
           hosts: [
             {
               hostId: "local",
-              kind: "local"
-            }
-          ]
+              kind: "local",
+            },
+          ],
         }),
-        {}
-      )
+        {},
+      ),
     ).toThrow("host substrate requires hostId or a default host");
   });
 
@@ -520,13 +506,13 @@ describe("core", () => {
         exportRisk: "medium",
         executionBinding: {
           family: "runtime",
-          operation: "summary"
-        }
+          operation: "summary",
+        },
       }),
       descriptor({
         id: "page.click",
-        exportable: false
-      })
+        exportable: false,
+      }),
     ]);
 
     expect(registry.projectMcpExportHandoffs()).toEqual([
@@ -541,9 +527,9 @@ describe("core", () => {
         annotations: {
           sideEffects: "reads",
           supportsVerify: true,
-          supportsStreaming: false
-        }
-      }
+          supportsStreaming: false,
+        },
+      },
     ]);
   });
 
@@ -556,14 +542,14 @@ describe("core", () => {
         permissions: ["page.query"],
         executionBinding: {
           family: "page",
-          operation: "query"
-        }
-      })
+          operation: "query",
+        },
+      }),
     ]);
     const providers = new FamilyProviderRegistry();
     providers.register({
       family: "page",
-      invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+      invoke: ({ binding, input }) => ({ operation: binding.operation, input }),
     });
 
     const ctx = createSkillRuntimeContext({
@@ -571,20 +557,20 @@ describe("core", () => {
       providers,
       sessionId: "s1",
       skillId: "skill.page",
-      permissions: ["page.*"]
+      permissions: ["page.*"],
     });
 
     await expect(ctx.call("page.click", { uid: "u1" })).resolves.toEqual({
       operation: "click",
-      input: { uid: "u1" }
+      input: { uid: "u1" },
     });
     await expect(
       (ctx.capabilities.page as { query(input: unknown): Promise<unknown> }).query({
-        text: "Search"
-      })
+        text: "Search",
+      }),
     ).resolves.toEqual({
       operation: "query",
-      input: { text: "Search" }
+      input: { text: "Search" },
     });
   });
 
@@ -593,18 +579,18 @@ describe("core", () => {
     const providers = new FamilyProviderRegistry();
     providers.register({
       family: "page",
-      invoke: () => "ok"
+      invoke: () => "ok",
     });
     const ctx = createSkillRuntimeContext({
       registry,
       providers,
       sessionId: "s1",
       skillId: "skill.page",
-      permissions: ["page.query"]
+      permissions: ["page.query"],
     });
 
     await expect(ctx.call("page.click", { uid: "u1" })).rejects.toMatchObject({
-      code: "E_PERMISSION_DENIED"
+      code: "E_PERMISSION_DENIED",
     });
   });
 
@@ -616,14 +602,14 @@ describe("core", () => {
         permissions: ["skills.invoke"],
         executionBinding: {
           family: "skills",
-          operation: "invoke"
-        }
-      })
+          operation: "invoke",
+        },
+      }),
     ]);
     const providers = new FamilyProviderRegistry();
     providers.register({
       family: "page",
-      invoke: () => "ok"
+      invoke: () => "ok",
     });
 
     const ctx = createSkillRuntimeContext({
@@ -633,14 +619,14 @@ describe("core", () => {
       skillId: "skill.page",
       permissions: ["page.*", "skills.*"],
       depth: 3,
-      invokeSkill: async () => "never"
+      invokeSkill: async () => "never",
     });
 
     await expect(ctx.skills.invoke("skill.child", "run", {})).rejects.toBeInstanceOf(
-      CapabilityError
+      CapabilityError,
     );
     await expect(ctx.skills.invoke("skill.child", "run", {})).rejects.toMatchObject({
-      code: "E_REENTRANCY_BLOCKED"
+      code: "E_REENTRANCY_BLOCKED",
     });
   });
 
@@ -649,7 +635,7 @@ describe("core", () => {
     const providers = new FamilyProviderRegistry();
     providers.register({
       family: "page",
-      invoke: ({ input }) => ({ ok: true, input })
+      invoke: ({ input }) => ({ ok: true, input }),
     });
 
     const ctx = createSkillRuntimeContext({
@@ -657,7 +643,7 @@ describe("core", () => {
       providers,
       sessionId: "s1",
       skillId: "skill.page",
-      permissions: ["page.*"]
+      permissions: ["page.*"],
     });
 
     await ctx.call("page.click", { uid: "u1" });
@@ -667,7 +653,7 @@ describe("core", () => {
       traceId: ctx.traceId,
       capabilityId: "page.click",
       status: "succeeded",
-      output: { ok: true, input: { uid: "u1" } }
+      output: { ok: true, input: { uid: "u1" } },
     });
   });
 
@@ -676,7 +662,7 @@ describe("core", () => {
     const providers = new FamilyProviderRegistry();
     providers.register({
       family: "page",
-      invoke: ({ input }) => ({ ok: true, input })
+      invoke: ({ input }) => ({ ok: true, input }),
     });
 
     const ctx = createSkillRuntimeContext({
@@ -684,7 +670,7 @@ describe("core", () => {
       providers,
       sessionId: "s1",
       skillId: "skill.page",
-      permissions: ["page.*"]
+      permissions: ["page.*"],
     });
 
     await ctx.call("page.click", { uid: "u1" });
@@ -698,7 +684,7 @@ describe("core", () => {
     const providers = new FamilyProviderRegistry();
     providers.register({
       family: "page",
-      invoke: ({ input }) => ({ ok: true, input })
+      invoke: ({ input }) => ({ ok: true, input }),
     });
 
     const ctx = createSkillRuntimeContext({
@@ -707,7 +693,7 @@ describe("core", () => {
       sessionId: "s1",
       skillId: "skill.page",
       permissions: ["page.*"],
-      traceId: "trace-explicit"
+      traceId: "trace-explicit",
     });
 
     await ctx.call("page.click", { uid: "u1" });
@@ -735,7 +721,7 @@ describe("core", () => {
         "snapshot",
         "stage",
         "stat",
-        "write"
+        "write",
       ];
 
       expect(memfsOperations).toEqual(expectedVfsMethods);
@@ -771,7 +757,7 @@ describe("core", () => {
       for (const d of BUILTIN_CAPABILITIES) {
         expect(
           d.inputSchema.type || d.inputSchema.$ref || d.inputSchema.oneOf,
-          `${d.id} inputSchema missing type`
+          `${d.id} inputSchema missing type`,
         ).toBeTruthy();
       }
     });
@@ -792,8 +778,8 @@ describe("core", () => {
           "page.query",
           "tabs.list",
           "runtime.list_capabilities",
-          "runtime.capture_diagnostics"
-        ])
+          "runtime.capture_diagnostics",
+        ]),
       );
       expect(BUILTIN_EXPORT_HANDOFFS.map((entry) => entry.capabilityId)).not.toEqual(
         expect.arrayContaining([
@@ -801,11 +787,11 @@ describe("core", () => {
           "memfs.write",
           "runner.invoke",
           "host.exec",
-          "site.fetch_with_session"
-        ])
+          "site.fetch_with_session",
+        ]),
       );
       expect(BUILTIN_EXPORT_HANDOFFS.every((entry) => entry.exportName.trim().length > 0)).toBe(
-        true
+        true,
       );
     });
 
@@ -814,7 +800,7 @@ describe("core", () => {
       expect(memfs.length).toBe(12);
       expect(memfs.every((d) => d.id.startsWith("memfs."))).toBe(true);
       expect(memfs.map((d) => d.id)).toEqual(
-        expect.arrayContaining(["memfs.edit", "memfs.stat", "memfs.stage"])
+        expect.arrayContaining(["memfs.edit", "memfs.stat", "memfs.stage"]),
       );
 
       expect(getBuiltinsByNamespace("nonexistent")).toEqual([]);
@@ -835,22 +821,22 @@ describe("core", () => {
           risk: "low",
           sideEffects: "reads",
           permissions: ["memfs.read"],
-          executionBinding: { family: "memfs", operation: "read" }
+          executionBinding: { family: "memfs", operation: "read" },
         }),
         descriptor({
           id: "skills.invoke",
           permissions: ["skills.invoke"],
-          executionBinding: { family: "skills", operation: "invoke" }
-        })
+          executionBinding: { family: "skills", operation: "invoke" },
+        }),
       ]);
       const providers = new FamilyProviderRegistry();
       providers.register({
         family: "page",
-        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input }),
       });
       providers.register({
         family: "memfs",
-        invoke: ({ input }) => ({ content: "hello", input })
+        invoke: ({ input }) => ({ content: "hello", input }),
       });
       const service = new SkillInvocationService({ registry, providers });
       return { registry, providers, service };
@@ -864,26 +850,26 @@ describe("core", () => {
         handler: async (ctx, action, args) => {
           const clicked = await ctx.call("page.click", { uid: "btn1" });
           return { action, args, clicked };
-        }
+        },
       });
 
       const result = await service.invoke({
         sessionId: "s1",
         skillId: "skill.greet",
         action: "run",
-        args: { name: "world" }
+        args: { name: "world" },
       });
 
       expect(result.result).toMatchObject({
         action: "run",
         args: { name: "world" },
-        clicked: { operation: "click", input: { uid: "btn1" } }
+        clicked: { operation: "click", input: { uid: "btn1" } },
       });
       expect(result.trace).toHaveLength(1);
       expect(result.trace[0]).toMatchObject({
         traceId: result.traceId,
         capabilityId: "page.click",
-        status: "succeeded"
+        status: "succeeded",
       });
       expect(result.depth).toBe(1);
       expect(result.parentTraceId).toBeUndefined();
@@ -898,8 +884,8 @@ describe("core", () => {
           sessionId: "s1",
           skillId: "skill.nonexistent",
           action: "run",
-          args: {}
-        })
+          args: {},
+        }),
       ).rejects.toMatchObject({ code: "E_CAPABILITY_NOT_FOUND" });
     });
 
@@ -911,7 +897,7 @@ describe("core", () => {
         handler: async (ctx) => {
           await ctx.call("page.click", { uid: "u1" });
           return "should not reach";
-        }
+        },
       });
 
       await expect(
@@ -919,8 +905,8 @@ describe("core", () => {
           sessionId: "s1",
           skillId: "skill.readonly",
           action: "run",
-          args: {}
-        })
+          args: {},
+        }),
       ).rejects.toMatchObject({ code: "E_PERMISSION_DENIED" });
     });
 
@@ -932,25 +918,25 @@ describe("core", () => {
         handler: async (ctx) => {
           const inner = await ctx.skills.invoke("skill.inner", "run", {});
           return { inner };
-        }
+        },
       });
       service.register({
         id: "skill.inner",
         permissions: ["page.*"],
         handler: async (ctx, action) => {
           return { action, depth: ctx.depth };
-        }
+        },
       });
 
       const result = await service.invoke({
         sessionId: "s1",
         skillId: "skill.outer",
         action: "run",
-        args: {}
+        args: {},
       });
 
       expect(result.result).toMatchObject({
-        inner: { action: "run", depth: 2 }
+        inner: { action: "run", depth: 2 },
       });
       expect(result.depth).toBe(1);
     });
@@ -960,7 +946,7 @@ describe("core", () => {
       service.register({
         id: "skill.parent",
         permissions: ["memfs.read", "skills.invoke"],
-        handler: async (ctx) => ctx.skills.invoke("skill.child", "run", {})
+        handler: async (ctx) => ctx.skills.invoke("skill.child", "run", {}),
       });
       service.register({
         id: "skill.child",
@@ -968,21 +954,21 @@ describe("core", () => {
         handler: async (ctx) => ({
           permissions: ctx.permissions,
           canRead: typeof (ctx.capabilities.memfs as { read?: unknown } | undefined)?.read,
-          canClick: typeof (ctx.capabilities.page as { click?: unknown } | undefined)?.click
-        })
+          canClick: typeof (ctx.capabilities.page as { click?: unknown } | undefined)?.click,
+        }),
       });
 
       const result = await service.invoke({
         sessionId: "s1",
         skillId: "skill.parent",
         action: "run",
-        args: {}
+        args: {},
       });
 
       expect(result.result).toEqual({
         permissions: ["memfs.read"],
         canRead: "function",
-        canClick: "undefined"
+        canClick: "undefined",
       });
     });
 
@@ -993,7 +979,7 @@ describe("core", () => {
         permissions: ["skills.*"],
         handler: async (ctx) => {
           return ctx.skills.invoke("skill.recursive", "run", {});
-        }
+        },
       });
 
       await expect(
@@ -1001,8 +987,8 @@ describe("core", () => {
           sessionId: "s1",
           skillId: "skill.recursive",
           action: "run",
-          args: {}
-        })
+          args: {},
+        }),
       ).rejects.toMatchObject({ code: "E_REENTRANCY_BLOCKED" });
     });
 
@@ -1011,12 +997,12 @@ describe("core", () => {
       service.register({
         id: "skill.a",
         permissions: [],
-        handler: async () => null
+        handler: async () => null,
       });
       service.register({
         id: "skill.b",
         permissions: [],
-        handler: async () => null
+        handler: async () => null,
       });
 
       expect(service.get("skill.a")).toBeDefined();
@@ -1036,7 +1022,7 @@ describe("core", () => {
           await ctx.call("page.click", { uid: "p1" });
           await ctx.skills.invoke("skill.child", "run", {});
           return "done";
-        }
+        },
       });
       service.register({
         id: "skill.child",
@@ -1046,21 +1032,21 @@ describe("core", () => {
           childParentTraceId = ctx.parentTraceId;
           await ctx.call("page.click", { uid: "c1" });
           return "child done";
-        }
+        },
       });
 
       const result = await service.invoke({
         sessionId: "s1",
         skillId: "skill.parent",
         action: "run",
-        args: {}
+        args: {},
       });
 
       expect(result.trace).toHaveLength(2);
       expect(result.trace[0]).toMatchObject({
         traceId: result.traceId,
         capabilityId: "page.click",
-        input: { uid: "p1" }
+        input: { uid: "p1" },
       });
       expect(result.trace[1]).toMatchObject({
         traceId: result.traceId,
@@ -1068,10 +1054,10 @@ describe("core", () => {
         input: {
           skillId: "skill.child",
           action: "run",
-          args: {}
+          args: {},
         },
         childTraceId,
-        output: "child done"
+        output: "child done",
       });
       expect(childTraceId).toMatch(/^trace-/);
       expect(childTraceId).not.toBe(result.traceId);
@@ -1083,12 +1069,12 @@ describe("core", () => {
       service.register({
         id: "skill.parent",
         permissions: ["skills.invoke"],
-        handler: async (ctx) => ctx.skills.invoke("skill.child", "run", {})
+        handler: async (ctx) => ctx.skills.invoke("skill.child", "run", {}),
       });
       service.register({
         id: "skill.child",
         permissions: ["page.click"],
-        handler: async (ctx) => ctx.call("page.click", { uid: "u1" })
+        handler: async (ctx) => ctx.call("page.click", { uid: "u1" }),
       });
 
       await expect(
@@ -1096,8 +1082,8 @@ describe("core", () => {
           sessionId: "s1",
           skillId: "skill.parent",
           action: "run",
-          args: {}
-        })
+          args: {},
+        }),
       ).rejects.toMatchObject({ code: "E_PERMISSION_DENIED" });
     });
   });
@@ -1108,11 +1094,11 @@ describe("core", () => {
       const providers = new FamilyProviderRegistry();
       providers.register({
         family: "memfs",
-        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input }),
       });
       providers.register({
         family: "page",
-        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input }),
       });
 
       const ctx = createSkillRuntimeContext({
@@ -1120,7 +1106,7 @@ describe("core", () => {
         providers,
         sessionId: "s1",
         skillId: "skill.test",
-        permissions: ["*"]
+        permissions: ["*"],
       });
 
       const caps = typedCapabilities(ctx);
@@ -1147,7 +1133,7 @@ describe("core", () => {
       const providers = new FamilyProviderRegistry();
       providers.register({
         family: "memfs",
-        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input }),
       });
 
       const ctx = createSkillRuntimeContext({
@@ -1155,7 +1141,7 @@ describe("core", () => {
         providers,
         sessionId: "s1",
         skillId: "skill.limited",
-        permissions: ["memfs.read"]
+        permissions: ["memfs.read"],
       });
 
       const caps = typedCapabilities(ctx);
@@ -1170,7 +1156,7 @@ describe("core", () => {
       const providers = new FamilyProviderRegistry();
       providers.register({
         family: "memfs",
-        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input }),
       });
 
       const permissions = ["memfs.read"] as const;
@@ -1179,7 +1165,7 @@ describe("core", () => {
         providers,
         sessionId: "s1",
         skillId: "skill.narrowed",
-        permissions: [...permissions]
+        permissions: [...permissions],
       });
 
       const caps = typedCapabilitiesForPermissions(ctx, permissions);
@@ -1188,7 +1174,7 @@ describe("core", () => {
 
       expect(result).toEqual({
         operation: "read",
-        input: { uri: "mem://narrowed" }
+        input: { uri: "mem://narrowed" },
       });
     });
 
@@ -1197,7 +1183,7 @@ describe("core", () => {
       const providers = new FamilyProviderRegistry();
       providers.register({
         family: "memfs",
-        invoke: ({ binding, input }) => ({ operation: binding.operation, input })
+        invoke: ({ binding, input }) => ({ operation: binding.operation, input }),
       });
 
       const permissions = ["memfs.edit", "memfs.stat", "memfs.stage"] as const;
@@ -1206,7 +1192,7 @@ describe("core", () => {
         providers,
         sessionId: "s1",
         skillId: "skill.memfs",
-        permissions: [...permissions]
+        permissions: [...permissions],
       });
 
       const caps = typedCapabilitiesForPermissions(ctx, permissions);
@@ -1216,17 +1202,17 @@ describe("core", () => {
 
       await expect(edit({ uri: "mem://workspace/file.txt", patch: "next" })).resolves.toEqual({
         operation: "edit",
-        input: { uri: "mem://workspace/file.txt", patch: "next" }
+        input: { uri: "mem://workspace/file.txt", patch: "next" },
       });
       await expect(stat({ uri: "mem://workspace/file.txt" })).resolves.toEqual({
         operation: "stat",
-        input: { uri: "mem://workspace/file.txt" }
+        input: { uri: "mem://workspace/file.txt" },
       });
       await expect(
-        stage({ entries: [{ uri: "mem://workspace/file.txt", content: "next" }] })
+        stage({ entries: [{ uri: "mem://workspace/file.txt", content: "next" }] }),
       ).resolves.toEqual({
         operation: "stage",
-        input: { entries: [{ uri: "mem://workspace/file.txt", content: "next" }] }
+        input: { entries: [{ uri: "mem://workspace/file.txt", content: "next" }] },
       });
     });
   });

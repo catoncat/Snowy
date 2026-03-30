@@ -1,17 +1,14 @@
 import {
-  AI_SURFACE_BOUNDARY as CONTRACT_AI_SURFACE_BOUNDARY,
+  type AiSurfaceBoundary,
   BOOTSTRAP_RESOURCE_KEYS,
+  type BootstrapResourceKey,
   CONFIG_RESOURCE_FIELDS,
-  assertCapabilityDescriptor,
-  descriptorsToCapabilityExportHandoffs,
-  descriptorToToolContract,
-  CapabilityError,
-  MAX_SKILL_CALL_DEPTH,
-  PUBLIC_CAPABILITY_NAMESPACES,
-  capabilityNamespace,
-  type CapabilityExportHandoff,
+  AI_SURFACE_BOUNDARY as CONTRACT_AI_SURFACE_BOUNDARY,
   type CapabilityDescriptor,
+  CapabilityError,
+  type CapabilityExportHandoff,
   type CapabilityTraceEntry,
+  type ConfigResourceField,
   type ExecutionBinding,
   type ExecutionHostHealthStatus,
   type ExecutionHostKind,
@@ -19,10 +16,13 @@ import {
   type ExecutionHostState,
   type HostControlPlaneSnapshot,
   type JsonSchema,
+  MAX_SKILL_CALL_DEPTH,
+  PUBLIC_CAPABILITY_NAMESPACES,
   type ToolContract,
-  type AiSurfaceBoundary,
-  type BootstrapResourceKey,
-  type ConfigResourceField
+  assertCapabilityDescriptor,
+  capabilityNamespace,
+  descriptorToToolContract,
+  descriptorsToCapabilityExportHandoffs,
 } from "@bbl-next/contracts";
 
 export interface CapabilityProviderRequest {
@@ -88,20 +88,20 @@ export class FamilyProviderRegistry {
   async invoke(
     descriptor: CapabilityDescriptor,
     input: unknown,
-    context?: SkillRuntimeContext
+    context?: SkillRuntimeContext,
   ): Promise<unknown> {
     const provider = this.#providers.get(descriptor.executionBinding.family);
     if (!provider) {
       throw new CapabilityError(
         "E_RUNTIME",
-        `No provider registered for family ${descriptor.executionBinding.family}`
+        `No provider registered for family ${descriptor.executionBinding.family}`,
       );
     }
     return provider.invoke({
       descriptor,
       binding: descriptor.executionBinding,
       input,
-      context
+      context,
     });
   }
 }
@@ -126,10 +126,7 @@ export class CapabilityRegistry {
   require(capabilityId: string): CapabilityDescriptor {
     const descriptor = this.get(capabilityId);
     if (!descriptor) {
-      throw new CapabilityError(
-        "E_CAPABILITY_NOT_FOUND",
-        `Unknown capability: ${capabilityId}`
-      );
+      throw new CapabilityError("E_CAPABILITY_NOT_FOUND", `Unknown capability: ${capabilityId}`);
     }
     return descriptor;
   }
@@ -144,9 +141,7 @@ export class CapabilityRegistry {
 }
 
 export const AI_SURFACE_BOUNDARY: AiSurfaceBoundary = CONTRACT_AI_SURFACE_BOUNDARY;
-export const BUILTIN_BOOTSTRAP_RESOURCE_KEYS: BootstrapResourceKey[] = [
-  ...BOOTSTRAP_RESOURCE_KEYS
-];
+export const BUILTIN_BOOTSTRAP_RESOURCE_KEYS: BootstrapResourceKey[] = [...BOOTSTRAP_RESOURCE_KEYS];
 
 export type BootstrapSummaryStatus = "healthy" | "degraded" | "empty";
 export type ConfigSummaryStatus = "ready" | "placeholder";
@@ -279,9 +274,15 @@ interface CatalogEntryInput {
 
 function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
   const {
-    id, family, operation, risk, sideEffects,
-    permissions, description, inputSchema,
-    outputSchema = { type: "object" }
+    id,
+    family,
+    operation,
+    risk,
+    sideEffects,
+    permissions,
+    description,
+    inputSchema,
+    outputSchema = { type: "object" },
   } = input;
   return {
     id,
@@ -297,12 +298,12 @@ function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
     exportable: sideEffects === "reads" || sideEffects === "none",
     exportName: id,
     exportRisk: risk,
-    executionBinding: { family, operation }
+    executionBinding: { family, operation },
   };
 }
 
 function normalizeConfigValues(
-  values: Partial<Record<ConfigResourceField, Record<string, unknown>>> | undefined
+  values: Partial<Record<ConfigResourceField, Record<string, unknown>>> | undefined,
 ): Partial<Record<ConfigResourceField, Record<string, unknown>>> {
   const out: Partial<Record<ConfigResourceField, Record<string, unknown>>> = {};
   if (!values) {
@@ -320,7 +321,7 @@ function normalizeConfigValues(
 }
 
 function buildConfigBootstrapSummary(
-  input: BootstrapSummaryInput["config"]
+  input: BootstrapSummaryInput["config"],
 ): ConfigBootstrapSummary {
   const values = normalizeConfigValues(input?.values);
   const hasValues = Object.keys(values).length > 0;
@@ -330,16 +331,21 @@ function buildConfigBootstrapSummary(
     status,
     fields: input?.fields ?? [...CONFIG_RESOURCE_FIELDS],
     values,
-    note: input?.note ?? (status === "ready" ? null : "Config control plane is not implemented yet."),
-    updatedAt: input?.updatedAt ?? null
+    note:
+      input?.note ?? (status === "ready" ? null : "Config control plane is not implemented yet."),
+    updatedAt: input?.updatedAt ?? null,
   };
 }
 
 export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> = {
   config: [
     catalogEntry({
-      id: "config.update", family: "config", operation: "update",
-      risk: "medium", sideEffects: "writes", permissions: ["config.update"],
+      id: "config.update",
+      family: "config",
+      operation: "update",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["config.update"],
       description: "Apply a structured patch to the product config control plane",
       inputSchema: {
         type: "object",
@@ -350,79 +356,135 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
               model: { type: "object" },
               automation: { type: "object" },
               permissions: { type: "object" },
-              preferences: { type: "object" }
-            }
-          }
+              preferences: { type: "object" },
+            },
+          },
         },
-        required: ["patch"]
+        required: ["patch"],
       },
       outputSchema: {
         type: "object",
         properties: {
-          config: { type: "object" }
+          config: { type: "object" },
         },
-        required: ["config"]
-      }
+        required: ["config"],
+      },
     }),
   ],
   memfs: [
     catalogEntry({
-      id: "memfs.read", family: "memfs", operation: "read",
-      risk: "low", sideEffects: "reads", permissions: ["memfs.read"],
+      id: "memfs.read",
+      family: "memfs",
+      operation: "read",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["memfs.read"],
       description: "Read a file from the virtual filesystem",
-      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] }
+      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] },
     }),
     catalogEntry({
-      id: "memfs.write", family: "memfs", operation: "write",
-      risk: "medium", sideEffects: "writes", permissions: ["memfs.write"],
+      id: "memfs.write",
+      family: "memfs",
+      operation: "write",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["memfs.write"],
       description: "Write content to a file in the virtual filesystem",
-      inputSchema: { type: "object", properties: { uri: { type: "string" }, content: { type: "string" } }, required: ["uri", "content"] }
+      inputSchema: {
+        type: "object",
+        properties: { uri: { type: "string" }, content: { type: "string" } },
+        required: ["uri", "content"],
+      },
     }),
     catalogEntry({
-      id: "memfs.edit", family: "memfs", operation: "edit",
-      risk: "medium", sideEffects: "writes", permissions: ["memfs.edit"],
+      id: "memfs.edit",
+      family: "memfs",
+      operation: "edit",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["memfs.edit"],
       description: "Apply an edit patch to a file in the virtual filesystem",
-      inputSchema: { type: "object", properties: { uri: { type: "string" }, patch: { type: "string" } }, required: ["uri", "patch"] }
+      inputSchema: {
+        type: "object",
+        properties: { uri: { type: "string" }, patch: { type: "string" } },
+        required: ["uri", "patch"],
+      },
     }),
     catalogEntry({
-      id: "memfs.stat", family: "memfs", operation: "stat",
-      risk: "low", sideEffects: "reads", permissions: ["memfs.stat"],
+      id: "memfs.stat",
+      family: "memfs",
+      operation: "stat",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["memfs.stat"],
       description: "Read metadata for a virtual filesystem path",
-      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] }
+      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] },
     }),
     catalogEntry({
-      id: "memfs.list", family: "memfs", operation: "list",
-      risk: "low", sideEffects: "reads", permissions: ["memfs.list"],
+      id: "memfs.list",
+      family: "memfs",
+      operation: "list",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["memfs.list"],
       description: "List entries in a virtual filesystem directory",
-      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] }
+      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] },
     }),
     catalogEntry({
-      id: "memfs.mkdir", family: "memfs", operation: "mkdir",
-      risk: "medium", sideEffects: "writes", permissions: ["memfs.mkdir"],
+      id: "memfs.mkdir",
+      family: "memfs",
+      operation: "mkdir",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["memfs.mkdir"],
       description: "Create a directory in the virtual filesystem",
-      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] }
+      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] },
     }),
     catalogEntry({
-      id: "memfs.rm", family: "memfs", operation: "rm",
-      risk: "medium", sideEffects: "writes", permissions: ["memfs.rm"],
+      id: "memfs.rm",
+      family: "memfs",
+      operation: "rm",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["memfs.rm"],
       description: "Remove a file or directory from the virtual filesystem",
-      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] }
+      inputSchema: { type: "object", properties: { uri: { type: "string" } }, required: ["uri"] },
     }),
     catalogEntry({
-      id: "memfs.mv", family: "memfs", operation: "mv",
-      risk: "medium", sideEffects: "writes", permissions: ["memfs.mv"],
+      id: "memfs.mv",
+      family: "memfs",
+      operation: "mv",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["memfs.mv"],
       description: "Move a file or directory in the virtual filesystem",
-      inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" } }, required: ["from", "to"] }
+      inputSchema: {
+        type: "object",
+        properties: { from: { type: "string" }, to: { type: "string" } },
+        required: ["from", "to"],
+      },
     }),
     catalogEntry({
-      id: "memfs.copy", family: "memfs", operation: "copy",
-      risk: "medium", sideEffects: "writes", permissions: ["memfs.copy"],
+      id: "memfs.copy",
+      family: "memfs",
+      operation: "copy",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["memfs.copy"],
       description: "Copy a file or directory in the virtual filesystem",
-      inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" } }, required: ["from", "to"] }
+      inputSchema: {
+        type: "object",
+        properties: { from: { type: "string" }, to: { type: "string" } },
+        required: ["from", "to"],
+      },
     }),
     catalogEntry({
-      id: "memfs.stage", family: "memfs", operation: "stage",
-      risk: "medium", sideEffects: "writes", permissions: ["memfs.stage"],
+      id: "memfs.stage",
+      family: "memfs",
+      operation: "stage",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["memfs.stage"],
       description: "Stage multiple file writes in the virtual filesystem",
       inputSchema: {
         type: "object",
@@ -433,108 +495,200 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
               type: "object",
               properties: {
                 uri: { type: "string" },
-                content: { type: "string" }
+                content: { type: "string" },
               },
-              required: ["uri", "content"]
-            }
-          }
+              required: ["uri", "content"],
+            },
+          },
         },
-        required: ["entries"]
-      }
+        required: ["entries"],
+      },
     }),
     catalogEntry({
-      id: "memfs.snapshot", family: "memfs", operation: "snapshot",
-      risk: "medium", sideEffects: "writes", permissions: ["memfs.snapshot"],
+      id: "memfs.snapshot",
+      family: "memfs",
+      operation: "snapshot",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["memfs.snapshot"],
       description: "Create a snapshot of a virtual filesystem subtree",
-      inputSchema: { type: "object", properties: { source: { type: "string" }, target: { type: "string" } }, required: ["source", "target"] }
+      inputSchema: {
+        type: "object",
+        properties: { source: { type: "string" }, target: { type: "string" } },
+        required: ["source", "target"],
+      },
     }),
     catalogEntry({
-      id: "memfs.rehydrate", family: "memfs", operation: "rehydrate",
-      risk: "medium", sideEffects: "writes", permissions: ["memfs.rehydrate"],
+      id: "memfs.rehydrate",
+      family: "memfs",
+      operation: "rehydrate",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["memfs.rehydrate"],
       description: "Restore a virtual filesystem subtree from a snapshot",
-      inputSchema: { type: "object", properties: { snapshot: { type: "string" }, target: { type: "string" } }, required: ["snapshot", "target"] }
+      inputSchema: {
+        type: "object",
+        properties: { snapshot: { type: "string" }, target: { type: "string" } },
+        required: ["snapshot", "target"],
+      },
     }),
   ],
   page: [
     catalogEntry({
-      id: "page.query", family: "page", operation: "query",
-      risk: "low", sideEffects: "reads", permissions: ["page.query"],
+      id: "page.query",
+      family: "page",
+      operation: "query",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["page.query"],
       description: "Query elements on the active page",
-      inputSchema: { type: "object", properties: { selector: { type: "string" } }, required: ["selector"] }
+      inputSchema: {
+        type: "object",
+        properties: { selector: { type: "string" } },
+        required: ["selector"],
+      },
     }),
     catalogEntry({
-      id: "page.click", family: "page", operation: "click",
-      risk: "medium", sideEffects: "writes", permissions: ["page.click"],
+      id: "page.click",
+      family: "page",
+      operation: "click",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["page.click"],
       description: "Click an element on the active page",
-      inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] }
+      inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] },
     }),
     catalogEntry({
-      id: "page.fill", family: "page", operation: "fill",
-      risk: "medium", sideEffects: "writes", permissions: ["page.fill"],
+      id: "page.fill",
+      family: "page",
+      operation: "fill",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["page.fill"],
       description: "Fill a form field on the active page",
-      inputSchema: { type: "object", properties: { uid: { type: "string" }, value: { type: "string" } }, required: ["uid", "value"] }
+      inputSchema: {
+        type: "object",
+        properties: { uid: { type: "string" }, value: { type: "string" } },
+        required: ["uid", "value"],
+      },
     }),
   ],
   site: [
     catalogEntry({
-      id: "site.fetch_with_session", family: "site", operation: "fetch_with_session",
-      risk: "medium", sideEffects: "external", permissions: ["site.fetch_with_session"],
+      id: "site.fetch_with_session",
+      family: "site",
+      operation: "fetch_with_session",
+      risk: "medium",
+      sideEffects: "external",
+      permissions: ["site.fetch_with_session"],
       description: "Fetch a URL using the active tab session cookies",
-      inputSchema: { type: "object", properties: { url: { type: "string" }, method: { type: "string" } }, required: ["url"] }
+      inputSchema: {
+        type: "object",
+        properties: { url: { type: "string" }, method: { type: "string" } },
+        required: ["url"],
+      },
     }),
   ],
   tabs: [
     catalogEntry({
-      id: "tabs.list", family: "tabs", operation: "list",
-      risk: "low", sideEffects: "reads", permissions: ["tabs.list"],
+      id: "tabs.list",
+      family: "tabs",
+      operation: "list",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["tabs.list"],
       description: "List all open browser tabs",
-      inputSchema: { type: "object" }
+      inputSchema: { type: "object" },
     }),
     catalogEntry({
-      id: "tabs.get_active", family: "tabs", operation: "get_active",
-      risk: "low", sideEffects: "reads", permissions: ["tabs.get_active"],
+      id: "tabs.get_active",
+      family: "tabs",
+      operation: "get_active",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["tabs.get_active"],
       description: "Get metadata of the currently active tab",
-      inputSchema: { type: "object" }
+      inputSchema: { type: "object" },
     }),
   ],
   runner: [
     catalogEntry({
-      id: "runner.invoke", family: "runner", operation: "invoke",
-      risk: "medium", sideEffects: "writes", permissions: ["runner.invoke"],
+      id: "runner.invoke",
+      family: "runner",
+      operation: "invoke",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["runner.invoke"],
       description: "Invoke a JS module in the isolated runner host",
-      inputSchema: { type: "object", properties: { moduleId: { type: "string" }, input: { type: "object" } }, required: ["moduleId"] }
+      inputSchema: {
+        type: "object",
+        properties: { moduleId: { type: "string" }, input: { type: "object" } },
+        required: ["moduleId"],
+      },
     }),
   ],
   skills: [
     catalogEntry({
-      id: "skills.invoke", family: "skills", operation: "invoke",
-      risk: "medium", sideEffects: "writes", permissions: ["skills.invoke"],
+      id: "skills.invoke",
+      family: "skills",
+      operation: "invoke",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["skills.invoke"],
       description: "Invoke another skill by id and action",
-      inputSchema: { type: "object", properties: { skillId: { type: "string" }, action: { type: "string" }, args: { type: "object" } }, required: ["skillId", "action"] }
+      inputSchema: {
+        type: "object",
+        properties: {
+          skillId: { type: "string" },
+          action: { type: "string" },
+          args: { type: "object" },
+        },
+        required: ["skillId", "action"],
+      },
     }),
     catalogEntry({
-      id: "skills.list", family: "skills", operation: "list",
-      risk: "low", sideEffects: "reads", permissions: ["skills.list"],
+      id: "skills.list",
+      family: "skills",
+      operation: "list",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["skills.list"],
       description: "List all installed skills",
-      inputSchema: { type: "object" }
+      inputSchema: { type: "object" },
     }),
   ],
   runtime: [
     catalogEntry({
-      id: "runtime.list_capabilities", family: "runtime", operation: "list_capabilities",
-      risk: "low", sideEffects: "reads", permissions: ["runtime.list_capabilities"],
+      id: "runtime.list_capabilities",
+      family: "runtime",
+      operation: "list_capabilities",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["runtime.list_capabilities"],
       description: "List all registered action capabilities",
-      inputSchema: { type: "object" }
+      inputSchema: { type: "object" },
     }),
     catalogEntry({
-      id: "runtime.get_capability", family: "runtime", operation: "get_capability",
-      risk: "low", sideEffects: "reads", permissions: ["runtime.get_capability"],
+      id: "runtime.get_capability",
+      family: "runtime",
+      operation: "get_capability",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["runtime.get_capability"],
       description: "Get an action capability descriptor by id",
-      inputSchema: { type: "object", properties: { capabilityId: { type: "string" } }, required: ["capabilityId"] }
+      inputSchema: {
+        type: "object",
+        properties: { capabilityId: { type: "string" } },
+        required: ["capabilityId"],
+      },
     }),
     catalogEntry({
-      id: "runtime.capture_diagnostics", family: "runtime", operation: "capture_diagnostics",
-      risk: "low", sideEffects: "reads", permissions: ["runtime.capture_diagnostics"],
+      id: "runtime.capture_diagnostics",
+      family: "runtime",
+      operation: "capture_diagnostics",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["runtime.capture_diagnostics"],
       description: "Capture a read-only runtime diagnostics snapshot without triggering recovery",
       inputSchema: {
         type: "object",
@@ -542,111 +696,175 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
           tabId: { type: "number" },
           world: {
             type: "string",
-            enum: ["main", "content"]
-          }
-        }
-      }
+            enum: ["main", "content"],
+          },
+        },
+      },
     }),
     catalogEntry({
-      id: "runtime.clear_error", family: "runtime", operation: "clear_error",
-      risk: "low", sideEffects: "writes", permissions: ["runtime.clear_error"],
+      id: "runtime.clear_error",
+      family: "runtime",
+      operation: "clear_error",
+      risk: "low",
+      sideEffects: "writes",
+      permissions: ["runtime.clear_error"],
       description: "Clear the current runtime error state, idempotent if no error is present",
-      inputSchema: { type: "object" }
+      inputSchema: { type: "object" },
     }),
   ],
   hosts: [
     catalogEntry({
-      id: "hosts.list", family: "hosts", operation: "list",
-      risk: "low", sideEffects: "reads", permissions: ["hosts.list"],
+      id: "hosts.list",
+      family: "hosts",
+      operation: "list",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["hosts.list"],
       description: "List execution hosts managed by the product control plane",
-      inputSchema: { type: "object" }
+      inputSchema: { type: "object" },
     }),
     catalogEntry({
-      id: "hosts.get", family: "hosts", operation: "get",
-      risk: "low", sideEffects: "reads", permissions: ["hosts.get"],
+      id: "hosts.get",
+      family: "hosts",
+      operation: "get",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["hosts.get"],
       description: "Get execution host control plane state by host id",
-      inputSchema: { type: "object", properties: { hostId: { type: "string" } }, required: ["hostId"] }
+      inputSchema: {
+        type: "object",
+        properties: { hostId: { type: "string" } },
+        required: ["hostId"],
+      },
     }),
     catalogEntry({
-      id: "hosts.connect", family: "hosts", operation: "connect",
-      risk: "medium", sideEffects: "writes", permissions: ["hosts.connect"],
+      id: "hosts.connect",
+      family: "hosts",
+      operation: "connect",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["hosts.connect"],
       description: "Connect an execution host through the product control plane",
-      inputSchema: { type: "object", properties: { hostId: { type: "string" } }, required: ["hostId"] }
+      inputSchema: {
+        type: "object",
+        properties: { hostId: { type: "string" } },
+        required: ["hostId"],
+      },
     }),
     catalogEntry({
-      id: "hosts.disconnect", family: "hosts", operation: "disconnect",
-      risk: "medium", sideEffects: "writes", permissions: ["hosts.disconnect"],
+      id: "hosts.disconnect",
+      family: "hosts",
+      operation: "disconnect",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["hosts.disconnect"],
       description: "Disconnect an execution host through the product control plane",
-      inputSchema: { type: "object", properties: { hostId: { type: "string" } }, required: ["hostId"] }
+      inputSchema: {
+        type: "object",
+        properties: { hostId: { type: "string" } },
+        required: ["hostId"],
+      },
     }),
     catalogEntry({
-      id: "hosts.set_default", family: "hosts", operation: "set_default",
-      risk: "medium", sideEffects: "writes", permissions: ["hosts.set_default"],
+      id: "hosts.set_default",
+      family: "hosts",
+      operation: "set_default",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["hosts.set_default"],
       description: "Set the default execution host for future host substrate actions",
-      inputSchema: { type: "object", properties: { hostId: { type: "string" } }, required: ["hostId"] }
+      inputSchema: {
+        type: "object",
+        properties: { hostId: { type: "string" } },
+        required: ["hostId"],
+      },
     }),
     catalogEntry({
-      id: "hosts.health", family: "hosts", operation: "health",
-      risk: "low", sideEffects: "reads", permissions: ["hosts.health"],
+      id: "hosts.health",
+      family: "hosts",
+      operation: "health",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["hosts.health"],
       description: "Read execution host health through the product control plane",
-      inputSchema: { type: "object", properties: { hostId: { type: "string" } }, required: ["hostId"] }
+      inputSchema: {
+        type: "object",
+        properties: { hostId: { type: "string" } },
+        required: ["hostId"],
+      },
     }),
   ],
   host: [
     catalogEntry({
-      id: "host.read", family: "host", operation: "read",
-      risk: "medium", sideEffects: "reads", permissions: ["host.read"],
+      id: "host.read",
+      family: "host",
+      operation: "read",
+      risk: "medium",
+      sideEffects: "reads",
+      permissions: ["host.read"],
       description: "Read content from the selected execution host",
       inputSchema: {
         type: "object",
         properties: {
           path: { type: "string" },
-          hostId: { type: "string" }
+          hostId: { type: "string" },
         },
-        required: ["path"]
-      }
+        required: ["path"],
+      },
     }),
     catalogEntry({
-      id: "host.write", family: "host", operation: "write",
-      risk: "high", sideEffects: "external", permissions: ["host.write"],
+      id: "host.write",
+      family: "host",
+      operation: "write",
+      risk: "high",
+      sideEffects: "external",
+      permissions: ["host.write"],
       description: "Write content to a path on the selected execution host",
       inputSchema: {
         type: "object",
         properties: {
           path: { type: "string" },
           content: { type: "string" },
-          hostId: { type: "string" }
+          hostId: { type: "string" },
         },
-        required: ["path", "content"]
-      }
+        required: ["path", "content"],
+      },
     }),
     catalogEntry({
-      id: "host.edit", family: "host", operation: "edit",
-      risk: "high", sideEffects: "external", permissions: ["host.edit"],
+      id: "host.edit",
+      family: "host",
+      operation: "edit",
+      risk: "high",
+      sideEffects: "external",
+      permissions: ["host.edit"],
       description: "Apply an edit patch to a path on the selected execution host",
       inputSchema: {
         type: "object",
         properties: {
           path: { type: "string" },
           patch: { type: "string" },
-          hostId: { type: "string" }
+          hostId: { type: "string" },
         },
-        required: ["path", "patch"]
-      }
+        required: ["path", "patch"],
+      },
     }),
     catalogEntry({
-      id: "host.exec", family: "host", operation: "exec",
-      risk: "high", sideEffects: "external", permissions: ["host.exec"],
+      id: "host.exec",
+      family: "host",
+      operation: "exec",
+      risk: "high",
+      sideEffects: "external",
+      permissions: ["host.exec"],
       description: "Execute a command on the selected execution host",
       inputSchema: {
         type: "object",
         properties: {
           command: { type: "string" },
           timeoutMs: { type: "number" },
-          hostId: { type: "string" }
+          hostId: { type: "string" },
         },
-        required: ["command"]
-      }
+        required: ["command"],
+      },
     }),
   ],
 };
@@ -656,12 +874,11 @@ export const BUILTIN_EXPORT_HANDOFFS: CapabilityExportHandoff[] =
   descriptorsToCapabilityExportHandoffs(BUILTIN_CAPABILITIES);
 
 function normalizeExecutionHostRecord(input: HostControlPlaneRecordInput): ExecutionHostRecord {
-  const connected =
-    input.connected ?? (input.state === "connected" || input.state === "degraded");
+  const connected = input.connected ?? (input.state === "connected" || input.state === "degraded");
   const state = input.state ?? (connected ? "connected" : "disconnected");
   const healthStatus =
-    input.health?.status
-    ?? (state === "connected" ? "healthy" : state === "degraded" ? "degraded" : "unknown");
+    input.health?.status ??
+    (state === "connected" ? "healthy" : state === "degraded" ? "degraded" : "unknown");
 
   return {
     hostId: input.hostId,
@@ -671,14 +888,14 @@ function normalizeExecutionHostRecord(input: HostControlPlaneRecordInput): Execu
     isDefault: input.isDefault === true,
     health: {
       status: healthStatus,
-      ...(input.health?.checkedAt ? { checkedAt: input.health.checkedAt } : {})
-    }
+      ...(input.health?.checkedAt ? { checkedAt: input.health.checkedAt } : {}),
+    },
   };
 }
 
 function finalizeHostControlPlaneSnapshot(
   hosts: ExecutionHostRecord[],
-  defaultHostId: string | null
+  defaultHostId: string | null,
 ): HostControlPlaneSnapshot {
   if (defaultHostId && !hosts.some((host) => host.hostId === defaultHostId)) {
     throw new CapabilityError("E_CAPABILITY_NOT_FOUND", `Unknown execution host: ${defaultHostId}`);
@@ -688,8 +905,8 @@ function finalizeHostControlPlaneSnapshot(
     defaultHostId,
     hosts: hosts.map((host) => ({
       ...host,
-      isDefault: defaultHostId != null && host.hostId === defaultHostId
-    }))
+      isDefault: defaultHostId != null && host.hostId === defaultHostId,
+    })),
   };
 }
 
@@ -697,7 +914,7 @@ function mapExecutionHost(
   snapshot: HostControlPlaneSnapshot,
   hostId: string,
   update: (host: ExecutionHostRecord) => ExecutionHostRecord,
-  defaultHostId = snapshot.defaultHostId
+  defaultHostId = snapshot.defaultHostId,
 ): HostControlPlaneSnapshot {
   const exists = snapshot.hosts.some((host) => host.hostId === hostId);
   if (!exists) {
@@ -706,12 +923,12 @@ function mapExecutionHost(
 
   return finalizeHostControlPlaneSnapshot(
     snapshot.hosts.map((host) => (host.hostId === hostId ? update(host) : host)),
-    defaultHostId
+    defaultHostId,
   );
 }
 
 export function createHostControlPlaneSnapshot(
-  input: HostControlPlaneSnapshotInput = {}
+  input: HostControlPlaneSnapshotInput = {},
 ): HostControlPlaneSnapshot {
   const hosts = (input.hosts ?? []).map((host) => normalizeExecutionHostRecord(host));
   const defaultHostId = input.defaultHostId ?? hosts.find((host) => host.isDefault)?.hostId ?? null;
@@ -725,7 +942,7 @@ export function connectExecutionHost(
   health: {
     status?: ExecutionHostHealthStatus;
     checkedAt?: string;
-  } = {}
+  } = {},
 ): HostControlPlaneSnapshot {
   const healthStatus = health.status ?? "healthy";
 
@@ -735,8 +952,8 @@ export function connectExecutionHost(
     state: healthStatus === "degraded" ? "degraded" : "connected",
     health: {
       status: healthStatus,
-      ...(health.checkedAt ? { checkedAt: health.checkedAt } : {})
-    }
+      ...(health.checkedAt ? { checkedAt: health.checkedAt } : {}),
+    },
   }));
 }
 
@@ -746,7 +963,7 @@ export function disconnectExecutionHost(
   health: {
     status?: Extract<ExecutionHostHealthStatus, "unknown" | "degraded">;
     checkedAt?: string;
-  } = {}
+  } = {},
 ): HostControlPlaneSnapshot {
   const healthStatus = health.status ?? "unknown";
 
@@ -756,14 +973,14 @@ export function disconnectExecutionHost(
     state: "disconnected",
     health: {
       status: healthStatus,
-      ...(health.checkedAt ? { checkedAt: health.checkedAt } : {})
-    }
+      ...(health.checkedAt ? { checkedAt: health.checkedAt } : {}),
+    },
   }));
 }
 
 export function setDefaultExecutionHost(
   snapshot: HostControlPlaneSnapshot,
-  hostId: string
+  hostId: string,
 ): HostControlPlaneSnapshot {
   return mapExecutionHost(snapshot, hostId, (host) => host, hostId);
 }
@@ -772,21 +989,24 @@ export function resolveHostSubstrateTarget(
   snapshot: HostControlPlaneSnapshot,
   input: {
     hostId?: string | null;
-  } = {}
+  } = {},
 ): HostSubstrateTarget {
   if (input.hostId) {
     if (!snapshot.hosts.some((host) => host.hostId === input.hostId)) {
-      throw new CapabilityError("E_CAPABILITY_NOT_FOUND", `Unknown execution host: ${input.hostId}`);
+      throw new CapabilityError(
+        "E_CAPABILITY_NOT_FOUND",
+        `Unknown execution host: ${input.hostId}`,
+      );
     }
     return {
       hostId: input.hostId,
-      via: "explicit"
+      via: "explicit",
     };
   }
   if (snapshot.defaultHostId) {
     return {
       hostId: snapshot.defaultHostId,
-      via: "default"
+      via: "default",
     };
   }
   throw new CapabilityError("E_BAD_INPUT", "host substrate requires hostId or a default host");
@@ -794,14 +1014,16 @@ export function resolveHostSubstrateTarget(
 
 export function createBootstrapSummary(input: BootstrapSummaryInput = {}): BootstrapSummary {
   const capabilityCatalog = input.capabilities ?? BUILTIN_CAPABILITIES;
-  const actionNamespaces = [...new Set(capabilityCatalog.map((entry) => capabilityNamespace(entry.id)))];
+  const actionNamespaces = [
+    ...new Set(capabilityCatalog.map((entry) => capabilityNamespace(entry.id))),
+  ];
   const activeTab =
     input.activeTab && input.activeTab.active !== false
       ? {
           tabId: input.activeTab.tabId,
           url: input.activeTab.url,
           title: input.activeTab.title,
-          world: input.activeTab.world
+          world: input.activeTab.world,
         }
       : null;
 
@@ -815,8 +1037,8 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
     lastError: input.runtime?.lastError ?? null,
     actionCapabilities: {
       total: capabilityCatalog.length,
-      namespaces: actionNamespaces
-    }
+      namespaces: actionNamespaces,
+    },
   };
 
   const skills: SkillsBootstrapSummary = {
@@ -824,21 +1046,22 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
     installedCount: input.skills?.installedCount ?? 0,
     enabledCount: input.skills?.enabledCount ?? 0,
     trustedCount: input.skills?.trustedCount ?? 0,
-    recentChange: input.skills?.recentChange ?? null
+    recentChange: input.skills?.recentChange ?? null,
   };
 
   const hostItems = input.hosts?.items ?? [];
   const connectedCount = hostItems.filter((entry) => entry.connected).length;
   const hasDegradedHost = hostItems.some((entry) => entry.state === "degraded");
   const hostsStatus =
-    input.hosts?.status
-    ?? (hasDegradedHost ? "degraded" : connectedCount > 0 ? "healthy" : "empty");
+    input.hosts?.status ??
+    (hasDegradedHost ? "degraded" : connectedCount > 0 ? "healthy" : "empty");
   const hosts: HostsBootstrapSummary = {
     status: hostsStatus,
-    defaultHostId: input.hosts?.defaultHostId ?? hostItems.find((entry) => entry.isDefault)?.hostId ?? null,
+    defaultHostId:
+      input.hosts?.defaultHostId ?? hostItems.find((entry) => entry.isDefault)?.hostId ?? null,
     totalCount: hostItems.length,
     connectedCount,
-    items: hostItems
+    items: hostItems,
   };
 
   const config = buildConfigBootstrapSummary(input.config);
@@ -856,7 +1079,7 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
     runtime,
     skills,
     hosts,
-    config
+    config,
   };
 }
 
@@ -886,7 +1109,11 @@ function toCamelCase(value: string): string {
   return value.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
 
-function attachCapability(target: Record<string, unknown>, parts: string[], call: (id: string, input: unknown) => Promise<unknown>): void {
+function attachCapability(
+  target: Record<string, unknown>,
+  parts: string[],
+  call: (id: string, input: unknown) => Promise<unknown>,
+): void {
   const [head, ...rest] = parts;
   if (!head) {
     return;
@@ -925,20 +1152,18 @@ interface NestedSkillInvocationEnvelope {
   parentTraceId?: string;
 }
 
-function isNestedSkillInvocationEnvelope(
-  value: unknown
-): value is NestedSkillInvocationEnvelope {
+function isNestedSkillInvocationEnvelope(value: unknown): value is NestedSkillInvocationEnvelope {
   return (
-    typeof value === "object"
-    && value != null
-    && (value as { __skillInvocationMeta?: unknown }).__skillInvocationMeta === true
+    typeof value === "object" &&
+    value != null &&
+    (value as { __skillInvocationMeta?: unknown }).__skillInvocationMeta === true
   );
 }
 
 function resolveGrantedPermissions(
   registry: CapabilityRegistry,
   declaredPermissions: string[],
-  parentPermissions?: string[]
+  parentPermissions?: string[],
 ): string[] {
   if (!parentPermissions) {
     return [...declaredPermissions];
@@ -948,14 +1173,14 @@ function resolveGrantedPermissions(
     .list()
     .filter(
       (descriptor) =>
-        declaredPermissions.some((permission) => matchesPermission(permission, descriptor.id))
-        && parentPermissions.some((permission) => matchesPermission(permission, descriptor.id))
+        declaredPermissions.some((permission) => matchesPermission(permission, descriptor.id)) &&
+        parentPermissions.some((permission) => matchesPermission(permission, descriptor.id)),
     )
     .map((descriptor) => descriptor.id);
 }
 
 export function createSkillRuntimeContext(
-  options: SkillRuntimeContextOptions
+  options: SkillRuntimeContextOptions,
 ): SkillRuntimeContext {
   const trace = options.trace ?? [];
   const depth = options.depth ?? 1;
@@ -965,12 +1190,12 @@ export function createSkillRuntimeContext(
   const allowedDescriptors = options.registry
     .list()
     .filter((descriptor) =>
-      options.permissions.some((permission) => matchesPermission(permission, descriptor.id))
+      options.permissions.some((permission) => matchesPermission(permission, descriptor.id)),
     );
 
   const invokeBuiltinCapability = async (
     descriptor: CapabilityDescriptor,
-    input: unknown
+    input: unknown,
   ): Promise<unknown> => {
     const { family, operation } = descriptor.executionBinding;
     if (family !== "skills") {
@@ -981,14 +1206,11 @@ export function createSkillRuntimeContext(
         if (depth >= MAX_SKILL_CALL_DEPTH) {
           throw new CapabilityError(
             "E_REENTRANCY_BLOCKED",
-            `Skill depth limit exceeded at ${options.skillId}`
+            `Skill depth limit exceeded at ${options.skillId}`,
           );
         }
         if (!options.invokeSkill) {
-          throw new CapabilityError(
-            "E_RUNTIME",
-            "No skill invoker configured for runtime context"
-          );
+          throw new CapabilityError("E_RUNTIME", "No skill invoker configured for runtime context");
         }
         const payload = asRecord(input);
         const skillId = payload.skillId;
@@ -996,40 +1218,34 @@ export function createSkillRuntimeContext(
         if (typeof skillId !== "string" || typeof action !== "string") {
           throw new CapabilityError(
             "E_BAD_INPUT",
-            "skills.invoke requires string skillId and action"
+            "skills.invoke requires string skillId and action",
           );
         }
         return options.invokeSkill({
           skillId,
           action,
           args: payload.args,
-          parentContext: ctx
+          parentContext: ctx,
         });
       }
       case "list":
         return options.listSkills ? await options.listSkills() : [];
       default:
-        throw new CapabilityError(
-          "E_RUNTIME",
-          `Unsupported skills operation: ${operation}`
-        );
+        throw new CapabilityError("E_RUNTIME", `Unsupported skills operation: ${operation}`);
     }
   };
 
   const call = async (capabilityId: string, input: unknown): Promise<unknown> => {
     const descriptor = options.registry.require(capabilityId);
     if (!options.permissions.some((permission) => matchesPermission(permission, capabilityId))) {
-      throw new CapabilityError(
-        "E_PERMISSION_DENIED",
-        `Capability not permitted: ${capabilityId}`
-      );
+      throw new CapabilityError("E_PERMISSION_DENIED", `Capability not permitted: ${capabilityId}`);
     }
     if (descriptor.risk === "high" && options.confirm) {
       const confirmed = await options.confirm(descriptor, input);
       if (!confirmed) {
         throw new CapabilityError(
           "E_PERMISSION_DENIED",
-          `Capability confirmation denied: ${capabilityId}`
+          `Capability confirmation denied: ${capabilityId}`,
         );
       }
     }
@@ -1039,7 +1255,7 @@ export function createSkillRuntimeContext(
       capabilityId,
       startedAt: new Date().toISOString(),
       status: "started",
-      input
+      input,
     };
     trace.push(entry);
     try {
@@ -1047,9 +1263,7 @@ export function createSkillRuntimeContext(
       if (isNestedSkillInvocationEnvelope(output)) {
         entry.childTraceId = output.traceId;
       }
-      const normalizedOutput = isNestedSkillInvocationEnvelope(output)
-        ? output.result
-        : output;
+      const normalizedOutput = isNestedSkillInvocationEnvelope(output) ? output.result : output;
       entry.endedAt = new Date().toISOString();
       entry.status = "succeeded";
       entry.output = normalizedOutput;
@@ -1057,8 +1271,7 @@ export function createSkillRuntimeContext(
     } catch (error) {
       entry.endedAt = new Date().toISOString();
       entry.status = "failed";
-      entry.errorCode =
-        error instanceof CapabilityError ? error.code : "E_RUNTIME";
+      entry.errorCode = error instanceof CapabilityError ? error.code : "E_RUNTIME";
       throw error;
     }
   };
@@ -1081,12 +1294,11 @@ export function createSkillRuntimeContext(
     runtime: {
       listCapabilities: () => [...allowedDescriptors],
       getCapability: (capabilityId) =>
-        allowedDescriptors.find((descriptor) => descriptor.id === capabilityId)
+        allowedDescriptors.find((descriptor) => descriptor.id === capabilityId),
     },
     skills: {
-      invoke: async (skillId, action, args) =>
-        call("skills.invoke", { skillId, action, args })
-    }
+      invoke: async (skillId, action, args) => call("skills.invoke", { skillId, action, args }),
+    },
   };
 
   return ctx;
@@ -1143,17 +1355,14 @@ export class SkillInvocationService {
   }): Promise<SkillInvocationResult> {
     const skill = this.#skills.get(request.skillId);
     if (!skill) {
-      throw new CapabilityError(
-        "E_CAPABILITY_NOT_FOUND",
-        `Unknown skill: ${request.skillId}`
-      );
+      throw new CapabilityError("E_CAPABILITY_NOT_FOUND", `Unknown skill: ${request.skillId}`);
     }
 
     const depth = request.parentContext ? request.parentContext.depth + 1 : 1;
     if (depth > MAX_SKILL_CALL_DEPTH) {
       throw new CapabilityError(
         "E_REENTRANCY_BLOCKED",
-        `Skill depth limit exceeded at ${request.skillId}.${request.action}`
+        `Skill depth limit exceeded at ${request.skillId}.${request.action}`,
       );
     }
 
@@ -1161,7 +1370,7 @@ export class SkillInvocationService {
     const grantedPermissions = resolveGrantedPermissions(
       this.#options.registry,
       skill.permissions,
-      request.parentContext?.permissions
+      request.parentContext?.permissions,
     );
     const ctx = createSkillRuntimeContext({
       registry: this.#options.registry,
@@ -1180,16 +1389,16 @@ export class SkillInvocationService {
           skillId: childRequest.skillId,
           action: childRequest.action,
           args: childRequest.args,
-          parentContext: ctx
+          parentContext: ctx,
         });
 
         return {
           __skillInvocationMeta: true,
           result: childResult.result,
           traceId: childResult.traceId,
-          parentTraceId: childResult.parentTraceId
+          parentTraceId: childResult.parentTraceId,
         } satisfies NestedSkillInvocationEnvelope;
-      }
+      },
     });
 
     const result = await skill.handler(ctx, request.action, request.args);
@@ -1198,7 +1407,7 @@ export class SkillInvocationService {
       trace,
       depth,
       traceId: ctx.traceId,
-      parentTraceId: ctx.parentTraceId
+      parentTraceId: ctx.parentTraceId,
     };
   }
 }
@@ -1275,7 +1484,7 @@ type CamelCase<Value extends string> = Value extends `${infer Head}_${infer Tail
 
 type AllowedMethodsFromPermission<
   Namespace extends keyof BuiltinCapabilityMap,
-  Permission extends string
+  Permission extends string,
 > = Permission extends `${Namespace & string}.${infer Method}`
   ?
       | (Method & keyof BuiltinCapabilityMap[Namespace])
@@ -1284,32 +1493,34 @@ type AllowedMethodsFromPermission<
 
 type AllowedMethods<
   Namespace extends keyof BuiltinCapabilityMap,
-  Permissions extends readonly string[]
-> =
-  "*" extends Permissions[number]
+  Permissions extends readonly string[],
+> = "*" extends Permissions[number]
+  ? keyof BuiltinCapabilityMap[Namespace]
+  : `${Namespace & string}.*` extends Permissions[number]
     ? keyof BuiltinCapabilityMap[Namespace]
-    : `${Namespace & string}.*` extends Permissions[number]
-      ? keyof BuiltinCapabilityMap[Namespace]
-      : AllowedMethodsFromPermission<Namespace, Permissions[number] & string>;
+    : AllowedMethodsFromPermission<Namespace, Permissions[number] & string>;
 
 export type CapabilityMapForPermissions<Permissions extends readonly string[]> =
-  NamespaceCapability<"memfs", Permissions>
-  & NamespaceCapability<"page", Permissions>
-  & NamespaceCapability<"site", Permissions>
-  & NamespaceCapability<"tabs", Permissions>
-  & NamespaceCapability<"runner", Permissions>
-  & NamespaceCapability<"skills", Permissions>
-  & NamespaceCapability<"runtime", Permissions>
-  & NamespaceCapability<"hosts", Permissions>
-  & NamespaceCapability<"host", Permissions>;
+  NamespaceCapability<"memfs", Permissions> &
+    NamespaceCapability<"page", Permissions> &
+    NamespaceCapability<"site", Permissions> &
+    NamespaceCapability<"tabs", Permissions> &
+    NamespaceCapability<"runner", Permissions> &
+    NamespaceCapability<"skills", Permissions> &
+    NamespaceCapability<"runtime", Permissions> &
+    NamespaceCapability<"hosts", Permissions> &
+    NamespaceCapability<"host", Permissions>;
 
 type NamespaceCapability<
   Namespace extends keyof BuiltinCapabilityMap,
-  Permissions extends readonly string[]
+  Permissions extends readonly string[],
 > = [AllowedMethods<Namespace, Permissions>] extends [never]
-  ? {}
+  ? Record<never, never>
   : {
-      [Key in Namespace]: Pick<BuiltinCapabilityMap[Namespace], AllowedMethods<Namespace, Permissions>>;
+      [Key in Namespace]: Pick<
+        BuiltinCapabilityMap[Namespace],
+        AllowedMethods<Namespace, Permissions>
+      >;
     };
 
 export function typedCapabilities(ctx: SkillRuntimeContext): PartialBuiltinCapabilityMap {
@@ -1318,7 +1529,7 @@ export function typedCapabilities(ctx: SkillRuntimeContext): PartialBuiltinCapab
 
 export function typedCapabilitiesForPermissions<Permissions extends readonly string[]>(
   ctx: SkillRuntimeContext,
-  _permissions: Permissions
+  _permissions: Permissions,
 ): CapabilityMapForPermissions<Permissions> {
   return ctx.capabilities as unknown as CapabilityMapForPermissions<Permissions>;
 }

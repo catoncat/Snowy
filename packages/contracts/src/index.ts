@@ -9,20 +9,20 @@ export const CONFIG_RESOURCE_FIELDS = [
   "model",
   "automation",
   "permissions",
-  "preferences"
+  "preferences",
 ] as const;
 export type ConfigResourceField = (typeof CONFIG_RESOURCE_FIELDS)[number];
 
-export type BootstrapResourceBundle = Partial<Record<BootstrapResourceKey, Record<string, unknown>>>;
-export const CONFIG_CONTROL_PLANE_ACTIONS = [
-  "config.update"
-] as const;
+export type BootstrapResourceBundle = Partial<
+  Record<BootstrapResourceKey, Record<string, unknown>>
+>;
+export const CONFIG_CONTROL_PLANE_ACTIONS = ["config.update"] as const;
 export type ConfigControlPlaneAction = (typeof CONFIG_CONTROL_PLANE_ACTIONS)[number];
 export const HOST_SUBSTRATE_ACTIONS = [
   "host.read",
   "host.write",
   "host.edit",
-  "host.exec"
+  "host.exec",
 ] as const;
 export type HostSubstrateAction = (typeof HOST_SUBSTRATE_ACTIONS)[number];
 export const HOST_CONTROL_PLANE_ACTIONS = [
@@ -31,14 +31,14 @@ export const HOST_CONTROL_PLANE_ACTIONS = [
   "hosts.connect",
   "hosts.disconnect",
   "hosts.set_default",
-  "hosts.health"
+  "hosts.health",
 ] as const;
 export type HostControlPlaneAction = (typeof HOST_CONTROL_PLANE_ACTIONS)[number];
 export const RUNTIME_CONTROL_PLANE_ACTIONS = [
   "runtime.list_capabilities",
   "runtime.get_capability",
   "runtime.capture_diagnostics",
-  "runtime.clear_error"
+  "runtime.clear_error",
 ] as const;
 export type RuntimeControlPlaneAction = (typeof RUNTIME_CONTROL_PLANE_ACTIONS)[number];
 export type ExecutionHostKind = "local" | "remote";
@@ -64,13 +64,7 @@ export interface HostControlPlaneSnapshot {
 
 export type CapabilityRisk = "low" | "medium" | "high";
 export type CapabilitySideEffects = "none" | "reads" | "writes" | "external";
-export type SkillStatus =
-  | "draft"
-  | "staged"
-  | "installed"
-  | "enabled"
-  | "disabled"
-  | "archived";
+export type SkillStatus = "draft" | "staged" | "installed" | "enabled" | "disabled" | "archived";
 
 export type CapabilityErrorCode =
   | "E_BAD_INPUT"
@@ -140,14 +134,14 @@ export const AI_SURFACE_BOUNDARY: AiSurfaceBoundary = {
   actions: {
     primitive: "action",
     descriptorModel: "CapabilityDescriptor",
-    toolProjection: "ToolContract"
+    toolProjection: "ToolContract",
   },
   bootstrapResources: BOOTSTRAP_RESOURCE_KEYS,
   workflows: {
     primitive: "workflow",
     packaging: "skill-package",
-    invocation: "skills.invoke"
-  }
+    invocation: "skills.invoke",
+  },
 };
 
 export interface CapabilityExportHandoff {
@@ -172,9 +166,7 @@ export interface SkillLifecycleState {
 
 export type SkillLifecycleActor = "agent" | "user" | "system";
 
-export type SkillRollbackTrigger =
-  | "verifier_failed_with_confirmation"
-  | "release_gate_failed";
+export type SkillRollbackTrigger = "verifier_failed_with_confirmation" | "release_gate_failed";
 
 export interface SkillVersionRef {
   versionId: string;
@@ -218,7 +210,7 @@ export const DEFAULT_SKILL_VERSION_RETENTION = 3;
 
 export const DEFAULT_SKILL_ROLLBACK_TRIGGERS: readonly SkillRollbackTrigger[] = [
   "verifier_failed_with_confirmation",
-  "release_gate_failed"
+  "release_gate_failed",
 ];
 
 export const PUBLIC_CAPABILITY_NAMESPACES = [
@@ -231,7 +223,7 @@ export const PUBLIC_CAPABILITY_NAMESPACES = [
   "skills",
   "runtime",
   "host",
-  "hosts"
+  "hosts",
 ] as const;
 
 export type CapabilityNamespace = (typeof PUBLIC_CAPABILITY_NAMESPACES)[number];
@@ -246,31 +238,34 @@ const SKILL_STATUS_TRANSITIONS: Record<SkillStatus, SkillStatus[]> = {
   installed: ["enabled", "archived"],
   enabled: ["disabled", "archived"],
   disabled: ["enabled", "archived"],
-  archived: []
+  archived: [],
 };
 
-const SKILL_TRANSITION_ACTORS: Record<SkillStatus, Partial<Record<SkillStatus, readonly SkillLifecycleActor[]>>> = {
+const SKILL_TRANSITION_ACTORS: Record<
+  SkillStatus,
+  Partial<Record<SkillStatus, readonly SkillLifecycleActor[]>>
+> = {
   draft: {
     staged: ["agent"],
-    archived: ["user", "system"]
+    archived: ["user", "system"],
   },
   staged: {
     installed: ["agent"],
-    archived: ["user", "system"]
+    archived: ["user", "system"],
   },
   installed: {
     enabled: ["user", "system"],
-    archived: ["user", "system"]
+    archived: ["user", "system"],
   },
   enabled: {
     disabled: ["user", "system"],
-    archived: ["user", "system"]
+    archived: ["user", "system"],
   },
   disabled: {
     enabled: ["user", "system"],
-    archived: ["user", "system"]
+    archived: ["user", "system"],
   },
-  archived: {}
+  archived: {},
 };
 
 export class CapabilityError extends Error {
@@ -306,16 +301,11 @@ export function isPublicCapabilityNamespace(namespace: string): boolean {
 
 function assertJsonSchemaHasType(schema: JsonSchema, label: string): void {
   if (!schema.type && !schema.$ref && !schema.oneOf && !schema.anyOf && !schema.allOf) {
-    throw new CapabilityError(
-      "E_BAD_INPUT",
-      `${label} must declare a type, $ref, or combinator`
-    );
+    throw new CapabilityError("E_BAD_INPUT", `${label} must declare a type, $ref, or combinator`);
   }
 }
 
-export function assertCapabilityDescriptor(
-  value: CapabilityDescriptor
-): CapabilityDescriptor {
+export function assertCapabilityDescriptor(value: CapabilityDescriptor): CapabilityDescriptor {
   if (!CAPABILITY_ID_RE.test(value.id)) {
     throw new CapabilityError("E_BAD_INPUT", `Invalid capability id: ${value.id}`);
   }
@@ -328,7 +318,7 @@ export function assertCapabilityDescriptor(
   if (!value.executionBinding.family.trim() || !value.executionBinding.operation.trim()) {
     throw new CapabilityError(
       "E_BAD_INPUT",
-      "Descriptor executionBinding family and operation are required"
+      "Descriptor executionBinding family and operation are required",
     );
   }
   assertJsonSchemaHasType(value.inputSchema, "inputSchema");
@@ -340,9 +330,7 @@ export function capabilityIdToToolName(capabilityId: string): string {
   return capabilityId.replace(/\./g, "_");
 }
 
-export function descriptorToToolContract(
-  descriptor: CapabilityDescriptor
-): ToolContract {
+export function descriptorToToolContract(descriptor: CapabilityDescriptor): ToolContract {
   assertCapabilityDescriptor(descriptor);
   return {
     name: capabilityIdToToolName(descriptor.id),
@@ -354,13 +342,13 @@ export function descriptorToToolContract(
       risk: descriptor.risk,
       sideEffects: descriptor.sideEffects,
       supportsVerify: descriptor.supportsVerify,
-      supportsStreaming: descriptor.supportsStreaming
-    }
+      supportsStreaming: descriptor.supportsStreaming,
+    },
   };
 }
 
 export function descriptorToCapabilityExportHandoff(
-  descriptor: CapabilityDescriptor
+  descriptor: CapabilityDescriptor,
 ): CapabilityExportHandoff | null {
   assertCapabilityDescriptor(descriptor);
   if (!descriptor.exportable) {
@@ -377,13 +365,13 @@ export function descriptorToCapabilityExportHandoff(
     annotations: {
       sideEffects: descriptor.sideEffects,
       supportsVerify: descriptor.supportsVerify,
-      supportsStreaming: descriptor.supportsStreaming
-    }
+      supportsStreaming: descriptor.supportsStreaming,
+    },
   };
 }
 
 export function descriptorsToCapabilityExportHandoffs(
-  descriptors: CapabilityDescriptor[]
+  descriptors: CapabilityDescriptor[],
 ): CapabilityExportHandoff[] {
   return descriptors.flatMap((descriptor) => {
     const handoff = descriptorToCapabilityExportHandoff(descriptor);
@@ -391,16 +379,13 @@ export function descriptorsToCapabilityExportHandoffs(
   });
 }
 
-export function canTransitionSkillState(
-  from: SkillStatus,
-  to: SkillStatus
-): boolean {
+export function canTransitionSkillState(from: SkillStatus, to: SkillStatus): boolean {
   return SKILL_STATUS_TRANSITIONS[from].includes(to);
 }
 
 export function allowedActorsForSkillTransition(
   from: SkillStatus,
-  to: SkillStatus
+  to: SkillStatus,
 ): SkillLifecycleActor[] {
   return [...(SKILL_TRANSITION_ACTORS[from][to] ?? [])];
 }
@@ -408,7 +393,7 @@ export function allowedActorsForSkillTransition(
 export function canActorTransitionSkillState(
   actor: SkillLifecycleActor,
   from: SkillStatus,
-  to: SkillStatus
+  to: SkillStatus,
 ): boolean {
   return allowedActorsForSkillTransition(from, to).includes(actor);
 }
@@ -432,7 +417,7 @@ function compareSkillVersionRefs(left: SkillVersionRef, right: SkillVersionRef):
 }
 
 export function selectLatestTrustedSkillVersion(
-  versions: SkillVersionRef[]
+  versions: SkillVersionRef[],
 ): SkillVersionRef | null {
   const trusted = versions.filter((version) => version.trusted);
   if (trusted.length === 0) {
@@ -443,16 +428,14 @@ export function selectLatestTrustedSkillVersion(
 
 export function createSkillVersionPolicy(
   skillId: string,
-  overrides: Partial<SkillVersionPolicy> = {}
+  overrides: Partial<SkillVersionPolicy> = {},
 ): SkillVersionPolicy {
   return {
     snapshotRootUri: overrides.snapshotRootUri ?? skillVersionRootUri(skillId),
     versionFormat: overrides.versionFormat ?? "iso-timestamp",
     retention: overrides.retention ?? DEFAULT_SKILL_VERSION_RETENTION,
     rollbackTarget: overrides.rollbackTarget ?? "latest_trusted",
-    rollbackTriggers: [
-      ...(overrides.rollbackTriggers ?? DEFAULT_SKILL_ROLLBACK_TRIGGERS)
-    ]
+    rollbackTriggers: [...(overrides.rollbackTriggers ?? DEFAULT_SKILL_ROLLBACK_TRIGGERS)],
   };
 }
 
@@ -461,7 +444,7 @@ export function createSkillLifecycleVersionSurface({
   lifecycle,
   activeVersion = null,
   versions = [],
-  policy
+  policy,
 }: {
   skillId: string;
   lifecycle: SkillLifecycleState;
@@ -478,47 +461,40 @@ export function createSkillLifecycleVersionSurface({
       resolvedPolicy.rollbackTarget === "latest_trusted"
         ? selectLatestTrustedSkillVersion(versions)
         : null,
-    policy: resolvedPolicy
+    policy: resolvedPolicy,
   };
 }
 
 export function transitionSkillState(
   current: SkillLifecycleState,
-  nextStatus: SkillStatus
+  nextStatus: SkillStatus,
 ): SkillLifecycleState {
   if (!canTransitionSkillState(current.status, nextStatus)) {
     throw new CapabilityError(
       "E_BAD_INPUT",
-      `Illegal skill transition: ${current.status} -> ${nextStatus}`
+      `Illegal skill transition: ${current.status} -> ${nextStatus}`,
     );
   }
   return {
     status: nextStatus,
-    trusted: nextStatus === "enabled" ? current.trusted : false
+    trusted: nextStatus === "enabled" ? current.trusted : false,
   };
 }
 
-export function grantSkillTrusted(
-  current: SkillLifecycleState
-): SkillLifecycleState {
+export function grantSkillTrusted(current: SkillLifecycleState): SkillLifecycleState {
   if (current.status !== "enabled") {
-    throw new CapabilityError(
-      "E_BAD_INPUT",
-      "Trusted flag can only be granted while enabled"
-    );
+    throw new CapabilityError("E_BAD_INPUT", "Trusted flag can only be granted while enabled");
   }
   return {
     ...current,
-    trusted: true
+    trusted: true,
   };
 }
 
-export function revokeSkillTrusted(
-  current: SkillLifecycleState
-): SkillLifecycleState {
+export function revokeSkillTrusted(current: SkillLifecycleState): SkillLifecycleState {
   return {
     ...current,
-    trusted: false
+    trusted: false,
   };
 }
 
@@ -532,7 +508,7 @@ export const SESSION_ENTRY_TYPES = [
   "thinking_level_change",
   "model_change",
   "label",
-  "session_info"
+  "session_info",
 ] as const;
 export type SessionEntryType = (typeof SESSION_ENTRY_TYPES)[number];
 
@@ -586,13 +562,7 @@ export interface SessionContextMessage {
 // Run State Model
 // ──────────────────────────────────────────────────────────
 
-export const RUN_PHASES = [
-  "idle",
-  "running",
-  "paused",
-  "compacting",
-  "stopped"
-] as const;
+export const RUN_PHASES = ["idle", "running", "paused", "compacting", "stopped"] as const;
 export type RunPhase = (typeof RUN_PHASES)[number];
 
 export interface RetryState {
@@ -625,7 +595,7 @@ export const RUN_PHASE_TRANSITIONS: Record<RunPhase, readonly RunPhase[]> = {
   running: ["paused", "compacting", "stopped"],
   paused: ["running"],
   compacting: ["running", "idle"],
-  stopped: ["idle"]
+  stopped: ["idle"],
 };
 
 export function canTransitionRunPhase(from: RunPhase, to: RunPhase): boolean {
@@ -643,14 +613,11 @@ export const LOOP_TERMINAL_STATUSES = [
   "progress_uncertain",
   "max_steps",
   "stopped",
-  "timeout"
+  "timeout",
 ] as const;
 export type LoopTerminalStatus = (typeof LOOP_TERMINAL_STATUSES)[number];
 
-export const NO_PROGRESS_REASONS = [
-  "repeat_signature",
-  "ping_pong"
-] as const;
+export const NO_PROGRESS_REASONS = ["repeat_signature", "ping_pong"] as const;
 export type NoProgressReason = (typeof NO_PROGRESS_REASONS)[number];
 
 export const LOOP_TURN_STATUSES = [
@@ -658,7 +625,7 @@ export const LOOP_TURN_STATUSES = [
   "executing",
   "succeeded",
   "failed",
-  "skipped"
+  "skipped",
 ] as const;
 export type LoopTurnStatus = (typeof LOOP_TURN_STATUSES)[number];
 
@@ -682,11 +649,7 @@ export interface LoopTurn {
 // Compaction Contract
 // ──────────────────────────────────────────────────────────
 
-export const COMPACTION_REASONS = [
-  "overflow",
-  "threshold",
-  "manual"
-] as const;
+export const COMPACTION_REASONS = ["overflow", "threshold", "manual"] as const;
 export type CompactionReason = (typeof COMPACTION_REASONS)[number];
 
 export interface CompactionDraft {
