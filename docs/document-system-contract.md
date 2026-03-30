@@ -16,6 +16,16 @@
 2. Agent 完成任务时要补哪些文档
 3. 什么时候视为文档已经过期
 
+任务级阅读入口已经迁到：
+
+- `docs/agent-task-index.md`
+
+本文件继续保留，但它的职责只剩：
+
+1. 文档分层
+2. Doc Freshness Gate
+3. Definition Of Done
+
 ## 1. 四类文档
 
 ### A. Locked Docs
@@ -76,28 +86,15 @@
 - 旧仓设计文档
 - `_research/*`
 
-## 2. 新 Agent 的最短阅读路径
+## 2. 新 Agent 的阅读路径
 
-默认先读：
+不要再以本文件维护任务阅读顺序。
 
-1. `AGENTS.md`
-2. `docs/source-of-truth-map.md`
-3. `docs/module-tracking-ledger.json`
-4. `docs/agent-bootstrap-context-pack.md`
-5. 当前 issue
+统一入口：
 
-如果要改架构层，再读：
+1. `docs/agent-task-index.md`
 
-1. `docs/locked-decisions-2026-03-29.md`
-2. `docs/ai-native-capability-surface-design.md`
-3. `docs/ai-surface-index.md`
-4. 相关包代码和测试
-
-如果要做迁移判断，再读：
-
-1. `docs/legacy-to-vnext-migration-matrix.md`
-2. `docs/migration-parity-dashboard.md`
-3. `docs/cutover-readiness-criteria.md`
+如果你的任务触及 public surface / workflow / migration / docs gate，再回来看本文件。
 
 ## 3. Doc Freshness Gate
 

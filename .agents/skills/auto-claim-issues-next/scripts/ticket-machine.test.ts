@@ -1,15 +1,15 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  type LiveQueue,
   activeLeases,
   loadLeaseState,
   releaseTicket,
   takeTicket,
-  type LiveQueue
 } from "./ticket-machine";
 
 const tempDirs: string[] = [];
@@ -22,7 +22,10 @@ function makeRepo() {
 }
 
 function writeQueue(repoRoot: string, queue: LiveQueue) {
-  writeFileSync(path.join(repoRoot, "docs", "workflow", "live-queue.json"), `${JSON.stringify(queue, null, 2)}\n`);
+  writeFileSync(
+    path.join(repoRoot, "docs", "workflow", "live-queue.json"),
+    `${JSON.stringify(queue, null, 2)}\n`,
+  );
 }
 
 afterEach(() => {
@@ -35,6 +38,23 @@ afterEach(() => {
 });
 
 describe("ticket-machine", () => {
+  it("returns queue_empty when the live queue file is missing", async () => {
+    const repoRoot = makeRepo();
+    const leaseRootDir = path.join(repoRoot, ".leases");
+
+    await expect(
+      takeTicket({
+        repoRoot,
+        leaseRootDir,
+        sessionId: "session-a",
+        agentName: "atlas",
+      }),
+    ).resolves.toEqual({
+      kind: "queue_empty",
+      reason: "live queue file is missing; run bun run workflow:queue:build",
+    });
+  });
+
   it("reuses the same lease for the same session", async () => {
     const repoRoot = makeRepo();
     const leaseRootDir = path.join(repoRoot, ".leases");
@@ -53,22 +73,22 @@ describe("ticket-machine", () => {
           tracking_kind: "gap",
           check_cmd: "bun run check",
           depends_on: [],
-          write_scope: ["docs/"]
-        }
-      ]
+          write_scope: ["docs/"],
+        },
+      ],
     });
 
     const first = await takeTicket({
       repoRoot,
       leaseRootDir,
       sessionId: "session-a",
-      agentName: "atlas"
+      agentName: "atlas",
     });
     const second = await takeTicket({
       repoRoot,
       leaseRootDir,
       sessionId: "session-a",
-      agentName: "atlas"
+      agentName: "atlas",
     });
 
     expect(first.kind).toBe("ticket");
@@ -99,28 +119,28 @@ describe("ticket-machine", () => {
           tracking_kind: "gap",
           check_cmd: "bun run check",
           depends_on: [],
-          write_scope: ["docs/"]
-        }
-      ]
+          write_scope: ["docs/"],
+        },
+      ],
     });
 
     const first = await takeTicket({
       repoRoot,
       leaseRootDir,
       sessionId: "session-a",
-      agentName: "atlas"
+      agentName: "atlas",
     });
     const second = await takeTicket({
       repoRoot,
       leaseRootDir,
       sessionId: "session-b",
-      agentName: "mercury"
+      agentName: "mercury",
     });
 
     expect(first.kind).toBe("ticket");
     expect(second).toEqual({
       kind: "queue_empty",
-      reason: "all live queue entries are already leased"
+      reason: "all live queue entries are already leased",
     });
     const leaseState = loadLeaseState(repoRoot, { leaseRootDir });
     expect(Object.keys(leaseState.leases_by_issue)).toEqual(["ISSUE-036"]);
@@ -144,16 +164,16 @@ describe("ticket-machine", () => {
           tracking_kind: "gap",
           check_cmd: "bun run check",
           depends_on: [],
-          write_scope: ["docs/"]
-        }
-      ]
+          write_scope: ["docs/"],
+        },
+      ],
     });
 
     await takeTicket({
       repoRoot,
       leaseRootDir,
       sessionId: "session-a",
-      agentName: "atlas"
+      agentName: "atlas",
     });
     expect(await releaseTicket(repoRoot, "session-a", { leaseRootDir })).toBe(true);
 
@@ -161,7 +181,7 @@ describe("ticket-machine", () => {
       repoRoot,
       leaseRootDir,
       sessionId: "session-b",
-      agentName: "mercury"
+      agentName: "mercury",
     });
 
     expect(next.kind).toBe("ticket");
@@ -169,5 +189,48 @@ describe("ticket-machine", () => {
       throw new Error("expected ticket");
     }
     expect(next.entry.issue_id).toBe("ISSUE-036");
+  });
+
+  it("drops stale leases after the queue changes", async () => {
+    const repoRoot = makeRepo();
+    const leaseRootDir = path.join(repoRoot, ".leases");
+    writeQueue(repoRoot, {
+      schema_version: 1,
+      generated_at: "2026-03-30T00:00:00.000Z",
+      repo_root: repoRoot,
+      entries: [
+        {
+          issue_id: "ISSUE-036",
+          issue_path: "docs/backlog/issue-036.md",
+          title: "Automation cutover",
+          parallel_group: "site-runtime",
+          module_id: "site-runtime-browser-automation",
+          module_stage: "secondary",
+          tracking_kind: "gap",
+          check_cmd: "bun run check",
+          depends_on: [],
+          write_scope: ["docs/"],
+        },
+      ],
+    });
+
+    await takeTicket({
+      repoRoot,
+      leaseRootDir,
+      sessionId: "session-a",
+      agentName: "atlas",
+    });
+
+    writeQueue(repoRoot, {
+      schema_version: 1,
+      generated_at: "2026-03-30T01:00:00.000Z",
+      repo_root: repoRoot,
+      entries: [],
+    });
+
+    expect(activeLeases(repoRoot, { leaseRootDir })).toEqual([]);
+    expect(
+      readFileSync(path.join(leaseRootDir, `${path.basename(repoRoot)}.json`), "utf8"),
+    ).toContain('"leases_by_session": {}');
   });
 });

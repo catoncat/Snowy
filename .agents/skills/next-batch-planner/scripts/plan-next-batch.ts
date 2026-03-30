@@ -4,6 +4,10 @@ import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import {
+  type IssueFile,
+  type IssueSummary,
+  type Priority,
+  type TrackingKind,
   dependenciesSatisfied,
   issueModuleId,
   issueModuleStage,
@@ -13,25 +17,25 @@ import {
   loadAllIssues,
   readString,
   toIssueSummary,
-  type IssueFile,
-  type IssueSummary,
-  type Priority,
-  type TrackingKind
 } from "../../auto-claim-issues-next/scripts/claim-issue";
 import {
+  type ModuleLedger,
+  type ModuleRecord,
+  type ModuleStage,
   getModuleRecord,
   loadModuleLedger,
   sortModules,
-  type ModuleLedger,
-  type ModuleRecord,
-  type ModuleStage
 } from "../../auto-claim-issues-next/scripts/module-ledger";
-import { activeLeases, type TicketLease } from "../../auto-claim-issues-next/scripts/ticket-machine";
+import {
+  type TicketLease,
+  activeLeases,
+} from "../../auto-claim-issues-next/scripts/ticket-machine";
 
 export interface PlanArgs {
   repoRoot: string;
   date?: string;
   outputPath?: string;
+  leaseRootDir?: string;
   dryRun: boolean;
   json: boolean;
 }
@@ -172,49 +176,56 @@ function inspectIssueMappings(issues: IssueFile[], moduleLedger: ModuleLedger): 
 function summarizeOpenIssues(
   open: IssueFile[],
   all: IssueFile[],
-  moduleLedger: ModuleLedger
+  moduleLedger: ModuleLedger,
 ): PlannedIssueSummary[] {
-  return [...open].sort((left, right) => compareIssues(left, right, moduleLedger)).map((issue) => {
-    const module = getModuleRecord(moduleLedger, issueModuleId(issue));
-    if (!module) {
-      throw new Error(`unknown module_id for issue ${readString(issue, "id")}`);
-    }
-    return {
-      id: readString(issue, "id"),
-      title: readString(issue, "title"),
-      priority: issuePriority(issue),
-      parallelGroup: readString(issue, "parallel_group"),
-      dependsOn: issue.frontmatter.data.depends_on
-        ? Array.isArray(issue.frontmatter.data.depends_on)
-          ? issue.frontmatter.data.depends_on.map((item) => String(item))
-          : [String(issue.frontmatter.data.depends_on)]
-        : [],
-      writeScope: issue.frontmatter.data.write_scope
-        ? Array.isArray(issue.frontmatter.data.write_scope)
-          ? issue.frontmatter.data.write_scope.map((item) => String(item))
-          : [String(issue.frontmatter.data.write_scope)]
-        : [],
-      readyNow: dependenciesSatisfied(issue, all),
-      moduleId: module.module_id,
-      moduleTitle: module.title,
-      moduleStage: issueModuleStage(issue),
-      trackingKind: issueTrackingKind(issue),
-      moduleOrder: module.tracking_order
-    };
-  });
+  return [...open]
+    .sort((left, right) => compareIssues(left, right, moduleLedger))
+    .map((issue) => {
+      const module = getModuleRecord(moduleLedger, issueModuleId(issue));
+      if (!module) {
+        throw new Error(`unknown module_id for issue ${readString(issue, "id")}`);
+      }
+      return {
+        id: readString(issue, "id"),
+        title: readString(issue, "title"),
+        priority: issuePriority(issue),
+        parallelGroup: readString(issue, "parallel_group"),
+        dependsOn: issue.frontmatter.data.depends_on
+          ? Array.isArray(issue.frontmatter.data.depends_on)
+            ? issue.frontmatter.data.depends_on.map((item) => String(item))
+            : [String(issue.frontmatter.data.depends_on)]
+          : [],
+        writeScope: issue.frontmatter.data.write_scope
+          ? Array.isArray(issue.frontmatter.data.write_scope)
+            ? issue.frontmatter.data.write_scope.map((item) => String(item))
+            : [String(issue.frontmatter.data.write_scope)]
+          : [],
+        readyNow: dependenciesSatisfied(issue, all),
+        moduleId: module.module_id,
+        moduleTitle: module.title,
+        moduleStage: issueModuleStage(issue),
+        trackingKind: issueTrackingKind(issue),
+        moduleOrder: module.tracking_order,
+      };
+    });
 }
 
 function collectModuleCoverage(
   moduleLedger: ModuleLedger,
-  issues: IssueFile[]
+  issues: IssueFile[],
 ): ModuleCoverageSummary[] {
   return [...moduleLedger.modules].sort(sortModules).map((module) => {
     const openIssueIds = issues
-      .filter((issue) => issueStatus(issue) === "open" && readString(issue, "module_id") === module.module_id)
+      .filter(
+        (issue) =>
+          issueStatus(issue) === "open" && readString(issue, "module_id") === module.module_id,
+      )
       .map((issue) => readString(issue, "id"));
     const inProgressIssueIds = issues
       .filter(
-        (issue) => issueStatus(issue) === "in-progress" && readString(issue, "module_id") === module.module_id
+        (issue) =>
+          issueStatus(issue) === "in-progress" &&
+          readString(issue, "module_id") === module.module_id,
       )
       .map((issue) => readString(issue, "id"));
     return {
@@ -223,7 +234,7 @@ function collectModuleCoverage(
       stage: module.stage,
       status: module.status,
       openIssueIds,
-      inProgressIssueIds
+      inProgressIssueIds,
     };
   });
 }
@@ -252,7 +263,7 @@ function buildPlanMarkdown(
   repoRoot: string,
   issues: PlannedIssueSummary[],
   counts: { done: number; open: number },
-  moduleLedger: ModuleLedger
+  moduleLedger: ModuleLedger,
 ): string {
   const currentBatch = batchNumber(repoRoot);
   const lines: string[] = [
@@ -265,7 +276,7 @@ function buildPlanMarkdown(
     `- open issues: ${counts.open}`,
     `- done issues: ${counts.done}`,
     `- tracked modules: ${moduleLedger.modules.length}`,
-    `- recommended batch: Batch ${currentBatch}`
+    `- recommended batch: Batch ${currentBatch}`,
   ];
 
   const stageOrder: ModuleStage[] = ["mainline", "secondary", "deferred"];
@@ -294,10 +305,10 @@ function buildPlanMarkdown(
         lines.push(`  - parallel_group: ${issue.parallelGroup}`);
         lines.push(`  - ready_now: ${issue.readyNow ? "yes" : "no"}`);
         lines.push(
-          `  - depends_on: ${issue.dependsOn.length > 0 ? issue.dependsOn.join(", ") : "(none)"}`
+          `  - depends_on: ${issue.dependsOn.length > 0 ? issue.dependsOn.join(", ") : "(none)"}`,
         );
         lines.push(
-          `  - write_scope: ${issue.writeScope.length > 0 ? issue.writeScope.join(", ") : "(none)"}`
+          `  - write_scope: ${issue.writeScope.length > 0 ? issue.writeScope.join(", ") : "(none)"}`,
         );
       }
       lines.push("");
@@ -322,7 +333,7 @@ export function parseArgs(argv: string[], cwd = process.cwd()): PlanArgs {
     date: undefined,
     outputPath: undefined,
     dryRun: false,
-    json: false
+    json: false,
   };
 
   for (const item of argv) {
@@ -346,6 +357,9 @@ export function parseArgs(argv: string[], cwd = process.cwd()): PlanArgs {
     if (key === "output" && value) {
       out.outputPath = value;
     }
+    if (key === "lease-root" && value) {
+      out.leaseRootDir = path.resolve(cwd, value);
+    }
     if (key === "repo-root" && value) {
       out.repoRoot = path.resolve(cwd, value);
     }
@@ -361,7 +375,10 @@ export function planNextBatch(args: PlanArgs): PlanResult {
   const moduleCoverage = collectModuleCoverage(moduleLedger, issues);
   const missingModules = findMissingModules(moduleCoverage);
   const inProgressIssues = issues.filter((issue) => issueStatus(issue) === "in-progress");
-  const liveLeases = activeLeases(args.repoRoot);
+  const liveLeases = activeLeases(
+    args.repoRoot,
+    args.leaseRootDir ? { leaseRootDir: args.leaseRootDir } : undefined,
+  );
   const openIssues = issues.filter((issue) => issueStatus(issue) === "open");
   const doneCount = issues.filter((issue) => issueStatus(issue) === "done").length;
 
@@ -374,7 +391,7 @@ export function planNextBatch(args: PlanArgs): PlanResult {
       open: [],
       missingModules,
       unmappedIssues: metadataProblems,
-      moduleCoverage
+      moduleCoverage,
     };
   }
 
@@ -387,7 +404,7 @@ export function planNextBatch(args: PlanArgs): PlanResult {
       open: openIssues.map(toIssueSummary),
       missingModules,
       unmappedIssues: [],
-      moduleCoverage
+      moduleCoverage,
     };
   }
 
@@ -400,7 +417,7 @@ export function planNextBatch(args: PlanArgs): PlanResult {
       open: openIssues.map(toIssueSummary),
       missingModules,
       unmappedIssues: [],
-      moduleCoverage
+      moduleCoverage,
     };
   }
 
@@ -413,7 +430,7 @@ export function planNextBatch(args: PlanArgs): PlanResult {
       open: openIssues.map(toIssueSummary),
       missingModules,
       unmappedIssues: [],
-      moduleCoverage
+      moduleCoverage,
     };
   }
 
@@ -426,17 +443,25 @@ export function planNextBatch(args: PlanArgs): PlanResult {
       open: [],
       missingModules,
       unmappedIssues: [],
-      moduleCoverage
+      moduleCoverage,
     };
   }
 
   const date = args.date ?? todayDate();
-  const outputPath = args.outputPath ?? `docs/next-development-slices-${date}-batch-${batchNumber(args.repoRoot)}.md`;
+  const outputPath =
+    args.outputPath ??
+    `docs/next-development-slices-${date}-batch-${batchNumber(args.repoRoot)}.md`;
   const summaries = summarizeOpenIssues(openIssues, issues, moduleLedger);
-  const markdown = buildPlanMarkdown(date, args.repoRoot, summaries, {
-    done: doneCount,
-    open: openIssues.length
-  }, moduleLedger);
+  const markdown = buildPlanMarkdown(
+    date,
+    args.repoRoot,
+    summaries,
+    {
+      done: doneCount,
+      open: openIssues.length,
+    },
+    moduleLedger,
+  );
 
   if (!args.dryRun) {
     const fullPath = path.join(args.repoRoot, outputPath);
@@ -453,7 +478,7 @@ export function planNextBatch(args: PlanArgs): PlanResult {
     issues: summaries,
     missingModules,
     unmappedIssues: [],
-    moduleCoverage
+    moduleCoverage,
   };
 }
 
@@ -465,7 +490,7 @@ function printCoverageSummary(entries: ModuleCoverageSummary[]): void {
   for (const entry of entries) {
     const live = [...entry.inProgressIssueIds, ...entry.openIssueIds];
     console.log(
-      `- ${entry.moduleId} stage=${entry.stage} status=${entry.status} live=${live.length > 0 ? live.join(", ") : "(none)"}`
+      `- ${entry.moduleId} stage=${entry.stage} status=${entry.status} live=${live.length > 0 ? live.join(", ") : "(none)"}`,
     );
   }
 }

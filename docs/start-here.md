@@ -21,7 +21,7 @@
 - browser-side kernel 主层
 - session / run queue / compaction 主链
 - 完整 diagnostics / intervention / browser automation 主线
-- 一份被 workflow scripts 直接消费的全模块追踪台账
+- queue rebuild / claim / planning 的轻量工作流收口
 
 所以现在的主线不是“继续把 substrate 做得更满”，而是：
 
@@ -80,27 +80,53 @@
   - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
   - `docs/kernel-skeleton-design.md`
   - `docs/module-tracking-ledger.json`
+  - `docs/workflow/live-queue.json`
+
+## 如果你是来跑 workflow / claim
+
+不要一上来扫完整个 backlog。
+
+先按这个顺序：
+
+1. `docs/agent-task-index.md`
+2. `docs/workflow/live-queue.json`
+3. 当前 issue 文件
+
+工作流判断要分两层看：
+
+- planning / coverage truth：`docs/module-tracking-ledger.json` + `docs/backlog/*.md`
+- dispatch / locking truth：`docs/workflow/live-queue.json` + `~/.codex/workflow-leases/browser-brain-loop-next.json`
+
+如果 backlog 刚发生变化，例如：
+
+- 新增 issue
+- 某 issue 改成 `done`
+- `depends_on` 变化
+- `write_scope` 变化
+
+先执行：
+
+```bash
+bun run workflow:queue:build
+```
+
+再去 claim。
 
 ## 进入代码前的强制阅读顺序
 
-1. `AGENTS.md`
-2. `docs/source-of-truth-map.md`
-3. `docs/agent-bootstrap-context-pack.md`
-4. `docs/document-system-contract.md`
-5. `docs/start-here.md`
-6. `docs/locked-decisions-2026-03-29.md`
-7. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-8. `docs/kernel-skeleton-design.md`
-9. `docs/module-tracking-ledger.json`
-10. `docs/ai-native-capability-surface-design.md`
-11. `docs/ai-surface-index.md`
-12. `docs/v0-slice.md`
-13. `docs/legacy-reference-map.md`
-14. `docs/legacy-to-vnext-migration-matrix.md`
-15. `docs/migration-parity-dashboard.md`
-16. `docs/cutover-readiness-criteria.md`
-17. 当前 backlog issue
-18. 当前 batch / planning 文档
+不要再维护一个“所有任务都要走的全量顺序”。
+
+统一入口改为：
+
+1. `docs/agent-task-index.md`
+2. 按当前任务类型补读
+
+典型场景：
+
+- claim / workflow：`docs/workflow/live-queue.json`
+- implement claimed issue：当前 issue + `acceptance_ref` + 对应代码测试
+- planning：`docs/source-of-truth-map.md` + `docs/module-tracking-ledger.json` + `docs/backlog/README.md`
+- architecture：`docs/locked-decisions-2026-03-29.md` + recovery report + kernel skeleton
 
 ## 如果你要判断“旧仓是不是已经迁完”
 

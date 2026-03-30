@@ -8,22 +8,18 @@
 - 产品对 AI 暴露统一 `AI Surface`；其中 invokable actions 继续通过 `Capability API` 暴露。
 - 默认不做 legacy/fallback 设计；旧仓只作行为和概念参考，不作兼容前提。
 - 当前阶段判断：v0 已完成的是 substrate foundation；当前主线是补回 browser-side kernel。
-- workflow/planning 的 live 模块真相源是 `docs/module-tracking-ledger.json`，不是散落在 review 文档里的口头模块列表。
+- planning truth 是 `docs/module-tracking-ledger.json`。
+- dispatch truth 是 `docs/workflow/live-queue.json` + `~/.codex/workflow-leases/browser-brain-loop-next.json`。
 
 ## 1.1 Mandatory Onboarding
 
-- 任何新进入本仓的 agent，在动代码前必须先读：
-  1. `docs/start-here.md`
-  2. `docs/source-of-truth-map.md`
-  3. `docs/agent-bootstrap-context-pack.md`
-  4. `docs/locked-decisions-2026-03-29.md`
-  5. `docs/module-tracking-ledger.json`
-  6. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-  7. `docs/kernel-skeleton-design.md`
-  8. `docs/ai-native-capability-surface-design.md`
-  9. `docs/ai-surface-index.md`
-  10. `docs/v0-slice.md`
-  11. `docs/legacy-reference-map.md`
+- 任何新进入本仓的 agent，在动代码前先读：
+  1. `docs/agent-task-index.md`
+- 然后只按当前任务类型补读，不要默认全量读文档：
+  - claim / workflow：`docs/workflow/live-queue.json`
+  - implement claimed issue：当前 issue + `acceptance_ref` + 对应 `src/` / `test/`
+  - planning：`docs/source-of-truth-map.md` + `docs/module-tracking-ledger.json` + `docs/backlog/README.md`
+  - architecture / public surface：`docs/locked-decisions-2026-03-29.md` + `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` + `docs/kernel-skeleton-design.md`
 - 如果要改 architecture-level 代码，再去读旧仓：
   - `/Users/envvar/work/repos/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
   - `/Users/envvar/work/repos/browser-brain-loop/docs/kernel-architecture.md`
@@ -41,6 +37,7 @@
 - 当前主线不是继续横向扩 substrate，而是补回 `packages/kernel` 这一层 browser-side brain。
 - `packages/kernel` 负责 session / run / compaction / diagnostics / intervention 主层。
 - planning 默认按模块台账推进：module stage → module order → issue priority。
+- dispatch 默认按 live queue 推进：queue entry order → active lease exclusion。
 - `host.*` 保持粗粒度原语，不要按产品功能无限细分。
 - `Skill` 通过 `ctx.call()` / `ctx.capabilities.*` 使用能力，不直连私有内核实现。
 
@@ -320,7 +317,9 @@
 
 ## 9. Workflow
 
-- backlog 派工入口：`docs/backlog/README.md`
+- backlog 规则：`docs/backlog/README.md`
+- live dispatch queue：`docs/workflow/live-queue.json`
+- live lease file：`~/.codex/workflow-leases/browser-brain-loop-next.json`
 - 当前 batch 指针：`docs/next-development-slices-2026-03-29-batch-7.md`
 - 历史批次索引：`docs/next-development-slices-2026-03-29.md`
 - Agent 工作流说明：`docs/multi-agent-workflow.md`
@@ -329,9 +328,10 @@
 - batch planning skill：`.agents/skills/next-batch-planner/`
 - 所有 Agent 默认能力相同；差异来自当前状态和当前上下文
 - role prompt 只作为可选 stance overlay，不是系统前提
-- claim / done 回写只在 canonical workspace 可靠
-- 真正 claim 时，`assignee` 必须写 Agent 自己选定并持续复用的名字，不能写通用 `agent`
-- 若 claim 预览返回无可认领 issue，当前 Agent 必须进入下一批规划，而不是默认停工
+- queue build 由 backlog + module ledger 生成；claim path 本身不再扫描 backlog
+- live ticket 只通过 lease 文件加锁；`in-progress` 不再是 dispatch lock
+- backlog 变化后必须重建 live queue，至少包括：新增 issue、改 `done`、改 `depends_on`、改 `write_scope`
+- 若 live queue 返回空，先判断是否需要重建 queue；确认无票后再进入下一批规划
 
 ## 10. Commands
 
@@ -339,6 +339,9 @@
 - `bun run test`
 - `bun run typecheck`
 - `bun run check`
+- `bun run workflow:queue:build`
+- `bun run workflow:queue:preview`
+- `bun run workflow:queue:json`
 - `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview`
 - `BBL_AGENT_NAME=<agent-name> bun run workflow:claim`
 - `BBL_AGENT_NAME=<agent-name> bun run workflow:claim:json`
@@ -350,13 +353,6 @@
 
 ## 11. First Places To Read Before Changing Code
 
-1. `docs/start-here.md`
-2. `docs/source-of-truth-map.md`
-3. `docs/locked-decisions-2026-03-29.md`
-4. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-5. `docs/kernel-skeleton-design.md`
-6. `docs/v0-slice.md`
-7. `docs/legacy-reference-map.md`
-8. `docs/backlog/README.md`
-9. `docs/multi-agent-workflow.md`
-10. 对应 issue / 对应 package 的 `src/` 和 `test/`
+1. `docs/agent-task-index.md`
+2. 当前任务对应的最小 read path
+3. 当前 issue / 当前 package 的 `src/` 和 `test/`

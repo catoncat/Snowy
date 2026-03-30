@@ -4,21 +4,25 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import {
+  type IssueFile,
+  type Priority,
   dependenciesSatisfied,
   issueModuleId,
   issueModuleStage,
   issuePriority,
-  issueTrackingKind,
   loadAllIssues,
   readArray,
   readString,
   scopesConflict,
   toIssueSummary,
-  type IssueFile,
-  type Priority
 } from "./claim-issue";
-import { getModuleRecord, loadModuleLedger, moduleStageRank, type ModuleLedger } from "./module-ledger";
-import { liveQueuePath, type LiveQueue, type QueueEntry } from "./ticket-machine";
+import {
+  type ModuleLedger,
+  getModuleRecord,
+  loadModuleLedger,
+  moduleStageRank,
+} from "./module-ledger";
+import { type LiveQueue, type QueueEntry, liveQueuePath } from "./ticket-machine";
 
 export interface BuildLiveQueueArgs {
   repoRoot: string;
@@ -46,7 +50,8 @@ function priorityRank(priority: Priority): number {
 function compareQueueOrder(left: IssueFile, right: IssueFile, moduleLedger: ModuleLedger): number {
   const leftModule = getModuleRecord(moduleLedger, issueModuleId(left));
   const rightModule = getModuleRecord(moduleLedger, issueModuleId(right));
-  const stageDelta = moduleStageRank(issueModuleStage(left)) - moduleStageRank(issueModuleStage(right));
+  const stageDelta =
+    moduleStageRank(issueModuleStage(left)) - moduleStageRank(issueModuleStage(right));
   if (stageDelta !== 0) {
     return stageDelta;
   }
@@ -82,7 +87,7 @@ function queueEntryFromIssue(repoRoot: string, issue: IssueFile): QueueEntry {
     tracking_kind: summary.tracking_kind,
     check_cmd: summary.check_cmd,
     depends_on: summary.depends_on,
-    write_scope: summary.write_scope
+    write_scope: summary.write_scope,
   };
 }
 
@@ -92,7 +97,7 @@ function conflictsWithSelected(issue: IssueFile, selected: QueueEntry[]): boolea
     return false;
   }
   return selected.some((entry) =>
-    currentScopes.some((left) => entry.write_scope.some((right) => scopesConflict(left, right)))
+    currentScopes.some((left) => entry.write_scope.some((right) => scopesConflict(left, right))),
   );
 }
 
@@ -100,7 +105,7 @@ export function buildLiveQueue(args: BuildLiveQueueArgs): BuildLiveQueueResult {
   const moduleLedger = loadModuleLedger(args.repoRoot);
   const issues = loadAllIssues(args.repoRoot, {
     moduleLedger,
-    validateModuleMetadata: true
+    validateModuleMetadata: true,
   });
 
   const readyIssues = issues
@@ -120,7 +125,7 @@ export function buildLiveQueue(args: BuildLiveQueueArgs): BuildLiveQueueResult {
     schema_version: 1,
     generated_at: new Date().toISOString(),
     repo_root: args.repoRoot,
-    entries
+    entries,
   };
 
   const outputPath = liveQueuePath(args.repoRoot);
@@ -133,7 +138,7 @@ export function buildLiveQueue(args: BuildLiveQueueArgs): BuildLiveQueueResult {
     kind: args.dryRun ? "preview" : "built",
     outputPath: path.relative(args.repoRoot, outputPath),
     entryCount: queue.entries.length,
-    queue
+    queue,
   };
 }
 
@@ -141,7 +146,7 @@ function parseArgs(argv: string[], cwd = process.cwd()): BuildLiveQueueArgs {
   const out: BuildLiveQueueArgs = {
     repoRoot: cwd,
     dryRun: false,
-    json: false
+    json: false,
   };
 
   for (const item of argv) {

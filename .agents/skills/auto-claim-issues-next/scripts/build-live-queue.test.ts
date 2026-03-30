@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -35,7 +35,7 @@ function writeModuleLedger(repoRoot: string) {
             code_roots: ["packages/kernel/"],
             source_docs: ["docs/kernel-skeleton-design.md"],
             cutover_gate: null,
-            default_parallel_group: "kernel"
+            default_parallel_group: "kernel",
           },
           {
             module_id: "site-runtime-browser-automation",
@@ -48,14 +48,14 @@ function writeModuleLedger(repoRoot: string) {
             code_roots: ["packages/site-runtime/"],
             source_docs: ["docs/cutover-readiness-criteria.md"],
             cutover_gate: null,
-            default_parallel_group: "site-runtime"
-          }
-        ]
+            default_parallel_group: "site-runtime",
+          },
+        ],
       },
       null,
-      2
+      2,
     ),
-    "utf8"
+    "utf8",
   );
 }
 
@@ -99,7 +99,7 @@ write_scope:
   - docs/
 acceptance_ref: docs/cutover-readiness-criteria.md
 check_cmd: bun run check
----`
+---`,
     );
     writeIssue(
       repoRoot,
@@ -125,7 +125,7 @@ write_scope:
   - docs/
 acceptance_ref: docs/kernel-skeleton-design.md
 check_cmd: bun run check
----`
+---`,
     );
     writeIssue(
       repoRoot,
@@ -150,13 +150,13 @@ write_scope:
   - docs/
 acceptance_ref: docs/kernel-skeleton-design.md
 check_cmd: bun run check
----`
+---`,
     );
 
     const result = buildLiveQueue({
       repoRoot,
       dryRun: true,
-      json: false
+      json: false,
     });
 
     expect(result.kind).toBe("preview");
@@ -190,18 +190,18 @@ write_scope:
   - packages/site-runtime/src/index.ts
 acceptance_ref: docs/cutover-readiness-criteria.md
 check_cmd: bun run check
----`
+---`,
     );
 
     const result = buildLiveQueue({
       repoRoot,
       dryRun: false,
-      json: false
+      json: false,
     });
 
     expect(result.kind).toBe("built");
     const written = JSON.parse(
-      readFileSync(path.join(repoRoot, "docs", "workflow", "live-queue.json"), "utf8")
+      readFileSync(path.join(repoRoot, "docs", "workflow", "live-queue.json"), "utf8"),
     ) as { entries: Array<{ issue_id: string }> };
     expect(written.entries.map((entry) => entry.issue_id)).toEqual(["ISSUE-036"]);
   });

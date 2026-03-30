@@ -8,6 +8,10 @@
 
 给新进入仓库的 Agent 一个高信号、小体积的上下文包。
 
+任务级阅读路由见：
+
+- `docs/agent-task-index.md`
+
 ## 1. 仓库身份
 
 - 仓库：`browser-brain-loop-next`
@@ -65,14 +69,7 @@
 ## 6. 新 Agent 默认 operating loop
 
 1. 先读：
-   - `AGENTS.md`
-   - `docs/source-of-truth-map.md`
-   - `docs/backlog/README.md`
-   - `docs/multi-agent-workflow.md`
-   - `docs/workflow/live-queue.json`
-   - `docs/module-tracking-ledger.json`
-   - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-   - `docs/kernel-skeleton-design.md`
+   - `docs/agent-task-index.md`
    - 本文件
 2. 再判断：
    - 用户是否指定了 issue
@@ -89,6 +86,7 @@
 ## 7. 当前最值得看的索引
 
 - 仓库工作规则：`AGENTS.md`
+- 任务阅读入口：`docs/agent-task-index.md`
 - 真相源排序：`docs/source-of-truth-map.md`
 - 派工规则：`docs/backlog/README.md`
 - 多 Agent 工作流：`docs/multi-agent-workflow.md`

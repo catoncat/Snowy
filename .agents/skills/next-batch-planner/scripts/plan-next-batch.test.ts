@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -25,7 +25,7 @@ function writeModuleLedger(
     stage: "mainline" | "secondary" | "deferred";
     status?: "shipped" | "partial" | "not-started";
     default_parallel_group: string;
-  }>
+  }>,
 ) {
   writeFileSync(
     path.join(repoRoot, "docs", "module-tracking-ledger.json"),
@@ -40,13 +40,13 @@ function writeModuleLedger(
           depends_on_modules: [],
           code_roots: ["packages/"],
           source_docs: ["docs/start-here.md"],
-          cutover_gate: null
-        }))
+          cutover_gate: null,
+        })),
       },
       null,
-      2
+      2,
     ),
-    "utf8"
+    "utf8",
   );
 }
 
@@ -54,7 +54,7 @@ function writeIssue(repoRoot: string, filename: string, frontmatter: string, bod
   writeFileSync(
     path.join(repoRoot, "docs", "backlog", filename),
     `${frontmatter}\n${body}`,
-    "utf8"
+    "utf8",
   );
 }
 
@@ -76,15 +76,15 @@ describe("plan-next-batch", () => {
         title: "Kernel",
         tracking_order: 10,
         stage: "mainline",
-        default_parallel_group: "kernel"
+        default_parallel_group: "kernel",
       },
       {
         module_id: "browser-vfs",
         title: "BrowserVFS",
         tracking_order: 80,
         stage: "deferred",
-        default_parallel_group: "browser-vfs"
-      }
+        default_parallel_group: "browser-vfs",
+      },
     ]);
     writeIssue(
       repoRoot,
@@ -109,7 +109,7 @@ write_scope:
   - packages/kernel/src/index.ts
 acceptance_ref: project_plan.md
 check_cmd: bun run check
----`
+---`,
     );
     writeIssue(
       repoRoot,
@@ -135,14 +135,14 @@ write_scope:
   - packages/browser-vfs/src/index.ts
 acceptance_ref: project_plan.md
 check_cmd: bun run check
----`
+---`,
     );
 
     const result = planNextBatch({
       repoRoot,
       date: "2026-03-30",
       dryRun: true,
-      json: false
+      json: false,
     });
 
     expect(result.kind).toBe("preview");
@@ -164,8 +164,8 @@ check_cmd: bun run check
         title: "Kernel",
         tracking_order: 10,
         stage: "mainline",
-        default_parallel_group: "kernel"
-      }
+        default_parallel_group: "kernel",
+      },
     ]);
     writeIssue(
       repoRoot,
@@ -190,14 +190,14 @@ write_scope:
   - packages/kernel/src/run-controller.ts
 acceptance_ref: project_plan.md
 check_cmd: bun run check
----`
+---`,
     );
 
     const result = planNextBatch({
       repoRoot,
       date: "2026-03-30",
       dryRun: true,
-      json: false
+      json: false,
     });
 
     expect(result.kind).toBe("blocked");
@@ -208,6 +208,89 @@ check_cmd: bun run check
     expect(result.inProgress.map((item) => item.id)).toEqual(["ISSUE-012"]);
   });
 
+  it("refuses to plan a new batch while workflow tickets are still leased", () => {
+    const repoRoot = makeRepo();
+    const leaseRootDir = path.join(repoRoot, ".leases");
+    writeModuleLedger(repoRoot, [
+      {
+        module_id: "kernel",
+        title: "Kernel",
+        tracking_order: 10,
+        stage: "mainline",
+        default_parallel_group: "kernel",
+      },
+    ]);
+    writeIssue(
+      repoRoot,
+      "2026-03-29-open.md",
+      `---
+id: ISSUE-021
+title: "Kernel session cleanup"
+status: open
+priority: p0
+source: review
+created: 2026-03-29
+assignee: unassigned
+tags: [kernel]
+module_id: kernel
+module_stage: mainline
+tracking_kind: mainline
+kind: slice
+epic: EPIC-kernel
+parallel_group: kernel
+depends_on: []
+write_scope:
+  - packages/kernel/src/session-store.ts
+acceptance_ref: project_plan.md
+check_cmd: bun run check
+---`,
+    );
+    mkdirSync(leaseRootDir, { recursive: true });
+    writeFileSync(
+      path.join(leaseRootDir, `${path.basename(repoRoot)}.json`),
+      JSON.stringify(
+        {
+          schema_version: 1,
+          repo_id: path.basename(repoRoot),
+          updated_at: "2026-03-30T00:00:00.000Z",
+          leases_by_session: {
+            "session-a": {
+              session_id: "session-a",
+              agent_name: "atlas",
+              issue_id: "ISSUE-021",
+              issue_title: "Kernel session cleanup",
+              parallel_group: "kernel",
+              write_scope: ["packages/kernel/src/session-store.ts"],
+              check_cmd: "bun run check",
+              claimed_at: "2026-03-30T00:00:00.000Z",
+            },
+          },
+          leases_by_issue: {
+            "ISSUE-021": "session-a",
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const result = planNextBatch({
+      repoRoot,
+      leaseRootDir,
+      date: "2026-03-30",
+      dryRun: true,
+      json: false,
+    });
+
+    expect(result.kind).toBe("blocked");
+    if (result.kind !== "blocked") {
+      throw new Error(`expected blocked result, got ${result.kind}`);
+    }
+    expect(result.reason).toContain("workflow tickets");
+    expect(result.activeLeases.map((item) => item.issue_id)).toEqual(["ISSUE-021"]);
+  });
+
   it("writes the planning document when not in dry-run mode", () => {
     const repoRoot = makeRepo();
     writeModuleLedger(repoRoot, [
@@ -216,8 +299,8 @@ check_cmd: bun run check
         title: "Execution Host",
         tracking_order: 60,
         stage: "secondary",
-        default_parallel_group: "js-runner"
-      }
+        default_parallel_group: "js-runner",
+      },
     ]);
     writeIssue(
       repoRoot,
@@ -243,14 +326,14 @@ write_scope:
   - packages/js-runner/src/index.ts
 acceptance_ref: project_plan.md
 check_cmd: bun run check
----`
+---`,
     );
 
     const result = planNextBatch({
       repoRoot,
       date: "2026-03-30",
       dryRun: false,
-      json: false
+      json: false,
     });
 
     expect(result.kind).toBe("planned");
@@ -269,15 +352,15 @@ check_cmd: bun run check
         title: "Kernel",
         tracking_order: 10,
         stage: "mainline",
-        default_parallel_group: "kernel"
+        default_parallel_group: "kernel",
       },
       {
         module_id: "observability-audit",
         title: "Observability",
         tracking_order: 20,
         stage: "mainline",
-        default_parallel_group: "mv3-shell"
-      }
+        default_parallel_group: "mv3-shell",
+      },
     ]);
     writeIssue(
       repoRoot,
@@ -302,14 +385,14 @@ write_scope:
   - packages/kernel/src/
 acceptance_ref: project_plan.md
 check_cmd: bun run check
----`
+---`,
     );
 
     const result = planNextBatch({
       repoRoot,
       date: "2026-03-30",
       dryRun: true,
-      json: false
+      json: false,
     });
 
     expect(result.kind).toBe("blocked");

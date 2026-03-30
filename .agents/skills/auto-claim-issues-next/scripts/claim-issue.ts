@@ -1,16 +1,15 @@
 #!/usr/bin/env bun
 
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import {
-  getModuleRecord,
-  loadModuleLedger,
-  moduleStageRank,
   type ModuleLedger,
-  type ModuleStage
+  type ModuleStage,
+  getModuleRecord,
+  moduleStageRank,
 } from "./module-ledger";
-import { takeTicket, type QueueEntry } from "./ticket-machine";
+import { type QueueEntry, takeTicket } from "./ticket-machine";
 
 export type Status = "open" | "in-progress" | "done";
 export type Priority = "p0" | "p1" | "p2";
@@ -83,7 +82,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     assignee: String(process.env.BBL_AGENT_NAME || "").trim(),
     dryRun: false,
     json: false,
-    allowConflicts: false
+    allowConflicts: false,
   };
 
   for (const item of argv) {
@@ -132,7 +131,7 @@ export function isNamedAgentAssignee(value: string): boolean {
 function stripQuotes(raw: string): string {
   const text = String(raw || "").trim();
   if (
-    (text.startsWith("\"") && text.endsWith("\"")) ||
+    (text.startsWith('"') && text.endsWith('"')) ||
     (text.startsWith("'") && text.endsWith("'"))
   ) {
     return text.slice(1, -1);
@@ -232,7 +231,7 @@ export function parseFrontmatter(text: string): { frontmatter: Frontmatter; body
 
   return {
     frontmatter: { order, data },
-    body
+    body,
   };
 }
 
@@ -280,7 +279,7 @@ export function loadIssueFile(filePath: string): IssueFile {
     path: filePath,
     filename: path.basename(filePath),
     body: parsed.body,
-    frontmatter: parsed.frontmatter
+    frontmatter: parsed.frontmatter,
   };
 }
 
@@ -385,7 +384,7 @@ export function toIssueSummary(issue: IssueFile): IssueSummary {
     path: path.relative(process.cwd(), issue.path),
     module_id: issueModuleId(issue),
     module_stage: issueModuleStage(issue),
-    tracking_kind: issueTrackingKind(issue)
+    tracking_kind: issueTrackingKind(issue),
   };
 }
 
@@ -416,9 +415,7 @@ export function hasScopeConflict(issue: IssueFile, active: IssueFile[]): boolean
       return false;
     }
     const otherScopes = readArray(other, "write_scope");
-    return currentScopes.some((left) =>
-      otherScopes.some((right) => scopesConflict(left, right))
-    );
+    return currentScopes.some((left) => otherScopes.some((right) => scopesConflict(left, right)));
   });
 }
 
@@ -444,7 +441,7 @@ export function validateIssueModuleMetadata(issue: IssueFile, moduleLedger: Modu
 
 export function loadAllIssues(
   repoRoot: string,
-  opts?: { moduleLedger?: ModuleLedger; validateModuleMetadata?: boolean }
+  opts?: { moduleLedger?: ModuleLedger; validateModuleMetadata?: boolean },
 ): IssueFile[] {
   const backlogDir = path.join(repoRoot, "docs", "backlog");
   const files = readdirSync(backlogDir)
@@ -465,7 +462,7 @@ export function loadAllIssues(
 function compareClaimPriority(
   left: IssueFile,
   right: IssueFile,
-  moduleLedger?: ModuleLedger
+  moduleLedger?: ModuleLedger,
 ): number {
   const leftStage = issueModuleStage(left);
   const rightStage = issueModuleStage(right);
@@ -498,7 +495,7 @@ function compareClaimPriority(
 export function chooseIssue(
   issues: IssueFile[],
   args: ParsedArgs,
-  opts?: { moduleLedger?: ModuleLedger }
+  opts?: { moduleLedger?: ModuleLedger },
 ): ClaimResult {
   const active = issues.filter((issue) => issueStatus(issue) === "in-progress");
 
@@ -511,7 +508,7 @@ export function chooseIssue(
       return {
         kind: "already_claimed",
         issue: toIssueSummary(exact),
-        reason: "指定 issue 已经是 in-progress"
+        reason: "指定 issue 已经是 in-progress",
       };
     }
     if (issueStatus(exact) === "done") {
@@ -522,7 +519,7 @@ export function chooseIssue(
         kind: "blocked",
         reason: "指定 issue 的 depends_on 尚未完成",
         blockedByDependencies: [toIssueSummary(exact)],
-        blockedByConflicts: []
+        blockedByConflicts: [],
       };
     }
     if (!args.allowConflicts && hasScopeConflict(exact, active)) {
@@ -530,13 +527,13 @@ export function chooseIssue(
         kind: "blocked",
         reason: "指定 issue 与当前 in-progress write_scope 冲突",
         blockedByDependencies: [],
-        blockedByConflicts: [toIssueSummary(exact)]
+        blockedByConflicts: [toIssueSummary(exact)],
       };
     }
     return {
       kind: args.dryRun ? "preview" : "claimed",
       issue: toIssueSummary(exact),
-      reason: "按指定 issue 认领"
+      reason: "按指定 issue 认领",
     };
   }
 
@@ -553,7 +550,7 @@ export function chooseIssue(
     return {
       kind: args.dryRun ? "preview" : "claimed",
       issue: toIssueSummary(claimable[0]),
-      reason: "按优先级、依赖和 write_scope 冲突规则自动认领"
+      reason: "按优先级、依赖和 write_scope 冲突规则自动认领",
     };
   }
 
@@ -568,7 +565,7 @@ export function chooseIssue(
       .filter((issue) => dependenciesSatisfied(issue, issues))
       .filter((issue) => hasScopeConflict(issue, active))
       .map(toIssueSummary)
-      .slice(0, 5)
+      .slice(0, 5),
   };
 }
 
@@ -582,90 +579,56 @@ export function claimIssueFile(issue: IssueFile, assignee: string): void {
   writeIssueFile(issue);
 }
 
-function printResult(result: ClaimResult, asJson: boolean): void {
-  if (asJson) {
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
-  if (result.kind === "blocked") {
-    console.log(`result: ${result.kind}`);
-    console.log(`reason: ${result.reason}`);
-    if (result.blockedByDependencies.length > 0) {
-      console.log("blockedByDependencies:");
-      for (const item of result.blockedByDependencies) {
-        console.log(`- ${item.id} ${item.title}`);
-      }
-    }
-    if (result.blockedByConflicts.length > 0) {
-      console.log("blockedByConflicts:");
-      for (const item of result.blockedByConflicts) {
-        console.log(`- ${item.id} ${item.title}`);
-      }
-    }
-    return;
-  }
-
-  console.log(`result: ${result.kind}`);
-  console.log(`reason: ${result.reason}`);
-  console.log(`id: ${result.issue.id}`);
-  console.log(`title: ${result.issue.title}`);
-  console.log(`assignee: ${result.issue.assignee || "(none)"}`);
-  console.log(`parallel_group: ${result.issue.parallel_group}`);
-  console.log(`module_id: ${result.issue.module_id}`);
-  console.log(`module_stage: ${result.issue.module_stage}`);
-  console.log(`tracking_kind: ${result.issue.tracking_kind}`);
-  console.log(`path: ${result.issue.path}`);
-  console.log(`depends_on: ${result.issue.depends_on.join(", ") || "(none)"}`);
-  console.log(`write_scope: ${result.issue.write_scope.join(", ") || "(none)"}`);
-  console.log(`check_cmd: ${result.issue.check_cmd || "(none)"}`);
-}
-
-export function main() {
+export async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const repoRoot = process.cwd();
   if (!args.dryRun && !isNamedAgentAssignee(args.assignee)) {
     fail(
-      "真正 claim 时必须写 Agent 自己的名字，使用 --name=<your-name>、--assignee=<your-name>，或设置 BBL_AGENT_NAME；不要用 agent/human/unassigned"
+      "真正 claim 时必须写 Agent 自己的名字，使用 --name=<your-name>、--assignee=<your-name>，或设置 BBL_AGENT_NAME；不要用 agent/human/unassigned",
     );
   }
 
   const sessionId = `cli:${args.assignee || "preview"}`;
-  takeTicket({
-    repoRoot,
-    sessionId,
-    agentName: args.assignee || "preview",
-    dryRun: args.dryRun,
-    issueId: args.issueId
-  })
-    .then((ticket) => {
-      if (args.json) {
-        console.log(JSON.stringify(ticket, null, 2));
-        return;
-      }
-
-      if (ticket.kind === "queue_empty") {
-        console.log("result: blocked");
-        console.log(`reason: ${ticket.reason}`);
-        return;
-      }
-
-      printTicketEntry(ticket.entry, args.dryRun ? "preview" : "claimed", ticket.reason, args.assignee);
-    })
-    .catch((error) => {
-      fail(error instanceof Error ? error.message : String(error));
+  try {
+    const ticket = await takeTicket({
+      repoRoot,
+      sessionId,
+      agentName: args.assignee || "preview",
+      dryRun: args.dryRun,
+      issueId: args.issueId,
     });
+
+    if (args.json) {
+      console.log(JSON.stringify(ticket, null, 2));
+      return;
+    }
+
+    if (ticket.kind === "queue_empty") {
+      console.log("result: blocked");
+      console.log(`reason: ${ticket.reason}`);
+      return;
+    }
+
+    printTicketEntry(
+      ticket.entry,
+      args.dryRun ? "preview" : "claimed",
+      ticket.reason,
+      args.assignee,
+    );
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
 }
 
 if (import.meta.main) {
-  main();
+  void main();
 }
 
 function printTicketEntry(
   entry: QueueEntry,
   result: "preview" | "claimed",
   reason: string,
-  assignee: string
+  assignee: string,
 ): void {
   console.log(`result: ${result}`);
   console.log(`reason: ${reason}`);

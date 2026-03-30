@@ -6,6 +6,12 @@
 2. 我现在该看哪类文档来判断下一步
 3. 多份文档互相打架时，到底谁说了算
 
+如果你想知道“当前任务该先读什么”，先看：
+
+- `docs/agent-task-index.md`
+
+本文件负责裁决真相源，不负责要求每个任务都全量读完。
+
 ## 1. 核心结论
 
 当前仓库的真实状态是：
@@ -19,13 +25,17 @@
 - `AGENTS.md` + `docs/locked-decisions-2026-03-29.md`
   - 定义不能改口的仓库边界
 - `docs/module-tracking-ledger.json`
-  - 定义 workflow 必须持续跟踪的模块、阶段和默认顺序
+  - 定义 planning 必须持续跟踪的模块、阶段和默认顺序
+- `docs/workflow/live-queue.json`
+  - 定义当前可直接 dispatch 的 issue 队列
+- `~/.codex/workflow-leases/browser-brain-loop-next.json`
+  - 定义当前 session 级 live ticket 锁
 - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
   - 定义“为什么 repo 主线已切回 browser-side kernel”
 - `docs/kernel-skeleton-design.md`
   - 定义 `packages/kernel` 的当前主线骨架与切片
-- `docs/backlog/*.md` + `bun run workflow:claim:preview`
-  - 定义现在该做什么
+- `docs/backlog/*.md`
+  - 定义 issue metadata、acceptance、completion record 与 queue build 输入
 - `packages/*/src/` + `packages/*/test/*.spec.ts`
   - 定义已经真正落地的行为
 
@@ -47,7 +57,7 @@
 | workflow 必须跟踪哪些模块 | `docs/module-tracking-ledger.json` |
 | 当前主线为什么是 kernel | `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
 | `packages/kernel` 该怎么做 | `docs/kernel-skeleton-design.md` |
-| 我现在该 claim 什么 | `docs/backlog/README.md` → live `docs/backlog/*.md` → `BBL_AGENT_NAME=<name> bun run workflow:claim:preview` |
+| 我现在该 claim 什么 | `docs/backlog/README.md` → `docs/workflow/live-queue.json` → `BBL_AGENT_NAME=<name> bun run workflow:claim:preview` |
 | 当前批次是什么 | `docs/next-development-slices-2026-03-29-batch-7.md` |
 | 某个能力是否已经真正落地 | 对应 `packages/*/src/` + `packages/*/test/*.spec.ts` |
 | v0 已经做到哪 | `docs/v0-slice.md` |
@@ -81,18 +91,20 @@
 如果出现：
 
 - batch 文档写的是一个顺序
-- backlog frontmatter / claim preview 显示的是另一个顺序
+- live queue / lease 显示的是另一个顺序
 
 以这条为准：
 
-1. live `docs/backlog/*.md`
-2. `bun run workflow:claim:preview`
-3. batch / planning 文档
+1. `docs/workflow/live-queue.json`
+2. `~/.codex/workflow-leases/browser-brain-loop-next.json`
+3. live `docs/backlog/*.md`
+4. batch / planning 文档
 
 也就是说：
 
 - planning 文档是快照
-- backlog frontmatter 才是 live queue
+- backlog frontmatter 是 queue build 输入，不再直接等于 live queue
+- 真正的 dispatch lock 由 lease 文件持有，不由 `in-progress` frontmatter 隐式充当
 
 ### 场景 C：设计文档和代码/测试冲突
 
@@ -142,20 +154,16 @@
 
 ## 4. 新 Agent 第一次进入仓库的阅读顺序
 
-1. `AGENTS.md`
-2. `docs/start-here.md`
-3. `docs/source-of-truth-map.md`
-4. `docs/agent-bootstrap-context-pack.md`
-5. `docs/locked-decisions-2026-03-29.md`
-6. `docs/module-tracking-ledger.json`
-7. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-8. `docs/kernel-skeleton-design.md`
-9. `docs/backlog/README.md`
-10. `docs/multi-agent-workflow.md`
-11. `docs/next-development-slices-2026-03-29-batch-7.md`
-12. 你要做的那个 `docs/backlog/<issue>.md`
-13. 相关 lane 的 `packages/*/src/` + `packages/*/test/*.spec.ts`
-14. 如需要旧仓对照，再读 `docs/legacy-reference-map.md`
+先读：
+
+1. `docs/agent-task-index.md`
+
+再按任务类型补读，不要默认全量读：
+
+2. claim / workflow：`docs/workflow/live-queue.json`
+3. implementation：当前 issue + `acceptance_ref`
+4. planning：`docs/module-tracking-ledger.json` + `docs/backlog/README.md`
+5. architecture：`docs/locked-decisions-2026-03-29.md` + recovery report + kernel skeleton
 
 ## 5. 这套架构到底想成为什么
 
@@ -229,10 +237,11 @@
 
 1. 先看 `docs/module-tracking-ledger.json` 里的 module stage 和 module order
 2. 再看 live backlog 是否已经覆盖这些非 deferred 模块
-3. 若还有 mainline module 的 live issue，先按 module order 推进
-4. mainline 收口后，再看 secondary modules
-5. deferred modules 只在前两层没有 live issue 时再进入
-6. 当 live backlog 没有可 claim issue 时，再进入 next-batch planning
+3. backlog 变化后先重建 `docs/workflow/live-queue.json`
+4. 若还有 mainline module 的 live queue entry，先按 module order 推进
+5. mainline 收口后，再看 secondary modules
+6. deferred modules 只在前两层没有 live queue entry 时再进入
+7. 当 live queue 为空且没有 active lease 时，再进入 next-batch planning
 
 当前默认 planning 快照是：
 

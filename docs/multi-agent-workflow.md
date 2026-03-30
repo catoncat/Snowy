@@ -5,130 +5,128 @@
 让任何一个进入仓库的 Agent 都能：
 
 - 快速建立足够上下文
-- 判断自己现在该继续当前 issue、认领下一个、还是规划下一批
+- 不靠扫全 backlog 就锁定当前任务
 - 在并行开发下不抢同一片写域
-- 把 backlog、实现、集成、review 组织成一个统一循环
+- 在 queue 为空时自动切到 planning
 
 当前 repo phase：
 
 - substrate foundation 已完成
 - browser-side kernel reconstruction 是当前主线
-- 所以 workflow 的目标不是平均派工，而是先把 claim 拉回 kernel mainline
+- workflow 的目标不是平均派工，而是把 dispatch 稳定拉回 kernel-aware mainline
 
-这里没有固定角色前提。
+## Truth Layers
 
-- 所有 Agent 默认能力相同
-- 差异只来自：
-  - 当前上下文
-  - 当前工作区状态
-  - 当前用户指令
-  - 当前 backlog / planning 状态
+- architecture truth
+  - `AGENTS.md`
+  - `docs/locked-decisions-2026-03-29.md`
+  - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+  - `docs/kernel-skeleton-design.md`
+- planning truth
+  - `docs/module-tracking-ledger.json`
+  - `docs/backlog/*.md`
+- dispatch truth
+  - `docs/workflow/live-queue.json`
+- live lock truth
+  - `~/.codex/workflow-leases/browser-brain-loop-next.json`
+- behavior truth
+  - `packages/*/src/` + `packages/*/test/*.spec.ts`
 
-## Core Principle
+## Base Context
 
-不要先问“我是 coordinator / worker / integrator 吗？”
+默认先读：
 
-先问：
+1. `docs/agent-task-index.md`
 
-1. 当前 source of truth 是什么
-2. 当前仓库处于什么状态
-3. 我现在最该做的动作是什么
+如果当前 turn 没有 hook 注入的 ticket，再补读：
 
-## Prompt Stack
+2. `docs/workflow/live-queue.json`
 
-### Base Context
+如果当前是 planning / queue rebuild，再补读：
 
-所有 Agent 先读：
+3. `docs/source-of-truth-map.md`
+4. `docs/module-tracking-ledger.json`
+5. `docs/backlog/README.md`
+6. 本文件
 
-1. `AGENTS.md`
-2. `docs/source-of-truth-map.md`
-3. `docs/agent-bootstrap-context-pack.md`
-4. `docs/document-system-contract.md`
-5. `docs/start-here.md`
-6. `docs/locked-decisions-2026-03-29.md`
-7. `docs/module-tracking-ledger.json`
-8. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-9. `docs/kernel-skeleton-design.md`
-10. `docs/ai-surface-index.md`
-11. `docs/v0-slice.md`
-12. `docs/legacy-reference-map.md`
+如果当前任务已明确，再补读：
 
-### Workflow Skills
+- 当前 issue 文件
+- `acceptance_ref`
+- 对应 lane 的 `src/` + `test/`
+
+## Workflow Skills
 
 - `agent-workflow-next`
-  - 统一判断当前应该继续 issue、claim、还是进入 next-batch planning
+  - 决定当前该继续 issue、取号、还是进入 planning
 - `auto-claim-issues-next`
-  - 当需要判断“现在该接哪个 issue”时使用
+  - 通过 live queue + lease 取号
 - `next-batch-planner`
-  - 当需要判断“这一批做完后接下来该做什么”时使用
+  - 当 queue 为空时做下一批规划
 
-### Optional Stance Overlays
-
-这些不是固定角色，只是临时工作姿态：
+## Optional Stance Overlays
 
 - `.agents/prompts/coordinator.md`
-  - 当当前动作是 backlog 派工 / planning / claim 时叠加
+  - claim / queue rebuild / planning 时可叠加
 - `.agents/prompts/worker.md`
-  - 当当前动作是实现某个已明确 issue 时叠加
+  - 明确 issue 实现时可叠加
 - `.agents/prompts/integrator.md`
-  - 当当前动作是仓库级收口 / 门禁 / 接线时叠加
-
-同一个 Agent 在不同阶段可以切换 stance。
+  - 仓库级收口 / 接线 / 门禁时可叠加
 
 ## Canonical Rules
 
 ### Canonical Workspace Rule
 
-- `docs/backlog/*.md` 是派工真相源
-- 但 claim 和最终状态回写只在 canonical workspace 可靠
-- forked workspace 本地把 issue 改成 `in-progress` 不构成全局锁
+- queue build、真正 claim、最终状态回写只在 canonical workspace 可靠
+- forked workspace 可以 preview，但本地 frontmatter 变化不构成全局锁
 
-### Claim Rule
+### Dispatch Rule
 
-- 任何 Agent 都可以做 claim 判断
-- 但只有运行在 canonical workspace 的那个 Agent，才应该真正执行 claim / 状态回写
-- 真正 claim 时，`assignee` 必须写该 Agent 自己选定的名字，不能写通用 `agent`
-- 同一位 Agent 在当前上下文里应持续复用同一个名字，方便其他 Agent 识别 ownership
-- 若通过 Codex 显式触发 `$agent-workflow-next` 或 `$auto-claim-issues-next`，repo-local `UserPromptSubmit` hook 会在模型回合开始前先做一次 workflow ticket 预处理
-- 这个 hook 只对显式 skill token 生效；普通对话、普通 review、以及 `next-batch-planner` 不会触发取号
-- hook 默认直接 claim live issue；若要只验证不落盘，可临时设置 `BBL_WORKFLOW_TICKET_DRY_RUN=1`
+- queue build 从 backlog + module ledger 生成 `docs/workflow/live-queue.json`
+- claim path 自身不再直接扫描 backlog
+- live 锁只写入 `~/.codex/workflow-leases/browser-brain-loop-next.json`
+- `status: in-progress` 不再充当 dispatch lock
+
+### Hook Rule
+
+- repo-local `UserPromptSubmit` hook 只在显式触发 `$agent-workflow-next` 或 `$auto-claim-issues-next` 时取号
+- hook 在模型首 token 前完成 ticket preflight
+- hook 不会为普通对话、普通 review、`next-batch-planner` 预先取号
+- 若要只验证不写 lease，可临时设置 `BBL_WORKFLOW_TICKET_DRY_RUN=1`
 
 ### Helper Rule
 
-- Skills 负责：
-  - 读哪些文档
-  - 怎么判断当前状态
-  - 怎么决定下一步动作
-  - 什么时候创建新 backlog issue
-  - 什么时候生成下一批 planning 文档
-- 脚本只负责 deterministic helper：
-  - frontmatter 落盘
-  - 编号
-  - planning 文档骨架
-- 脚本不负责决定“接下来做什么”
+- Skills 决定当前动作
+- queue builder 只负责构建 dispatchable entry 集合
+- ticket machine 只负责 session 级 lease
+- planner 只在 queue 空且无 active lease 时进入
 
 ## Unified Operating Loop
 
-### Step 0: Build Context
+### Step 0: Refresh Queue When Needed
 
-1. 读 base context 文档
-2. 先看 `docs/module-tracking-ledger.json`
-3. 再看 `docs/backlog/*.md`
-4. 查看当前 working tree 和最近提交
-5. 必要时查看当前 planning 文档
-6. 默认先触发 `agent-workflow-next`
+如果 backlog 刚变化过，先执行：
+
+```bash
+bun run workflow:queue:build
+```
+
+触发条件至少包括：
+
+- 新增 issue
+- issue 改成 `done`
+- `depends_on` 变化
+- `write_scope` 变化
 
 ### Step 1: Detect Current State
 
 按顺序判断：
 
 1. 用户是否明确指定了某个 issue / 方向
-2. 是否存在自己应该继续收口的 `in-progress` issue
-3. 是否存在可 claim 的 `open` issue
-4. 若没有 open issue，是否仍有 `in-progress`
-5. 若 open / in-progress 都没有，是否该进入 next-batch planning
-
-当 Codex hook 已经为当前 session 注入 workflow ticket 时，等价于把“claim 判断”前置到了模型首 token 之前。此时当前 turn 应直接把 hook 注入的 issue 当作 live task，而不是再做一次 claim。
+2. 当前 session 是否已有 hook 注入的 ticket / 已有 lease
+3. live queue 是否还有可取 entry
+4. 若 queue 为空，是否只是 queue 过期未重建
+5. 若 queue 为空且无 active lease，进入 next-batch planning
 
 ### Step 2: Choose Action
 
@@ -138,37 +136,29 @@
 - 读 issue 文件和 `acceptance_ref`
 - 按实现 loop 推进
 
-#### State B: 有自己该继续的 `in-progress` issue
+#### State B: 当前 session 已持有 live ticket
 
-- 继续收口当前 issue
+- 直接把该 ticket 当作当前 live task
+- 不重复 claim
 - 不切新任务
 
-#### State C: 有可做的 `open` issue
+#### State C: live queue 有可用 entry
 
 - 使用 `auto-claim-issues-next`
 - 在 canonical workspace 中执行真正 claim
 - 再进入实现 loop
-- 若同时存在多个 claimable issue：
-  - 先看 module ledger 的 stage 和 order
-  - 再看 issue priority
-  - DX / doc-debt 不能越过 mainline module
 
-#### State D: 没有 open issue，但还有 `in-progress`
+#### State D: queue 为空，但刚发生 backlog 变化
 
-- 优先收口这些 `in-progress`
-- 不提前规划下一批
+- 先重建 queue
+- 再重新判断
 
-#### State E: 没有 open，也没有 in-progress
+#### State E: queue 为空，且没有 active lease
 
 - 进入 next-batch planning
-- 对照：
-  - `docs/locked-decisions-2026-03-29.md`
-  - `project_plan.md`
-  - 当前代码和测试
-- 识别 drift / 缺口 / 下一阶段依赖
+- 对照 locked decisions / recovery report / kernel skeleton / 当前实现和测试
 - 创建新的 backlog issue
-- 生成新的 planning 文档
-- 然后回到 claim loop
+- 再重建 queue
 
 ## Implementation Loop
 
@@ -186,67 +176,40 @@
    - `status: done`
    - `## 工作总结`
    - `## 相关 commits`
-
-## Integration Loop
-
-当问题主要变成：
-
-- 多 slice 接线
-- 仓库级门禁
-- 小范围共享配置冲突
-
-可临时叠加 `integrator` stance。
-
-但原则不变：
-
-- 不静默吞掉未完成的 slice
-- 不借集成名义扩 scope
+10. 若完成状态影响 dispatch，重建 live queue
 
 ## Planning Loop
 
-当当前批次做完后：
+当 queue 为空且无 active lease 后：
 
 1. 临时叠加 `coordinator` stance
-2. 使用 `next-batch-planner` skill
-3. 先做一轮 module coverage review：
-   - 非 deferred modules 是否都有 live issue
-   - 是否存在没有 `module_id` 的 issue
-   - issue `module_stage` 是否与台账一致
-4. 再做一轮 drift review：
-   - recovery report drift
-   - kernel skeleton drift
-   - locked decisions drift
-   - AI surface drift
-   - doc freshness drift
-5. 再做一轮 LLM 主导的 review：
-   - locked decisions drift
-   - plan drift
-   - implementation / test gap
-6. 每个发现都落成 backlog issue
-7. 用 helper 命令生成新的 planning 文档
+2. 使用 `next-batch-planner`
+3. 先做一轮 module coverage review
+4. 再做一轮 drift review
+5. 每个发现都落成 backlog issue
+6. 生成新的 planning 文档
+7. 重建 live queue
 
 ## Recommended Commands
 
-这些命令是 helper，不是 workflow 的脑：
-
 ```bash
+bun run workflow:queue:build
+bun run workflow:queue:preview
+bun run workflow:queue:json
+
 BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview
 BBL_AGENT_NAME=<agent-name> bun run workflow:claim
 BBL_AGENT_NAME=<agent-name> bun run workflow:claim:json
 
-bun run workflow:claim:preview -- --name=<agent-name>
-bun run workflow:claim -- --name=<agent-name>
-bun run workflow:claim:json -- --name=<agent-name>
-
-bun run workflow:new-review-issue -- --module=... --title=... --epic=... --acceptance-ref=... --scope=... --accept=...
 bun run workflow:plan:preview
 bun run workflow:plan
+bun run workflow:plan:json
 ```
 
 ## Anti-Patterns
 
-- 把 Agent 固定成永久 coordinator / worker / integrator
-- 看到脚本就让脚本替自己判断下一步任务
-- forked workspace 自己 claim 然后以为拿到了全局锁
-- 所有 issue 做完后直接停住，不进入下一批 planning
-- 不经 review 就口头说“下一步做这个那个”
+- 让 hook 直接扫描 backlog、module ledger、review 文档再决定下一步
+- 把 `in-progress` frontmatter 当成真正的分布式锁
+- backlog 已变化却不重建 queue
+- queue 为空就直接停工，不进入 planning
+- 把 batch snapshot 当成 live dispatch queue

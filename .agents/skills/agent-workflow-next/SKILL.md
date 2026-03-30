@@ -10,37 +10,54 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 ## 核心原则
 
 - 不假设固定角色
-- 所有 Agent 默认能力相同
 - 先判断当前状态，再决定当前动作
-- Skills 负责判断与流程
-- 脚本只负责 deterministic helper，不负责决定下一步任务
+- workflow skill 负责判断
+- queue builder 只负责构建 live queue
+- ticket machine 只负责 lease
 
 ## 先读
 
-1. `AGENTS.md`
-2. `docs/source-of-truth-map.md`
-3. `docs/agent-bootstrap-context-pack.md`
-4. `docs/document-system-contract.md`
-5. `docs/start-here.md`
-6. `docs/locked-decisions-2026-03-29.md`
-7. `docs/module-tracking-ledger.json`
-8. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-9. `docs/kernel-skeleton-design.md`
-10. `docs/ai-surface-index.md`
-11. `docs/v0-slice.md`
-12. `docs/legacy-reference-map.md`
-13. `docs/backlog/README.md`
-14. `docs/multi-agent-workflow.md`
+默认只读：
+
+1. `docs/agent-task-index.md`
+
+如果当前 turn 没有 hook 注入的 ticket，再读：
+
+2. `docs/workflow/live-queue.json`
+
+只有在 queue 为空、需要重建 queue、或要进入 planning 时，再补读：
+
+3. `docs/source-of-truth-map.md`
+4. `docs/backlog/README.md`
+5. `docs/multi-agent-workflow.md`
+6. `docs/module-tracking-ledger.json`
+7. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
+8. `docs/kernel-skeleton-design.md`
+
+如果当前 issue 已明确，再读：
+
+- 对应 `docs/backlog/<issue>.md`
+- `acceptance_ref`
+- 对应 lane 的 `src/` + `test/`
+
+## 真相源分工
+
+- planning / coverage
+  - `docs/module-tracking-ledger.json`
+  - `docs/backlog/*.md`
+- dispatch / claim
+  - `docs/workflow/live-queue.json`
+  - `~/.codex/workflow-leases/browser-brain-loop-next.json`
 
 ## 状态判断顺序
 
 按这个顺序判断，不要跳：
 
 1. 用户是否明确指定了某个 issue / 方向
-2. 当前是否有自己应继续收口的 `in-progress` issue
-3. 当前是否存在可 claim 的 `open` issue
-4. 若没有 `open`，是否还有 `in-progress`
-5. 若 `open / in-progress` 都没有，是否该进入 next-batch planning
+2. 当前 session 是否已有 hook 注入的 ticket / 已有 lease
+3. live queue 是否还有可取 entry
+4. 若 queue 为空，是否只是 queue 过期未重建
+5. 若 queue 为空且无 active lease，是否该进入 next-batch planning
 
 ## 动作选择
 
@@ -51,71 +68,66 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 - 必要时叠加 `worker` stance
 - 按实现 loop 推进
 
-### 状态 B：有应继续的 `in-progress` issue
+### 状态 B：当前 session 已有 live ticket
 
-- 继续收口当前 issue
+- 直接把该 ticket 当作当前 live task
+- 不重复 claim
 - 不切新任务
 
-### 状态 C：有可做的 `open` issue
+### 状态 C：live queue 有可做 entry
 
 - 使用 `auto-claim-issues-next`
 - 如果当前在 canonical workspace，可执行真正 claim
 - 如果不在 canonical workspace，只做 claim 判断并把结论带回
 - claim 后进入实现 loop
-- 若同时存在多个 claimable issue，默认顺序：
-  1. module ledger 的 `mainline`
-  2. module ledger 的 `secondary`
-  3. module ledger 的 `deferred`
-  4. 同 stage 内再看 module order 和 issue priority
 
-### 状态 D：没有 `open`，但还有 `in-progress`
+### 状态 D：queue 为空，但 backlog 刚变化
 
-- 优先收口 `in-progress`
-- 不提前规划下一批
+- 先重建 queue：
 
-### 状态 E：没有 `open`，也没有 `in-progress`
+```bash
+bun run workflow:queue:build
+```
+
+- 再重新判断
+
+### 状态 E：queue 为空，且没有 active lease
 
 - 使用 `next-batch-planner`
-- 对照 locked decisions / project plan / 当前实现和测试做 review
+- 对照 locked decisions / recovery report / kernel skeleton / 当前实现和测试做 review
 - 把发现的新 gap 落成 backlog issue
 - 生成下一批 planning 文档
-- 再回到 claim loop
+- 重建 queue 后再回到 claim loop
 
 ## Optional Stance Overlays
 
-这些不是固定角色，只是临时姿态：
-
 - `.agents/prompts/coordinator.md`
-  - 当当前动作是 claim / planning / backlog 整理时叠加
+  - 当当前动作是 claim / queue rebuild / planning 时叠加
 - `.agents/prompts/worker.md`
   - 当当前动作是实现某个已明确 issue 时叠加
 - `.agents/prompts/integrator.md`
   - 当当前动作是仓库级收口 / 接线 / 门禁时叠加
 
-同一个 Agent 可以在一轮工作里切换 stance。
-
 ## Canonical Workspace 规则
 
-- `docs/backlog/*.md` 是派工真相源
-- 但真正的 claim 和 `done` 回写只在 canonical workspace 可靠
-- 非 canonical workspace 不要把本地 frontmatter 变化当成全局锁
+- queue build、真正 claim、`done` 回写只在 canonical workspace 可靠
+- `docs/backlog/*.md` 是 issue registry，不再直接等于 live queue
+- `in-progress` frontmatter 不再充当 dispatch lock
 
 ## Helper Commands
 
-这些命令可以用，但它们不是 workflow 的脑：
-
 ```bash
+bun run workflow:queue:build
+bun run workflow:queue:preview
+bun run workflow:queue:json
+
 BBL_AGENT_NAME=<agent-name> bun run workflow:claim:preview
 BBL_AGENT_NAME=<agent-name> bun run workflow:claim
 BBL_AGENT_NAME=<agent-name> bun run workflow:claim:json
 
-bun run workflow:claim:preview -- --name=<agent-name>
-bun run workflow:claim -- --name=<agent-name>
-bun run workflow:claim:json -- --name=<agent-name>
-
-bun run workflow:new-review-issue -- --module=... --title=... --epic=... --acceptance-ref=... --scope=... --accept=...
 bun run workflow:plan:preview
 bun run workflow:plan
+bun run workflow:plan:json
 ```
 
 ## 输出要求
@@ -128,7 +140,6 @@ bun run workflow:plan
   - 追加 `## 工作总结`
   - 追加 `## 相关 commits`
 - 若进入 next-batch planning：
-  - 先做 drift review，再做 LLM review
   - issue 先按 `slice / review / follow-up / decision / doc-debt` 分类
   - 不要只生成 planning 文档而不落 backlog
-  - 不要把“下一步建议”只停留在口头
+  - 生成完成后重建 live queue

@@ -3,8 +3,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { takeTicket, type QueueEntry } from "../../.agents/skills/auto-claim-issues-next/scripts/ticket-machine";
 import { isNamedAgentAssignee } from "../../.agents/skills/auto-claim-issues-next/scripts/claim-issue";
+import {
+  type QueueEntry,
+  takeTicket,
+} from "../../.agents/skills/auto-claim-issues-next/scripts/ticket-machine";
 
 interface HookPayload {
   prompt?: string;
@@ -28,7 +31,7 @@ export function isWorkflowSkillPrompt(prompt: string): boolean {
     return false;
   }
   return CLAIM_SKILLS.some(
-    (skill) => text.includes(`$${skill}`) || text.includes(`<name>${skill}</name>`)
+    (skill) => text.includes(`$${skill}`) || text.includes(`<name>${skill}</name>`),
   );
 }
 
@@ -56,7 +59,7 @@ function formatIssueContext(
   agentName: string,
   claimMode: "claimed" | "preview",
   reason: string,
-  reused: boolean
+  reused: boolean,
 ): string {
   return [
     "Workflow ticket was resolved before the model turn.",
@@ -74,7 +77,10 @@ function formatIssueContext(
     `depends_on: ${entry.depends_on.join(", ") || "(none)"}`,
     `write_scope: ${entry.write_scope.join(", ") || "(none)"}`,
     `check_cmd: ${entry.check_cmd || "(none)"}`,
-    "Treat this as the current workflow issue. Do not run claim again in this turn unless the user explicitly asks to change issue."
+    "Treat this as the current workflow issue.",
+    "Read path now: issue file -> acceptance_ref -> matching src/test.",
+    "Skip workflow/planning docs in this turn unless the user asks to change issue, rebuild queue, or do planning.",
+    "Do not run claim again in this turn unless the user explicitly asks to change issue.",
   ].join("\n");
 }
 
@@ -82,7 +88,7 @@ function formatQueueEmptyContext(reason: string): string {
   return [
     "Workflow ticket preflight did not assign an issue.",
     `reason: ${reason}`,
-    "If the queue is empty, continue with next-batch planning or rebuild the live queue after backlog changes."
+    "If the queue is empty, continue with next-batch planning or rebuild the live queue after backlog changes.",
   ].join("\n");
 }
 
@@ -105,7 +111,7 @@ export async function run(): Promise<void> {
     sessionId,
     agentName,
     dryRun: dryRunEnabled(),
-    issueId: readExplicitIssueId(prompt)
+    issueId: readExplicitIssueId(prompt),
   });
 
   if (ticket.kind === "queue_empty") {
@@ -114,8 +120,8 @@ export async function run(): Promise<void> {
       systemMessage: "Workflow ticket: queue empty",
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext: formatQueueEmptyContext(ticket.reason)
-      }
+        additionalContext: formatQueueEmptyContext(ticket.reason),
+      },
     });
     return;
   }
@@ -130,9 +136,9 @@ export async function run(): Promise<void> {
         agentName,
         dryRunEnabled() ? "preview" : "claimed",
         ticket.reason,
-        ticket.reused
-      )
-    }
+        ticket.reused,
+      ),
+    },
   });
 }
 
@@ -140,7 +146,7 @@ if (import.meta.main) {
   run().catch((error) => {
     printJson({
       continue: true,
-      systemMessage: `Workflow ticket hook failed: ${error instanceof Error ? error.message : String(error)}`
+      systemMessage: `Workflow ticket hook failed: ${error instanceof Error ? error.message : String(error)}`,
     });
   });
 }

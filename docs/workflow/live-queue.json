@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-03-30T05:29:15.625Z",
+  "repo_root": "/Users/envvar/work/repos/browser-brain-loop-next",
+  "entries": [
+    {
+      "issue_id": "ISSUE-063",
+      "issue_path": "docs/backlog/2026-03-30-observability-diagnostics-resource-read-surface.md",
+      "title": "observability: diagnostics resource read surface",
+      "parallel_group": "mv3-shell",
+      "module_id": "observability-audit",
+      "module_stage": "mainline",
+      "tracking_kind": "gap",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts"
+      ]
+    }
+  ]
+}

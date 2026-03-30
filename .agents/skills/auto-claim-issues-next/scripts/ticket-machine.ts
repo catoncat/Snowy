@@ -131,7 +131,7 @@ export function loadLiveQueue(repoRoot: string): LiveQueue {
       tracking_kind: entry.tracking_kind,
       check_cmd: entry.check_cmd,
       depends_on: entry.depends_on.map((item) => String(item)),
-      write_scope: entry.write_scope.map((item) => String(item))
+      write_scope: entry.write_scope.map((item) => String(item)),
     } satisfies QueueEntry;
   });
 
@@ -139,7 +139,7 @@ export function loadLiveQueue(repoRoot: string): LiveQueue {
     schema_version: 1,
     generated_at: String(raw.generated_at || ""),
     repo_root: String(raw.repo_root || repoRoot),
-    entries
+    entries,
   };
 }
 
@@ -149,13 +149,15 @@ function defaultLeaseState(repoRoot: string): LeaseState {
     repo_id: repoId(repoRoot),
     updated_at: new Date().toISOString(),
     leases_by_session: {},
-    leases_by_issue: {}
+    leases_by_issue: {},
   };
 }
 
 export function loadLeaseState(repoRoot: string, opts?: TicketMachineOptions): LeaseState {
   try {
-    const raw = JSON.parse(readFileSync(leaseStatePath(repoRoot, opts), "utf8")) as Partial<LeaseState>;
+    const raw = JSON.parse(
+      readFileSync(leaseStatePath(repoRoot, opts), "utf8"),
+    ) as Partial<LeaseState>;
     if (
       raw.schema_version === 1 &&
       raw.repo_id === repoId(repoRoot) &&
@@ -167,7 +169,7 @@ export function loadLeaseState(repoRoot: string, opts?: TicketMachineOptions): L
         repo_id: raw.repo_id,
         updated_at: String(raw.updated_at || new Date().toISOString()),
         leases_by_session: raw.leases_by_session as Record<string, TicketLease>,
-        leases_by_issue: raw.leases_by_issue as Record<string, string>
+        leases_by_issue: raw.leases_by_issue as Record<string, string>,
       };
     }
   } catch {}
@@ -210,7 +212,7 @@ function entryByIssueId(queue: LiveQueue, issueId: string): QueueEntry | undefin
 function sessionLeaseEntry(
   queue: LiveQueue,
   state: LeaseState,
-  sessionId: string
+  sessionId: string,
 ): { lease: TicketLease; entry: QueueEntry } | undefined {
   const lease = state.leases_by_session[sessionId];
   if (!lease) {
@@ -232,7 +234,7 @@ function persistLease(
   state: LeaseState,
   entry: QueueEntry,
   sessionId: string,
-  agentName: string
+  agentName: string,
 ): TicketLease {
   const lease: TicketLease = {
     session_id: sessionId,
@@ -242,7 +244,7 @@ function persistLease(
     parallel_group: entry.parallel_group,
     write_scope: entry.write_scope,
     check_cmd: entry.check_cmd,
-    claimed_at: new Date().toISOString()
+    claimed_at: new Date().toISOString(),
   };
   state.leases_by_session[sessionId] = lease;
   state.leases_by_issue[entry.issue_id] = sessionId;
@@ -259,7 +261,7 @@ async function acquireLeaseLock(repoRoot: string, opts?: TicketMachineOptions): 
       writeFileSync(
         path.join(lockPath, "owner.json"),
         `${JSON.stringify({ created_at: new Date().toISOString(), pid: process.pid })}\n`,
-        "utf8"
+        "utf8",
       );
       return;
     } catch {
@@ -285,7 +287,7 @@ function releaseLeaseLock(repoRoot: string, opts?: TicketMachineOptions): void {
 async function withLeaseLock<T>(
   repoRoot: string,
   opts: TicketMachineOptions | undefined,
-  fn: () => T | Promise<T>
+  fn: () => T | Promise<T>,
 ): Promise<T> {
   await acquireLeaseLock(repoRoot, opts);
   try {
@@ -304,7 +306,7 @@ export async function takeTicket(args: TakeTicketArgs): Promise<TakeTicketResult
       if ((error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
         return {
           kind: "queue_empty",
-          reason: "live queue file is missing; run bun run workflow:queue:build"
+          reason: "live queue file is missing; run bun run workflow:queue:build",
         };
       }
       throw error;
@@ -319,7 +321,7 @@ export async function takeTicket(args: TakeTicketArgs): Promise<TakeTicketResult
         kind: "ticket",
         reused: true,
         entry: current.entry,
-        reason: "existing session lease"
+        reason: "existing session lease",
       };
     }
 
@@ -329,7 +331,7 @@ export async function takeTicket(args: TakeTicketArgs): Promise<TakeTicketResult
         saveLeaseState(args.repoRoot, state, args);
         return {
           kind: "queue_empty",
-          reason: `issue ${args.issueId} is not present in live queue`
+          reason: `issue ${args.issueId} is not present in live queue`,
         };
       }
       const owner = state.leases_by_issue[requested.issue_id];
@@ -337,7 +339,7 @@ export async function takeTicket(args: TakeTicketArgs): Promise<TakeTicketResult
         saveLeaseState(args.repoRoot, state, args);
         return {
           kind: "queue_empty",
-          reason: `issue ${args.issueId} is already leased`
+          reason: `issue ${args.issueId} is already leased`,
         };
       }
 
@@ -349,7 +351,7 @@ export async function takeTicket(args: TakeTicketArgs): Promise<TakeTicketResult
         kind: "ticket",
         reused: false,
         entry: requested,
-        reason: "claimed requested queue entry"
+        reason: "claimed requested queue entry",
       };
     }
 
@@ -366,14 +368,17 @@ export async function takeTicket(args: TakeTicketArgs): Promise<TakeTicketResult
         kind: "ticket",
         reused: false,
         entry,
-        reason: "claimed next queue entry"
+        reason: "claimed next queue entry",
       };
     }
 
     saveLeaseState(args.repoRoot, state, args);
     return {
       kind: "queue_empty",
-      reason: queue.entries.length === 0 ? "live queue is empty" : "all live queue entries are already leased"
+      reason:
+        queue.entries.length === 0
+          ? "live queue is empty"
+          : "all live queue entries are already leased",
     };
   });
 }
@@ -381,7 +386,7 @@ export async function takeTicket(args: TakeTicketArgs): Promise<TakeTicketResult
 export async function releaseTicket(
   repoRoot: string,
   sessionId: string,
-  opts?: TicketMachineOptions
+  opts?: TicketMachineOptions,
 ): Promise<boolean> {
   return withLeaseLock(repoRoot, opts, async () => {
     const state = loadLeaseState(repoRoot, opts);
