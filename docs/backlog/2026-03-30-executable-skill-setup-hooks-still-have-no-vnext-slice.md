@@ -41,13 +41,17 @@ check_cmd: "bun run check"
 - packages/skill-sdk 至少提供一个可测试的 hook authoring surface 或 placeholder contract，而不是继续停留在口头方向
 - 测试锁住 hook 声明与运行时边界，避免未来再退回旧 plugin hook 语义
 
+## Sub Issues
+
+- `ISSUE-080` `Follow-up: skill setup hook authoring docs are stale`
+
 ## 工作总结
 
 - `packages/skill-sdk` 新增 install-only `setup` 声明面、`SKILL_SETUP_PHASES`、`runSkillSetupHooks()`，把 setup side effect 先收口为 `mem://skills/<skillId>/...` 包内文件计划与 notes。
 - `packages/skill-sdk/test/skill-sdk.spec.ts` 新增 setup contract 测试，覆盖 phase 锁定、声明归一化、非法 phase / 非函数拒绝、包根逃逸阻断，以及 runtime invoke 不执行 setup hooks。
 - Doc Freshness Gate 已检查 `docs/ai-surface-index.md`、`docs/agent-bootstrap-context-pack.md`、`docs/module-tracking-ledger.json`、`docs/legacy-to-vnext-migration-matrix.md`、`docs/migration-parity-dashboard.md`、`docs/cutover-readiness-criteria.md`。
 - 已更新 `docs/legacy-to-vnext-migration-matrix.md`，把 hooks system / extension points 从 `not-started` 回写为 `partial`；其余控制面文档未声明该 authoring surface 或 cutover 判定，无需同步。
-- 已新增 `ISSUE-079`，继续收口 skill setup hook 的 README / authoring guide / package convention 文档缺口。
+- 已新增 `ISSUE-080`，继续收口 skill setup hook 的 README / authoring guide / package convention 文档缺口。
 - 已运行：
   - `bun test packages/skill-sdk/test/skill-sdk.spec.ts`
   - `bunx biome check packages/skill-sdk/src/index.ts packages/skill-sdk/test/skill-sdk.spec.ts`

@@ -1,9 +1,9 @@
 ---
-id: ISSUE-079
+id: ISSUE-080
 title: "Follow-up: skill setup hook authoring docs are stale"
 status: open
-priority: p2
-source: "ISSUE-077 follow-up 2026-03-30"
+priority: p1
+source: "ISSUE-077 closure 2026-03-30"
 created: 2026-03-30
 assignee: unassigned
 tags:
@@ -14,32 +14,30 @@ tags:
   - authoring
 module_id: skill-runtime-sdk-studio
 module_stage: deferred
-tracking_kind: follow-up
+tracking_kind: doc-debt
 kind: slice
-epic: EPIC-skill-sdk
+epic: EPIC-skill-runtime-sdk
 parallel_group: sdk-docs
-depends_on:
-  - ISSUE-077
+depends_on: []
 write_scope:
-  - packages/skill-sdk/README.md
   - docs/skill-authoring-guide.md
   - docs/skill-package-convention.md
-acceptance_ref: packages/skill-sdk/src/index.ts
+  - packages/skill-sdk/README.md
+acceptance_ref: docs/legacy-to-vnext-migration-matrix.md
 check_cmd: "bun run check"
 ---
 
 ## Goal
 
-把 install-only skill setup hook 的作者入口文档补齐，避免后续继续回流到旧 plugin hook 心智。
+把 Follow-up: skill setup hook authoring docs are stale 收口成可执行的 backlog 结论，并明确后续 follow-up。
 
 ## Review Finding
 
-- `packages/skill-sdk` 现在已有 `setup` 声明面与 `runSkillSetupHooks()`，但 README、authoring guide、package convention 还没有解释这个 surface
-- 文档如果继续缺位，后续 agent 很容易误以为 runtime hook / app glue 仍是推荐路径
-- 当前 contract 还特意限制为 install-only、`mem://skills/<id>/...` 包内写入；这些边界需要显式写清
+- ISSUE-077 已补 install-only setup contract，但 authoring docs 仍未解释 setup 何时运行、允许哪些副作用、以及为何当前只开放 install phase。
+- 如果不把作者文档同步到位，后续 executable skill author 很容易重新发明 app-local glue 或误用 runtime hook 语义。
 
 ## Acceptance
 
-- `packages/skill-sdk/README.md` 补 setup hook 最小示例与关键 export
-- `docs/skill-authoring-guide.md` 说明 install phase、`ctx.writeFile()` / `ctx.note()` 语义和“不在 runtime invoke 时执行”
-- `docs/skill-package-convention.md` 补 canonical package root 与 setup 生成文件的约束，不再暗示旧 plugin hook 语义
+- skill setup hook 的 install-only contract 被写入作者文档与 package README。
+- 文档明确 setup hook 的允许副作用边界、推荐文件落点与当前不支持的 phase。
+- skill authoring 路径不再需要从测试或源码猜 setup contract。
