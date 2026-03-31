@@ -102,12 +102,13 @@
 
 当前口径：
 
-- 这是轻量 resource contract，不是完整 resource registry
-- `runtime.bootstrap` 仍是当前 bootstrap summary bridge read path
-- `audit.tail` 已是当前 control-plane audit bridge read path，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall`
+- 这是轻量 resource contract + lookup surface，不是完整 resource registry
+- `packages/core` 现提供 `readAiSurfaceResource()`；`apps/mv3-shell` 通过统一 `resource.read` bridge read path 暴露 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail`
+- `runtime.bootstrap` 继续保留为 bootstrap bundle compatibility read path
+- `audit.tail` 仍是当前 control-plane audit 主资源，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall`
 - `runtime.summary` 现已包含 typed `interventions` summary；`audit.intervention` 是 intervention lifecycle 的 shared audit read path
 - `audit.host` 仅保留为 host-only compatibility alias
-- 统一 northbound resource registry 与 app integration 仍由后续 issue 收口
+- 更完整的 resource metadata / audience registry 仍由后续 issue 收口
 
 ## 5. Audience 原则
 

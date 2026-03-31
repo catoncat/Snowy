@@ -3,6 +3,7 @@ import {
   AI_SURFACE_PRIMITIVES,
   AI_SURFACE_RESOURCE_AUDIENCES,
   AI_SURFACE_RESOURCE_IDS,
+  type AiSurfaceResourceDocument,
   type AuditTailResource,
   BOOTSTRAP_RESOURCE_KEYS,
   COMPACTION_REASONS,
@@ -198,7 +199,9 @@ describe("contracts", () => {
       },
     } satisfies AuditTailResource;
 
-    expect(runtimeResource.id).toBe("runtime.summary");
+    const resourceDocs = [runtimeResource, auditResource] satisfies AiSurfaceResourceDocument[];
+
+    expect(resourceDocs[0]?.id).toBe("runtime.summary");
     expect(auditResource.data.entries[0]?.kind).toBe("hosts.connect");
     expect(auditResource.data.entries[1]?.kind).toBe("config.update");
   });

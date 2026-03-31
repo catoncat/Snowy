@@ -113,7 +113,7 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 主要原因：
 
 1. 迁移控制面刚建立，还未长期维护
-2. AI-native product control plane 已有最小实现；`config.*` / `skills.*` / `hosts.*` 与最小 `audit.tail` 已形成主链，但统一 northbound resource registry 与更完整 product surface 仍未完成
+2. AI-native product control plane 已有最小实现；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read` 与最小 `audit.tail` 已形成主链，但完整 resource metadata registry 与更完整 product surface 仍未完成
 3. browser automation 主线仍未完整迁入：`tabs.navigate`、`page.press_key`、`page.screenshot` 已有最小路径，intervention 位置也已定性，但 `page.query/click/fill` production path 与 intervention lifecycle integration 仍未收口
 4. diagnostics / provider / studio / automation parity 仍未成体系
 

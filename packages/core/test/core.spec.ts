@@ -35,6 +35,7 @@ import {
   dispatchCapabilityCall,
   getBuiltinsByNamespace,
   hasPublicNamespaceCoverage,
+  readAiSurfaceResource,
   resolveHostSubstrateTarget,
   setDefaultExecutionHost,
   typedCapabilities,
@@ -707,6 +708,51 @@ describe("core", () => {
               resolution: "resume",
             },
           },
+        ],
+      },
+    });
+  });
+
+  it("reads built-in resources through a unified lookup helper", () => {
+    const runtime = readAiSurfaceResource({
+      resourceId: "runtime.summary",
+      bootstrap: {
+        generatedAt: "2026-03-30T00:00:00.000Z",
+        runtime: {
+          sessionId: "session-lookup",
+          loopState: "idle",
+        },
+      },
+    });
+    const audit = readAiSurfaceResource({
+      resourceId: "audit.tail",
+      auditTail: {
+        generatedAt: "2026-03-30T00:00:03.000Z",
+        entries: [
+          {
+            timestamp: "2026-03-30T00:00:03.000Z",
+            sessionId: "session-lookup",
+            kind: "config.update",
+            changedFields: ["model"],
+            status: "updated",
+          },
+        ],
+      },
+    });
+
+    expect(runtime).toMatchObject({
+      id: "runtime.summary",
+      data: {
+        sessionId: "session-lookup",
+      },
+    });
+    expect(audit).toMatchObject({
+      id: "audit.tail",
+      data: {
+        entries: [
+          expect.objectContaining({
+            kind: "config.update",
+          }),
         ],
       },
     });

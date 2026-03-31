@@ -50,14 +50,14 @@
 - JS Runner baseline
 - Site Runtime baseline
 - MV3 shell baseline
-- lightweight resource contracts/builders: `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary` / `audit.tail` / `audit.intervention`
+- lightweight resource contracts/builders + lookup: `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary` / `audit.tail` / `audit.intervention` + `readAiSurfaceResource()` / MV3 `resource.read`
 - minimal product control-plane actions: `hosts.*`, `config.update`, `skills.install/enable/disable/uninstall`, `runtime.capture_diagnostics`, `runtime.clear_error`
 
 注意：
 
 - 这些是 foundation
 - 不是完整 kernel parity
-- `skills.*` lifecycle、`runtime.summary.interventions` 与 `audit.intervention` 已有最小 app integration path
+- `skills.*` lifecycle、`runtime.summary.interventions`、`audit.intervention` 与 MV3 `resource.read` 已有最小 app integration path
 - 更完整的 diagnostics / debug 主面仍未收口
 
 ## 5. 当前最重要的未收口区

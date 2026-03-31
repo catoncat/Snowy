@@ -733,7 +733,7 @@ Skill 只需要：
 3. audience / projection 规则
 4. 不引入多余 descriptor family
 
-其中第 1 步和 bootstrap bundle keys 已可先在 contracts/core 以轻量边界常量落地；真正 resource registry 仍属于后续实现。
+其中第 1 步和 bootstrap bundle keys 已可先在 contracts/core 以轻量边界常量落地；当前仓也已补到 `readAiSurfaceResource()` + MV3 `resource.read` 最小 lookup surface；更完整的 resource metadata registry 仍属于后续实现。
 
 ### Phase 2: 先把产品自我认知做出来
 

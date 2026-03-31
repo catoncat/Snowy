@@ -37,4 +37,4 @@ import { createBackgroundRunnerBridge, createPageHookBridge } from "mv3-shell/ba
 
 ## Message Routing
 
-Routes `runner.*`, `host.*`, `hosts.*`, `site.runtime.invoke`, `runtime.diagnostics`, `runtime.bootstrap` messages between offscreen, content scripts, and page hooks.
+Routes `runner.*`, `host.*`, `hosts.*`, `site.runtime.invoke`, `runtime.diagnostics`, `runtime.bootstrap`, and `resource.read` messages between offscreen, content scripts, and page hooks.

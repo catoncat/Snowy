@@ -21,7 +21,7 @@ import {
 | Builtin catalog | `BUILTIN_CAPABILITIES`, `BUILTIN_CATALOG`, `BUILTIN_EXPORT_HANDOFFS` |
 | Skill context | `createSkillRuntimeContext()`, `SkillRuntimeContext` |
 | Invocation | `SkillInvocationService`, `SkillInvocationResult` |
-| Bootstrap | `createBootstrapSummary()`, `createHostControlPlaneSnapshot()` |
+| Bootstrap / Resources | `createBootstrapSummary()`, `createBootstrapSummaryResources()`, `readAiSurfaceResource()`, `createHostControlPlaneSnapshot()` |
 | Host control | `connectExecutionHost()`, `disconnectExecutionHost()`, `resolveHostSubstrateTarget()` |
 | Typed facades | `typedCapabilities()`, `typedCapabilitiesForPermissions()` |
 

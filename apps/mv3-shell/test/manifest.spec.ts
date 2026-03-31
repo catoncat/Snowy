@@ -2158,6 +2158,197 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("reads summary and audit resources through the unified resource.read path", async () => {
+    const harness = createChromeHarness({
+      host: {
+        dispatch: vi.fn(async (request) => {
+          if (request.kind === "health") {
+            return {
+              kind: "health_result",
+              requestId: request.requestId,
+              ok: true,
+              health: {
+                status: "idle",
+                inflightCount: 0,
+                consecutiveFailures: 0,
+              },
+            };
+          }
+          return {
+            kind: "invoke_result",
+            requestId: request.requestId,
+            ok: true,
+            result: { result: "ok", durationMs: 1 },
+          };
+        }),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0,
+        })),
+      },
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/resource",
+        title: "Resource Fixture",
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      sessionId: "session-resource-1",
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "hosts.connect",
+      hostId: "local",
+    });
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "hosts.set_default",
+      hostId: "local",
+    });
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "config.update",
+      patch: {
+        model: {
+          provider: "openai",
+        },
+      },
+    });
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.install",
+      skillId: "skill.resource",
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "runtime.summary",
+        world: "main",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "runtime.summary",
+        primitive: "resource",
+        data: {
+          sessionId: "session-resource-1",
+          activeTab: {
+            tabId: 11,
+            url: "https://fixture.test/resource",
+            world: "main",
+          },
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "config.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "config.summary",
+        data: {
+          status: "ready",
+          values: {
+            model: {
+              provider: "openai",
+            },
+          },
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "skills.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "skills.summary",
+        data: {
+          installedCount: 1,
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "hosts.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "hosts.summary",
+        data: {
+          defaultHostId: "local",
+          connectedCount: 1,
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "audit.tail",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "audit.tail",
+        primitive: "resource",
+        data: {
+          entries: expect.arrayContaining([
+            expect.objectContaining({
+              kind: "hosts.connect",
+              sessionId: "session-resource-1",
+            }),
+            expect.objectContaining({
+              kind: "config.update",
+              sessionId: "session-resource-1",
+            }),
+            expect.objectContaining({
+              kind: "skills.install",
+              sessionId: "session-resource-1",
+            }),
+          ]),
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "missing.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_BAD_INPUT",
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("lists and gets the local host without auto-connecting it", async () => {
     const harness = createChromeHarness({
       host: {

@@ -289,6 +289,13 @@ export type InterventionAuditResource = ResourceDocument<
   "audit.intervention",
   InterventionAuditSummary
 >;
+export type AiSurfaceResourceDocument =
+  | RuntimeSummaryResource
+  | ConfigSummaryResource
+  | SkillsSummaryResource
+  | HostsSummaryResource
+  | AuditTailResource
+  | InterventionAuditResource;
 
 export interface BootstrapResourceBundle {
   runtime?: RuntimeBootstrapSummary;

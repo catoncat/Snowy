@@ -1,5 +1,6 @@
 import {
   type AiSurfaceBoundary,
+  type AiSurfaceResourceDocument,
   type AiSurfaceResourceId,
   type AuditTailResource,
   type AuditTailSummary,
@@ -214,6 +215,7 @@ export class CapabilityRegistry {
 export const AI_SURFACE_BOUNDARY: AiSurfaceBoundary = CONTRACT_AI_SURFACE_BOUNDARY;
 export const BUILTIN_BOOTSTRAP_RESOURCE_KEYS: BootstrapResourceKey[] = [...BOOTSTRAP_RESOURCE_KEYS];
 export type {
+  AiSurfaceResourceDocument,
   AuditTailResource,
   AuditTailSummary,
   BootstrapActiveTabSummary,
@@ -296,6 +298,13 @@ export interface InterventionAuditResourceInput {
   entries: InterventionAuditEntry[];
   generatedAt?: string;
   limit?: number;
+}
+
+export interface ReadAiSurfaceResourceInput {
+  resourceId: AiSurfaceResourceId;
+  bootstrap?: BootstrapSummaryInput;
+  auditTail?: AuditTailResourceInput;
+  interventionAudit?: InterventionAuditResourceInput;
 }
 
 export interface HostControlPlaneRecordInput {
@@ -1592,6 +1601,25 @@ export function createInterventionAuditResource(
   };
 
   return createResourceDocument("audit.intervention", generatedAt, data);
+}
+
+export function readAiSurfaceResource(
+  input: ReadAiSurfaceResourceInput,
+): AiSurfaceResourceDocument {
+  switch (input.resourceId) {
+    case "runtime.summary":
+      return createRuntimeSummaryResource(input.bootstrap);
+    case "config.summary":
+      return createConfigSummaryResource(input.bootstrap);
+    case "skills.summary":
+      return createSkillsSummaryResource(input.bootstrap);
+    case "hosts.summary":
+      return createHostsSummaryResource(input.bootstrap);
+    case "audit.tail":
+      return createAuditTailResource(input.auditTail ?? { entries: [] });
+    case "audit.intervention":
+      return createInterventionAuditResource(input.interventionAudit ?? { entries: [] });
+  }
 }
 
 export function createConfigControlPlane(

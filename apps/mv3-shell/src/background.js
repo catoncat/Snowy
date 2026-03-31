@@ -1,4 +1,5 @@
 import {
+  AI_SURFACE_RESOURCE_IDS,
   CONFIG_AUDIT_STATUSES,
   CONFIG_RESOURCE_FIELDS,
   BOOTSTRAP_RESOURCE_KEYS as CONTRACT_BOOTSTRAP_RESOURCE_KEYS,
@@ -6,11 +7,7 @@ import {
   HOST_AUDIT_STATUSES,
   SKILL_AUDIT_KINDS,
 } from "@bbl-next/contracts";
-import {
-  createAuditTailResource,
-  createBootstrapSummary,
-  createInterventionAuditResource,
-} from "@bbl-next/core";
+import { createBootstrapSummary, readAiSurfaceResource } from "@bbl-next/core";
 import { createPageHookBridge } from "./page-hook-bridge.js";
 import { createBackgroundRuntimeServices } from "./runtime-services.js";
 
@@ -53,6 +50,10 @@ function toBridgeError(error, fallbackCode = "E_RUNTIME") {
 
 function isoNow() {
   return new Date().toISOString();
+}
+
+function isAiSurfaceResourceId(value) {
+  return typeof value === "string" && AI_SURFACE_RESOURCE_IDS.includes(value);
 }
 
 function normalizeAuditEntry(value) {
@@ -432,9 +433,12 @@ export function createBackgroundRunnerBridge({
 
   async function readAuditResource(limit) {
     await auditReady;
-    return createAuditTailResource({
-      entries: [...auditEntries],
-      ...(typeof limit === "number" ? { limit } : {}),
+    return readAiSurfaceResource({
+      resourceId: "audit.tail",
+      auditTail: {
+        entries: [...auditEntries],
+        ...(typeof limit === "number" ? { limit } : {}),
+      },
     });
   }
 
@@ -1091,7 +1095,7 @@ export function createBackgroundRunnerBridge({
     };
   }
 
-  async function bootstrap({ world = "main" } = {}) {
+  async function buildBootstrapResourceInput({ world = "main" } = {}) {
     const generatedAt = isoNow();
     const activeTab = await queryActiveTab();
     const diagnosticsResult = await diagnostics({
@@ -1171,8 +1175,9 @@ export function createBackgroundRunnerBridge({
         ? await getRuntimeServices().getInterventionState()
         : emptyInterventionState();
 
-    const summary = bootstrapSummaryBuilder({
+    return {
       generatedAt,
+      activeTab: activeTabSummary,
       runtime: {
         status: runtimeStatus,
         mode: currentMode,
@@ -1241,12 +1246,62 @@ export function createBackgroundRunnerBridge({
         note: resolvedConfigSummary.note,
         updatedAt: resolvedConfigSummary.updatedAt,
       },
-    });
+    };
+  }
+
+  async function bootstrap({ world = "main" } = {}) {
+    const summary = bootstrapSummaryBuilder(await buildBootstrapResourceInput({ world }));
 
     return {
       ok: true,
       data: summary,
     };
+  }
+
+  async function readInterventionResource(limit) {
+    const entries =
+      typeof getRuntimeServices().readInterventionAudit === "function"
+        ? await getRuntimeServices().readInterventionAudit(limit)
+        : [];
+    return readAiSurfaceResource({
+      resourceId: "audit.intervention",
+      interventionAudit: {
+        entries,
+      },
+    });
+  }
+
+  async function readResource({ resourceId, world = "main", limit } = {}) {
+    if (!isAiSurfaceResourceId(resourceId)) {
+      return {
+        ok: false,
+        error: {
+          code: "E_BAD_INPUT",
+          message: `Unknown AI surface resource: ${String(resourceId)}`,
+        },
+      };
+    }
+
+    switch (resourceId) {
+      case "audit.tail":
+        return {
+          ok: true,
+          data: await readAuditResource(limit),
+        };
+      case "audit.intervention":
+        return {
+          ok: true,
+          data: await readInterventionResource(limit),
+        };
+      default:
+        return {
+          ok: true,
+          data: readAiSurfaceResource({
+            resourceId,
+            bootstrap: await buildBootstrapResourceInput({ world }),
+          }),
+        };
+    }
   }
 
   async function route(message) {
@@ -1360,11 +1415,17 @@ export function createBackgroundRunnerBridge({
         return routeRuntimeCapability("tabs.navigate", {
           url: message.url,
         });
+      case "resource.read":
+        return readResource({
+          resourceId: message.resourceId,
+          world: message.world,
+          limit: message.limit,
+        });
       case "audit.tail":
-        return {
-          ok: true,
-          data: await readAuditResource(message.limit),
-        };
+        return readResource({
+          resourceId: "audit.tail",
+          limit: message.limit,
+        });
       case "audit.host":
         return {
           ok: true,
@@ -1375,15 +1436,10 @@ export function createBackgroundRunnerBridge({
           },
         };
       case "audit.intervention":
-        return {
-          ok: true,
-          data: createInterventionAuditResource({
-            entries:
-              typeof getRuntimeServices().readInterventionAudit === "function"
-                ? await getRuntimeServices().readInterventionAudit(message.limit)
-                : [],
-          }),
-        };
+        return readResource({
+          resourceId: "audit.intervention",
+          limit: message.limit,
+        });
       case "intervention.list":
         return {
           ok: true,
