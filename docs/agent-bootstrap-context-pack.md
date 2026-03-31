@@ -51,18 +51,19 @@
 - Site Runtime baseline
 - MV3 shell baseline
 - lightweight resource contracts/builders: `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary` / `audit.tail`
-- minimal product control-plane actions: `hosts.*`, `runtime.capture_diagnostics`, `runtime.clear_error`, `config.update`
+- minimal product control-plane actions: `hosts.*`, `config.update`, `skills.install/enable/disable/uninstall`, `runtime.capture_diagnostics`, `runtime.clear_error`
 
 注意：
 
 - 这些是 foundation
 - 不是完整 kernel parity
-- `skills.*` lifecycle control plane 与 `audit` control plane 仍未收口
+- `skills.*` lifecycle 与 control-plane `audit.tail` 已有最小 app integration path
+- 更完整的 diagnostics / debug / intervention shared surface 仍未收口
 
 ## 5. 当前最重要的未收口区
 
 1. browser-side kernel（session / run / compaction）
-2. diagnostics / debug / audit 主面
+2. diagnostics / debug / intervention shared 主面
 3. intervention / human handoff lifecycle integration
 4. browser automation parity
 5. provider / profile / routing 主层

@@ -18,12 +18,12 @@ import {
   type ConfigResourceField,
   type ConfigSummaryResource,
   type ConfigSummaryStatus,
+  type ControlPlaneAuditEntry,
   type ExecutionBinding,
   type ExecutionHostHealthStatus,
   type ExecutionHostKind,
   type ExecutionHostRecord,
   type ExecutionHostState,
-  type HostAuditEntry,
   type HostBootstrapSummaryItem,
   type HostControlPlaneSnapshot,
   type HostsBootstrapSummary,
@@ -214,10 +214,13 @@ export type {
   BootstrapActiveTabSummary,
   BootstrapSummary,
   BootstrapSummaryStatus,
+  ConfigAuditEntry,
   ConfigBootstrapSummary,
   ConfigSummaryResource,
   ConfigSummaryStatus,
+  ControlPlaneAuditEntry,
   HostBootstrapSummaryItem,
+  HostAuditEntry,
   HostsBootstrapSummary,
   HostsSummaryResource,
   InterventionKind,
@@ -225,6 +228,7 @@ export type {
   InterventionTrigger,
   RuntimeBootstrapSummary,
   RuntimeSummaryResource,
+  SkillAuditEntry,
   SkillsBootstrapSummary,
   SkillsSummaryResource,
 } from "@bbl-next/contracts";
@@ -265,7 +269,7 @@ export interface BootstrapSummaryResources {
 }
 
 export interface AuditTailResourceInput {
-  entries: HostAuditEntry[];
+  entries: ControlPlaneAuditEntry[];
   generatedAt?: string;
   limit?: number;
 }

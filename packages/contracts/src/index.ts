@@ -81,14 +81,58 @@ export type HostAuditKind = (typeof HOST_AUDIT_KINDS)[number];
 export const HOST_AUDIT_STATUSES = ["connected", "disconnected", "default_set", "failed"] as const;
 export type HostAuditStatus = (typeof HOST_AUDIT_STATUSES)[number];
 
-export interface HostAuditEntry {
+export const CONFIG_AUDIT_KINDS = [...CONFIG_CONTROL_PLANE_ACTIONS] as const;
+export type ConfigAuditKind = (typeof CONFIG_AUDIT_KINDS)[number];
+
+export const CONFIG_AUDIT_STATUSES = ["updated"] as const;
+export type ConfigAuditStatus = (typeof CONFIG_AUDIT_STATUSES)[number];
+
+export const SKILL_AUDIT_KINDS = [...SKILL_CONTROL_PLANE_ACTIONS] as const;
+export type SkillAuditKind = (typeof SKILL_AUDIT_KINDS)[number];
+
+export const SKILL_AUDIT_STATUSES = ["installed", "enabled", "disabled", "archived"] as const;
+export type SkillAuditStatus = (typeof SKILL_AUDIT_STATUSES)[number];
+
+export const CONTROL_PLANE_AUDIT_KINDS = [
+  ...HOST_AUDIT_KINDS,
+  ...CONFIG_AUDIT_KINDS,
+  ...SKILL_AUDIT_KINDS,
+] as const;
+export type ControlPlaneAuditKind = (typeof CONTROL_PLANE_AUDIT_KINDS)[number];
+
+export const CONTROL_PLANE_AUDIT_STATUSES = [
+  ...HOST_AUDIT_STATUSES,
+  ...CONFIG_AUDIT_STATUSES,
+  ...SKILL_AUDIT_STATUSES,
+] as const;
+export type ControlPlaneAuditStatus = (typeof CONTROL_PLANE_AUDIT_STATUSES)[number];
+
+interface ControlPlaneAuditEntryBase {
   timestamp: string;
   sessionId: string | null;
+  error?: string;
+}
+
+export interface HostAuditEntry extends ControlPlaneAuditEntryBase {
   kind: HostAuditKind;
   hostId: string;
   status: HostAuditStatus;
-  error?: string;
 }
+
+export interface ConfigAuditEntry extends ControlPlaneAuditEntryBase {
+  kind: ConfigAuditKind;
+  status: ConfigAuditStatus;
+  changedFields: ConfigResourceField[];
+}
+
+export interface SkillAuditEntry extends ControlPlaneAuditEntryBase {
+  kind: SkillAuditKind;
+  skillId: string;
+  status: SkillAuditStatus;
+  trusted?: boolean;
+}
+
+export type ControlPlaneAuditEntry = HostAuditEntry | ConfigAuditEntry | SkillAuditEntry;
 
 export const INTERVENTION_KINDS = ["confirm", "takeover", "input"] as const;
 export type InterventionKind = (typeof INTERVENTION_KINDS)[number];
@@ -184,7 +228,7 @@ export interface BootstrapSummary {
 export interface AuditTailSummary {
   status: "available" | "empty";
   totalCount: number;
-  entries: HostAuditEntry[];
+  entries: ControlPlaneAuditEntry[];
 }
 
 export interface ResourceDocument<ResourceId extends AiSurfaceResourceId, Payload> {

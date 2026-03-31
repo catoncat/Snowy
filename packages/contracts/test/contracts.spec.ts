@@ -6,7 +6,11 @@ import {
   type AuditTailResource,
   BOOTSTRAP_RESOURCE_KEYS,
   COMPACTION_REASONS,
+  CONFIG_AUDIT_KINDS,
+  CONFIG_AUDIT_STATUSES,
   CONFIG_CONTROL_PLANE_ACTIONS,
+  CONTROL_PLANE_AUDIT_KINDS,
+  CONTROL_PLANE_AUDIT_STATUSES,
   type CapabilityDescriptor,
   type CapabilityTraceEntry,
   type CompactionDraft,
@@ -32,6 +36,8 @@ import {
   type RunState,
   type RuntimeSummaryResource,
   SESSION_ENTRY_TYPES,
+  SKILL_AUDIT_KINDS,
+  SKILL_AUDIT_STATUSES,
   SKILL_CONTROL_PLANE_ACTIONS,
   type SessionContext,
   type SessionContextMessage,
@@ -159,10 +165,10 @@ describe("contracts", () => {
     const auditResource = {
       id: "audit.tail",
       primitive: "resource",
-      generatedAt: "2026-03-30T00:00:00.000Z",
+      generatedAt: "2026-03-30T00:00:02.000Z",
       data: {
-        status: "available",
-        totalCount: 1,
+        status: "available" as const,
+        totalCount: 2,
         entries: [
           {
             timestamp: "2026-03-30T00:00:00.000Z",
@@ -171,12 +177,20 @@ describe("contracts", () => {
             hostId: "local",
             status: "connected",
           },
+          {
+            timestamp: "2026-03-30T00:00:02.000Z",
+            sessionId: "session-1",
+            kind: "config.update",
+            changedFields: ["model"],
+            status: "updated",
+          },
         ],
       },
     } satisfies AuditTailResource;
 
     expect(runtimeResource.id).toBe("runtime.summary");
     expect(auditResource.data.entries[0]?.kind).toBe("hosts.connect");
+    expect(auditResource.data.entries[1]?.kind).toBe("config.update");
   });
 
   it("locks the minimal execution host control plane action set", () => {
@@ -190,9 +204,39 @@ describe("contracts", () => {
     ]);
   });
 
-  it("locks the host audit vocabulary", () => {
+  it("locks the unified control-plane audit vocabulary", () => {
     expect(HOST_AUDIT_KINDS).toEqual(["hosts.connect", "hosts.disconnect", "hosts.set_default"]);
     expect(HOST_AUDIT_STATUSES).toEqual(["connected", "disconnected", "default_set", "failed"]);
+    expect(CONFIG_AUDIT_KINDS).toEqual(["config.update"]);
+    expect(CONFIG_AUDIT_STATUSES).toEqual(["updated"]);
+    expect(SKILL_AUDIT_KINDS).toEqual([
+      "skills.install",
+      "skills.enable",
+      "skills.disable",
+      "skills.uninstall",
+    ]);
+    expect(SKILL_AUDIT_STATUSES).toEqual(["installed", "enabled", "disabled", "archived"]);
+    expect(CONTROL_PLANE_AUDIT_KINDS).toEqual([
+      "hosts.connect",
+      "hosts.disconnect",
+      "hosts.set_default",
+      "config.update",
+      "skills.install",
+      "skills.enable",
+      "skills.disable",
+      "skills.uninstall",
+    ]);
+    expect(CONTROL_PLANE_AUDIT_STATUSES).toEqual([
+      "connected",
+      "disconnected",
+      "default_set",
+      "failed",
+      "updated",
+      "installed",
+      "enabled",
+      "disabled",
+      "archived",
+    ]);
   });
 
   it("locks the intervention vocabulary and request shape", () => {

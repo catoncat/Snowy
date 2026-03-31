@@ -1106,8 +1106,9 @@ describe("mv3-shell manifest", () => {
         status: "degraded",
         runtime: {
           status: "degraded",
-          loopState: "degraded",
+          loopState: "idle",
           lastError: null,
+          sessionId: expect.any(String),
         },
         hosts: {
           status: "degraded",
@@ -1134,7 +1135,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("exposes an empty bootstrap summary bundle before runtime state exists", async () => {
+  it("exposes an empty bootstrap summary bundle before active runtime state exists", async () => {
     const harness = createChromeHarness({
       host: {
         dispatch: vi.fn(),
@@ -1163,8 +1164,8 @@ describe("mv3-shell manifest", () => {
         resourceKeys: ["runtime", "config", "skills", "hosts"],
         runtime: {
           status: "empty",
-          sessionId: null,
-          loopState: null,
+          sessionId: expect.any(String),
+          loopState: "idle",
           activeTab: null,
         },
         skills: {
@@ -1994,6 +1995,168 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("writes config and skills lifecycle changes into a unified audit.tail resource", async () => {
+    const harness = createChromeHarness({
+      host: {
+        dispatch: vi.fn(),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0,
+        })),
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "config.update",
+        patch: {
+          model: {
+            provider: "openai",
+          },
+          automation: {
+            activeTabOnly: true,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        config: {
+          status: "ready",
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.install",
+        skillId: "skill.demo",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skill: {
+          skillId: "skill.demo",
+          status: "installed",
+          trusted: false,
+          recentChange: "skills.install",
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.enable",
+        skillId: "skill.demo",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skill: {
+          skillId: "skill.demo",
+          status: "enabled",
+          trusted: false,
+          recentChange: "skills.enable",
+        },
+      },
+    });
+
+    const auditResult = (await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "audit.tail",
+    })) as {
+      ok: boolean;
+      data: {
+        id: string;
+        primitive: string;
+        generatedAt: string;
+        data: {
+          status: string;
+          totalCount: number;
+          entries: Array<{
+            timestamp: string;
+            sessionId: string | null;
+            kind: string;
+            status: string;
+            changedFields?: string[];
+            skillId?: string;
+            trusted?: boolean;
+          }>;
+        };
+      };
+    };
+
+    expect(auditResult.ok).toBe(true);
+    expect(auditResult.data.id).toBe("audit.tail");
+    expect(auditResult.data.primitive).toBe("resource");
+    expect(auditResult.data.data.totalCount).toBe(3);
+    expect(auditResult.data.data.entries.map((entry) => entry.kind)).toEqual([
+      "config.update",
+      "skills.install",
+      "skills.enable",
+    ]);
+    expect(auditResult.data.data.entries[0]).toMatchObject({
+      kind: "config.update",
+      status: "updated",
+      changedFields: ["model", "automation"],
+    });
+    expect(auditResult.data.data.entries[1]).toMatchObject({
+      kind: "skills.install",
+      skillId: "skill.demo",
+      status: "installed",
+      trusted: false,
+    });
+    expect(auditResult.data.data.entries[2]).toMatchObject({
+      kind: "skills.enable",
+      skillId: "skill.demo",
+      status: "enabled",
+      trusted: false,
+    });
+
+    const sessionIds = auditResult.data.data.entries.map((entry) => entry.sessionId);
+    expect(sessionIds.every((value) => typeof value === "string" && value.length > 0)).toBe(true);
+    expect(new Set(sessionIds).size).toBe(1);
+    expect(
+      auditResult.data.data.entries[0]?.timestamp <= auditResult.data.data.entries[1]?.timestamp,
+    ).toBe(true);
+    expect(
+      auditResult.data.data.entries[1]?.timestamp <= auditResult.data.data.entries[2]?.timestamp,
+    ).toBe(true);
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.bootstrap",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        runtime: {
+          sessionId: auditResult.data.data.entries[0]?.sessionId,
+        },
+        skills: {
+          status: "healthy",
+          installedCount: 1,
+          enabledCount: 1,
+          trustedCount: 0,
+          recentChange: "skills.enable",
+        },
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("lists and gets the local host without auto-connecting it", async () => {
     const harness = createChromeHarness({
       host: {
@@ -2517,7 +2680,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("writes and reads back host control plane audit entries", async () => {
+  it("reads host control plane changes back through audit.tail as the main read path", async () => {
     const auditStore = createAuditStoreHarness();
     const host = {
       dispatch: vi.fn(async (request) => {
@@ -2576,25 +2739,29 @@ describe("mv3-shell manifest", () => {
       hostId: "local",
     });
 
-    // read audit tail via route
+    // read audit tail via unified route
     const auditResult = (await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "audit.host",
+      kind: "audit.tail",
     })) as {
       ok: boolean;
       data: {
-        entries: Array<{
-          timestamp: string;
-          sessionId: string | null;
-          kind: string;
-          hostId: string;
-          status: string;
-        }>;
+        id: string;
+        data: {
+          entries: Array<{
+            timestamp: string;
+            sessionId: string | null;
+            kind: string;
+            hostId: string;
+            status: string;
+          }>;
+        };
       };
     };
 
     expect(auditResult.ok).toBe(true);
-    const entries = auditResult.data.entries;
+    expect(auditResult.data.id).toBe("audit.tail");
+    const entries = auditResult.data.data.entries;
     expect(entries).toHaveLength(3);
 
     expect(entries[0]).toMatchObject({
@@ -2629,7 +2796,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("persists audit tail across bridge restart and rehydrates from the shared store", async () => {
+  it("persists the unified audit.tail across bridge restart and rehydrates mixed control-plane events", async () => {
     const auditStore = createAuditStoreHarness();
     const host = {
       dispatch: vi.fn(async (request) => {
@@ -2678,6 +2845,20 @@ describe("mv3-shell manifest", () => {
       kind: "hosts.set_default",
       hostId: "local",
     });
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "config.update",
+      patch: {
+        model: {
+          provider: "openai",
+        },
+      },
+    });
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.install",
+      skillId: "skill.persisted",
+    });
 
     disposeFirst();
     firstHarness.cleanup();
@@ -2692,37 +2873,57 @@ describe("mv3-shell manifest", () => {
 
     const auditResult = (await secondHarness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "audit.host",
+      kind: "audit.tail",
     })) as {
       ok: boolean;
       data: {
-        entries: Array<{
-          sessionId: string | null;
-          kind: string;
-          status: string;
-        }>;
+        id: string;
+        data: {
+          entries: Array<{
+            sessionId: string | null;
+            kind: string;
+            status: string;
+            changedFields?: string[];
+            skillId?: string;
+          }>;
+        };
       };
     };
 
     expect(auditResult).toMatchObject({
       ok: true,
       data: {
-        entries: [
-          {
-            sessionId: "session-persist-1",
-            kind: "hosts.connect",
-            status: "connected",
-          },
-          {
-            sessionId: "session-persist-1",
-            kind: "hosts.set_default",
-            status: "default_set",
-          },
-        ],
+        id: "audit.tail",
+        data: {
+          entries: [
+            {
+              sessionId: "session-persist-1",
+              kind: "hosts.connect",
+              status: "connected",
+            },
+            {
+              sessionId: "session-persist-1",
+              kind: "hosts.set_default",
+              status: "default_set",
+            },
+            {
+              sessionId: "session-persist-1",
+              kind: "config.update",
+              status: "updated",
+              changedFields: ["model"],
+            },
+            {
+              sessionId: "session-persist-1",
+              kind: "skills.install",
+              status: "installed",
+              skillId: "skill.persisted",
+            },
+          ],
+        },
       },
     });
 
-    expect(secondBridge.getAuditTail(10)).toHaveLength(2);
+    expect(secondBridge.getAuditTail(10)).toHaveLength(4);
 
     disposeSecond();
     secondHarness.cleanup();

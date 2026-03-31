@@ -1,9 +1,12 @@
 import {
+  CONFIG_AUDIT_STATUSES,
+  CONFIG_RESOURCE_FIELDS,
   BOOTSTRAP_RESOURCE_KEYS as CONTRACT_BOOTSTRAP_RESOURCE_KEYS,
   HOST_AUDIT_KINDS,
   HOST_AUDIT_STATUSES,
+  SKILL_AUDIT_KINDS,
 } from "@bbl-next/contracts";
-import { createBootstrapSummary } from "@bbl-next/core";
+import { createAuditTailResource, createBootstrapSummary } from "@bbl-next/core";
 import { createPageHookBridge } from "./page-hook-bridge.js";
 import { createBackgroundRuntimeServices } from "./runtime-services.js";
 
@@ -20,7 +23,8 @@ export const PAGE_HOOK_GLOBAL_KEY = "__BBL_NEXT_PAGE_HOOK__";
 export const PAGE_HOOK_DEFAULT_FILE = "src/page-hook.js";
 export const BOOTSTRAP_RESOURCE_KEYS = [...CONTRACT_BOOTSTRAP_RESOURCE_KEYS];
 const LOCAL_HOST_ID = "local";
-const AUDIT_STORAGE_KEY = "bbl-next.audit.host.v1";
+const AUDIT_STORAGE_KEY = "bbl-next.audit.tail.v1";
+const LEGACY_AUDIT_STORAGE_KEYS = ["bbl-next.audit.host.v1"];
 
 function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   if (error && typeof error === "object" && "code" in error && "message" in error) {
@@ -51,38 +55,90 @@ function normalizeAuditEntry(value) {
   if (!value || typeof value !== "object") {
     return null;
   }
-  if (
-    typeof value.kind !== "string" ||
-    !HOST_AUDIT_KINDS.includes(value.kind) ||
-    typeof value.status !== "string" ||
-    !HOST_AUDIT_STATUSES.includes(value.status) ||
-    typeof value.hostId !== "string"
-  ) {
+  if (typeof value.kind !== "string" || typeof value.status !== "string") {
     return null;
   }
-
-  const entry = {
+  const baseEntry = {
     timestamp: typeof value.timestamp === "string" ? value.timestamp : isoNow(),
     sessionId: typeof value.sessionId === "string" ? value.sessionId : null,
     kind: value.kind,
-    hostId: value.hostId,
     status: value.status,
   };
-  if (typeof value.error === "string" && value.error.length > 0) {
-    entry.error = value.error;
+
+  if (HOST_AUDIT_KINDS.includes(value.kind)) {
+    if (!HOST_AUDIT_STATUSES.includes(value.status) || typeof value.hostId !== "string") {
+      return null;
+    }
+    const entry = {
+      ...baseEntry,
+      hostId: value.hostId,
+    };
+    if (typeof value.error === "string" && value.error.length > 0) {
+      entry.error = value.error;
+    }
+    return entry;
   }
-  return entry;
+
+  if (value.kind === "config.update") {
+    if (!CONFIG_AUDIT_STATUSES.includes(value.status)) {
+      return null;
+    }
+    const changedFields = Array.isArray(value.changedFields)
+      ? value.changedFields.filter((field) => CONFIG_RESOURCE_FIELDS.includes(field))
+      : [];
+    const entry = {
+      ...baseEntry,
+      changedFields,
+    };
+    if (typeof value.error === "string" && value.error.length > 0) {
+      entry.error = value.error;
+    }
+    return entry;
+  }
+
+  if (SKILL_AUDIT_KINDS.includes(value.kind)) {
+    if (
+      !["installed", "enabled", "disabled", "archived"].includes(value.status) ||
+      typeof value.skillId !== "string"
+    ) {
+      return null;
+    }
+    const entry = {
+      ...baseEntry,
+      skillId: value.skillId,
+      ...(typeof value.trusted === "boolean" ? { trusted: value.trusted } : {}),
+    };
+    if (typeof value.error === "string" && value.error.length > 0) {
+      entry.error = value.error;
+    }
+    return entry;
+  }
+
+  return null;
 }
 
-function createChromeAuditStore(chromeApi, storageKey = AUDIT_STORAGE_KEY) {
+function createChromeAuditStore(
+  chromeApi,
+  storageKey = AUDIT_STORAGE_KEY,
+  legacyStorageKeys = LEGACY_AUDIT_STORAGE_KEYS,
+) {
   const storageArea = chromeApi?.storage?.local;
   if (typeof storageArea?.get !== "function" || typeof storageArea?.set !== "function") {
     return undefined;
   }
   return {
     async load() {
-      const loaded = await storageArea.get(storageKey);
-      return Array.isArray(loaded?.[storageKey]) ? loaded[storageKey] : [];
+      const keys = [storageKey, ...legacyStorageKeys];
+      const loaded = await storageArea.get(keys);
+      if (Array.isArray(loaded?.[storageKey])) {
+        return loaded[storageKey];
+      }
+      for (const legacyKey of legacyStorageKeys) {
+        if (Array.isArray(loaded?.[legacyKey])) {
+          return loaded[legacyKey];
+        }
+      }
+      return [];
     },
     async save(entries) {
       await storageArea.set({
@@ -189,25 +245,57 @@ function normalizeSkillSummaryInput(entry) {
   if (typeof entry === "string") {
     return {
       id: entry,
+      status: "installed",
       enabled: false,
       trusted: false,
       recentChange: null,
+      lastChangedAt: null,
     };
   }
-  if (!entry || typeof entry !== "object" || typeof entry.id !== "string") {
+  if (!entry || typeof entry !== "object") {
     return null;
   }
+  const id =
+    typeof entry.id === "string"
+      ? entry.id
+      : typeof entry.skillId === "string"
+        ? entry.skillId
+        : null;
+  if (!id) {
+    return null;
+  }
+  const status =
+    typeof entry.status === "string"
+      ? entry.status
+      : entry.enabled === true || entry.state === "enabled"
+        ? "enabled"
+        : "installed";
   return {
-    id: entry.id,
-    enabled: entry.enabled === true || entry.state === "enabled",
+    id,
+    status,
+    enabled: status === "enabled",
     trusted: entry.trusted === true,
-    recentChange:
-      typeof entry.recentChange === "string"
-        ? entry.recentChange
-        : typeof entry.lastChangedAt === "string"
-          ? entry.lastChangedAt
-          : null,
+    recentChange: typeof entry.recentChange === "string" ? entry.recentChange : null,
+    lastChangedAt: typeof entry.lastChangedAt === "string" ? entry.lastChangedAt : null,
   };
+}
+
+function pickLatestSkillChange(skillEntries) {
+  return skillEntries.reduce((latest, entry) => {
+    if (!entry.recentChange) {
+      return latest;
+    }
+    if (!latest) {
+      return entry;
+    }
+    if (!latest.lastChangedAt) {
+      return entry;
+    }
+    if (!entry.lastChangedAt) {
+      return latest;
+    }
+    return entry.lastChangedAt >= latest.lastChangedAt ? entry : latest;
+  }, null);
 }
 
 function createTimeoutPromise(kind, requestId, timeoutMs) {
@@ -301,17 +389,23 @@ export function createBackgroundRunnerBridge({
     return runtimeKernelState?.session?.id ?? null;
   }
 
-  async function appendAudit({ kind, hostId, status, error }) {
+  async function appendAudit(auditInput) {
     await auditReady;
-    const entry = {
+    const entry = normalizeAuditEntry({
       timestamp: isoNow(),
       sessionId: await resolveAuditSessionId(),
-      kind,
-      hostId,
-      status,
-    };
-    if (error) {
-      entry.error = typeof error === "string" ? error : (error.message ?? String(error));
+      ...auditInput,
+      ...(auditInput?.error
+        ? {
+            error:
+              typeof auditInput.error === "string"
+                ? auditInput.error
+                : (auditInput.error.message ?? String(auditInput.error)),
+          }
+        : {}),
+    });
+    if (!entry) {
+      throw new Error(`Invalid audit entry for ${auditInput?.kind ?? "unknown"}`);
     }
     auditEntries.push(entry);
     if (auditEntries.length > AUDIT_MAX_ENTRIES) {
@@ -329,6 +423,14 @@ export function createBackgroundRunnerBridge({
   async function readAuditTail(limit) {
     await auditReady;
     return getAuditTail(limit);
+  }
+
+  async function readAuditResource(limit) {
+    await auditReady;
+    return createAuditTailResource({
+      entries: [...auditEntries],
+      ...(typeof limit === "number" ? { limit } : {}),
+    });
   }
 
   function setRuntimeError(error) {
@@ -465,6 +567,17 @@ export function createBackgroundRunnerBridge({
         error: toBridgeError(error),
       };
     }
+  }
+
+  async function routeAuditedRuntimeCapability({ capabilityId, input = {}, buildAuditEntry }) {
+    const response = await routeRuntimeCapability(capabilityId, input);
+    if (response.ok && typeof buildAuditEntry === "function") {
+      const auditEntry = buildAuditEntry(response.data);
+      if (auditEntry) {
+        await appendAudit(auditEntry);
+      }
+    }
+    return response;
   }
 
   async function routeRuntimeService(call) {
@@ -988,7 +1101,7 @@ export function createBackgroundRunnerBridge({
     const runnerHealth = runtimeDiagnostics.runner?.health;
     const activeTabSummary = activeTab ? toBootstrapActiveTab(activeTab, world) : null;
     const runtimeKernelState =
-      sessionId == null && runtimeServices
+      sessionId == null && typeof getRuntimeServices().getKernelRuntimeState === "function"
         ? await getRuntimeServices().getKernelRuntimeState()
         : null;
     const runtimeStatus =
@@ -1025,10 +1138,19 @@ export function createBackgroundRunnerBridge({
       },
     ];
 
-    const rawSkillsSummary = await resolveMaybe(listSkills);
+    const runtimeSkillEntries =
+      typeof getRuntimeServices().listSkills === "function"
+        ? await getRuntimeServices().listSkills()
+        : null;
+    const rawSkillsSummary =
+      Array.isArray(runtimeSkillEntries) && runtimeSkillEntries.length > 0
+        ? runtimeSkillEntries
+        : await resolveMaybe(listSkills);
     const skillEntries = Array.isArray(rawSkillsSummary)
       ? rawSkillsSummary.map((entry) => normalizeSkillSummaryInput(entry)).filter(Boolean)
       : [];
+    const activeSkillEntries = skillEntries.filter((entry) => entry.status !== "archived");
+    const latestSkillChange = pickLatestSkillChange(skillEntries);
     const resolvedConfigSummary =
       typeof getRuntimeServices().getConfigBootstrapSummary === "function"
         ? await getRuntimeServices().getConfigBootstrapSummary()
@@ -1067,11 +1189,11 @@ export function createBackgroundRunnerBridge({
         },
       },
       skills: {
-        status: skillEntries.length > 0 ? "healthy" : "empty",
-        installedCount: skillEntries.length,
-        enabledCount: skillEntries.filter((entry) => entry.enabled).length,
-        trustedCount: skillEntries.filter((entry) => entry.trusted).length,
-        recentChange: skillEntries.find((entry) => entry.recentChange)?.recentChange ?? null,
+        status: activeSkillEntries.length > 0 ? "healthy" : "empty",
+        installedCount: activeSkillEntries.length,
+        enabledCount: activeSkillEntries.filter((entry) => entry.enabled).length,
+        trustedCount: activeSkillEntries.filter((entry) => entry.trusted).length,
+        recentChange: latestSkillChange?.recentChange ?? null,
       },
       hosts: {
         status: hostItems.some((entry) => entry.state === "degraded")
@@ -1179,8 +1301,36 @@ export function createBackgroundRunnerBridge({
           hostId: message.hostId,
         });
       case "config.update":
-        return routeRuntimeCapability("config.update", {
-          patch: message.patch,
+        return routeAuditedRuntimeCapability({
+          capabilityId: "config.update",
+          input: {
+            patch: message.patch,
+          },
+          buildAuditEntry: () => ({
+            kind: "config.update",
+            status: "updated",
+            changedFields: Object.keys(message.patch ?? {}).filter((field) =>
+              CONFIG_RESOURCE_FIELDS.includes(field),
+            ),
+          }),
+        });
+      case "skills.list":
+        return routeRuntimeCapability("skills.list");
+      case "skills.install":
+      case "skills.enable":
+      case "skills.disable":
+      case "skills.uninstall":
+        return routeAuditedRuntimeCapability({
+          capabilityId: message.kind,
+          input: {
+            skillId: message.skillId,
+          },
+          buildAuditEntry: (data) => ({
+            kind: message.kind,
+            skillId: data?.skill?.skillId ?? message.skillId,
+            status: data?.skill?.status,
+            trusted: data?.skill?.trusted,
+          }),
         });
       case "page.press_key":
         return routeRuntimeService(async () => {
@@ -1203,11 +1353,18 @@ export function createBackgroundRunnerBridge({
         return routeRuntimeCapability("tabs.navigate", {
           url: message.url,
         });
+      case "audit.tail":
+        return {
+          ok: true,
+          data: await readAuditResource(message.limit),
+        };
       case "audit.host":
         return {
           ok: true,
           data: {
-            entries: await readAuditTail(message.limit),
+            entries: (await readAuditTail(message.limit)).filter((entry) =>
+              HOST_AUDIT_KINDS.includes(entry.kind),
+            ),
           },
         };
       case "audit.intervention":

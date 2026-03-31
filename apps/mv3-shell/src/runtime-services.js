@@ -17,6 +17,62 @@ function isPlainObject(value) {
 }
 
 const DEFAULT_INTERVENTION_TIMEOUT_MS = 5 * 60 * 1000;
+const SKILL_STATUS_BY_ACTION = {
+  "skills.install": "installed",
+  "skills.enable": "enabled",
+  "skills.disable": "disabled",
+  "skills.uninstall": "archived",
+};
+
+function createInMemorySkillManager() {
+  const records = new Map();
+
+  function cloneSkillRecord(record) {
+    return {
+      skillId: record.skillId,
+      status: record.status,
+      trusted: record.trusted,
+      recentChange: record.recentChange,
+      lastChangedAt: record.lastChangedAt,
+    };
+  }
+
+  return {
+    async list() {
+      return [...records.values()].map((record) => cloneSkillRecord(record));
+    },
+    async listActiveIds() {
+      return [...records.values()]
+        .filter((record) => record.status !== "archived")
+        .map((record) => record.skillId);
+    },
+    async manage({ action, skillId }) {
+      const previous = records.get(skillId);
+      const status = SKILL_STATUS_BY_ACTION[action];
+      if (!status) {
+        throw new CapabilityError("E_RUNTIME", `Unsupported skill lifecycle action: ${action}`);
+      }
+
+      const nextRecord = {
+        skillId,
+        status,
+        trusted: previous?.trusted ?? false,
+        recentChange: action,
+        lastChangedAt: new Date().toISOString(),
+      };
+      records.set(skillId, nextRecord);
+
+      return {
+        skill: {
+          skillId,
+          status,
+          trusted: nextRecord.trusted,
+          recentChange: action,
+        },
+      };
+    },
+  };
+}
 
 function createBridgeRunnerHost({ invokeRunner }) {
   return {
@@ -254,6 +310,7 @@ export function createBackgroundRuntimeServices({
 } = {}) {
   let servicesPromise = null;
   let sessionPromise = null;
+  const skillManager = createInMemorySkillManager();
 
   async function ensureServices() {
     if (!servicesPromise) {
@@ -413,6 +470,8 @@ export function createBackgroundRuntimeServices({
       input,
       skillId,
       permissions,
+      listSkills: async () => skillManager.listActiveIds(),
+      manageSkill: async (request) => skillManager.manage(request),
     });
   }
 
@@ -488,6 +547,10 @@ export function createBackgroundRuntimeServices({
       id,
       typeof reason === "string" && reason.trim() ? { reason: reason.trim() } : undefined,
     );
+  }
+
+  async function listSkills() {
+    return skillManager.list();
   }
 
   async function invokeSiteSkill({
@@ -607,6 +670,7 @@ export function createBackgroundRuntimeServices({
     getKernelRuntimeState,
     invokePageAction,
     invokeSiteSkill,
+    listSkills,
     listInterventions,
     readInterventionAudit,
     resolveIntervention,

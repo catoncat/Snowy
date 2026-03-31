@@ -102,7 +102,9 @@
 当前口径：
 
 - 这是轻量 resource contract，不是完整 resource registry
-- `runtime.bootstrap` / `audit.host` 仍是当前 bridge read path
+- `runtime.bootstrap` 仍是当前 bootstrap summary bridge read path
+- `audit.tail` 已是当前 control-plane audit bridge read path，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall`
+- `audit.host` 仅保留为 host-only compatibility alias；`audit.intervention` 仍是 runtime handoff 私有读面
 - 统一 northbound resource registry 与 app integration 仍由后续 issue 收口
 
 ## 5. Audience 原则
