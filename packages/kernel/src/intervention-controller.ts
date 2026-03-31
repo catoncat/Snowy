@@ -1,40 +1,23 @@
-import { CapabilityError, type InterventionRequest } from "@bbl-next/contracts";
+import {
+  CapabilityError,
+  type InterventionAuditEntry,
+  type InterventionLifecycleStatus,
+  type InterventionRecord,
+  type InterventionRequest,
+  type InterventionSummary,
+} from "@bbl-next/contracts";
+export type { InterventionLifecycleStatus } from "@bbl-next/contracts";
 
-export type InterventionLifecycleStatus =
-  | InterventionRequest["status"]
-  | "resolved"
-  | "cancelled"
-  | "timed_out";
+export type KernelInterventionRecord = InterventionRecord;
+export type KernelInterventionEvent = InterventionAuditEntry;
+export type KernelInterventionSummary = InterventionSummary;
 
-export interface KernelInterventionRecord extends Omit<InterventionRequest, "status"> {
-  status: InterventionLifecycleStatus;
-  sessionId: string | null;
-  requestedAt: string;
-  updatedAt: string;
-  expiresAt: string | null;
-  resolution?: Record<string, unknown>;
+export interface KernelInterventionSnapshot {
+  records: KernelInterventionRecord[];
+  audit: KernelInterventionEvent[];
 }
 
-export interface KernelInterventionEvent {
-  eventId: string;
-  interventionId: string;
-  sessionId: string | null;
-  status: InterventionLifecycleStatus;
-  timestamp: string;
-  kind: KernelInterventionRecord["kind"];
-  trigger: KernelInterventionRecord["trigger"];
-  details?: Record<string, unknown>;
-}
-
-export interface KernelInterventionSummary {
-  status: "empty" | "requested" | "settled";
-  totalCount: number;
-  activeCount: number;
-  recentCount: number;
-  active: KernelInterventionRecord[];
-}
-
-interface StoredInterventionRecord extends KernelInterventionRecord {
+interface StoredInterventionRecord extends InterventionRecord {
   resolution?: Record<string, unknown>;
 }
 
@@ -47,6 +30,13 @@ function cloneRecord(record: StoredInterventionRecord): KernelInterventionRecord
     ...record,
     ...(record.payload ? { payload: { ...record.payload } } : {}),
     ...(record.resolution ? { resolution: { ...record.resolution } } : {}),
+  };
+}
+
+function cloneEvent(entry: KernelInterventionEvent): KernelInterventionEvent {
+  return {
+    ...entry,
+    ...(entry.details ? { details: { ...entry.details } } : {}),
   };
 }
 
@@ -170,10 +160,61 @@ export class InterventionController {
       opts?.sessionId === undefined ? true : entry.sessionId === (opts.sessionId ?? null),
     );
     const limit = typeof opts?.limit === "number" && opts.limit > 0 ? opts.limit : this.#maxEvents;
-    return filtered.slice(-limit).map((entry) => ({
-      ...entry,
-      ...(entry.details ? { details: { ...entry.details } } : {}),
-    }));
+    return filtered.slice(-limit).map((entry) => cloneEvent(entry));
+  }
+
+  snapshot(opts?: {
+    sessionId?: string | null;
+    now?: number;
+  }): KernelInterventionSnapshot {
+    this.expire(opts?.now);
+    return {
+      records: this.list({
+        sessionId: opts?.sessionId,
+        now: opts?.now,
+      }),
+      audit: this.readAudit({
+        sessionId: opts?.sessionId,
+        limit: Number.MAX_SAFE_INTEGER,
+        now: opts?.now,
+      }),
+    };
+  }
+
+  replaceSession(
+    sessionId: string | null,
+    snapshot: KernelInterventionSnapshot | null | undefined,
+    opts?: { now?: number },
+  ): void {
+    this.expire(opts?.now);
+    const normalizedSessionId = sessionId ?? null;
+    for (const [interventionId, record] of this.#records.entries()) {
+      if (record.sessionId === normalizedSessionId) {
+        this.#records.delete(interventionId);
+      }
+    }
+
+    if (this.#events.length > 0) {
+      const retained = this.#events.filter((entry) => entry.sessionId !== normalizedSessionId);
+      this.#events.splice(0, this.#events.length, ...retained);
+    }
+
+    for (const record of snapshot?.records ?? []) {
+      this.#records.set(record.id, {
+        ...cloneRecord(record),
+      });
+    }
+
+    if (snapshot?.audit?.length) {
+      const merged = [...this.#events, ...snapshot.audit.map((entry) => cloneEvent(entry))].sort(
+        (left, right) => left.timestamp.localeCompare(right.timestamp),
+      );
+      this.#events.splice(
+        0,
+        this.#events.length,
+        ...merged.slice(-this.#maxEvents).map((entry) => cloneEvent(entry)),
+      );
+    }
   }
 
   getSummary(opts?: {

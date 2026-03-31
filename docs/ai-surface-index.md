@@ -98,13 +98,15 @@
 - `skills.summary`
 - `hosts.summary`
 - `audit.tail`
+- `audit.intervention`
 
 当前口径：
 
 - 这是轻量 resource contract，不是完整 resource registry
 - `runtime.bootstrap` 仍是当前 bootstrap summary bridge read path
 - `audit.tail` 已是当前 control-plane audit bridge read path，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall`
-- `audit.host` 仅保留为 host-only compatibility alias；`audit.intervention` 仍是 runtime handoff 私有读面
+- `runtime.summary` 现已包含 typed `interventions` summary；`audit.intervention` 是 intervention lifecycle 的 shared audit read path
+- `audit.host` 仅保留为 host-only compatibility alias
 - 统一 northbound resource registry 与 app integration 仍由后续 issue 收口
 
 ## 5. Audience 原则
@@ -124,6 +126,7 @@
 
 - intervention 是 cutover 前必需，但当前不作为新的 public action namespace
 - 当前最小形态是 `kernel/site-runtime` 之间的 runtime handoff contract
+- northbound read 面收口到 `runtime.summary.interventions` 与 `audit.intervention`
 - high-risk capability 的 pre-dispatch 确认继续走 core confirm gate
 - browser automation 的 verify failure / runtime blocked handoff 则产出结构化 intervention request
 ## 7. Host 原则

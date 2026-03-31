@@ -175,6 +175,17 @@ async function createSessionStorage({ sessionStorage, workspaceId }) {
   return new VfsSessionStorage(vfs);
 }
 
+function pickRuntimeSession(sessions) {
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    return null;
+  }
+  return (
+    [...sessions]
+      .filter((session) => session?.title === "mv3-shell runtime session")
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null
+  );
+}
+
 function toCanonicalTab(activeTab) {
   return {
     tabId: activeTab.id,
@@ -443,11 +454,16 @@ export function createBackgroundRuntimeServices({
 
   async function ensureSession() {
     if (!sessionPromise) {
-      sessionPromise = ensureServices().then(({ kernel }) =>
-        kernel.createSession({
-          title: "mv3-shell runtime session",
-        }),
-      );
+      sessionPromise = ensureServices().then(async ({ kernel }) => {
+        const existing = pickRuntimeSession(await kernel.listSessions());
+        const session =
+          existing ??
+          (await kernel.createSession({
+            title: "mv3-shell runtime session",
+          }));
+        await kernel.rehydrateInterventions(session.id);
+        return session;
+      });
     }
     return sessionPromise;
   }
@@ -503,6 +519,7 @@ export function createBackgroundRuntimeServices({
     const summary = kernel.getInterventionSummary({
       sessionId: session.id,
     });
+    await kernel.persistInterventions(session.id);
     return {
       sessionId: session.id,
       ...summary,
@@ -514,9 +531,11 @@ export function createBackgroundRuntimeServices({
       return [];
     }
     const [{ kernel }, session] = await Promise.all([ensureServices(), sessionPromise]);
-    return kernel.listInterventions({
+    const items = kernel.listInterventions({
       sessionId: session.id,
     });
+    await kernel.persistInterventions(session.id);
+    return items;
   }
 
   async function readInterventionAudit(limit) {
@@ -524,10 +543,12 @@ export function createBackgroundRuntimeServices({
       return [];
     }
     const [{ kernel }, session] = await Promise.all([ensureServices(), sessionPromise]);
-    return kernel.readInterventionAudit({
+    const entries = kernel.readInterventionAudit({
       sessionId: session.id,
       limit,
     });
+    await kernel.persistInterventions(session.id);
+    return entries;
   }
 
   async function resolveIntervention({ id, resolution } = {}) {
@@ -535,7 +556,14 @@ export function createBackgroundRuntimeServices({
       throw new CapabilityError("E_BAD_INPUT", "intervention.resolve requires a request id");
     }
     const { kernel } = await ensureServices();
-    return kernel.resolveIntervention(id, isPlainObject(resolution) ? resolution : undefined);
+    const record = kernel.resolveIntervention(
+      id,
+      isPlainObject(resolution) ? resolution : undefined,
+    );
+    if (record.sessionId) {
+      await kernel.persistInterventions(record.sessionId);
+    }
+    return record;
   }
 
   async function cancelIntervention({ id, reason } = {}) {
@@ -543,10 +571,14 @@ export function createBackgroundRuntimeServices({
       throw new CapabilityError("E_BAD_INPUT", "intervention.cancel requires a request id");
     }
     const { kernel } = await ensureServices();
-    return kernel.cancelIntervention(
+    const record = kernel.cancelIntervention(
       id,
       typeof reason === "string" && reason.trim() ? { reason: reason.trim() } : undefined,
     );
+    if (record.sessionId) {
+      await kernel.persistInterventions(record.sessionId);
+    }
+    return record;
   }
 
   async function listSkills() {
@@ -606,6 +638,7 @@ export function createBackgroundRuntimeServices({
     const requested = kernel.requestIntervention(session.id, result.intervention, {
       timeoutMs: interventionTimeoutMs,
     });
+    await kernel.persistInterventions(session.id);
 
     return {
       ...result,
@@ -654,6 +687,7 @@ export function createBackgroundRuntimeServices({
     const requested = kernel.requestIntervention(session.id, result.intervention, {
       timeoutMs: interventionTimeoutMs,
     });
+    await kernel.persistInterventions(session.id);
 
     return {
       ...result,

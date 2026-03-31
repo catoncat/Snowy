@@ -88,4 +88,62 @@ describe("VfsSessionStorage", () => {
     expect(context.entries[1]?.entryId).toBe(second.entryId);
     expect(context.messages.map((message) => message.content)).toEqual(["persist me", "persisted"]);
   });
+
+  it("persists kernel snapshots into the session subtree", async () => {
+    await storage.createSession({
+      id: "s-vfs-snapshot",
+      createdAt: "2026-03-30T00:00:00.000Z",
+      title: "Kernel Snapshot",
+    });
+
+    await storage.writeKernelSnapshot("s-vfs-snapshot", {
+      interventions: {
+        records: [
+          {
+            id: "ivr:test:vfs",
+            kind: "takeover",
+            trigger: "verify_failed",
+            status: "requested",
+            title: "Need manual verify",
+            message: "Finish the flow manually",
+            sessionId: "s-vfs-snapshot",
+            requestedAt: "2026-03-30T00:00:00.000Z",
+            updatedAt: "2026-03-30T00:00:00.000Z",
+            expiresAt: null,
+          },
+        ],
+        audit: [
+          {
+            eventId: "ive-vfs-1",
+            interventionId: "ivr:test:vfs",
+            sessionId: "s-vfs-snapshot",
+            status: "requested",
+            timestamp: "2026-03-30T00:00:00.000Z",
+            kind: "takeover",
+            trigger: "verify_failed",
+          },
+        ],
+      },
+    });
+
+    expect(await vfs.read("mem://workspace/kernel/sessions/s-vfs-snapshot/kernel.json")).toContain(
+      '"ivr:test:vfs"',
+    );
+    expect(await storage.readKernelSnapshot("s-vfs-snapshot")).toEqual({
+      interventions: {
+        records: [
+          expect.objectContaining({
+            id: "ivr:test:vfs",
+            sessionId: "s-vfs-snapshot",
+          }),
+        ],
+        audit: [
+          expect.objectContaining({
+            interventionId: "ivr:test:vfs",
+            status: "requested",
+          }),
+        ],
+      },
+    });
+  });
 });

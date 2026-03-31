@@ -1,4 +1,9 @@
-import type { SessionEntry, SessionHeader, SessionStorage } from "@bbl-next/contracts";
+import type {
+  KernelSessionSnapshot,
+  SessionEntry,
+  SessionHeader,
+  SessionStorage,
+} from "@bbl-next/contracts";
 
 function cloneValue<T>(value: T): T {
   if (typeof structuredClone === "function") {
@@ -14,10 +19,12 @@ function cloneValue<T>(value: T): T {
 export class InMemorySessionStorage implements SessionStorage {
   readonly #headers = new Map<string, SessionHeader>();
   readonly #entries = new Map<string, SessionEntry[]>();
+  readonly #kernelSnapshots = new Map<string, KernelSessionSnapshot>();
 
   async createSession(header: SessionHeader): Promise<void> {
     this.#headers.set(header.id, cloneValue(header));
     this.#entries.set(header.id, []);
+    this.#kernelSnapshots.set(header.id, {});
   }
 
   async appendEntry(sessionId: string, entry: SessionEntry): Promise<void> {
@@ -43,8 +50,23 @@ export class InMemorySessionStorage implements SessionStorage {
   async deleteSession(sessionId: string): Promise<void> {
     const existedInHeaders = this.#headers.delete(sessionId);
     const existedInEntries = this.#entries.delete(sessionId);
-    if (!existedInHeaders || !existedInEntries) {
+    const existedInSnapshots = this.#kernelSnapshots.delete(sessionId);
+    if (!existedInHeaders || !existedInEntries || !existedInSnapshots) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+  }
+
+  async readKernelSnapshot(sessionId: string): Promise<KernelSessionSnapshot | null> {
+    if (!this.#headers.has(sessionId)) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    return cloneValue(this.#kernelSnapshots.get(sessionId) ?? {});
+  }
+
+  async writeKernelSnapshot(sessionId: string, snapshot: KernelSessionSnapshot): Promise<void> {
+    if (!this.#headers.has(sessionId)) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    this.#kernelSnapshots.set(sessionId, cloneValue(snapshot));
   }
 }

@@ -1,4 +1,9 @@
-import type { SessionEntry, SessionHeader, SessionStorage } from "@bbl-next/contracts";
+import type {
+  KernelSessionSnapshot,
+  SessionEntry,
+  SessionHeader,
+  SessionStorage,
+} from "@bbl-next/contracts";
 
 /**
  * Minimal VFS API surface required by the adapter.
@@ -26,6 +31,10 @@ function sessionDir(sessionId: string): string {
   return `${SESSIONS_ROOT}/${sessionId}`;
 }
 
+function kernelSnapshotUri(sessionId: string): string {
+  return `${sessionDir(sessionId)}/kernel.json`;
+}
+
 /**
  * SessionStorage adapter backed by BrowserVFS write-through.
  * Stores sessions under `mem://workspace/kernel/sessions/<id>/`.
@@ -41,6 +50,7 @@ export class VfsSessionStorage implements SessionStorage {
     await this.#vfs.mkdir(sessionDir(header.id));
     await this.#vfs.write(headerUri(header.id), JSON.stringify(header));
     await this.#vfs.write(entriesUri(header.id), "");
+    await this.#vfs.write(kernelSnapshotUri(header.id), JSON.stringify({}));
   }
 
   async appendEntry(sessionId: string, entry: SessionEntry): Promise<void> {
@@ -94,5 +104,28 @@ export class VfsSessionStorage implements SessionStorage {
       throw new Error(`Session not found: ${sessionId}`);
     }
     await this.#vfs.rm(sessionDir(sessionId));
+  }
+
+  async readKernelSnapshot(sessionId: string): Promise<KernelSessionSnapshot | null> {
+    try {
+      const raw = await this.#vfs.read(kernelSnapshotUri(sessionId));
+      return JSON.parse(raw) as KernelSessionSnapshot;
+    } catch {
+      try {
+        await this.#vfs.read(headerUri(sessionId));
+      } catch {
+        throw new Error(`Session not found: ${sessionId}`);
+      }
+      return {};
+    }
+  }
+
+  async writeKernelSnapshot(sessionId: string, snapshot: KernelSessionSnapshot): Promise<void> {
+    try {
+      await this.#vfs.read(headerUri(sessionId));
+    } catch {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    await this.#vfs.write(kernelSnapshotUri(sessionId), JSON.stringify(snapshot));
   }
 }

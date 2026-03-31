@@ -50,23 +50,23 @@
 - JS Runner baseline
 - Site Runtime baseline
 - MV3 shell baseline
-- lightweight resource contracts/builders: `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary` / `audit.tail`
+- lightweight resource contracts/builders: `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary` / `audit.tail` / `audit.intervention`
 - minimal product control-plane actions: `hosts.*`, `config.update`, `skills.install/enable/disable/uninstall`, `runtime.capture_diagnostics`, `runtime.clear_error`
 
 注意：
 
 - 这些是 foundation
 - 不是完整 kernel parity
-- `skills.*` lifecycle 与 control-plane `audit.tail` 已有最小 app integration path
-- 更完整的 diagnostics / debug / intervention shared surface 仍未收口
+- `skills.*` lifecycle、`runtime.summary.interventions` 与 `audit.intervention` 已有最小 app integration path
+- 更完整的 diagnostics / debug 主面仍未收口
 
 ## 5. 当前最重要的未收口区
 
 1. browser-side kernel（session / run / compaction）
-2. diagnostics / debug / intervention shared 主面
-3. intervention / human handoff lifecycle integration
-4. browser automation parity
-5. provider / profile / routing 主层
+2. diagnostics / debug shared 主面
+3. browser automation parity
+4. provider / profile / routing 主层
+5. Skill / product UI 收口
 
 ## 6. 新 Agent 默认 operating loop
 

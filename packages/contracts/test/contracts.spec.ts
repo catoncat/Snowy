@@ -22,6 +22,8 @@ import {
   HOST_SUBSTRATE_ACTIONS,
   INTERVENTION_KINDS,
   INTERVENTION_TRIGGERS,
+  type InterventionAuditSummary,
+  type InterventionRecord,
   type InterventionRequest,
   type KernelLlmAdapter,
   LOOP_TERMINAL_STATUSES,
@@ -136,6 +138,7 @@ describe("contracts", () => {
       "skills.summary",
       "hosts.summary",
       "audit.tail",
+      "audit.intervention",
     ]);
     expect(AI_SURFACE_RESOURCE_AUDIENCES).toEqual(["chat", "skill", "system", "mcp"]);
   });
@@ -155,6 +158,13 @@ describe("contracts", () => {
         },
         loopState: "idle",
         lastError: null,
+        interventions: {
+          status: "empty",
+          totalCount: 0,
+          activeCount: 0,
+          recentCount: 0,
+          active: [],
+        },
         actionCapabilities: {
           total: 4,
           namespaces: ["runtime", "page"],
@@ -260,6 +270,35 @@ describe("contracts", () => {
 
     expect(request.kind).toBe("takeover");
     expect(request.trigger).toBe("verify_failed");
+
+    const record = {
+      ...request,
+      sessionId: "session-1",
+      requestedAt: "2026-03-31T00:00:00.000Z",
+      updatedAt: "2026-03-31T00:00:01.000Z",
+      expiresAt: "2026-03-31T00:05:00.000Z",
+      resolution: {
+        verifier: "login_complete",
+      },
+    } satisfies InterventionRecord;
+
+    const audit = {
+      status: "available",
+      totalCount: 1,
+      entries: [
+        {
+          eventId: "ive-1",
+          interventionId: record.id,
+          sessionId: record.sessionId,
+          status: "requested",
+          timestamp: "2026-03-31T00:00:00.000Z",
+          kind: record.kind,
+          trigger: record.trigger,
+        },
+      ],
+    } satisfies InterventionAuditSummary;
+
+    expect(audit.entries[0]?.interventionId).toBe(record.id);
   });
 
   it("locks the minimal config control plane action set", () => {
@@ -733,6 +772,8 @@ describe("contracts", () => {
         getEntries: async () => [],
         listSessions: async () => [],
         deleteSession: async () => {},
+        readKernelSnapshot: async () => ({}),
+        writeKernelSnapshot: async () => {},
       };
       expect(typeof storage.createSession).toBe("function");
       expect(typeof storage.appendEntry).toBe("function");

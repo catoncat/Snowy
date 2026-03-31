@@ -132,6 +132,8 @@ export interface Kernel {
     auditLimit?: number;
     now?: number;
   }): KernelInterventionSummary;
+  persistInterventions(sessionId: string, opts?: { now?: number }): Promise<void>;
+  rehydrateInterventions(sessionId: string, opts?: { now?: number }): Promise<void>;
 
   // Subsystem access (for advanced usage)
   readonly sessions: SessionStore;
@@ -306,6 +308,22 @@ export function createKernel(opts: KernelOptions): Kernel {
     listInterventions: (requestOpts) => interventions.list(requestOpts),
     readInterventionAudit: (requestOpts) => interventions.readAudit(requestOpts),
     getInterventionSummary: (requestOpts) => interventions.getSummary(requestOpts),
+    async persistInterventions(sessionId, requestOpts) {
+      const current = (await opts.storage.readKernelSnapshot(sessionId)) ?? {};
+      await opts.storage.writeKernelSnapshot(sessionId, {
+        ...current,
+        interventions: interventions.snapshot({
+          sessionId,
+          now: requestOpts?.now,
+        }),
+      });
+    },
+    async rehydrateInterventions(sessionId, requestOpts) {
+      const snapshot = await opts.storage.readKernelSnapshot(sessionId);
+      interventions.replaceSession(sessionId, snapshot?.interventions, {
+        now: requestOpts?.now,
+      });
+    },
 
     // Subsystem access
     sessions,

@@ -385,6 +385,7 @@ Skill 最适合承载：
 - `kernel/site-runtime` 之间的 runtime handoff contract
 - 由 automation failure path / verify failure 显式产出 request
 - 由上层 runtime 决定 resolve / cancel / timeout / audit
+- shared read surface 收口到 `runtime.summary.interventions` 与 `audit.intervention`
 
 与 confirm 的关系：
 

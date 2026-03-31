@@ -7,6 +7,7 @@ export {
   type InterventionLifecycleStatus,
   type KernelInterventionEvent,
   type KernelInterventionRecord,
+  type KernelInterventionSnapshot,
   type KernelInterventionSummary,
 } from "./intervention-controller.js";
 export {

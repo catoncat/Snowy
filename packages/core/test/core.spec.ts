@@ -28,6 +28,7 @@ import {
   createConfigCapabilityProvider,
   createConfigControlPlane,
   createHostControlPlaneSnapshot,
+  createInterventionAuditResource,
   createSkillRuntimeContext,
   createTabsCapabilityProvider,
   disconnectExecutionHost,
@@ -405,6 +406,7 @@ describe("core", () => {
       "skills.summary",
       "hosts.summary",
       "audit.tail",
+      "audit.intervention",
     ]);
   });
 
@@ -421,6 +423,26 @@ describe("core", () => {
       runtime: {
         sessionId: "session-1",
         loopState: "idle",
+        interventions: {
+          status: "requested",
+          totalCount: 1,
+          activeCount: 1,
+          recentCount: 1,
+          active: [
+            {
+              id: "ivr:test:1",
+              kind: "takeover",
+              trigger: "verify_failed",
+              status: "requested",
+              title: "Need manual verify",
+              message: "Finish the flow manually",
+              sessionId: "session-1",
+              requestedAt: "2026-03-29T00:00:01.000Z",
+              updatedAt: "2026-03-29T00:00:01.000Z",
+              expiresAt: null,
+            },
+          ],
+        },
       },
       skills: {
         installedCount: 2,
@@ -454,6 +476,10 @@ describe("core", () => {
           world: "main",
         },
         loopState: "idle",
+        interventions: {
+          status: "requested",
+          activeCount: 1,
+        },
         actionCapabilities: {
           total: BUILTIN_CAPABILITIES.length,
         },
@@ -489,6 +515,25 @@ describe("core", () => {
       runtime: {
         sessionId: "session-1",
         loopState: "idle",
+        interventions: {
+          totalCount: 1,
+          activeCount: 1,
+          recentCount: 1,
+          active: [
+            {
+              id: "ivr:test:bootstrap",
+              kind: "input",
+              trigger: "runtime_blocked",
+              status: "requested",
+              title: "Need input",
+              message: "Provide a value",
+              sessionId: "session-1",
+              requestedAt: "2026-03-30T00:00:00.000Z",
+              updatedAt: "2026-03-30T00:00:00.000Z",
+              expiresAt: null,
+            },
+          ],
+        },
       },
       config: {
         values: {
@@ -516,6 +561,18 @@ describe("core", () => {
         },
         loopState: "idle",
         lastError: null,
+        interventions: {
+          status: "requested",
+          totalCount: 1,
+          activeCount: 1,
+          recentCount: 1,
+          active: [
+            expect.objectContaining({
+              id: "ivr:test:bootstrap",
+              status: "requested",
+            }),
+          ],
+        },
         actionCapabilities: {
           total: BUILTIN_CAPABILITIES.length,
         },
@@ -595,6 +652,60 @@ describe("core", () => {
             skillId: "skill.demo",
             status: "enabled",
             trusted: false,
+          },
+        ],
+      },
+    });
+  });
+
+  it("builds an intervention audit resource document", () => {
+    const resource = createInterventionAuditResource({
+      generatedAt: "2026-03-30T00:00:03.000Z",
+      limit: 1,
+      entries: [
+        {
+          eventId: "ive-1",
+          interventionId: "ivr:test:1",
+          sessionId: "session-1",
+          status: "requested",
+          timestamp: "2026-03-30T00:00:01.000Z",
+          kind: "takeover",
+          trigger: "verify_failed",
+        },
+        {
+          eventId: "ive-2",
+          interventionId: "ivr:test:1",
+          sessionId: "session-1",
+          status: "resolved",
+          timestamp: "2026-03-30T00:00:03.000Z",
+          kind: "takeover",
+          trigger: "verify_failed",
+          details: {
+            resolution: "resume",
+          },
+        },
+      ],
+    });
+
+    expect(resource).toEqual({
+      id: "audit.intervention",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:03.000Z",
+      data: {
+        status: "available",
+        totalCount: 1,
+        entries: [
+          {
+            eventId: "ive-2",
+            interventionId: "ivr:test:1",
+            sessionId: "session-1",
+            status: "resolved",
+            timestamp: "2026-03-30T00:00:03.000Z",
+            kind: "takeover",
+            trigger: "verify_failed",
+            details: {
+              resolution: "resume",
+            },
           },
         ],
       },

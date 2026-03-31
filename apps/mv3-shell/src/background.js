@@ -6,7 +6,11 @@ import {
   HOST_AUDIT_STATUSES,
   SKILL_AUDIT_KINDS,
 } from "@bbl-next/contracts";
-import { createAuditTailResource, createBootstrapSummary } from "@bbl-next/core";
+import {
+  createAuditTailResource,
+  createBootstrapSummary,
+  createInterventionAuditResource,
+} from "@bbl-next/core";
 import { createPageHookBridge } from "./page-hook-bridge.js";
 import { createBackgroundRuntimeServices } from "./runtime-services.js";
 
@@ -214,6 +218,7 @@ function defaultBootstrapSummaryBuilder(input) {
       sessionId: input.runtime?.sessionId,
       loopState: input.runtime?.loopState,
       lastError: input.runtime?.lastError,
+      interventions: input.runtime?.interventions,
     },
     skills: input.skills,
     hosts: input.hosts,
@@ -1183,6 +1188,29 @@ export function createBackgroundRunnerBridge({
               message: effectiveError.message,
             }
           : null,
+        interventions: {
+          status: interventionState.status,
+          totalCount: interventionState.totalCount,
+          activeCount: interventionState.activeCount,
+          recentCount: interventionState.recentCount,
+          active: interventionState.active.map((entry) => ({
+            id: entry.id,
+            kind: entry.kind,
+            trigger: entry.trigger,
+            status: entry.status,
+            title: entry.title,
+            message: entry.message,
+            sessionId: entry.sessionId ?? null,
+            skillId: entry.skillId ?? undefined,
+            action: entry.action ?? undefined,
+            tabId: entry.tabId ?? null,
+            payload: entry.payload,
+            requestedAt: entry.requestedAt,
+            updatedAt: entry.updatedAt,
+            expiresAt: entry.expiresAt,
+            resolution: entry.resolution,
+          })),
+        },
         actionCapabilities: {
           total: 0,
           namespaces: [],
@@ -1214,27 +1242,6 @@ export function createBackgroundRunnerBridge({
         updatedAt: resolvedConfigSummary.updatedAt,
       },
     });
-
-    summary.runtime.interventions = {
-      status: interventionState.status,
-      totalCount: interventionState.totalCount,
-      activeCount: interventionState.activeCount,
-      recentCount: interventionState.recentCount,
-      active: interventionState.active.map((entry) => ({
-        id: entry.id,
-        kind: entry.kind,
-        trigger: entry.trigger,
-        status: entry.status,
-        title: entry.title,
-        message: entry.message,
-        skillId: entry.skillId ?? null,
-        action: entry.action ?? null,
-        tabId: entry.tabId ?? null,
-        requestedAt: entry.requestedAt,
-        updatedAt: entry.updatedAt,
-        expiresAt: entry.expiresAt,
-      })),
-    };
 
     return {
       ok: true,
@@ -1370,12 +1377,12 @@ export function createBackgroundRunnerBridge({
       case "audit.intervention":
         return {
           ok: true,
-          data: {
+          data: createInterventionAuditResource({
             entries:
               typeof getRuntimeServices().readInterventionAudit === "function"
                 ? await getRuntimeServices().readInterventionAudit(message.limit)
                 : [],
-          },
+          }),
         };
       case "intervention.list":
         return {

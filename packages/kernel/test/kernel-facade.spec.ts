@@ -445,6 +445,81 @@ describe("KernelFacade (createKernel)", () => {
         ]),
       );
     });
+
+    it("rehydrates persisted interventions and audit into a new kernel instance", async () => {
+      const storage = new InMemorySessionStorage();
+      const firstKernel = createKernel({
+        storage,
+        llm: createMockLlm(),
+      });
+      const session = await firstKernel.createSession({ title: "persisted" });
+
+      firstKernel.requestIntervention(session.id, {
+        id: "ivr:test:rehydrate",
+        kind: "takeover",
+        trigger: "verify_failed",
+        status: "requested",
+        title: "Manual verify required",
+        message: "Finish the step manually",
+        tabId: 9,
+      });
+      await firstKernel.persistInterventions(session.id);
+
+      const secondKernel = createKernel({
+        storage,
+        llm: createMockLlm(),
+      });
+      await secondKernel.rehydrateInterventions(session.id);
+
+      expect(secondKernel.getInterventionSummary({ sessionId: session.id })).toMatchObject({
+        status: "requested",
+        totalCount: 1,
+        activeCount: 1,
+      });
+      expect(secondKernel.listInterventions({ sessionId: session.id })).toEqual([
+        expect.objectContaining({
+          id: "ivr:test:rehydrate",
+          status: "requested",
+        }),
+      ]);
+      expect(secondKernel.readInterventionAudit({ sessionId: session.id })).toEqual([
+        expect.objectContaining({
+          interventionId: "ivr:test:rehydrate",
+          status: "requested",
+        }),
+      ]);
+
+      const resolved = secondKernel.resolveIntervention("ivr:test:rehydrate", {
+        resolution: "resume",
+      });
+      expect(resolved.status).toBe("resolved");
+      await secondKernel.persistInterventions(session.id);
+
+      const thirdKernel = createKernel({
+        storage,
+        llm: createMockLlm(),
+      });
+      await thirdKernel.rehydrateInterventions(session.id);
+
+      expect(thirdKernel.listInterventions({ sessionId: session.id })).toEqual([
+        expect.objectContaining({
+          id: "ivr:test:rehydrate",
+          status: "resolved",
+        }),
+      ]);
+      expect(thirdKernel.readInterventionAudit({ sessionId: session.id })).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            interventionId: "ivr:test:rehydrate",
+            status: "requested",
+          }),
+          expect.objectContaining({
+            interventionId: "ivr:test:rehydrate",
+            status: "resolved",
+          }),
+        ]),
+      );
+    });
   });
 
   describe("subsystem access", () => {

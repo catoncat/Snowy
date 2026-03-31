@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import { InMemorySessionStorage } from "@bbl-next/kernel";
 import { describe, expect, it, vi } from "vitest";
 import manifest from "../manifest.json";
 // biome-ignore format: keep ts-ignore attached to single-line JS import
@@ -3367,12 +3368,15 @@ describe("mv3-shell manifest", () => {
     ).resolves.toMatchObject({
       ok: true,
       data: {
-        entries: [
-          expect.objectContaining({
-            interventionId: firstInvoke.data.intervention.id,
-            status: "requested",
-          }),
-        ],
+        id: "audit.intervention",
+        data: {
+          entries: [
+            expect.objectContaining({
+              interventionId: firstInvoke.data.intervention.id,
+              status: "requested",
+            }),
+          ],
+        },
       },
     });
 
@@ -3494,24 +3498,27 @@ describe("mv3-shell manifest", () => {
     ).resolves.toMatchObject({
       ok: true,
       data: {
-        entries: expect.arrayContaining([
-          expect.objectContaining({
-            interventionId: firstInvoke.data.intervention.id,
-            status: "requested",
-          }),
-          expect.objectContaining({
-            interventionId: firstInvoke.data.intervention.id,
-            status: "resolved",
-          }),
-          expect.objectContaining({
-            interventionId: secondInvoke.data.intervention.id,
-            status: "requested",
-          }),
-          expect.objectContaining({
-            interventionId: secondInvoke.data.intervention.id,
-            status: "cancelled",
-          }),
-        ]),
+        id: "audit.intervention",
+        data: {
+          entries: expect.arrayContaining([
+            expect.objectContaining({
+              interventionId: firstInvoke.data.intervention.id,
+              status: "requested",
+            }),
+            expect.objectContaining({
+              interventionId: firstInvoke.data.intervention.id,
+              status: "resolved",
+            }),
+            expect.objectContaining({
+              interventionId: secondInvoke.data.intervention.id,
+              status: "requested",
+            }),
+            expect.objectContaining({
+              interventionId: secondInvoke.data.intervention.id,
+              status: "cancelled",
+            }),
+          ]),
+        },
       },
     });
 
@@ -3707,6 +3714,296 @@ describe("mv3-shell manifest", () => {
     expect(kernel.getRunState(session.id).phase).toBe("paused");
 
     harness.cleanup();
+  });
+
+  it("rehydrates pending interventions across bridge restart with shared session storage", async () => {
+    const sessionStorage = new InMemorySessionStorage();
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "invoke") {
+          return {
+            kind: "invoke_result",
+            requestId: request.requestId,
+            ok: true,
+            result: {
+              result: {
+                ok: true,
+                echoedInput: request.invocation.input,
+              },
+              durationMs: 1,
+            },
+          };
+        }
+        return {
+          kind: "health_result",
+          requestId: request.requestId,
+          ok: true,
+          health: {
+            status: "idle",
+            inflightCount: 0,
+            consecutiveFailures: 0,
+          },
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0,
+      })),
+    };
+    const createFixturePageHookBridge = () => ({
+      install: vi.fn(async (step: { scriptId: string }) => ({
+        installationId: `${step.scriptId}:1`,
+      })),
+      invoke: vi.fn(
+        async ({
+          installation,
+          action,
+          input,
+          tab,
+        }: {
+          installation: { step: { scriptId: string }; result: { installationId: string } };
+          action: string;
+          input: unknown;
+          tab: { url: string };
+        }) => ({
+          ok: true,
+          action,
+          input,
+          installationId: installation.result.installationId,
+          installedScriptId: installation.step.scriptId,
+          tabUrl: tab.url,
+        }),
+      ),
+      verify: vi.fn(async () => false),
+      snapshotState: vi.fn(async ({ tabId, world }: { tabId: number; world: string }) => ({
+        tabId,
+        world,
+        installs: 1,
+        invocations: 1,
+        verifications: [{ action: "secure_login", verified: false }],
+      })),
+    });
+
+    const firstHarness = createChromeHarness({
+      host,
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/login",
+      },
+    });
+    const firstPageHookBridge = createFixturePageHookBridge();
+    const firstRuntimeServices = createBackgroundRuntimeServices({
+      chromeApi: firstHarness.chromeApi,
+      invokeRunner: async (invocation: { input: unknown }) => ({
+        ok: true,
+        data: {
+          ok: true,
+          result: {
+            result: invocation.input,
+            durationMs: 1,
+          },
+        },
+      }),
+      pageHookBridge: firstPageHookBridge,
+      sessionStorage,
+      interventionTimeoutMs: 10_000,
+    });
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstHarness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge: firstPageHookBridge,
+      runtimeServices: firstRuntimeServices,
+    });
+    const disposeFirst = firstBridge.registerRuntimeListener();
+
+    const firstInvoke = (await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "site.runtime.invoke",
+      skillId: "fixture.page",
+      action: "secure_login",
+      tab: {
+        tabId: 11,
+        url: "https://fixture.test/login",
+        active: true,
+      },
+      input: {
+        username: "alice",
+      },
+      plan: {
+        skillId: "fixture.page",
+        action: "secure_login",
+        steps: [
+          {
+            world: "main",
+            scriptId: "bbl-next.page-hook.fixture",
+          },
+        ],
+      },
+      module: {
+        id: "fixture.page.secure-login",
+        source: `
+          exports.default = async ({ input }) => ({
+            username: input.username
+          });
+        `,
+      },
+      verifier: "page_hook_ok",
+      intervention: {
+        kind: "takeover",
+        title: "Manual verify required",
+        message: "Finish the verification flow manually.",
+        trigger: "verify_failed",
+      },
+    })) as {
+      ok: boolean;
+      data: { intervention: { id: string; sessionId: string; status: string } };
+    };
+
+    disposeFirst();
+    firstHarness.cleanup();
+
+    const secondHarness = createChromeHarness({
+      host,
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/login",
+      },
+    });
+    const secondPageHookBridge = createFixturePageHookBridge();
+    const secondRuntimeServices = createBackgroundRuntimeServices({
+      chromeApi: secondHarness.chromeApi,
+      invokeRunner: async (invocation: { input: unknown }) => ({
+        ok: true,
+        data: {
+          ok: true,
+          result: {
+            result: invocation.input,
+            durationMs: 1,
+          },
+        },
+      }),
+      pageHookBridge: secondPageHookBridge,
+      sessionStorage,
+      interventionTimeoutMs: 10_000,
+    });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge: secondPageHookBridge,
+      runtimeServices: secondRuntimeServices,
+    });
+    const disposeSecond = secondBridge.registerRuntimeListener();
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.bootstrap",
+        world: "main",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        runtime: {
+          sessionId: firstInvoke.data.intervention.sessionId,
+          interventions: {
+            status: "requested",
+            activeCount: 1,
+            active: [
+              expect.objectContaining({
+                id: firstInvoke.data.intervention.id,
+                status: "requested",
+              }),
+            ],
+          },
+        },
+      },
+    });
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.diagnostics",
+        tabId: 11,
+        world: "main",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        interventions: {
+          status: "requested",
+          active: [
+            expect.objectContaining({
+              id: firstInvoke.data.intervention.id,
+              status: "requested",
+            }),
+          ],
+        },
+      },
+    });
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        summary: {
+          status: "requested",
+          activeCount: 1,
+        },
+        items: [
+          expect.objectContaining({
+            id: firstInvoke.data.intervention.id,
+            status: "requested",
+          }),
+        ],
+      },
+    });
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "audit.intervention",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "audit.intervention",
+        data: {
+          entries: [
+            expect.objectContaining({
+              interventionId: firstInvoke.data.intervention.id,
+              status: "requested",
+            }),
+          ],
+        },
+      },
+    });
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.resolve",
+        interventionId: firstInvoke.data.intervention.id,
+        resolution: {
+          resolution: "resume",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        intervention: {
+          id: firstInvoke.data.intervention.id,
+          status: "resolved",
+        },
+      },
+    });
+
+    disposeSecond();
+    secondHarness.cleanup();
   });
 
   it("rejects site runtime invoke when the target tab is not active", async () => {

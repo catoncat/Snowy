@@ -11,6 +11,7 @@ export const AI_SURFACE_RESOURCE_IDS = [
   "skills.summary",
   "hosts.summary",
   "audit.tail",
+  "audit.intervention",
 ] as const;
 export type AiSurfaceResourceId = (typeof AI_SURFACE_RESOURCE_IDS)[number];
 export const AI_SURFACE_RESOURCE_AUDIENCES = ["chat", "skill", "system", "mcp"] as const;
@@ -158,6 +159,46 @@ export interface InterventionRequest {
   payload?: Record<string, unknown>;
 }
 
+export type InterventionLifecycleStatus =
+  | InterventionRequest["status"]
+  | "resolved"
+  | "cancelled"
+  | "timed_out";
+
+export interface InterventionRecord extends Omit<InterventionRequest, "status"> {
+  status: InterventionLifecycleStatus;
+  sessionId: string | null;
+  requestedAt: string;
+  updatedAt: string;
+  expiresAt: string | null;
+  resolution?: Record<string, unknown>;
+}
+
+export interface InterventionAuditEntry {
+  eventId: string;
+  interventionId: string;
+  sessionId: string | null;
+  status: InterventionLifecycleStatus;
+  timestamp: string;
+  kind: InterventionRecord["kind"];
+  trigger: InterventionRecord["trigger"];
+  details?: Record<string, unknown>;
+}
+
+export interface InterventionSummary {
+  status: "empty" | "requested" | "settled";
+  totalCount: number;
+  activeCount: number;
+  recentCount: number;
+  active: InterventionRecord[];
+}
+
+export interface InterventionAuditSummary {
+  status: "available" | "empty";
+  totalCount: number;
+  entries: InterventionAuditEntry[];
+}
+
 export type BootstrapSummaryStatus = "healthy" | "degraded" | "empty";
 export type ConfigSummaryStatus = "ready" | "placeholder";
 
@@ -178,6 +219,7 @@ export interface RuntimeBootstrapSummary {
     code: string;
     message: string;
   } | null;
+  interventions: InterventionSummary;
   actionCapabilities: {
     total: number;
     namespaces: string[];
@@ -243,6 +285,10 @@ export type ConfigSummaryResource = ResourceDocument<"config.summary", ConfigBoo
 export type SkillsSummaryResource = ResourceDocument<"skills.summary", SkillsBootstrapSummary>;
 export type HostsSummaryResource = ResourceDocument<"hosts.summary", HostsBootstrapSummary>;
 export type AuditTailResource = ResourceDocument<"audit.tail", AuditTailSummary>;
+export type InterventionAuditResource = ResourceDocument<
+  "audit.intervention",
+  InterventionAuditSummary
+>;
 
 export interface BootstrapResourceBundle {
   runtime?: RuntimeBootstrapSummary;
@@ -874,4 +920,13 @@ export interface SessionStorage {
   getEntries(sessionId: string): Promise<SessionEntry[]>;
   listSessions(): Promise<SessionHeader[]>;
   deleteSession(sessionId: string): Promise<void>;
+  readKernelSnapshot(sessionId: string): Promise<KernelSessionSnapshot | null>;
+  writeKernelSnapshot(sessionId: string, snapshot: KernelSessionSnapshot): Promise<void>;
+}
+
+export interface KernelSessionSnapshot {
+  interventions?: {
+    records: InterventionRecord[];
+    audit: InterventionAuditEntry[];
+  };
 }

@@ -94,7 +94,7 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 - `screenshot_with_highlight`：cutover 后可补的 diagnostics composite
 - `download_image`：cutover 后可补的 product/workflow export ability
 - `download_chat_images`：暂不纳入主链
-- intervention / human handoff：cutover 前必需；`ISSUE-068` 已补齐最小 request / resolve / cancel / timeout / audit lifecycle。剩余 durable / shared-surface 收口由 `ISSUE-071` 继续承接。
+- intervention / human handoff：cutover 前必需；`ISSUE-068` 已补齐最小 request / resolve / cancel / timeout / audit lifecycle，`ISSUE-071` 已补齐 durable restart round-trip 与 `runtime.summary.interventions` / `audit.intervention` shared read surface。
 
 ## Not Enough To Claim Cutover
 

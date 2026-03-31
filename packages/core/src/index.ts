@@ -28,6 +28,11 @@ import {
   type HostControlPlaneSnapshot,
   type HostsBootstrapSummary,
   type HostsSummaryResource,
+  type InterventionAuditEntry,
+  type InterventionAuditResource,
+  type InterventionAuditSummary,
+  type InterventionRecord,
+  type InterventionSummary,
   type JsonSchema,
   MAX_SKILL_CALL_DEPTH,
   PUBLIC_CAPABILITY_NAMESPACES,
@@ -224,7 +229,13 @@ export type {
   HostsBootstrapSummary,
   HostsSummaryResource,
   InterventionKind,
+  InterventionAuditEntry,
+  InterventionAuditResource,
+  InterventionAuditSummary,
+  InterventionLifecycleStatus,
+  InterventionRecord,
   InterventionRequest,
+  InterventionSummary,
   InterventionTrigger,
   RuntimeBootstrapSummary,
   RuntimeSummaryResource,
@@ -244,6 +255,9 @@ export interface BootstrapSummaryInput {
       code: string;
       message: string;
     } | null;
+    interventions?: Partial<Omit<InterventionSummary, "active">> & {
+      active?: InterventionRecord[];
+    };
   };
   skills?: Partial<Omit<SkillsBootstrapSummary, "status">>;
   hosts?: {
@@ -268,8 +282,18 @@ export interface BootstrapSummaryResources {
   hosts: HostsSummaryResource;
 }
 
+type InterventionSummaryInput = Partial<Omit<InterventionSummary, "active">> & {
+  active?: InterventionRecord[];
+};
+
 export interface AuditTailResourceInput {
   entries: ControlPlaneAuditEntry[];
+  generatedAt?: string;
+  limit?: number;
+}
+
+export interface InterventionAuditResourceInput {
+  entries: InterventionAuditEntry[];
   generatedAt?: string;
   limit?: number;
 }
@@ -460,6 +484,34 @@ function normalizeConfigValues(
   }
 
   return out;
+}
+
+function cloneInterventionRecord(record: InterventionRecord): InterventionRecord {
+  return {
+    ...record,
+    ...(record.payload ? { payload: { ...record.payload } } : {}),
+    ...(record.resolution ? { resolution: { ...record.resolution } } : {}),
+  };
+}
+
+function cloneInterventionAuditEntry(entry: InterventionAuditEntry): InterventionAuditEntry {
+  return {
+    ...entry,
+    ...(entry.details ? { details: { ...entry.details } } : {}),
+  };
+}
+
+function buildInterventionSummary(
+  input: InterventionSummaryInput | undefined,
+): InterventionSummary {
+  const active = Array.isArray(input?.active) ? input.active.map(cloneInterventionRecord) : [];
+  return {
+    status: input?.status ?? (active.length > 0 ? "requested" : "empty"),
+    totalCount: input?.totalCount ?? active.length,
+    activeCount: input?.activeCount ?? active.length,
+    recentCount: input?.recentCount ?? 0,
+    active,
+  };
 }
 
 function buildConfigBootstrapSummary(
@@ -1404,6 +1456,7 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
     activeTab,
     loopState: input.runtime?.loopState ?? null,
     lastError: input.runtime?.lastError ?? null,
+    interventions: buildInterventionSummary(input.runtime?.interventions),
     actionCapabilities: {
       total: capabilityCatalog.length,
       namespaces: actionNamespaces,
@@ -1517,6 +1570,28 @@ export function createAuditTailResource(input: AuditTailResourceInput): AuditTai
   };
 
   return createResourceDocument("audit.tail", generatedAt, data);
+}
+
+export function createInterventionAuditResource(
+  input: InterventionAuditResourceInput,
+): InterventionAuditResource {
+  const limit =
+    typeof input.limit === "number" && Number.isFinite(input.limit) && input.limit >= 0
+      ? Math.floor(input.limit)
+      : undefined;
+  const entries =
+    typeof limit === "number"
+      ? input.entries.slice(-limit).map(cloneInterventionAuditEntry)
+      : input.entries.map(cloneInterventionAuditEntry);
+  const lastEntry = entries[entries.length - 1];
+  const generatedAt = input.generatedAt ?? lastEntry?.timestamp ?? new Date().toISOString();
+  const data: InterventionAuditSummary = {
+    status: entries.length > 0 ? "available" : "empty",
+    totalCount: entries.length,
+    entries,
+  };
+
+  return createResourceDocument("audit.intervention", generatedAt, data);
 }
 
 export function createConfigControlPlane(
