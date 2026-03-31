@@ -1,26 +1,23 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-31T06:10:02.941Z",
+  "generated_at": "2026-03-31T08:23:38.421Z",
   "repo_root": "/Users/envvar/work/repos/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-072",
-      "issue_path": "docs/backlog/2026-03-30-unified-northbound-resource-registry-and-mv3-read-path-are-still-missing.md",
-      "title": "Review: unified northbound resource registry and MV3 read path are still missing",
+      "issue_id": "ISSUE-082",
+      "issue_path": "docs/backlog/2026-03-31-follow-up-resource-metadata-registry-and-audience-projection-are-still-lookup-on.md",
+      "title": "Follow-up: resource metadata registry and audience projection are still lookup-only",
       "parallel_group": "contracts-core",
       "module_id": "ai-surface-control-plane",
       "module_stage": "secondary",
       "tracking_kind": "gap",
       "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-070", "ISSUE-071"],
+      "depends_on": ["ISSUE-072"],
       "write_scope": [
         "packages/contracts/src/index.ts",
         "packages/contracts/test/contracts.spec.ts",
         "packages/core/src/index.ts",
         "packages/core/test/core.spec.ts",
-        "apps/mv3-shell/src/background.js",
-        "apps/mv3-shell/src/runtime-services.js",
-        "apps/mv3-shell/test/manifest.spec.ts",
         "docs/"
       ]
     }
