@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 
+import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   type IssueFile,
@@ -23,6 +25,15 @@ import {
   moduleStageRank,
 } from "./module-ledger";
 import { type LiveQueue, type QueueEntry, liveQueuePath } from "./ticket-machine";
+
+const SCRIPT_REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../");
+const BIOME_CONFIG_PATH = path.join(SCRIPT_REPO_ROOT, "biome.json");
+const BIOME_EXECUTABLE_PATH = path.join(
+  SCRIPT_REPO_ROOT,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "biome.cmd" : "biome",
+);
 
 export interface BuildLiveQueueArgs {
   repoRoot: string;
@@ -101,6 +112,20 @@ function conflictsWithSelected(issue: IssueFile, selected: QueueEntry[]): boolea
   );
 }
 
+function formatQueueJson(outputPath: string, queue: LiveQueue, repoRoot: string): string {
+  const relativeOutputPath = path.relative(repoRoot, outputPath) || path.basename(outputPath);
+  const raw = `${JSON.stringify(queue, null, 2)}\n`;
+  return execFileSync(
+    BIOME_EXECUTABLE_PATH,
+    ["format", `--config-path=${BIOME_CONFIG_PATH}`, `--stdin-file-path=${relativeOutputPath}`],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      input: raw,
+    },
+  );
+}
+
 export function buildLiveQueue(args: BuildLiveQueueArgs): BuildLiveQueueResult {
   const moduleLedger = loadModuleLedger(args.repoRoot);
   const issues = loadAllIssues(args.repoRoot, {
@@ -131,7 +156,7 @@ export function buildLiveQueue(args: BuildLiveQueueArgs): BuildLiveQueueResult {
   const outputPath = liveQueuePath(args.repoRoot);
   if (!args.dryRun) {
     mkdirSync(path.dirname(outputPath), { recursive: true });
-    writeFileSync(outputPath, `${JSON.stringify(queue, null, 2)}\n`, "utf8");
+    writeFileSync(outputPath, formatQueueJson(outputPath, queue, args.repoRoot), "utf8");
   }
 
   return {

@@ -1,12 +1,22 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import { buildLiveQueue } from "./build-live-queue";
 
 const tempDirs: string[] = [];
+const SCRIPT_REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../");
+const BIOME_CONFIG_PATH = path.join(SCRIPT_REPO_ROOT, "biome.json");
+const BIOME_EXECUTABLE_PATH = path.join(
+  SCRIPT_REPO_ROOT,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "biome.cmd" : "biome",
+);
 
 function makeRepo() {
   const repoRoot = mkdtempSync(path.join(tmpdir(), "bbl-live-queue-"));
@@ -61,6 +71,18 @@ function writeModuleLedger(repoRoot: string) {
 
 function writeIssue(repoRoot: string, filename: string, frontmatter: string) {
   writeFileSync(path.join(repoRoot, "docs", "backlog", filename), `${frontmatter}\nbody\n`, "utf8");
+}
+
+function formatLikeBiome(repoRoot: string, relativeFilePath: string, content: string): string {
+  return execFileSync(
+    BIOME_EXECUTABLE_PATH,
+    ["format", `--config-path=${BIOME_CONFIG_PATH}`, `--stdin-file-path=${relativeFilePath}`],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      input: content,
+    },
+  );
 }
 
 afterEach(() => {
@@ -169,6 +191,31 @@ check_cmd: bun run check
     writeModuleLedger(repoRoot);
     writeIssue(
       repoRoot,
+      "issue-010.md",
+      `---
+id: ISSUE-010
+title: "Kernel baseline"
+status: done
+priority: p0
+source: planning
+created: 2026-03-29
+assignee: unassigned
+tags: [review]
+module_id: kernel
+module_stage: mainline
+tracking_kind: mainline
+kind: slice
+epic: EPIC-kernel
+parallel_group: kernel
+depends_on: []
+write_scope:
+  - packages/kernel/src/index.ts
+acceptance_ref: docs/kernel-skeleton-design.md
+check_cmd: bun run check
+---`,
+    );
+    writeIssue(
+      repoRoot,
       "issue-036.md",
       `---
 id: ISSUE-036
@@ -185,7 +232,8 @@ tracking_kind: gap
 kind: slice
 epic: EPIC-site-runtime
 parallel_group: site-runtime
-depends_on: []
+depends_on:
+  - ISSUE-010
 write_scope:
   - packages/site-runtime/src/index.ts
 acceptance_ref: docs/cutover-readiness-criteria.md
@@ -200,9 +248,12 @@ check_cmd: bun run check
     });
 
     expect(result.kind).toBe("built");
-    const written = JSON.parse(
-      readFileSync(path.join(repoRoot, "docs", "workflow", "live-queue.json"), "utf8"),
-    ) as { entries: Array<{ issue_id: string }> };
-    expect(written.entries.map((entry) => entry.issue_id)).toEqual(["ISSUE-036"]);
+    const filePath = path.join(repoRoot, "docs", "workflow", "live-queue.json");
+    const written = readFileSync(filePath, "utf8");
+    expect(JSON.parse(written)).toMatchObject({
+      entries: [{ issue_id: "ISSUE-036", depends_on: ["ISSUE-010"] }],
+    });
+    expect(written).toContain('"depends_on": ["ISSUE-010"],');
+    expect(written).toBe(formatLikeBiome(repoRoot, "docs/workflow/live-queue.json", written));
   });
 });
