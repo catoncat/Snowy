@@ -1,27 +1,27 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-30T15:37:46.472Z",
+  "generated_at": "2026-03-31T01:49:03.559Z",
   "repo_root": "/Users/envvar/work/repos/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-070",
-      "issue_path": "docs/backlog/2026-03-30-observability-unify-audit-tail-and-cover-config-skill-lifecycle-changes.md",
-      "title": "observability: unify audit.tail and cover config/skill lifecycle changes",
-      "parallel_group": "mv3-shell",
-      "module_id": "observability-audit",
+      "issue_id": "ISSUE-071",
+      "issue_path": "docs/backlog/2026-03-30-follow-up-intervention-state-and-audit-are-still-mv3-private-and-non-durable-acr.md",
+      "title": "Follow-up: intervention state and audit are still MV3-private and non-durable across runtime restart",
+      "parallel_group": "site-runtime",
+      "module_id": "intervention-handoff",
       "module_stage": "mainline",
       "tracking_kind": "gap",
       "check_cmd": "bun run check",
-      "depends_on": [
-        "ISSUE-066"
-      ],
+      "depends_on": ["ISSUE-067"],
       "write_scope": [
         "packages/contracts/src/index.ts",
         "packages/contracts/test/contracts.spec.ts",
         "packages/core/src/index.ts",
         "packages/core/test/core.spec.ts",
-        "apps/mv3-shell/src/background.js",
+        "packages/kernel/src/",
+        "packages/kernel/test/",
         "apps/mv3-shell/src/runtime-services.js",
+        "apps/mv3-shell/src/background.js",
         "apps/mv3-shell/test/manifest.spec.ts",
         "docs/"
       ]

@@ -1,0 +1,43 @@
+---
+id: ISSUE-081
+title: "Follow-up: workflow queue builder output is not biome-stable"
+status: open
+priority: p1
+source: "ISSUE-070 closure 2026-03-31"
+created: 2026-03-31
+assignee: unassigned
+tags:
+  - review
+  - workflow
+  - dx
+  - biome
+  - queue
+module_id: repo-workflow-dx
+module_stage: deferred
+tracking_kind: follow-up
+kind: slice
+epic: EPIC-dx-hardening
+parallel_group: sdk-docs
+depends_on: []
+write_scope:
+  - .agents/skills/auto-claim-issues-next/scripts/build-live-queue.ts
+  - .agents/skills/auto-claim-issues-next/scripts/build-live-queue.test.ts
+  - docs/workflow/live-queue.json
+acceptance_ref: docs/source-of-truth-map.md
+check_cmd: "bun run check"
+---
+
+## Goal
+
+把 Follow-up: workflow queue builder output is not biome-stable 收口成可执行的 backlog 结论，并明确后续 follow-up。
+
+## Review Finding
+
+- workflow:queue:build 目前把 live-queue.json 写成 JSON.stringify 默认风格；每次 queue rebuild 后 bun run check 都会再次被 docs/workflow/live-queue.json 卡住。
+- 这不是当前 observability slice 的行为问题，而是 workflow 产物本身与 repo formatter contract 不一致。
+
+## Acceptance
+
+- workflow:queue:build 输出的 live-queue.json 默认就是 biome-stable。
+- 回写 issue / queue rebuild 之后不需要再手动格式化 live-queue.json 才能通过 bun run check。
+- 相关脚本测试锁住 queue builder 输出格式不再回流。
