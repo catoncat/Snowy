@@ -60,14 +60,6 @@ apps/mv3-shell → kernel + core + browser-vfs + js-runner + site-runtime
 
 ---
 
-### 3.1 App Integration Rule
-
-- `apps/mv3-shell/src/runtime-services.js` 中的 runner step 与 site step 必须通过 `kernel.executeStep()` 进入 kernel-owned orchestration。
-- app 层只负责构造 session、注入 runner/site executor 依赖、以及把 intervention / bootstrap 等产品语义接回 UI/bridge。
-- 不再允许 app integration 直接旁路到 `JsRunnerHost` 或 `invokeSingleActionSiteSkill()` 作为主路径；这些依赖应先显式注入 kernel，再由 kernel 驱动。
-
----
-
 ## 4. 持久化: BrowserVFS + SessionStorage 接口
 
 ### 4.1 为什么用 BrowserVFS

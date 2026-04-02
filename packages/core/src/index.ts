@@ -836,7 +836,6 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
         required: ["dataUrl", "format"],
       },
       supportsVerify: false,
-      exportable: false,
     }),
   ],
   site: [

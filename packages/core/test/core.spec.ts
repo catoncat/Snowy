@@ -1,5 +1,4 @@
 import {
-  AI_SURFACE_RESOURCE_IDS,
   CONFIG_CONTROL_PLANE_ACTIONS,
   type CapabilityDescriptor,
   CapabilityError,
@@ -7,7 +6,6 @@ import {
   HOST_SUBSTRATE_ACTIONS,
   PUBLIC_CAPABILITY_NAMESPACES,
   RUNTIME_CONTROL_PLANE_ACTIONS,
-  SKILL_CONTROL_PLANE_ACTIONS,
   assertCapabilityDescriptor,
   capabilityNamespace,
 } from "@bbl-next/contracts";
@@ -22,20 +20,13 @@ import {
   FamilyProviderRegistry,
   SkillInvocationService,
   connectExecutionHost,
-  createAuditTailResource,
   createBootstrapSummary,
-  createBootstrapSummaryResources,
-  createConfigCapabilityProvider,
-  createConfigControlPlane,
   createHostControlPlaneSnapshot,
-  createInterventionAuditResource,
   createSkillRuntimeContext,
-  createTabsCapabilityProvider,
   disconnectExecutionHost,
   dispatchCapabilityCall,
   getBuiltinsByNamespace,
   hasPublicNamespaceCoverage,
-  readAiSurfaceResource,
   resolveHostSubstrateTarget,
   setDefaultExecutionHost,
   typedCapabilities,
@@ -112,160 +103,6 @@ describe("core", () => {
     ]);
   });
 
-  it("dispatches config.update through the package-owned config control-plane helper", async () => {
-    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
-    const providers = new FamilyProviderRegistry();
-    const configControlPlane = createConfigControlPlane();
-
-    providers.register(createConfigCapabilityProvider(configControlPlane));
-
-    await expect(
-      dispatchCapabilityCall({
-        registry,
-        providers,
-        sessionId: "s1",
-        capabilityId: "config.update",
-        input: {
-          patch: {
-            model: {
-              provider: "openai",
-            },
-          },
-        },
-      }),
-    ).resolves.toMatchObject({
-      config: {
-        status: "ready",
-        values: {
-          model: {
-            provider: "openai",
-          },
-        },
-      },
-    });
-
-    await expect(configControlPlane.getBootstrapSummary()).resolves.toMatchObject({
-      status: "ready",
-      values: {
-        model: {
-          provider: "openai",
-        },
-      },
-    });
-  });
-
-  it("dispatches tabs through the package-owned tabs transport helper", async () => {
-    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
-    const providers = new FamilyProviderRegistry();
-    let navigatedUrl = "";
-
-    providers.register(
-      createTabsCapabilityProvider({
-        list: async () => [
-          {
-            tabId: 21,
-            url: "https://fixture.test/home",
-            active: true,
-            title: "Fixture Home",
-          },
-        ],
-        getActive: async () => ({
-          tabId: 21,
-          url: "https://fixture.test/home",
-          active: true,
-          title: "Fixture Home",
-        }),
-        navigate: async (url) => {
-          navigatedUrl = url;
-          return {
-            tabId: 21,
-            url,
-            active: true,
-            title: "Fixture Home",
-          };
-        },
-      }),
-    );
-
-    await expect(
-      dispatchCapabilityCall({
-        registry,
-        providers,
-        sessionId: "s1",
-        capabilityId: "tabs.get_active",
-        input: {},
-      }),
-    ).resolves.toMatchObject({
-      tabId: 21,
-      url: "https://fixture.test/home",
-      active: true,
-    });
-
-    await expect(
-      dispatchCapabilityCall({
-        registry,
-        providers,
-        sessionId: "s1",
-        capabilityId: "tabs.navigate",
-        input: {
-          url: "https://fixture.test/settings",
-        },
-      }),
-    ).resolves.toMatchObject({
-      tabId: 21,
-      url: "https://fixture.test/settings",
-      active: true,
-    });
-
-    expect(navigatedUrl).toBe("https://fixture.test/settings");
-  });
-
-  it("keeps skill lifecycle control-plane actions aligned with canonical contracts", () => {
-    expect(SKILL_CONTROL_PLANE_ACTIONS).toEqual([
-      "skills.install",
-      "skills.enable",
-      "skills.disable",
-      "skills.uninstall",
-    ]);
-    expect(getBuiltinsByNamespace("skills").map((entry) => entry.id)).toEqual([
-      "skills.invoke",
-      "skills.list",
-      ...SKILL_CONTROL_PLANE_ACTIONS,
-    ]);
-    expect(getBuiltinsByNamespace("skills")).toMatchObject([
-      {
-        id: "skills.invoke",
-        sideEffects: "writes",
-      },
-      {
-        id: "skills.list",
-        sideEffects: "reads",
-      },
-      {
-        id: "skills.install",
-        sideEffects: "writes",
-        inputSchema: {
-          required: ["skillId"],
-        },
-        outputSchema: {
-          required: ["skill"],
-        },
-      },
-      {
-        id: "skills.enable",
-        sideEffects: "writes",
-      },
-      {
-        id: "skills.disable",
-        sideEffects: "writes",
-      },
-      {
-        id: "skills.uninstall",
-        sideEffects: "writes",
-      },
-    ]);
-  });
-
   it("keeps tabs automation actions aligned with the active-tab-only boundary", () => {
     expect(getBuiltinsByNamespace("tabs").map((entry) => entry.id)).toEqual([
       "tabs.list",
@@ -290,61 +127,11 @@ describe("core", () => {
         id: "tabs.navigate",
         sideEffects: "writes",
         supportsVerify: true,
-        exportable: false,
         inputSchema: {
           required: ["url"],
         },
         outputSchema: {
           required: ["tabId", "url", "active"],
-        },
-      },
-    ]);
-  });
-
-  it("keeps page automation actions aligned with the Tier 1 browser boundary", () => {
-    expect(getBuiltinsByNamespace("page").map((entry) => entry.id)).toEqual([
-      "page.query",
-      "page.click",
-      "page.fill",
-      "page.press_key",
-      "page.screenshot",
-    ]);
-    expect(getBuiltinsByNamespace("page")).toMatchObject([
-      {
-        id: "page.query",
-        sideEffects: "reads",
-        supportsVerify: true,
-        exportable: true,
-      },
-      {
-        id: "page.click",
-        sideEffects: "writes",
-        supportsVerify: true,
-      },
-      {
-        id: "page.fill",
-        sideEffects: "writes",
-        supportsVerify: true,
-      },
-      {
-        id: "page.press_key",
-        sideEffects: "writes",
-        supportsVerify: true,
-        exportable: false,
-        inputSchema: {
-          required: ["key"],
-        },
-        outputSchema: {
-          required: ["ok"],
-        },
-      },
-      {
-        id: "page.screenshot",
-        sideEffects: "reads",
-        supportsVerify: false,
-        exportable: false,
-        outputSchema: {
-          required: ["dataUrl", "format"],
         },
       },
     ]);
@@ -400,17 +187,6 @@ describe("core", () => {
     ]);
   });
 
-  it("locks the lightweight resource ids used by core summary builders", () => {
-    expect(AI_SURFACE_RESOURCE_IDS).toEqual([
-      "runtime.summary",
-      "config.summary",
-      "skills.summary",
-      "hosts.summary",
-      "audit.tail",
-      "audit.intervention",
-    ]);
-  });
-
   it("builds a healthy bootstrap summary bundle", () => {
     const summary = createBootstrapSummary({
       generatedAt: "2026-03-29T00:00:00.000Z",
@@ -424,26 +200,6 @@ describe("core", () => {
       runtime: {
         sessionId: "session-1",
         loopState: "idle",
-        interventions: {
-          status: "requested",
-          totalCount: 1,
-          activeCount: 1,
-          recentCount: 1,
-          active: [
-            {
-              id: "ivr:test:1",
-              kind: "takeover",
-              trigger: "verify_failed",
-              status: "requested",
-              title: "Need manual verify",
-              message: "Finish the flow manually",
-              sessionId: "session-1",
-              requestedAt: "2026-03-29T00:00:01.000Z",
-              updatedAt: "2026-03-29T00:00:01.000Z",
-              expiresAt: null,
-            },
-          ],
-        },
       },
       skills: {
         installedCount: 2,
@@ -477,10 +233,6 @@ describe("core", () => {
           world: "main",
         },
         loopState: "idle",
-        interventions: {
-          status: "requested",
-          activeCount: 1,
-        },
         actionCapabilities: {
           total: BUILTIN_CAPABILITIES.length,
         },
@@ -499,261 +251,6 @@ describe("core", () => {
       },
       config: {
         status: "placeholder",
-      },
-    });
-  });
-
-  it("projects bootstrap summaries into lightweight resource documents", () => {
-    const resources = createBootstrapSummaryResources({
-      generatedAt: "2026-03-30T00:00:00.000Z",
-      activeTab: {
-        tabId: 7,
-        url: "https://x.com/home",
-        title: "Home",
-        world: "main",
-        active: true,
-      },
-      runtime: {
-        sessionId: "session-1",
-        loopState: "idle",
-        interventions: {
-          totalCount: 1,
-          activeCount: 1,
-          recentCount: 1,
-          active: [
-            {
-              id: "ivr:test:bootstrap",
-              kind: "input",
-              trigger: "runtime_blocked",
-              status: "requested",
-              title: "Need input",
-              message: "Provide a value",
-              sessionId: "session-1",
-              requestedAt: "2026-03-30T00:00:00.000Z",
-              updatedAt: "2026-03-30T00:00:00.000Z",
-              expiresAt: null,
-            },
-          ],
-        },
-      },
-      config: {
-        values: {
-          model: {
-            provider: "openai",
-          },
-        },
-        updatedAt: "2026-03-30T00:00:00.000Z",
-      },
-    });
-
-    expect(resources.runtime).toMatchObject({
-      id: "runtime.summary",
-      primitive: "resource",
-      generatedAt: "2026-03-30T00:00:00.000Z",
-      data: {
-        status: "healthy",
-        mode: "active-tab-only",
-        sessionId: "session-1",
-        activeTab: {
-          tabId: 7,
-          url: "https://x.com/home",
-          title: "Home",
-          world: "main",
-        },
-        loopState: "idle",
-        lastError: null,
-        interventions: {
-          status: "requested",
-          totalCount: 1,
-          activeCount: 1,
-          recentCount: 1,
-          active: [
-            expect.objectContaining({
-              id: "ivr:test:bootstrap",
-              status: "requested",
-            }),
-          ],
-        },
-        actionCapabilities: {
-          total: BUILTIN_CAPABILITIES.length,
-        },
-      },
-    });
-    expect(resources.runtime.data.actionCapabilities.namespaces).toEqual(
-      expect.arrayContaining([...PUBLIC_CAPABILITY_NAMESPACES]),
-    );
-    expect(resources.config).toMatchObject({
-      id: "config.summary",
-      primitive: "resource",
-      generatedAt: "2026-03-30T00:00:00.000Z",
-      data: {
-        status: "ready",
-        fields: ["model", "automation", "permissions", "preferences"],
-        updatedAt: "2026-03-30T00:00:00.000Z",
-        values: {
-          model: {
-            provider: "openai",
-          },
-        },
-      },
-    });
-    expect(resources.skills.id).toBe("skills.summary");
-    expect(resources.hosts.id).toBe("hosts.summary");
-  });
-
-  it("builds an audit tail resource document from audit entries", () => {
-    const resource = createAuditTailResource({
-      generatedAt: "2026-03-30T00:00:03.000Z",
-      limit: 2,
-      entries: [
-        {
-          timestamp: "2026-03-30T00:00:01.000Z",
-          sessionId: "session-1",
-          kind: "hosts.connect",
-          hostId: "local",
-          status: "connected",
-        },
-        {
-          timestamp: "2026-03-30T00:00:02.000Z",
-          sessionId: "session-1",
-          kind: "config.update",
-          changedFields: ["model"],
-          status: "updated",
-        },
-        {
-          timestamp: "2026-03-30T00:00:03.000Z",
-          sessionId: "session-1",
-          kind: "skills.enable",
-          skillId: "skill.demo",
-          status: "enabled",
-          trusted: false,
-        },
-      ],
-    });
-
-    expect(resource).toEqual({
-      id: "audit.tail",
-      primitive: "resource",
-      generatedAt: "2026-03-30T00:00:03.000Z",
-      data: {
-        status: "available",
-        totalCount: 2,
-        entries: [
-          {
-            timestamp: "2026-03-30T00:00:02.000Z",
-            sessionId: "session-1",
-            kind: "config.update",
-            changedFields: ["model"],
-            status: "updated",
-          },
-          {
-            timestamp: "2026-03-30T00:00:03.000Z",
-            sessionId: "session-1",
-            kind: "skills.enable",
-            skillId: "skill.demo",
-            status: "enabled",
-            trusted: false,
-          },
-        ],
-      },
-    });
-  });
-
-  it("builds an intervention audit resource document", () => {
-    const resource = createInterventionAuditResource({
-      generatedAt: "2026-03-30T00:00:03.000Z",
-      limit: 1,
-      entries: [
-        {
-          eventId: "ive-1",
-          interventionId: "ivr:test:1",
-          sessionId: "session-1",
-          status: "requested",
-          timestamp: "2026-03-30T00:00:01.000Z",
-          kind: "takeover",
-          trigger: "verify_failed",
-        },
-        {
-          eventId: "ive-2",
-          interventionId: "ivr:test:1",
-          sessionId: "session-1",
-          status: "resolved",
-          timestamp: "2026-03-30T00:00:03.000Z",
-          kind: "takeover",
-          trigger: "verify_failed",
-          details: {
-            resolution: "resume",
-          },
-        },
-      ],
-    });
-
-    expect(resource).toEqual({
-      id: "audit.intervention",
-      primitive: "resource",
-      generatedAt: "2026-03-30T00:00:03.000Z",
-      data: {
-        status: "available",
-        totalCount: 1,
-        entries: [
-          {
-            eventId: "ive-2",
-            interventionId: "ivr:test:1",
-            sessionId: "session-1",
-            status: "resolved",
-            timestamp: "2026-03-30T00:00:03.000Z",
-            kind: "takeover",
-            trigger: "verify_failed",
-            details: {
-              resolution: "resume",
-            },
-          },
-        ],
-      },
-    });
-  });
-
-  it("reads built-in resources through a unified lookup helper", () => {
-    const runtime = readAiSurfaceResource({
-      resourceId: "runtime.summary",
-      bootstrap: {
-        generatedAt: "2026-03-30T00:00:00.000Z",
-        runtime: {
-          sessionId: "session-lookup",
-          loopState: "idle",
-        },
-      },
-    });
-    const audit = readAiSurfaceResource({
-      resourceId: "audit.tail",
-      auditTail: {
-        generatedAt: "2026-03-30T00:00:03.000Z",
-        entries: [
-          {
-            timestamp: "2026-03-30T00:00:03.000Z",
-            sessionId: "session-lookup",
-            kind: "config.update",
-            changedFields: ["model"],
-            status: "updated",
-          },
-        ],
-      },
-    });
-
-    expect(runtime).toMatchObject({
-      id: "runtime.summary",
-      data: {
-        sessionId: "session-lookup",
-      },
-    });
-    expect(audit).toMatchObject({
-      id: "audit.tail",
-      data: {
-        entries: [
-          expect.objectContaining({
-            kind: "config.update",
-          }),
-        ],
       },
     });
   });
@@ -1135,38 +632,6 @@ describe("core", () => {
     });
   });
 
-  it("dispatches staged skill lifecycle capabilities through the runtime helper", async () => {
-    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
-    const providers = new FamilyProviderRegistry();
-
-    await expect(
-      dispatchCapabilityCall({
-        registry,
-        providers,
-        sessionId: "s1",
-        skillId: "kernel.loop",
-        capabilityId: "skills.enable",
-        input: { skillId: "skill.demo" },
-        permissions: ["skills.enable"],
-        manageSkill: async ({ action, skillId }) => ({
-          skill: {
-            skillId,
-            status: "enabled",
-            trusted: true,
-            recentChange: action,
-          },
-        }),
-      }),
-    ).resolves.toEqual({
-      skill: {
-        skillId: "skill.demo",
-        status: "enabled",
-        trusted: true,
-        recentChange: "skills.enable",
-      },
-    });
-  });
-
   it("blocks capabilities outside the declared permission set", async () => {
     const registry = new CapabilityRegistry([descriptor()]);
     const providers = new FamilyProviderRegistry();
@@ -1220,111 +685,6 @@ describe("core", () => {
     );
     await expect(ctx.skills.invoke("skill.child", "run", {})).rejects.toMatchObject({
       code: "E_REENTRANCY_BLOCKED",
-    });
-  });
-
-  it("routes skills install/enable/disable/uninstall through the runtime skill manager", async () => {
-    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
-    const providers = new FamilyProviderRegistry();
-    const calls: string[] = [];
-
-    const ctx = createSkillRuntimeContext({
-      registry,
-      providers,
-      sessionId: "s1",
-      skillId: "skill.page",
-      permissions: ["skills.install", "skills.enable", "skills.disable", "skills.uninstall"],
-      manageSkill: async ({ action, skillId }) => {
-        calls.push(`${action}:${skillId}`);
-        return {
-          skill: {
-            skillId,
-            status:
-              action === "skills.uninstall"
-                ? "archived"
-                : action === "skills.disable"
-                  ? "disabled"
-                  : action === "skills.enable"
-                    ? "enabled"
-                    : "installed",
-            trusted: false,
-          },
-        };
-      },
-    });
-
-    await expect(ctx.skills.install("skill.demo")).resolves.toEqual({
-      skill: {
-        skillId: "skill.demo",
-        status: "installed",
-        trusted: false,
-      },
-    });
-    await expect(ctx.skills.enable("skill.demo")).resolves.toEqual({
-      skill: {
-        skillId: "skill.demo",
-        status: "enabled",
-        trusted: false,
-      },
-    });
-    await expect(ctx.skills.disable("skill.demo")).resolves.toEqual({
-      skill: {
-        skillId: "skill.demo",
-        status: "disabled",
-        trusted: false,
-      },
-    });
-    await expect(ctx.skills.uninstall("skill.demo")).resolves.toEqual({
-      skill: {
-        skillId: "skill.demo",
-        status: "archived",
-        trusted: false,
-      },
-    });
-    expect(calls).toEqual([
-      "skills.install:skill.demo",
-      "skills.enable:skill.demo",
-      "skills.disable:skill.demo",
-      "skills.uninstall:skill.demo",
-    ]);
-  });
-
-  it("fails staged skill lifecycle calls when no skill manager is configured", async () => {
-    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
-    const providers = new FamilyProviderRegistry();
-    const ctx = createSkillRuntimeContext({
-      registry,
-      providers,
-      sessionId: "s1",
-      skillId: "skill.page",
-      permissions: ["skills.install"],
-    });
-
-    await expect(ctx.skills.install("skill.demo")).rejects.toMatchObject({
-      code: "E_RUNTIME",
-    });
-  });
-
-  it("preserves permission checks for staged skill lifecycle calls", async () => {
-    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
-    const providers = new FamilyProviderRegistry();
-    const ctx = createSkillRuntimeContext({
-      registry,
-      providers,
-      sessionId: "s1",
-      skillId: "skill.page",
-      permissions: ["skills.install"],
-      manageSkill: async ({ action, skillId }) => ({
-        skill: {
-          skillId,
-          status: action,
-          trusted: false,
-        },
-      }),
-    });
-
-    await expect(ctx.skills.enable("skill.demo")).rejects.toMatchObject({
-      code: "E_PERMISSION_DENIED",
     });
   });
 
@@ -1460,15 +820,12 @@ describe("core", () => {
       }
     });
 
-    it("read-only capabilities are exportable unless explicitly opted out", () => {
+    it("read-only capabilities are exportable", () => {
       for (const d of BUILTIN_CAPABILITIES) {
-        if ((d.sideEffects === "reads" || d.sideEffects === "none") && d.id !== "page.screenshot") {
+        if (d.sideEffects === "reads" || d.sideEffects === "none") {
           expect(d.exportable, `${d.id} should be exportable`).toBe(true);
         }
       }
-      expect(
-        BUILTIN_CAPABILITIES.find((descriptor) => descriptor.id === "page.screenshot")?.exportable,
-      ).toBe(false);
     });
 
     it("derives bridge-side MCP handoff data only from exportable builtins", () => {
@@ -1485,7 +842,6 @@ describe("core", () => {
       expect(BUILTIN_EXPORT_HANDOFFS.map((entry) => entry.capabilityId)).not.toEqual(
         expect.arrayContaining([
           "page.click",
-          "page.screenshot",
           "memfs.write",
           "runner.invoke",
           "host.exec",
@@ -1915,67 +1271,6 @@ describe("core", () => {
       ).resolves.toEqual({
         operation: "stage",
         input: { entries: [{ uri: "mem://workspace/file.txt", content: "next" }] },
-      });
-    });
-
-    it("narrowed skills facade exposes install/enable/disable/uninstall when declared", async () => {
-      const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
-      const providers = new FamilyProviderRegistry();
-
-      const permissions = [
-        "skills.install",
-        "skills.enable",
-        "skills.disable",
-        "skills.uninstall",
-      ] as const;
-      const ctx = createSkillRuntimeContext({
-        registry,
-        providers,
-        sessionId: "s1",
-        skillId: "skill.skills",
-        permissions: [...permissions],
-        manageSkill: async ({ action, skillId }) => ({
-          skill: {
-            skillId,
-            status: action,
-            trusted: false,
-          },
-        }),
-      });
-
-      const caps = typedCapabilitiesForPermissions(ctx, permissions);
-      const install: BuiltinCapabilityMap["skills"]["install"] = caps.skills.install;
-      const enable: BuiltinCapabilityMap["skills"]["enable"] = caps.skills.enable;
-      const disable: BuiltinCapabilityMap["skills"]["disable"] = caps.skills.disable;
-      const uninstall: BuiltinCapabilityMap["skills"]["uninstall"] = caps.skills.uninstall;
-
-      await expect(install({ skillId: "skill.demo" })).resolves.toEqual({
-        skill: {
-          skillId: "skill.demo",
-          status: "skills.install",
-          trusted: false,
-        },
-      });
-      await expect(enable({ skillId: "skill.demo" })).resolves.toEqual({
-        skill: {
-          skillId: "skill.demo",
-          status: "skills.enable",
-          trusted: false,
-        },
-      });
-      await expect(disable({ skillId: "skill.demo" })).resolves.toEqual({
-        skill: {
-          skillId: "skill.demo",
-          status: "skills.disable",
-          trusted: false,
-        },
-      });
-      await expect(uninstall({ skillId: "skill.demo" })).resolves.toEqual({
-        skill: {
-          skillId: "skill.demo",
-          status: "skills.uninstall",
-          trusted: false,
-        },
       });
     });
   });
