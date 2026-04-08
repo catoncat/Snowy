@@ -1,8 +1,20 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-08T14:16:22.516Z",
+  "generated_at": "2026-04-08T14:28:03.287Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
+    {
+      "issue_id": "ISSUE-088",
+      "issue_path": "docs/backlog/2026-04-08-prompt-skills-injection.md",
+      "title": "Inject available skills into system prompt",
+      "parallel_group": "kernel",
+      "module_id": "kernel",
+      "module_stage": "mainline",
+      "tracking_kind": "gap",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": ["packages/kernel/src/prompt-builder.ts", "packages/kernel/test/"]
+    },
     {
       "issue_id": "ISSUE-085",
       "issue_path": "docs/backlog/2026-04-08-sidepanel-vue3-minimal-chat-ui.md",

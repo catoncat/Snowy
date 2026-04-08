@@ -10,7 +10,7 @@ tags:
   - kernel
   - loop
 module_id: kernel
-module_stage: secondary
+module_stage: mainline
 tracking_kind: gap
 kind: slice
 epic: EPIC-kernel
