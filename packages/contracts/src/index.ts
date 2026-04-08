@@ -918,6 +918,123 @@ export interface KernelLlmAdapter {
 }
 
 // ──────────────────────────────────────────────────────────
+// LLM Provider / Profile / Route Types
+// ──────────────────────────────────────────────────────────
+
+export const LLM_PROVIDER_EXECUTION_LANES = ["primary", "compaction", "title"] as const;
+export type LlmProviderExecutionLane = (typeof LLM_PROVIDER_EXECUTION_LANES)[number];
+
+export const LLM_PROFILE_ESCALATION_POLICIES = ["disabled", "upgrade_only"] as const;
+export type LlmProfileEscalationPolicy = (typeof LLM_PROFILE_ESCALATION_POLICIES)[number];
+
+export interface LlmResolvedRoute {
+  profile: string;
+  provider: string;
+  llmBase: string;
+  llmKey: string;
+  llmModel: string;
+  providerOptions?: Record<string, unknown>;
+  llmTimeoutMs: number;
+  llmRetryMaxAttempts: number;
+  llmMaxRetryDelayMs: number;
+  role: string;
+  escalationPolicy: LlmProfileEscalationPolicy;
+  orderedProfiles: string[];
+}
+
+export interface LlmProviderSendInput {
+  sessionId?: string;
+  step?: number;
+  lane?: LlmProviderExecutionLane;
+  route: LlmResolvedRoute;
+  payload: Record<string, unknown>;
+  signal: AbortSignal;
+  requestUrl?: string;
+}
+
+export interface LlmProviderAdapter {
+  id: string;
+  resolveRequestUrl(route: LlmResolvedRoute): string;
+  send(input: LlmProviderSendInput): Promise<Response>;
+}
+
+export interface LlmProfileDef {
+  id: string;
+  providerId: string;
+  llmBase: string;
+  llmKey: string;
+  llmModel: string;
+  providerOptions?: Record<string, unknown>;
+  llmTimeoutMs?: number;
+  llmRetryMaxAttempts?: number;
+  llmMaxRetryDelayMs?: number;
+}
+
+export interface LlmProfileConfig {
+  profiles: LlmProfileDef[];
+  defaultProfile: string;
+  fallbackProfile?: string;
+  auxProfile?: string;
+}
+
+export type ResolveLlmRouteResult =
+  | { ok: true; route: LlmResolvedRoute }
+  | {
+      ok: false;
+      reason: "profile_not_found" | "missing_llm_config";
+      message: string;
+      profile: string;
+    };
+
+// ──────────────────────────────────────────────────────────
+// LLM Message Model
+// ──────────────────────────────────────────────────────────
+
+export type LlmMessageRole = "system" | "user" | "assistant" | "tool";
+
+export interface LlmToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+export interface LlmTextBlock {
+  type: "text";
+  text: string;
+}
+
+export interface LlmToolCallBlock {
+  type: "toolCall";
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export type LlmAssistantContentBlock = LlmTextBlock | LlmToolCallBlock;
+
+export interface LlmAssistantMessage {
+  role: "assistant";
+  content: LlmAssistantContentBlock[];
+  toolCalls?: LlmToolCall[];
+  stopReason?: string;
+}
+
+export interface LlmContextMessage {
+  role: "system" | "user" | "tool";
+  content: string;
+  name?: string;
+  tool_call_id?: string;
+}
+
+export type LlmMessage = LlmAssistantMessage | LlmContextMessage;
+
+export interface LlmSseStreamResult {
+  message: Record<string, unknown>;
+  rawBody: string;
+  packetCount: number;
+}
+
+// ──────────────────────────────────────────────────────────
 // Session Storage (persistence interface)
 // ──────────────────────────────────────────────────────────
 

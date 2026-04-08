@@ -12,7 +12,7 @@ tags:
   - profile
   - routing
 module_id: provider-profile-routing
-module_stage: deferred
+module_stage: mainline
 tracking_kind: gap
 kind: slice
 epic: EPIC-kernel

@@ -26,3 +26,16 @@ export {
   type CompactionPreparation,
 } from "./compaction-manager.js";
 export { createKernel, type Kernel, type KernelOptions } from "./kernel-facade.js";
+export {
+  LlmProviderRegistry,
+  type RegisterLlmProviderOptions,
+} from "./llm-provider-registry.js";
+export { createOpenAiCompatibleProvider } from "./llm-openai-provider.js";
+export { resolveLlmRoute } from "./llm-profile-resolver.js";
+export { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
+export {
+  normalizeToolCallId,
+  buildAssistantContentBlocks,
+  contextMessagesToLlmMessages,
+  llmMessagesToApiPayload,
+} from "./llm-message-model.js";
