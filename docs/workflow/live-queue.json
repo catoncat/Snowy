@@ -1,27 +1,24 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-08T13:40:36.238Z",
+  "generated_at": "2026-04-08T13:59:27.987Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-083",
-      "issue_path": "docs/backlog/2026-04-08-llm-provider-profile-layer-migration.md",
-      "title": "LLM provider/profile layer migration to kernel",
-      "parallel_group": "kernel",
+      "issue_id": "ISSUE-074",
+      "issue_path": "docs/backlog/2026-03-30-provider-profile-routing-still-has-no-executable-vnext-slice.md",
+      "title": "Review: provider/profile routing still has no executable vNext slice",
+      "parallel_group": "contracts-core",
       "module_id": "provider-profile-routing",
       "module_stage": "mainline",
-      "tracking_kind": "mainline",
+      "tracking_kind": "gap",
       "check_cmd": "bun run check",
-      "depends_on": [],
+      "depends_on": ["ISSUE-067", "ISSUE-072"],
       "write_scope": [
-        "packages/contracts/src/index.ts",
-        "packages/kernel/src/llm-provider-registry.ts",
-        "packages/kernel/src/llm-profile-resolver.ts",
-        "packages/kernel/src/llm-openai-provider.ts",
-        "packages/kernel/src/llm-stream-parser.ts",
-        "packages/kernel/src/llm-message-model.ts",
-        "packages/kernel/src/index.ts",
-        "packages/kernel/test/"
+        "packages/core/src/index.ts",
+        "packages/core/test/core.spec.ts",
+        "packages/kernel/src/",
+        "packages/kernel/test/",
+        "docs/"
       ]
     },
     {
@@ -39,25 +36,6 @@
         "apps/mv3-shell/src/sidepanel/",
         "apps/mv3-shell/vite.config.js",
         "apps/mv3-shell/package.json"
-      ]
-    },
-    {
-      "issue_id": "ISSUE-073",
-      "issue_path": "docs/backlog/2026-03-30-host-exec-still-lacks-a-remote-execution-host-path.md",
-      "title": "Review: host.exec still lacks a remote execution host path",
-      "parallel_group": "js-runner",
-      "module_id": "execution-host-bridge",
-      "module_stage": "secondary",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-067"],
-      "write_scope": [
-        "packages/js-runner/src/index.ts",
-        "packages/js-runner/test/js-runner.spec.ts",
-        "apps/mv3-shell/src/offscreen.js",
-        "apps/mv3-shell/src/runtime-services.js",
-        "apps/mv3-shell/test/manifest.spec.ts",
-        "docs/"
       ]
     }
   ]
