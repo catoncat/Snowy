@@ -440,7 +440,7 @@ loop step 执行边界：
 
 实际产出:
 - `packages/kernel/src/run-controller.ts` — RunState 状态机（idle→running→paused/stopped/compacting）+ prompt queue + retry strategy（默认 maxAttempts=2）
-- `packages/kernel/src/loop-engine.ts` — turn scheduling + step counting + terminal condition detection（7 种状态）+ no-progress detection（repeat_signature 三连+ping_pong AB交替）+ budget 系统
+- `packages/kernel/src/loop-engine.ts` — turn scheduling + step counting + terminal condition detection（7 种状态）+ no-progress detection（repeat_signature 默认二连且阈值可配置 + ping_pong AB交替）+ budget 系统
 - `packages/kernel/test/run-controller.spec.ts` — 15 测试
 - `packages/kernel/test/loop-engine.spec.ts` — 11 测试
 

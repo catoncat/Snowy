@@ -214,22 +214,49 @@ describe("LoopEngine", () => {
       expect(engine.checkNoProgress(sid)).toBeNull();
     });
 
-    it("detects repeat_signature after budget exhaustion", () => {
-      // Default budget for repeat_signature = 1, so first detection is forgiven
-      for (let i = 0; i < 4; i++) {
+    it("detects repeat_signature after budget exhaustion with old-repo-aligned threshold", () => {
+      // Default threshold = 2, budget = 1:
+      // third identical result should terminate (2 repeats after the first turn)
+      for (let i = 0; i < 2; i++) {
         const turn = engine.createTurn(sid, { capabilityId: "page.click" });
         engine.recordTurnResult(turn, { ok: true, data: "same" });
       }
 
-      // First check: budget allows 1 continuation
       expect(engine.checkNoProgress(sid)).toBeNull();
 
-      // Add more repeated signatures
       const turn = engine.createTurn(sid, { capabilityId: "page.click" });
       engine.recordTurnResult(turn, { ok: true, data: "same" });
 
-      // Budget exhausted
       expect(engine.checkNoProgress(sid)).toBe("repeat_signature");
+    });
+
+    it("allows overriding repeat_signature threshold through LoopEngineOptions", () => {
+      const engine2 = new LoopEngine({
+        maxSteps: 50,
+        noProgressRepeatSignatureThreshold: 3,
+      });
+
+      for (let i = 0; i < 3; i++) {
+        const turn = engine2.createTurn(sid, { capabilityId: "page.click" });
+        engine2.recordTurnResult(turn, { ok: true, data: "same" });
+      }
+
+      expect(engine2.checkNoProgress(sid)).toBeNull();
+
+      const turn = engine2.createTurn(sid, { capabilityId: "page.click" });
+      engine2.recordTurnResult(turn, { ok: true, data: "same" });
+
+      expect(engine2.checkNoProgress(sid)).toBe("repeat_signature");
+    });
+
+    it("does not treat non-consecutive matches as repeat_signature", () => {
+      const results = ["A", "B", "A"];
+      for (const result of results) {
+        const turn = engine.createTurn(sid, { capabilityId: "page.click" });
+        engine.recordTurnResult(turn, { ok: true, data: result });
+      }
+
+      expect(engine.checkNoProgress(sid)).toBeNull();
     });
 
     it("detects ping_pong pattern with zero budget", () => {

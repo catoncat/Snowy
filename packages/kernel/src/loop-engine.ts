@@ -54,12 +54,14 @@ export type StepExecutor = (request: {
 export interface LoopEngineOptions {
   maxSteps?: number;
   noProgressSignatureHistoryLimit?: number;
+  noProgressRepeatSignatureThreshold?: number;
   noProgressContinueBudget?: Partial<Record<NoProgressReason, number>>;
   executor?: StepExecutor;
 }
 
 const DEFAULT_MAX_STEPS = 50;
 const DEFAULT_SIGNATURE_HISTORY_LIMIT = 6;
+const DEFAULT_REPEAT_SIGNATURE_THRESHOLD = 2;
 const DEFAULT_NO_PROGRESS_BUDGET: Record<NoProgressReason, number> = {
   repeat_signature: 1,
   ping_pong: 0,
@@ -72,6 +74,7 @@ function generateTurnId(): string {
 export class LoopEngine {
   readonly #maxSteps: number;
   readonly #signatureHistoryLimit: number;
+  readonly #repeatSignatureThreshold: number;
   readonly #noProgressBudget: Record<NoProgressReason, number>;
   readonly #executor?: StepExecutor;
   readonly #noProgressCounts = new Map<string, Record<NoProgressReason, number>>();
@@ -82,6 +85,10 @@ export class LoopEngine {
     this.#maxSteps = opts?.maxSteps ?? DEFAULT_MAX_STEPS;
     this.#signatureHistoryLimit =
       opts?.noProgressSignatureHistoryLimit ?? DEFAULT_SIGNATURE_HISTORY_LIMIT;
+    this.#repeatSignatureThreshold = Math.max(
+      2,
+      opts?.noProgressRepeatSignatureThreshold ?? DEFAULT_REPEAT_SIGNATURE_THRESHOLD,
+    );
     this.#noProgressBudget = {
       ...DEFAULT_NO_PROGRESS_BUDGET,
       ...opts?.noProgressContinueBudget,
@@ -226,10 +233,16 @@ export class LoopEngine {
       }
     }
 
-    // Check repeat_signature: last N signatures are all the same
+    // Check repeat_signature: the trailing signatures are all the same
     const last = history[history.length - 1];
-    const repeatCount = history.filter((s) => s === last).length;
-    if (repeatCount >= 3) {
+    let repeatCount = 1;
+    for (let index = history.length - 2; index >= 0; index -= 1) {
+      if (history[index] !== last) {
+        break;
+      }
+      repeatCount += 1;
+    }
+    if (repeatCount >= this.#repeatSignatureThreshold) {
       return this.#applyBudget(sessionId, "repeat_signature");
     }
 
