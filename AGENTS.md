@@ -1,5 +1,18 @@
 # AGENTS.md
 
+## 0. Fast Index
+
+| 我现在要做什么 | 先读什么 | 做完前必须补什么 |
+|---|---|---|
+| 认领 / 判断下一个 issue | `docs/agent-task-index.md` → `docs/workflow/live-queue.json` | 真正 claim 只看 queue + lease，不扫 backlog |
+| 实现已认领 issue | 当前 issue → `acceptance_ref` → 对应 `src/` / `test/` | 聚焦验证；不要顺手修 write scope 外 |
+| 收口已完成 issue | 当前 issue → `docs/backlog/README.md` 的 Completion Record | code commit + `status: done` + `## 工作总结` + `## 相关 commits` |
+| queue / backlog 变了 | `docs/backlog/README.md` | `bun run workflow:queue:build` |
+| 规划下一批 | `docs/source-of-truth-map.md` → `docs/module-tracking-ledger.json` → `docs/backlog/README.md` | 先落 backlog，再重建 queue |
+| 改 architecture / public surface | `docs/locked-decisions-2026-03-29.md` → review report → kernel skeleton | 过 Doc Freshness Gate |
+
+- 一句话规则：先锁任务，再补最小上下文；完成任务不等于写完代码，必须完成 commit 和 issue 收口。
+
 ## 1. Repo Mission
 
 - 本仓是 Browser Brain Loop 的 vNext 主线实验仓。
@@ -18,6 +31,7 @@
 - 然后只按当前任务类型补读，不要默认全量读文档：
   - claim / workflow：`docs/workflow/live-queue.json`
   - implement claimed issue：当前 issue + `acceptance_ref` + 对应 `src/` / `test/`
+  - finish / close issue：当前 issue + `docs/backlog/README.md`
   - planning：`docs/source-of-truth-map.md` + `docs/module-tracking-ledger.json` + `docs/backlog/README.md`
   - architecture / public surface：`docs/locked-decisions-2026-03-29.md` + `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` + `docs/kernel-skeleton-design.md`
 - 如果要改 architecture-level 代码，再去读旧仓：
@@ -51,6 +65,21 @@
 - 不要重新引入 `Plugin` 作为主概念；统一收敛为 executable skill。
 - 不要重新引入 `bash.exec`/`find` 这类 shell 依赖去完成 VFS/skill discovery。
 - 变更优先从 `packages/contracts` 开始推导，再改 `core` 和 substrate。
+- 默认假设有别的 Agent 在并行开发；看到陌生 diff 先判断是否为并行改动，不要直接回滚。
+- 尽量不要和别的 Agent 改同一片代码；若必须进入共享区域，只做最小改动并显式意识到可能存在并行编辑。
+- 验证默认先做自己 `write_scope` 内的聚焦 lint / test；repo 级 `bun run check` 若被其他活跃 slice 阻塞，要记录 blocker，不顺手修 unrelated 文件。
+- 提交默认小步、单一目的，减少并行冲突与共享文件重写。
+
+## 3.1 Completion Contract
+
+- 一个 issue 只有在下面都完成后才算 done：
+  1. 代码改动已提交 commit
+  2. issue frontmatter 已改 `status: done`
+  3. issue 已追加 `## 工作总结`
+  4. issue 已追加 `## 相关 commits`
+  5. 若 backlog 元数据变化影响 dispatch，已执行 `bun run workflow:queue:build`
+- 不要把“测试过 / 代码写完 / 本地能跑”当成 issue 已收口。
+- 如果 repo 级 gate 被并行改动挡住，仍要把 blocker 和已通过的聚焦验证写进 issue。
 
 ## 4. Repo Index
 
@@ -332,6 +361,10 @@
 - live ticket 只通过 lease 文件加锁；`in-progress` 不再是 dispatch lock
 - backlog 变化后必须重建 live queue，至少包括：新增 issue、改 `done`、改 `depends_on`、改 `write_scope`
 - 若 live queue 返回空，先判断是否需要重建 queue；确认无票后再进入下一批规划
+- worker 默认只对自己当前 slice / `write_scope` 的聚焦验证负责；repo 级 gate 是补充，不是并行情况下的唯一完成依据
+- 若 repo 级 lint / check 被别的 Agent 的活跃改动挡住，必须在 issue `## 工作总结` 里写明 blocker 和自己已通过的聚焦检查
+- 共享接线文件优先交给 integrator 或对应 lane owner；coordinator 拆 slice 时应优先避免共享写域重叠
+- 不要因为共享文件出现陌生改动就直接 revert；先看 lease / queue / issue owner，再决定是否需要协调
 
 ## 10. Commands
 
@@ -339,6 +372,7 @@
 - `bun run test`
 - `bun run typecheck`
 - `bun run check`
+- `./node_modules/.bin/biome check <files...>`（推荐：只检查当前 slice 相关文件）
 - `bun run workflow:queue:build`
 - `bun run workflow:queue:preview`
 - `bun run workflow:queue:json`
