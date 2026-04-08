@@ -3,7 +3,6 @@ import type {
   LlmProviderAdapter,
   LlmToolCall,
   LoopTerminalStatus,
-  MessagePayload,
   ToolContract,
 } from "@bbl-next/contracts";
 import type { CapabilityRegistry } from "@bbl-next/core";
@@ -11,11 +10,14 @@ import type { Kernel } from "./kernel-facade.js";
 import {
   buildAssistantContentBlocks,
   contextMessagesToLlmMessages,
+  llmAssistantMessageToMessagePayload,
   llmMessagesToApiPayload,
   normalizeToolCallId,
+  stepResultToToolMessagePayload,
 } from "./llm-message-model.js";
 import { resolveLlmRoute } from "./llm-profile-resolver.js";
 import { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
+import { type PromptBuilderOptions, buildSystemPromptBase } from "./prompt-builder.js";
 
 export interface LoopOrchestratorOptions {
   kernel: Kernel;
@@ -23,6 +25,7 @@ export interface LoopOrchestratorOptions {
   provider: LlmProviderAdapter;
   profileConfig: LlmProfileConfig;
   systemPromptBuilder?: (tools: ToolContract[]) => string;
+  promptOptions?: PromptBuilderOptions;
   contextWindow?: number;
 }
 
@@ -44,9 +47,8 @@ function toolNameToCapabilityId(toolName: string): string {
   return toolName.replace(/_/g, ".");
 }
 
-function defaultSystemPrompt(tools: ToolContract[]): string {
-  const toolList = tools.map((t) => `- ${t.name}: ${t.description}`).join("\n");
-  return `You are a browser automation agent. You can use the following tools:\n\n${toolList}\n\nCall tools to accomplish the user's request. When done, respond without tool calls.`;
+function defaultSystemPrompt(tools: ToolContract[], promptOptions?: PromptBuilderOptions): string {
+  return buildSystemPromptBase(tools, promptOptions);
 }
 
 function toolContractsToOpenAiTools(tools: ToolContract[]): Array<Record<string, unknown>> {
@@ -66,7 +68,9 @@ export async function runLoop(
 ): Promise<RunLoopResult> {
   const { kernel, registry, provider, profileConfig } = opts;
   const contextWindow = opts.contextWindow ?? 8192;
-  const buildSystemPrompt = opts.systemPromptBuilder ?? defaultSystemPrompt;
+  const buildSystemPrompt =
+    opts.systemPromptBuilder ??
+    ((tools: ToolContract[]) => defaultSystemPrompt(tools, opts.promptOptions));
 
   // Resolve LLM route
   const routeResult = resolveLlmRoute(profileConfig);
@@ -151,18 +155,13 @@ export async function runLoop(
       const textContent = (message.content as string) || "";
       const toolCalls = (message.tool_calls as LlmToolCall[] | undefined) ?? [];
 
-      // Build content blocks preserving text + tool_calls structure
-      const contentBlocks =
-        toolCalls.length > 0
-          ? buildAssistantContentBlocks(textContent || null, toolCalls)
-          : undefined;
-
-      // Append assistant message (with contentBlocks if tool_calls present)
-      await kernel.appendMessage(input.sessionId, {
-        role: "assistant",
-        text: textContent,
-        contentBlocks,
-      } as MessagePayload);
+      await kernel.appendMessage(
+        input.sessionId,
+        llmAssistantMessageToMessagePayload({
+          role: "assistant",
+          content: buildAssistantContentBlocks(textContent || null, toolCalls),
+        }),
+      );
 
       // No tool calls → done
       if (toolCalls.length === 0) {
@@ -191,17 +190,10 @@ export async function runLoop(
           input: args,
         });
 
-        // Record tool result as message
-        const resultText = result.ok
-          ? JSON.stringify(result.data ?? { ok: true })
-          : JSON.stringify({ error: result.error });
-
-        await kernel.appendMessage(input.sessionId, {
-          role: "assistant",
-          text: resultText,
-          toolCallId,
-          toolName,
-        } as MessagePayload);
+        await kernel.appendMessage(
+          input.sessionId,
+          stepResultToToolMessagePayload(result, { toolCallId, toolName }),
+        );
 
         input.onToolResult?.(toolName, result);
 

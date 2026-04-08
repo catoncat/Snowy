@@ -36,6 +36,8 @@ export { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
 export {
   normalizeToolCallId,
   buildAssistantContentBlocks,
+  llmAssistantMessageToMessagePayload,
+  stepResultToToolMessagePayload,
   contextMessagesToLlmMessages,
   llmMessagesToApiPayload,
 } from "./llm-message-model.js";
@@ -46,3 +48,9 @@ export {
   type RunLoopInput,
   type RunLoopResult,
 } from "./loop-orchestrator.js";
+export {
+  buildSystemPromptBase,
+  buildTaskProgressMessage,
+  type PromptBuilderOptions,
+  type TaskProgressInput,
+} from "./prompt-builder.js";
