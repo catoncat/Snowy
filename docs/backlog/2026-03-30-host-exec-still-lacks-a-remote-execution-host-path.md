@@ -1,7 +1,7 @@
 ---
 id: ISSUE-073
 title: "Review: host.exec still lacks a remote execution host path"
-status: open
+status: done
 priority: p1
 source: "current plan expansion 2026-03-30"
 created: 2026-03-30
@@ -46,3 +46,42 @@ check_cmd: "bun run check"
 - host.exec 至少能通过一条 remote/default host path 成功执行，不再依赖 browser-only local adapter 或结构化 not-supported 错误作为常态
 - local 与 remote host 的路由、错误模型和默认选择规则被显式锁定，并与现有 hosts.* control plane 一致
 - 测试与文档明确：browser-only local adapter 继续承担读写编辑，真实 exec 由 remote host path 提供
+
+## Work Summary
+
+### What shipped
+
+1. **`createCompositeHostAdapter({ local, remote })`** in `packages/js-runner/src/index.ts`
+   - Explicit routing: read/write/edit → local adapter (fallback remote), exec → remote adapter (fallback local)
+   - Pure function, no side effects, fully injectable
+
+2. **`remoteHostAdapter` option** in `apps/mv3-shell/src/offscreen.js`
+   - `createOffscreenRunnerBridge` now accepts an optional remote adapter
+   - Automatically composes local + remote into a composite adapter
+
+3. **`createRemoteExecAdapter(sendExec)`** in `apps/mv3-shell/src/runtime-services.js`
+   - Wraps any async exec function into a `RunnerHostAdapter` with structured error handling
+   - Error model: `E_RUNTIME` + `remote_exec_failed` + original error message
+
+4. **6 new tests** across `js-runner.spec.ts` and `manifest.spec.ts`
+   - Composite routes exec→remote, read/write/edit→local
+   - Fallback when remote has no exec (uses local)
+   - Fallback when local is absent (uses remote for read)
+   - Structured error when neither adapter has exec
+   - End-to-end offscreen bridge with remote adapter
+   - `createRemoteExecAdapter` error wrapping
+
+### Routing rules (locked, tested)
+
+| Operation | Primary | Fallback |
+|-----------|---------|----------|
+| read | local | remote |
+| write | local | remote |
+| edit | local | remote |
+| exec | remote | local |
+
+### What is NOT included
+
+- No concrete bridge transport (WebSocket / native messaging) — the remote adapter is injectable, actual transport is a separate concern
+- No changes to `background.js` host routing — existing `routeHostSubstrate` still sends all ops to offscreen, which now has the composite adapter
+- No changes to `hosts.*` control plane multi-host support — still single "local" host in background.js
