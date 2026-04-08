@@ -1,19 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-08T16:04:11.367Z",
+  "generated_at": "2026-04-08T16:12:02.697Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-091",
-      "issue_path": "docs/backlog/2026-04-08-no-progress-threshold-alignment.md",
-      "title": "Align no-progress detection threshold with old repo",
+      "issue_id": "ISSUE-092",
+      "issue_path": "docs/backlog/2026-04-08-shared-tabs-context-injection.md",
+      "title": "Shared tabs context injection into system prompt",
       "parallel_group": "kernel",
       "module_id": "kernel",
       "module_stage": "mainline",
       "tracking_kind": "gap",
       "check_cmd": "bun run check",
       "depends_on": [],
-      "write_scope": ["packages/kernel/src/loop-engine.ts", "packages/kernel/test/"]
+      "write_scope": ["packages/kernel/src/prompt-builder.ts", "packages/kernel/test/"]
     },
     {
       "issue_id": "ISSUE-093",
