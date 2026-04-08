@@ -93,4 +93,4 @@ check_cmd: "bun run check"
 ## 相关 commits
 
 - `1429f8a` feat(kernel): add LLM provider/profile layer with full test coverage (ISSUE-083)
-- `bdf8ed8` fix(kernel): harden llm provider follow-up paths (ISSUE-083)
+- `e8136f0` fix(kernel): harden llm provider follow-up paths (ISSUE-083)
