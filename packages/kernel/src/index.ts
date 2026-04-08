@@ -39,3 +39,9 @@ export {
   contextMessagesToLlmMessages,
   llmMessagesToApiPayload,
 } from "./llm-message-model.js";
+export {
+  runLoop,
+  type LoopOrchestratorOptions,
+  type RunLoopInput,
+  type RunLoopResult,
+} from "./loop-orchestrator.js";
