@@ -94,3 +94,7 @@ check_cmd: "bun run check"
 
 - `1429f8a` feat(kernel): add LLM provider/profile layer with full test coverage (ISSUE-083)
 - `e8136f0` fix(kernel): harden llm provider follow-up paths (ISSUE-083)
+
+## Sub Issues
+
+- `ISSUE-087` Review: ISSUE-083 still lacks llm-message/session-entry closure
