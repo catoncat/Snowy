@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-08T15:09:27.700Z",
+  "generated_at": "2026-04-08T15:40:40.785Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
@@ -16,19 +16,20 @@
       "write_scope": ["packages/kernel/src/prompt-builder.ts", "packages/kernel/test/"]
     },
     {
-      "issue_id": "ISSUE-080",
-      "issue_path": "docs/backlog/2026-03-30-follow-up-skill-setup-hook-authoring-docs-are-stale.md",
-      "title": "Follow-up: skill setup hook authoring docs are stale",
+      "issue_id": "ISSUE-075",
+      "issue_path": "docs/backlog/2026-03-30-sidepanel-still-lacks-an-ai-surface-backed-management-ui.md",
+      "title": "Review: sidepanel still lacks an AI-surface-backed management UI",
       "parallel_group": "sdk-docs",
       "module_id": "skill-runtime-sdk-studio",
       "module_stage": "deferred",
-      "tracking_kind": "doc-debt",
+      "tracking_kind": "gap",
       "check_cmd": "bun run check",
-      "depends_on": [],
+      "depends_on": ["ISSUE-072"],
       "write_scope": [
-        "docs/skill-authoring-guide.md",
-        "docs/skill-package-convention.md",
-        "packages/skill-sdk/README.md"
+        "apps/mv3-shell/src/sidepanel.html",
+        "apps/mv3-shell/src/runtime-services.js",
+        "apps/mv3-shell/test/manifest.spec.ts",
+        "docs/"
       ]
     }
   ]

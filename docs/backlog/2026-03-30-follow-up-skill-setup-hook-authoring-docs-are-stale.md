@@ -1,11 +1,11 @@
 ---
 id: ISSUE-080
 title: "Follow-up: skill setup hook authoring docs are stale"
-status: open
+status: done
 priority: p1
 source: "ISSUE-077 closure 2026-03-30"
 created: 2026-03-30
-assignee: unassigned
+assignee: codex-followup
 tags:
   - review
   - docs
@@ -25,6 +25,7 @@ write_scope:
   - packages/skill-sdk/README.md
 acceptance_ref: docs/legacy-to-vnext-migration-matrix.md
 check_cmd: "bun run check"
+completed_at: 2026-04-08T15:40:40.779Z
 ---
 
 ## Goal
@@ -41,3 +42,19 @@ check_cmd: "bun run check"
 - skill setup hook 的 install-only contract 被写入作者文档与 package README。
 - 文档明确 setup hook 的允许副作用边界、推荐文件落点与当前不支持的 phase。
 - skill authoring 路径不再需要从测试或源码猜 setup contract。
+
+## 工作总结
+
+### 实现了什么
+- 在 skill authoring guide 中补 install-only setup hook 声明、运行方式、允许副作用边界与推荐文件落点
+- 在 skill package convention 与 skill-sdk README 中补 setup hook contract、package-root 写入限制与不支持 phase 说明
+
+### 实际跑了什么检查
+- git diff --check -- docs/skill-authoring-guide.md docs/skill-package-convention.md packages/skill-sdk/README.md
+
+### 残留风险
+- 当前 setup hook 仍只有 install phase；runtime 接线与更多 phase 仍是后续 gap
+
+## 相关 commits
+
+- `2cda7481a2db` docs(skill-sdk): document install-only setup hooks (ISSUE-080)
