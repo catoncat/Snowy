@@ -92,9 +92,14 @@ export function contextMessagesToLlmMessages(messages: SessionContextMessage[]):
     }
 
     if (msg.role === "assistant") {
+      // Use preserved contentBlocks if available (text + toolCall mixed),
+      // otherwise fall back to plain text block
+      const content = msg.contentBlocks?.length
+        ? msg.contentBlocks
+        : [{ type: "text" as const, text: msg.content }];
       result.push({
         role: "assistant",
-        content: [{ type: "text", text: msg.content }],
+        content,
       } satisfies LlmAssistantMessage);
     }
   }

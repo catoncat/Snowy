@@ -776,6 +776,7 @@ export interface MessagePayload {
   text: string;
   toolName?: string;
   toolCallId?: string;
+  contentBlocks?: LlmAssistantContentBlock[];
 }
 
 export interface CompactionPayload {
@@ -799,6 +800,7 @@ export interface SessionContextMessage {
   entryId: string;
   toolName?: string;
   toolCallId?: string;
+  contentBlocks?: LlmAssistantContentBlock[];
 }
 
 // ──────────────────────────────────────────────────────────

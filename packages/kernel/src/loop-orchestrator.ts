@@ -9,6 +9,7 @@ import type {
 import type { CapabilityRegistry } from "@bbl-next/core";
 import type { Kernel } from "./kernel-facade.js";
 import {
+  buildAssistantContentBlocks,
   contextMessagesToLlmMessages,
   llmMessagesToApiPayload,
   normalizeToolCallId,
@@ -150,11 +151,18 @@ export async function runLoop(
       const textContent = (message.content as string) || "";
       const toolCalls = (message.tool_calls as LlmToolCall[] | undefined) ?? [];
 
-      // Append assistant message
+      // Build content blocks preserving text + tool_calls structure
+      const contentBlocks =
+        toolCalls.length > 0
+          ? buildAssistantContentBlocks(textContent || null, toolCalls)
+          : undefined;
+
+      // Append assistant message (with contentBlocks if tool_calls present)
       await kernel.appendMessage(input.sessionId, {
         role: "assistant",
         text: textContent,
-      });
+        contentBlocks,
+      } as MessagePayload);
 
       // No tool calls → done
       if (toolCalls.length === 0) {

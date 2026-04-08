@@ -185,5 +185,6 @@ function entryToContextMessage(entry: SessionEntry): SessionContextMessage | nul
     entryId: entry.entryId,
     toolName: payload.toolName,
     toolCallId: payload.toolCallId,
+    contentBlocks: payload.contentBlocks,
   };
 }
