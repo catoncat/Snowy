@@ -1,0 +1,164 @@
+import { describe, expect, it } from "vitest";
+import {
+  SIDEPANEL_MANAGEMENT_ACTION_KINDS,
+  SIDEPANEL_MANAGEMENT_RESOURCE_IDS,
+  applyManagementResourceDocument,
+  buildManagementBootstrapRequests,
+  createInitialManagementState,
+  createManagementActionMessage,
+} from "../src/sidepanel/management";
+
+describe("sidepanel management state", () => {
+  it("bootstraps only through unified resource.read requests", () => {
+    expect(SIDEPANEL_MANAGEMENT_RESOURCE_IDS).toEqual([
+      "runtime.summary",
+      "config.summary",
+      "skills.summary",
+      "hosts.summary",
+    ]);
+
+    expect(buildManagementBootstrapRequests()).toEqual([
+      { kind: "resource.read", resourceId: "runtime.summary", world: "main" },
+      { kind: "resource.read", resourceId: "config.summary", world: "main" },
+      { kind: "resource.read", resourceId: "skills.summary", world: "main" },
+      { kind: "resource.read", resourceId: "hosts.summary", world: "main" },
+    ]);
+  });
+
+  it("hydrates runtime/config/skills/hosts summaries without app-local bootstrap truth", () => {
+    let state = createInitialManagementState();
+
+    state = applyManagementResourceDocument(state, {
+      id: "runtime.summary",
+      primitive: "resource",
+      generatedAt: "2026-04-09T00:00:00.000Z",
+      data: {
+        status: "healthy",
+        mode: "active-tab-only",
+        sessionId: "session-1",
+        activeTab: {
+          tabId: 7,
+          url: "https://fixture.test/runtime",
+          title: "Runtime",
+          world: "main",
+        },
+        loopState: "idle",
+        lastError: null,
+        interventions: {
+          status: "empty",
+          totalCount: 0,
+          activeCount: 0,
+          recentCount: 0,
+          active: [],
+        },
+        actionCapabilities: {
+          total: 4,
+          namespaces: ["runtime", "config"],
+        },
+      },
+    });
+    state = applyManagementResourceDocument(state, {
+      id: "config.summary",
+      primitive: "resource",
+      generatedAt: "2026-04-09T00:00:00.000Z",
+      data: {
+        status: "ready",
+        fields: ["model", "automation"],
+        values: {
+          model: {
+            provider: "openai",
+            model: "gpt-5.4",
+          },
+        },
+        note: null,
+        updatedAt: "2026-04-09T00:00:00.000Z",
+      },
+    });
+    state = applyManagementResourceDocument(state, {
+      id: "skills.summary",
+      primitive: "resource",
+      generatedAt: "2026-04-09T00:00:00.000Z",
+      data: {
+        status: "healthy",
+        installedCount: 2,
+        enabledCount: 1,
+        trustedCount: 1,
+        recentChange: "skills.enable",
+      },
+    });
+    state = applyManagementResourceDocument(state, {
+      id: "hosts.summary",
+      primitive: "resource",
+      generatedAt: "2026-04-09T00:00:00.000Z",
+      data: {
+        status: "healthy",
+        defaultHostId: "local",
+        totalCount: 1,
+        connectedCount: 1,
+        items: [
+          {
+            hostId: "local",
+            kind: "local",
+            connected: true,
+            state: "connected",
+            isDefault: true,
+          },
+        ],
+      },
+    });
+
+    expect(state.runtime?.data.activeTab?.url).toBe("https://fixture.test/runtime");
+    expect(state.config?.data.values.model).toEqual({
+      provider: "openai",
+      model: "gpt-5.4",
+    });
+    expect(state.skills?.data.installedCount).toBe(2);
+    expect(state.hosts?.data.defaultHostId).toBe("local");
+  });
+
+  it("builds only approved control-plane action messages", () => {
+    expect(SIDEPANEL_MANAGEMENT_ACTION_KINDS).toEqual([
+      "runtime.capture_diagnostics",
+      "runtime.clear_error",
+      "config.update",
+      "skills.install",
+      "skills.enable",
+      "skills.disable",
+      "skills.uninstall",
+      "hosts.connect",
+      "hosts.disconnect",
+      "hosts.set_default",
+    ]);
+
+    expect(
+      createManagementActionMessage("runtime.capture_diagnostics", { world: "main", tabId: 9 }),
+    ).toEqual({ kind: "runtime.capture_diagnostics", world: "main", tabId: 9 });
+    expect(createManagementActionMessage("runtime.clear_error")).toEqual({
+      kind: "runtime.clear_error",
+    });
+    expect(
+      createManagementActionMessage("config.update", {
+        patch: {
+          model: {
+            provider: "openai",
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "config.update",
+      patch: {
+        model: {
+          provider: "openai",
+        },
+      },
+    });
+    expect(createManagementActionMessage("skills.install", { skillId: "skill.demo" })).toEqual({
+      kind: "skills.install",
+      skillId: "skill.demo",
+    });
+    expect(createManagementActionMessage("hosts.connect", { hostId: "local" })).toEqual({
+      kind: "hosts.connect",
+      hostId: "local",
+    });
+  });
+});

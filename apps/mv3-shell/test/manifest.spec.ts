@@ -10,7 +10,7 @@ import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCR
 import { createOffscreenRunnerBridge } from "../src/offscreen.js";
 // biome-ignore format: keep ts-ignore attached to single-line JS import
 // @ts-ignore source JS module has no declaration file yet
-import { SIDEPANEL_MANAGEMENT_ACTION_KINDS, SIDEPANEL_MANAGEMENT_RESOURCE_IDS, createBackgroundRuntimeServices, createRemoteExecAdapter } from "../src/runtime-services.js";
+import { SIDEPANEL_MANAGEMENT_ACTION_KINDS, SIDEPANEL_MANAGEMENT_RESOURCE_IDS, createBackgroundRuntimeServices, createRemoteExecAdapter, isSidepanelManagementActionKind, isSidepanelManagementResourceId } from "../src/runtime-services.js";
 
 type MessageListener = (
   message: unknown,
@@ -2348,6 +2348,13 @@ describe("mv3-shell manifest", () => {
 
     dispose();
     harness.cleanup();
+  });
+
+  it("exports sidepanel management guard helpers for future UI consumers", () => {
+    expect(isSidepanelManagementResourceId("runtime.summary")).toBe(true);
+    expect(isSidepanelManagementResourceId("runtime.bootstrap")).toBe(false);
+    expect(isSidepanelManagementActionKind("skills.install")).toBe(true);
+    expect(isSidepanelManagementActionKind("runtime.chat.send")).toBe(false);
   });
 
   it("locks sidepanel management to shared AI-surface resources and control-plane actions", async () => {

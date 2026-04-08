@@ -11,32 +11,18 @@ import {
 } from "@bbl-next/core";
 import { InMemorySessionStorage, VfsSessionStorage, createKernel } from "@bbl-next/kernel";
 import { invokeSingleActionSiteSkill } from "@bbl-next/site-runtime";
+export {
+  SIDEPANEL_MANAGEMENT_ACTION_KINDS,
+  SIDEPANEL_MANAGEMENT_RESOURCE_IDS,
+  isSidepanelManagementActionKind,
+  isSidepanelManagementResourceId,
+} from "./sidepanel-management-contract.js";
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 const DEFAULT_INTERVENTION_TIMEOUT_MS = 5 * 60 * 1000;
-// Lock the future sidepanel management surface to shared AI-surface resources/actions
-// instead of app-local bootstrap or mutation paths.
-export const SIDEPANEL_MANAGEMENT_RESOURCE_IDS = [
-  "runtime.summary",
-  "config.summary",
-  "skills.summary",
-  "hosts.summary",
-];
-export const SIDEPANEL_MANAGEMENT_ACTION_KINDS = [
-  "runtime.capture_diagnostics",
-  "runtime.clear_error",
-  "config.update",
-  "skills.install",
-  "skills.enable",
-  "skills.disable",
-  "skills.uninstall",
-  "hosts.connect",
-  "hosts.disconnect",
-  "hosts.set_default",
-];
 const SKILL_STATUS_BY_ACTION = {
   "skills.install": "installed",
   "skills.enable": "enabled",
