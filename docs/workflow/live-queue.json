@@ -1,19 +1,23 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-08T15:40:40.785Z",
+  "generated_at": "2026-04-08T15:44:39.929Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-088",
-      "issue_path": "docs/backlog/2026-04-08-prompt-skills-injection.md",
-      "title": "Inject available skills into system prompt",
+      "issue_id": "ISSUE-089",
+      "issue_path": "docs/backlog/2026-04-08-action-failure-tracking.md",
+      "title": "Action failure tracking and strategy hints in prompt",
       "parallel_group": "kernel",
       "module_id": "kernel",
       "module_stage": "mainline",
       "tracking_kind": "gap",
       "check_cmd": "bun run check",
       "depends_on": [],
-      "write_scope": ["packages/kernel/src/prompt-builder.ts", "packages/kernel/test/"]
+      "write_scope": [
+        "packages/kernel/src/prompt-builder.ts",
+        "packages/kernel/src/loop-orchestrator.ts",
+        "packages/kernel/test/"
+      ]
     },
     {
       "issue_id": "ISSUE-075",
