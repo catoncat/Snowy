@@ -1,25 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-08T16:37:28.412Z",
+  "generated_at": "2026-04-08T16:38:43.218Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-093",
-      "issue_path": "docs/backlog/2026-04-08-sidepanel-management-ui-still-lacks-a-shared-control-plane-consumer.md",
-      "title": "Review: sidepanel management UI still lacks a shared control-plane consumer",
-      "parallel_group": "sdk-docs",
-      "module_id": "skill-runtime-sdk-studio",
-      "module_stage": "deferred",
-      "tracking_kind": "follow-up",
-      "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-072", "ISSUE-085"],
-      "write_scope": [
-        "apps/mv3-shell/src/sidepanel.html",
-        "apps/mv3-shell/src/sidepanel/",
-        "apps/mv3-shell/src/runtime-services.js",
-        "apps/mv3-shell/test/manifest.spec.ts",
-        "docs/"
-      ]
-    }
-  ]
+  "entries": []
 }
