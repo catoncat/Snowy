@@ -21,7 +21,8 @@
 - browser-side kernel 主层
 - session / run queue / compaction 主链
 - 完整 diagnostics / intervention / browser automation 主线
-- queue rebuild / claim / planning 的轻量工作流收口
+- kernel prompt / context / retry / failure-policy 收口
+- product UI / Skill Studio 收口
 
 所以现在的主线不是“继续把 substrate 做得更满”，而是：
 
@@ -125,8 +126,19 @@ bun run workflow:queue:build
 
 - claim / workflow：`docs/workflow/live-queue.json`
 - implement claimed issue：当前 issue + `acceptance_ref` + 对应代码测试
+- finish / close issue：当前 issue + `docs/backlog/README.md`
 - planning：`docs/source-of-truth-map.md` + `docs/module-tracking-ledger.json` + `docs/backlog/README.md`
 - architecture：`docs/locked-decisions-2026-03-29.md` + recovery report + kernel skeleton
+
+完成 issue 不只代表代码写完。
+
+至少还要补：
+
+1. code commit
+2. issue `status: done`
+3. issue `## 工作总结`
+4. issue `## 相关 commits`
+5. 若 backlog metadata 变化影响 dispatch，则 `bun run workflow:queue:build`
 
 ## 如果你要判断“旧仓是不是已经迁完”
 

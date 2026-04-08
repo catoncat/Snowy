@@ -452,22 +452,31 @@ loop step 执行边界：
 - `packages/kernel/test/compaction-manager.spec.ts` — 5 测试（threshold, full cycle, iterative compaction）
 - `packages/kernel/test/kernel-facade.spec.ts` — 13 测试（session/run/queue/loop/compaction 端到端集成 + capability dispatch）
 
-### 总计
+### 后续已补回的 kernel 扩展层
 
-| 指标 | 数值 |
-|------|------|
-| kernel 模块文件 | 6（session-store, in-memory-session-storage, run-controller, loop-engine, compaction-manager, kernel-facade）+ index.ts |
-| kernel 测试文件 | 4（session-store, run-controller, loop-engine, compaction-manager）+ 1 集成（kernel-facade）|
-| kernel 测试数量 | 54 |
-| 全仓测试总数 | 227（15 个文件，全部通过）|
-| typecheck | 零错误 |
+- `packages/kernel/src/intervention-controller.ts` — intervention lifecycle / summary / audit 共享状态
+- `packages/kernel/src/vfs-session-storage.ts` — VFS-backed session persistence adapter
+- `packages/kernel/src/llm-provider-registry.ts` / `llm-profile-resolver.ts` / `llm-openai-provider.ts` / `llm-stream-parser.ts` — provider/profile/transport 层
+- `packages/kernel/src/llm-kernel-adapter.ts` / `llm-message-model.ts` — provider 到 kernel loop 的消息转换与适配层
+- `packages/kernel/src/loop-orchestrator.ts` / `prompt-builder.ts` — 主 LLM loop 与 system prompt/task progress 注入
+- 对应验证入口见 `packages/kernel/test/*.spec.ts`
+
+### 当前实现快照
+
+| Area | Current Implementation |
+|------|------------------------|
+| session / run / compaction | `session-store.ts`, `run-controller.ts`, `loop-engine.ts`, `compaction-manager.ts`, `kernel-facade.ts` |
+| intervention / persistence | `intervention-controller.ts`, `vfs-session-storage.ts` |
+| provider / profile / transport | `llm-provider-registry.ts`, `llm-profile-resolver.ts`, `llm-openai-provider.ts`, `llm-stream-parser.ts`, `llm-kernel-adapter.ts`, `llm-message-model.ts` |
+| orchestration / prompt | `loop-orchestrator.ts`, `prompt-builder.ts` |
+| behavior truth | `packages/kernel/src/*.ts` + `packages/kernel/test/*.spec.ts` |
 
 ### 实际 vs 设计偏差
 
 | 项目 | 设计文档 §7 | 实际实现 | 说明 |
 |------|------------|----------|------|
 | LoopEngine.executeTurn | 直接编排 step 执行 | `createTurn()` + `recordTurnResult()` 拆分 | 更灵活，允许调用方控制执行过程 |
-| KernelFacade 构造参数 | `registry` + `providers` + `storage` + `llm` | `storage` + `llm` + `loop?` + `compaction?` | 骨架阶段不依赖 core 的 registry/providers，后续 wiring 时再加 |
+| KernelFacade 构造参数 | `registry` + `providers` + `storage` + `llm` | `storage` + `llm` + `registry?` + `providers?` + `dispatch/step overrides` + `loop?` + `compaction?` | 后续 wiring 已补回 registry/providers，并为 MV3/runtime 集成补了 dispatch 与 step override 入口 |
 | CompactionManager.shouldCompact | `(sessionId, opts?)` | `(sessionId, contextWindow, currentTokens?)` | 需要显式 contextWindow 参数，更符合调用方已知信息 |
 
 ---

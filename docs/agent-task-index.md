@@ -60,7 +60,27 @@
 - `docs/document-system-contract.md`
   - 仅当需要过 Doc Freshness Gate
 
-### C. Queue 为空，或要做下一批规划
+### C. 我已经做完代码，要收口 / close issue
+
+读：
+
+1. 当前 issue 文件
+2. `docs/backlog/README.md`
+
+按需再读：
+
+- `docs/document-system-contract.md`
+  - 仅当你要确认 DoD / Doc Freshness Gate
+
+完成前必须补：
+
+- code commit
+- issue `status: done`
+- `## 工作总结`
+- `## 相关 commits`
+- 若 backlog metadata 变化影响 dispatch，执行 `bun run workflow:queue:build`
+
+### D. Queue 为空，或要做下一批规划
 
 读：
 
@@ -77,7 +97,7 @@
 - `project_plan.md`
 - 当前相关包代码和测试
 
-### D. 我要改 architecture / public surface
+### E. 我要改 architecture / public surface
 
 读：
 
@@ -93,7 +113,7 @@
 - `docs/ai-surface-index.md`
 - `docs/document-system-contract.md`
 
-### E. 我要判断迁移 / cutover / parity
+### F. 我要判断迁移 / cutover / parity
 
 读：
 
@@ -135,4 +155,4 @@
 
 ## One-Line Rule
 
-先锁任务，再补上下文；先读 issue 和代码，再读大文档。
+先锁任务，再补上下文；实现看 issue 和代码，收口看 Completion Record，再读大文档。

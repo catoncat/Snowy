@@ -338,19 +338,14 @@
   - `packages/kernel`
   - session / run / compaction 骨架
   - diagnostics / intervention / browser automation 后续收口
-- 当前次级 open queue：
-  - operability
-  - site-runtime automation
-  - js-runner real local host adapter
-  - DX / 测试补洞
+- secondary / deferred 的当前可做项以 `docs/workflow/live-queue.json` + `docs/module-tracking-ledger.json` 为准，不在本文件维护静态列表。
 
 ## 9. Workflow
 
 - backlog 规则：`docs/backlog/README.md`
 - live dispatch queue：`docs/workflow/live-queue.json`
 - live lease file：`~/.codex/workflow-leases/browser-brain-loop-next.json`
-- 当前 batch 指针：`docs/next-development-slices-2026-03-29-batch-9.md`
-- 历史批次索引：`docs/next-development-slices-2026-03-29.md`
+- 历史 batch / planning snapshot：`docs/next-development-slices-2026-03-29.md`
 - Agent 工作流说明：`docs/multi-agent-workflow.md`
 - 统一 workflow skill：`.agents/skills/agent-workflow-next/`
 - claim skill：`.agents/skills/auto-claim-issues-next/`
@@ -359,6 +354,7 @@
 - role prompt 只作为可选 stance overlay，不是系统前提
 - queue build 由 backlog + module ledger 生成；claim path 本身不再扫描 backlog
 - live ticket 只通过 lease 文件加锁；`in-progress` 不再是 dispatch lock
+- batch 文档只是历史 planning snapshot；当前 dispatch 只看 live queue + lease
 - backlog 变化后必须重建 live queue，至少包括：新增 issue、改 `done`、改 `depends_on`、改 `write_scope`
 - 若 live queue 返回空，先判断是否需要重建 queue；确认无票后再进入下一批规划
 - worker 默认只对自己当前 slice / `write_scope` 的聚焦验证负责；repo 级 gate 是补充，不是并行情况下的唯一完成依据

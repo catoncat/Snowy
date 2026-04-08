@@ -58,10 +58,11 @@
 | 哪些原则不能变 | `AGENTS.md` → `docs/locked-decisions-2026-03-29.md` |
 | workflow 必须跟踪哪些模块 | `docs/module-tracking-ledger.json` |
 | 当前主线为什么是 kernel | `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
-| 本轮插件主线纠偏现在由哪些 issue 承载 | `docs/reviews/2026-03-30-plugin-mainline-correction-control.md` |
+| 2026-03-30 那轮插件纠偏流由哪些 issue 承载 | `docs/reviews/2026-03-30-plugin-mainline-correction-control.md` |
 | `packages/kernel` 该怎么做 | `docs/kernel-skeleton-design.md` |
 | 我现在该 claim 什么 | `docs/backlog/README.md` → `docs/workflow/live-queue.json` → `BBL_AGENT_NAME=<name> bun run workflow:claim:preview` |
-| 当前批次是什么 | `docs/next-development-slices-2026-03-29-batch-9.md` |
+| 当前 live dispatch 是什么 | `docs/workflow/live-queue.json` + `~/.codex/workflow-leases/browser-brain-loop-next.json` |
+| 历史 planning snapshot 在哪 | `docs/next-development-slices-*.md` |
 | 某个能力是否已经真正落地 | 对应 `packages/*/src/` + `packages/*/test/*.spec.ts` |
 | v0 已经做到哪 | `docs/v0-slice.md` |
 | 与旧仓的迁移差距还有哪些 | `docs/legacy-to-vnext-migration-matrix.md` → `docs/migration-parity-dashboard.md` → `docs/cutover-readiness-criteria.md` |
@@ -203,7 +204,7 @@
 
 `docs/reviews/` 下面的文档有两类，不要混用：
 
-### 类别 A：当前主线纠偏文档
+### 类别 A：主线裁决 / correction control 文档
 
 - `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
 - `docs/reviews/2026-03-30-plugin-mainline-correction-control.md`
@@ -217,9 +218,9 @@
   - kernel 主线回归的依据
   - backlog / workflow / planning 应该对齐的上游判断
 - `2026-03-30-plugin-mainline-correction-control.md`
-  - 本轮“插件主线纠偏”执行控制文档
-  - 负责把 review findings 映射到 correction gates 与 backlog
-  - 不替代 backlog，只决定 correction stream 如何判断“是否已经纠偏”
+  - 2026-03-30 那轮“插件主线纠偏”的执行控制文档
+  - 负责把当时的 review findings 映射到 correction gates 与 backlog
+  - 现在主要作为历史 correction stream 参考，不是当前 dispatch 真相源
 
 ### 类别 B：gap inventory / follow-up 来源
 
@@ -252,18 +253,12 @@
 6. deferred modules 只在前两层没有 live queue entry 时再进入
 7. 当 live queue 为空且没有 active lease 时，再进入 next-batch planning
 
-当前默认 planning 快照是：
+当前 dispatch 与规划要这样看：
 
-- `docs/next-development-slices-2026-03-29-batch-9.md`
-
-当前默认主线排序是：
-
-1. `ISSUE-067`
-2. `ISSUE-070`
-3. `ISSUE-071`
-3. `ISSUE-053`
-4. 再看 `ISSUE-033` / `ISSUE-042` / `ISSUE-043`
-5. 再看 `ISSUE-036` / `ISSUE-045` / `ISSUE-038`
+1. 当前可做什么：看 `docs/workflow/live-queue.json`
+2. 当前谁持有锁：看 `~/.codex/workflow-leases/browser-brain-loop-next.json`
+3. 为什么排序成这样：看 `docs/module-tracking-ledger.json`
+4. 历史 planning 背景：再回看 `docs/next-development-slices-*.md`
 
 ## 9. 文档为什么会过期
 

@@ -42,8 +42,8 @@
 | screenshot / visual / download utilities | old builtin tools | future capability families | keep-by-capability | `partial` | 边界已裁决且最小截图路径已落地（见 `docs/screenshot-download-surface-boundary.md`）：`page.screenshot` 已由 `ISSUE-057` 落地；`screenshot_with_highlight` 为 Tier 2 composite；download 延后到 product/workflow 层 |
 | interventions / human handoff | intervention tools + panel UI | runtime handoff contract + future kernel / studio lifecycle | replace-and-phase | `partial` | cutover 前必需地位已锁定；`packages/site-runtime` 已能对 verify/runtime blocked 返回结构化 intervention request，kernel / MV3 的 request/resolve/cancel/timeout/audit 已具备 durable restart round-trip；剩余 gap 主要是 product/studio 层的人机接管 UI |
 | tab / page interaction tools | old builtin page/tab tools | public namespaces `page.*`, `tabs.*` | replace-with-public-api | `partial` | 最小 public automation path 已锁定（见 `docs/page-tabs-public-automation-path.md`）：Tier 1 = page.query/click/fill/press_key/screenshot + tabs.get_active/navigate；`tabs.navigate` 已由 `ISSUE-058` 落地，`page.press_key` / `page.screenshot` 已由 `ISSUE-057` 落地；剩余 gap 是 `page.query/click/fill` production path |
-| LLM provider registry / profile routing | `llm-provider-registry.ts`, profile resolver | future provider layer | keep-core-idea | `not-started` | 新仓尚未迁旧 provider/profile 层 |
-| orchestration/session/run queue/compaction | `BrainOrchestrator`, session manager, loop | future mainline brain layer | keep-product-capability | `not-started` | 当前新仓只是 runtime substrate |
+| LLM provider registry / profile routing | `llm-provider-registry.ts`, profile resolver | provider/profile layer in `packages/kernel` | keep-core-idea | `partial` | `packages/kernel` 已有 `LlmProviderRegistry`、`resolveLlmRoute()`、OpenAI-compatible provider、kernel LLM adapter 与对应测试；剩余 gap 是 retry escalation、available skills/shared tabs context 注入与 provider policy hardening |
+| orchestration/session/run queue/compaction | `BrainOrchestrator`, session manager, loop | browser-side kernel mainline in `packages/kernel` | keep-product-capability | `partial` | `SessionStore` / `RunController` / `LoopEngine` / `CompactionManager` / `createKernel()` / `runLoop()` / `buildSystemPromptBase()` 已落地并有测试；剩余 gap 是 prompt/context policy、failure tracking 与 MV3 end-to-end wiring 完整收口 |
 | hooks system / extension points | `hook-runner.ts`, plugin hooks | future executable Skill setup hooks | replace-and-simplify | `partial` | `packages/skill-sdk` 已提供 install-only declarative setup hook contract 与 `runSkillSetupHooks()` 计划 runner；剩余 gap 是 authoring docs、runtime 接线与更丰富 phase 仍未定义 |
 | diagnostics / runtime debug / audit | debug snapshot + diagnostics HTTP | future observability layer | keep-and-rebuild | `partial` | 轻量 summary / `audit.tail` resource contract、runtime diagnostics action、以及覆盖 `hosts.*` / `config.update` / `skills.*` lifecycle 的统一 `audit.tail` app integration path 已落地；但仍没有旧仓同等级 debug 面 |
 | MCP export / external capability bridge | bridge + export plan | bridge-side MCP export | defer-but-required | `partial` | descriptor-derived handoff contract 已有代码和测试；真正 bridge-side MCP server/transport 仍未实现 |
@@ -62,7 +62,7 @@
 ## 对完整迁移最关键的未收口区域
 
 1. browser automation / screenshot / download 的剩余 runtime integration 与 intervention lifecycle 是否真正闭环
-2. provider / profile / diagnostics / observability 主链
+2. kernel prompt / context / provider policy / diagnostics / observability 主链
 3. Skill Studio / lifecycle / versioning 产品面
 
 ## 如何使用本文件
