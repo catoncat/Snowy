@@ -1,26 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-08T14:07:43.773Z",
+  "generated_at": "2026-04-08T14:11:17.899Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-087",
-      "issue_path": "docs/backlog/2026-04-08-issue-083-still-lacks-llm-message-session-entry-closure.md",
-      "title": "Review: ISSUE-083 still lacks llm-message/session-entry closure",
-      "parallel_group": "contracts-core",
-      "module_id": "provider-profile-routing",
-      "module_stage": "mainline",
-      "tracking_kind": "follow-up",
-      "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-083", "ISSUE-084"],
-      "write_scope": [
-        "packages/kernel/src/llm-message-model.ts",
-        "packages/kernel/src/loop-orchestrator.ts",
-        "packages/kernel/src/index.ts",
-        "packages/kernel/test/llm-message-model.spec.ts",
-        "packages/kernel/test/loop-orchestrator.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-082",
       "issue_path": "docs/backlog/2026-03-31-follow-up-resource-metadata-registry-and-audience-projection-are-still-lookup-on.md",
