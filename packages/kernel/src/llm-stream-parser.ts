@@ -26,6 +26,63 @@ export async function readLlmMessageFromSseStream(
   const toolByIndex = new Map<number, ToolCallAccumulator>();
   let stopReason: string | undefined;
 
+  function processLine(line: string): void {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith(":")) return;
+    if (trimmed === "data: [DONE]") return;
+    if (!trimmed.startsWith("data: ")) return;
+
+    const jsonStr = trimmed.slice(6);
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    packetCount++;
+
+    const choices = parsed.choices as Array<Record<string, unknown>> | undefined;
+    if (!choices?.length) return;
+
+    const choice = choices[0];
+    const delta = choice.delta as Record<string, unknown> | undefined;
+    const finishReason = choice.finish_reason as string | undefined;
+
+    if (finishReason) {
+      stopReason = finishReason;
+    }
+
+    if (!delta) return;
+
+    if (typeof delta.content === "string" && delta.content) {
+      accumulatedText += delta.content;
+      onDeltaText?.(delta.content);
+    }
+
+    const deltaToolCalls = delta.tool_calls as Array<Record<string, unknown>> | undefined;
+    if (deltaToolCalls) {
+      for (const tc of deltaToolCalls) {
+        const idx = (tc.index as number) ?? 0;
+        let acc = toolByIndex.get(idx);
+        if (!acc) {
+          acc = {
+            index: idx,
+            id: "",
+            type: "function",
+            function: { name: "", arguments: "" },
+          };
+          toolByIndex.set(idx, acc);
+        }
+        if (typeof tc.id === "string") acc.id += tc.id;
+        const fn = tc.function as Record<string, unknown> | undefined;
+        if (fn) {
+          if (typeof fn.name === "string") acc.function.name += fn.name;
+          if (typeof fn.arguments === "string") acc.function.arguments += fn.arguments;
+        }
+      }
+    }
+  }
+
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -40,63 +97,13 @@ export async function readLlmMessageFromSseStream(
       buffer = lines.pop() || "";
 
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith(":")) continue;
-        if (trimmed === "data: [DONE]") continue;
-        if (!trimmed.startsWith("data: ")) continue;
-
-        const jsonStr = trimmed.slice(6);
-        let parsed: Record<string, unknown>;
-        try {
-          parsed = JSON.parse(jsonStr) as Record<string, unknown>;
-        } catch {
-          continue;
-        }
-        packetCount++;
-
-        const choices = parsed.choices as Array<Record<string, unknown>> | undefined;
-        if (!choices?.length) continue;
-
-        const choice = choices[0];
-        const delta = choice.delta as Record<string, unknown> | undefined;
-        const finishReason = choice.finish_reason as string | undefined;
-
-        if (finishReason) {
-          stopReason = finishReason;
-        }
-
-        if (!delta) continue;
-
-        // Text content
-        if (typeof delta.content === "string" && delta.content) {
-          accumulatedText += delta.content;
-          onDeltaText?.(delta.content);
-        }
-
-        // Tool calls
-        const deltaToolCalls = delta.tool_calls as Array<Record<string, unknown>> | undefined;
-        if (deltaToolCalls) {
-          for (const tc of deltaToolCalls) {
-            const idx = (tc.index as number) ?? 0;
-            let acc = toolByIndex.get(idx);
-            if (!acc) {
-              acc = {
-                index: idx,
-                id: "",
-                type: "function",
-                function: { name: "", arguments: "" },
-              };
-              toolByIndex.set(idx, acc);
-            }
-            if (typeof tc.id === "string") acc.id += tc.id;
-            const fn = tc.function as Record<string, unknown> | undefined;
-            if (fn) {
-              if (typeof fn.name === "string") acc.function.name += fn.name;
-              if (typeof fn.arguments === "string") acc.function.arguments += fn.arguments;
-            }
-          }
-        }
+        processLine(line);
       }
+    }
+
+    buffer += decoder.decode();
+    for (const line of buffer.split("\n")) {
+      processLine(line);
     }
   } finally {
     reader.releaseLock();

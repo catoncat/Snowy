@@ -2,8 +2,11 @@ import { readLlmMessageFromSseStream } from "@bbl-next/kernel";
 import { describe, expect, it, vi } from "vitest";
 
 function sseStream(lines: string[]): ReadableStream<Uint8Array> {
+  return rawSseStream(`${lines.join("\n")}\n`);
+}
+
+function rawSseStream(text: string): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
-  const text = `${lines.join("\n")}\n`;
   return new ReadableStream({
     start(controller) {
       controller.enqueue(encoder.encode(text));
@@ -147,6 +150,16 @@ describe("readLlmMessageFromSseStream", () => {
     expect(onDelta).toHaveBeenNthCalledWith(1, "Hello");
     expect(onDelta).toHaveBeenNthCalledWith(2, ", ");
     expect(onDelta).toHaveBeenNthCalledWith(3, "world!");
+  });
+
+  it("parses final packet without trailing newline", async () => {
+    const stream = rawSseStream(sseChunk("tail", undefined, "stop"));
+
+    const result = await readLlmMessageFromSseStream(stream);
+
+    expect(result.message.content).toBe("tail");
+    expect(result.message.stop_reason).toBe("stop");
+    expect(result.packetCount).toBe(1);
   });
 
   it("preserves rawBody of the full stream", async () => {

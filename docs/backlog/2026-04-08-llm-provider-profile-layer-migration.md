@@ -73,14 +73,24 @@ check_cmd: "bun run check"
 
 ### 实际跑了什么检查
 
-- `bun run check` (typecheck + lint + test) 全部通过
-- 新增 24 个单元测试，总计 377 tests 全通过
+- 原实现提交 `1429f8a` 阶段已跑 `bun run check`
+- review follow-up 额外跑：
+  - `bun run test packages/kernel/test/llm-message-model.spec.ts packages/kernel/test/llm-openai-provider.spec.ts packages/kernel/test/llm-profile-resolver.spec.ts packages/kernel/test/llm-provider-registry.spec.ts packages/kernel/test/llm-stream-parser.spec.ts`
+  - `./node_modules/.bin/biome check packages/kernel/src/llm-stream-parser.ts packages/kernel/src/llm-openai-provider.ts packages/kernel/src/llm-message-model.ts packages/kernel/test/llm-stream-parser.spec.ts packages/kernel/test/llm-openai-provider.spec.ts packages/kernel/test/llm-message-model.spec.ts`
+
+### review follow-up（2026-04-08）
+
+- 修复 `readLlmMessageFromSseStream()` 在 SSE 末包无 trailing newline 时丢包的问题，补了 EOF leftover 覆盖测试
+- 修复 OpenAI-compatible provider 在空 `llmKey` 下仍发送 `Authorization: Bearer ` 的问题
+- 修复非法 / 缺失 tool call id fallback 可能碰撞的问题，补了多 invalid id 唯一性回归测试
 
 ### 残留风险
 
 - Profile escalation 策略只实现了 single profile 路径，多 profile 自动升级（upgrade_only）的 runtime 逻辑未实现
 - LlmProviderAdapter.send() 的 retry 逻辑在 provider 层没有内建，caller 需要自行处理
+- 当前工作树还有 ISSUE-083 外的未提交改动，导致现在重跑 `bun run check` 会被 `llm-kernel-adapter` / `loop-orchestrator` 相关 lint 问题拦住；本次 follow-up 只对修复触达文件做了定向验证
 
 ## 相关 commits
 
 - `1429f8a` feat(kernel): add LLM provider/profile layer with full test coverage (ISSUE-083)
+- `bdf8ed8` fix(kernel): harden llm provider follow-up paths (ISSUE-083)

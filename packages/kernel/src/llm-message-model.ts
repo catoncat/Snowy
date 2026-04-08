@@ -9,6 +9,8 @@ import type {
   SessionContextMessage,
 } from "@bbl-next/contracts";
 
+let toolCallFallbackSequence = 0;
+
 /**
  * Normalize a tool call ID to match the pattern /^[a-zA-Z0-9_-]{1,64}$/.
  * If the input is invalid, generate a deterministic fallback from a seed.
@@ -16,8 +18,11 @@ import type {
 export function normalizeToolCallId(rawId: string | undefined, fallbackSeed?: string): string {
   const id = String(rawId || "").trim();
   if (id && /^[a-zA-Z0-9_-]{1,64}$/.test(id)) return id;
-  const seed = fallbackSeed || String(Date.now());
-  return `tc_${seed.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 56)}`;
+  const autoSeed = `${Date.now()}_${toolCallFallbackSequence++}`;
+  const seed = String(fallbackSeed || autoSeed)
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 56);
+  return `tc_${seed || autoSeed.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 56)}`;
 }
 
 /**

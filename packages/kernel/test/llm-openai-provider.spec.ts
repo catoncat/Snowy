@@ -82,6 +82,20 @@ describe("createOpenAiCompatibleProvider", () => {
     expect(JSON.parse(opts.body)).toEqual(payload);
   });
 
+  it("omits authorization header when llmKey is empty", async () => {
+    const provider = createOpenAiCompatibleProvider();
+    const route = makeRoute({ llmKey: "   " });
+
+    await provider.send({
+      route,
+      payload: {},
+      signal: AbortSignal.timeout(5000),
+    });
+
+    const [, opts] = fetchSpy.mock.calls[0];
+    expect(opts.headers.authorization).toBeUndefined();
+  });
+
   it("uses requestUrl override when provided", async () => {
     const provider = createOpenAiCompatibleProvider();
     const route = makeRoute();

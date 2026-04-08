@@ -88,6 +88,27 @@ describe("buildAssistantContentBlocks", () => {
     expect(buildAssistantContentBlocks(undefined, [])).toEqual([]);
   });
 
+  it("generates unique fallback tool call ids for multiple invalid ids", () => {
+    const realNow = Date.now;
+    Date.now = () => 123;
+
+    try {
+      const blocks = buildAssistantContentBlocks(null, [
+        { id: "", type: "function", function: { name: "a", arguments: "{}" } },
+        { id: " ", type: "function", function: { name: "b", arguments: "{}" } },
+      ]);
+
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0].type).toBe("toolCall");
+      expect(blocks[1].type).toBe("toolCall");
+      if (blocks[0].type === "toolCall" && blocks[1].type === "toolCall") {
+        expect(blocks[0].id).not.toBe(blocks[1].id);
+      }
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
   it("normalizes invalid tool call IDs", () => {
     const toolCalls: LlmToolCall[] = [
       {
