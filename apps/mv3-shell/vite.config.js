@@ -1,13 +1,14 @@
 import { cpSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
+import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
 const appRoot = fileURLToPath(new URL(".", import.meta.url));
 const staticFiles = [
   ["manifest.json", "manifest.json"],
   ["src/offscreen.html", "src/offscreen.html"],
-  ["src/sidepanel.html", "src/sidepanel.html"],
   ["src/page-hook.js", "src/page-hook.js"],
 ];
 
@@ -32,8 +33,9 @@ function copyStaticExtensionFiles() {
 }
 
 export default defineConfig({
+  base: "./",
   root: appRoot,
-  plugins: [copyStaticExtensionFiles()],
+  plugins: [tailwindcss(), vue(), copyStaticExtensionFiles()],
   build: {
     outDir: "dist",
     emptyOutDir: true,
@@ -42,6 +44,7 @@ export default defineConfig({
       input: {
         background: resolve(appRoot, "src/background.js"),
         offscreen: resolve(appRoot, "src/offscreen.js"),
+        sidepanel: resolve(appRoot, "src/sidepanel.html"),
       },
       output: {
         entryFileNames: "src/[name].js",

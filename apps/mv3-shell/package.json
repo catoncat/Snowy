@@ -14,9 +14,14 @@
     "@bbl-next/core": "workspace:*",
     "@bbl-next/js-runner": "workspace:*",
     "@bbl-next/kernel": "workspace:*",
-    "@bbl-next/site-runtime": "workspace:*"
+    "@bbl-next/site-runtime": "workspace:*",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.13",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/compiler-sfc": "^3.5.13",
+    "tailwindcss": "^4.1.13",
     "vite": "^7.1.8"
   },
   "exports": {

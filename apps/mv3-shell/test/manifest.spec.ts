@@ -8,11 +8,9 @@ import manifest from "../manifest.json";
 import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCREEN_REASONS, createBackgroundRunnerBridge, createPageHookBridge } from "../src/background.js";
 // @ts-ignore source JS module has no declaration file yet
 import { createOffscreenRunnerBridge } from "../src/offscreen.js";
+// biome-ignore format: keep ts-ignore attached to single-line JS import
 // @ts-ignore source JS module has no declaration file yet
-import {
-  createBackgroundRuntimeServices,
-  createRemoteExecAdapter,
-} from "../src/runtime-services.js";
+import { createBackgroundRuntimeServices, createRemoteExecAdapter } from "../src/runtime-services.js";
 
 type MessageListener = (
   message: unknown,

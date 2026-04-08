@@ -1476,6 +1476,20 @@ export function createBackgroundRunnerBridge({
         };
       case "site.runtime.invoke":
         return routeRuntimeService(() => getRuntimeServices().invokeSiteSkill(message));
+      case "runtime.chat.bootstrap":
+        return routeRuntimeService(() => getRuntimeServices().bootstrapChat());
+      case "runtime.chat.send":
+        return routeRuntimeService(() =>
+          getRuntimeServices().sendChatPrompt({
+            text: message.text,
+          }),
+        );
+      case "runtime.chat.stop":
+        return routeRuntimeService(() =>
+          getRuntimeServices().stopChatRun({
+            sessionId: message.sessionId,
+          }),
+        );
       case "runtime.diagnostics":
       case "runtime.capture_diagnostics":
         return diagnostics({
