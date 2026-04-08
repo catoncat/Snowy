@@ -61,6 +61,46 @@ const result = await service.invoke({
 });
 ```
 
+## Install-Time Setup Hooks
+
+Skill setup hooks are install-time only. They are declared in `defineSkill({ setup })` and compiled into a setup plan through `runSkillSetupHooks()`; normal runtime invocation does not execute them.
+
+```typescript
+import { defineSkill, runSkillSetupHooks } from "@bbl-next/skill-sdk";
+
+const skill = defineSkill({
+  id: "my-namespace.hello",
+  permissions: ["memfs.write"] as const,
+  setup: {
+    install(ctx) {
+      ctx.writeFile("SKILL.md", "# My Skill\n");
+      ctx.writeFile("scripts/bootstrap.js", "export const ready = true;\n");
+      ctx.note("Generated default authoring files during install.");
+    },
+  },
+  handler: async () => ({ ok: true }),
+});
+
+const plan = await runSkillSetupHooks(skill, {
+  phase: "install",
+});
+```
+
+### Setup Hook Contract
+
+- Only the `install` phase is supported today.
+- Setup hooks may only emit package-relative writes under `mem://skills/<skillId>/...`.
+- `ctx.writeFile()` rejects absolute paths, `..`, backslashes, and any write outside the canonical skill package root.
+- Setup hooks are for package scaffolding and metadata/bootstrap files; they are not runtime side-effect hooks.
+
+### Recommended File Layout for Setup Writes
+
+- `SKILL.md` — author-facing instructions or packaged behavior contract
+- `scripts/*.js` — helper scripts that ship with the skill package
+- `assets/*` — static package assets needed after install
+
+Avoid writing workspace-global files or host-side paths from setup hooks. If a workflow needs enable/disable/runtime callbacks, that is not part of the current contract and should be modeled elsewhere.
+
 ## Creating a Site Skill
 
 Site skills bind to specific URLs and can inject scripts into web pages.
@@ -159,6 +199,7 @@ Call depth is limited to `MAX_SKILL_CALL_DEPTH` (3). Exceeding it throws `E_REEN
 
 - `id` — must be a non-empty string
 - `permissions` — must be an array
+- `setup` — only `install` is accepted, and every hook must be a function
 - `handler` — must be a function
 
 Invalid declarations throw immediately with a descriptive error message.

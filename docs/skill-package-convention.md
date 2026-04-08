@@ -8,6 +8,8 @@ A minimal skill package follows this structure:
 my-skill/
 ├── skill.json        # manifest: id, permissions, matches, metadata
 ├── handler.ts        # skill handler entry point
+├── SKILL.md          # packaged authoring/behavior notes (optional, setup-generated is OK)
+├── scripts/          # install-time generated helpers (optional)
 └── README.md         # human-readable description (optional)
 ```
 
@@ -91,6 +93,36 @@ export default defineSkill({
 });
 ```
 
+### Install-Only Setup Hooks
+
+Skill packages may declare setup hooks in `handler.ts`:
+
+```typescript
+import { defineSkill } from "@bbl-next/skill-sdk";
+
+export default defineSkill({
+  id: "my-namespace.my-skill",
+  permissions: ["memfs.write"],
+  setup: {
+    install(ctx) {
+      ctx.writeFile("SKILL.md", "# My Skill\n");
+      ctx.writeFile("scripts/bootstrap.js", "export const ready = true;\n");
+      ctx.note("Scaffolded default package files.");
+    },
+  },
+  handler: async () => ({ ok: true }),
+});
+```
+
+Current contract:
+
+- Only `install` is supported.
+- Hooks are executed through `runSkillSetupHooks()`, not through normal runtime invocation.
+- Writes must stay inside the canonical package root: `mem://skills/<skillId>/...`.
+- `writeFile()` only accepts forward-slash relative paths; absolute paths, `..`, and cross-package writes are rejected.
+
+This means setup hooks may scaffold package-local files, but they must not behave like runtime lifecycle hooks or app-global extension points.
+
 ### SkillRuntimeContext
 
 The `ctx` object provides:
@@ -141,6 +173,7 @@ draft → staged → installed → enabled ↔ disabled → archived
 
 - `trusted` is a flag on the `enabled` state, not a separate state
 - Only `enabled` skills can be invoked by the runtime
+- setup hooks currently run before that lifecycle during install planning only; there is no `enable` / `disable` / `runtime` setup phase yet
 
 ## ID Convention
 
