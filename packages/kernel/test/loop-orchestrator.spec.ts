@@ -8,7 +8,12 @@ import { CapabilityRegistry, FamilyProviderRegistry } from "@bbl-next/core";
 import { describe, expect, it } from "vitest";
 import { InMemorySessionStorage } from "../src/in-memory-session-storage.js";
 import { createKernel } from "../src/kernel-facade.js";
-import { runLoop } from "../src/loop-orchestrator.js";
+import { resolveLlmRoute } from "../src/llm-profile-resolver.js";
+import {
+  calculateLlmRetryDelayMs,
+  requestLlmWithRetry,
+  runLoop,
+} from "../src/loop-orchestrator.js";
 
 function sseResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -49,6 +54,34 @@ const TEST_PROFILE_CONFIG: LlmProfileConfig = {
   defaultProfile: "default",
 };
 
+function makeRetryProfileConfig(overrides: Partial<LlmProfileConfig> = {}): LlmProfileConfig {
+  return {
+    profiles: [
+      {
+        id: "default",
+        providerId: "test",
+        llmBase: "https://test.api",
+        llmKey: "test-key",
+        llmModel: "test-model",
+        llmRetryMaxAttempts: 3,
+        llmMaxRetryDelayMs: 0,
+      },
+      {
+        id: "fallback",
+        providerId: "test",
+        llmBase: "https://fallback.api",
+        llmKey: "fallback-key",
+        llmModel: "fallback-model",
+        llmRetryMaxAttempts: 3,
+        llmMaxRetryDelayMs: 0,
+      },
+    ],
+    defaultProfile: "default",
+    fallbackProfile: "fallback",
+    ...overrides,
+  };
+}
+
 const TEST_DESCRIPTOR = {
   id: "tabs.navigate",
   version: 1,
@@ -71,7 +104,7 @@ describe("runLoop", () => {
     const providers = new FamilyProviderRegistry();
     providers.register({
       family: "tabs",
-      invoke: async ({ binding, input }) => {
+      invoke: async ({ input }) => {
         return { navigated: true, url: (input as Record<string, unknown>).url };
       },
     });
@@ -447,5 +480,102 @@ describe("runLoop", () => {
     );
 
     expect(result.terminalStatus).toBe("stopped");
+  });
+});
+
+describe("calculateLlmRetryDelayMs", () => {
+  it("applies exponential backoff and caps retry-after to the route max", () => {
+    expect(calculateLlmRetryDelayMs({ attempt: 0, maxDelayMs: 4_000 })).toBe(250);
+    expect(calculateLlmRetryDelayMs({ attempt: 4, maxDelayMs: 1_000 })).toBe(1_000);
+    expect(
+      calculateLlmRetryDelayMs({
+        attempt: 0,
+        maxDelayMs: 1_500,
+        retryAfterHeader: "5",
+      }),
+    ).toBe(1_500);
+  });
+});
+
+describe("requestLlmWithRetry", () => {
+  it("retries retryable status codes before succeeding", async () => {
+    const config = makeRetryProfileConfig({
+      profiles: [
+        {
+          id: "default",
+          providerId: "test",
+          llmBase: "https://test.api",
+          llmKey: "test-key",
+          llmModel: "test-model",
+          llmRetryMaxAttempts: 2,
+          llmMaxRetryDelayMs: 0,
+        },
+      ],
+      defaultProfile: "default",
+      fallbackProfile: undefined,
+    });
+    const routeResult = resolveLlmRoute(config);
+    expect(routeResult.ok).toBe(true);
+    if (!routeResult.ok) return;
+
+    let callCount = 0;
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async () => {
+        callCount += 1;
+        if (callCount < 3) {
+          return new Response("busy", { status: 429 });
+        }
+        return new Response("ok", { status: 200 });
+      },
+    };
+
+    const result = await requestLlmWithRetry({
+      provider,
+      profileConfig: config,
+      route: routeResult.route,
+      payload: { model: routeResult.route.llmModel, messages: [] },
+      signal: new AbortController().signal,
+    });
+
+    expect(callCount).toBe(3);
+    expect(result.route.profile).toBe("default");
+    expect(result.response.status).toBe(200);
+  });
+
+  it("escalates to the fallback profile after repeated matching failures", async () => {
+    const config = makeRetryProfileConfig();
+    const routeResult = resolveLlmRoute(config);
+    expect(routeResult.ok).toBe(true);
+    if (!routeResult.ok) return;
+
+    const seenProfiles: string[] = [];
+    const seenModels: string[] = [];
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async (input) => {
+        seenProfiles.push(input.route.profile);
+        seenModels.push(String(input.payload.model));
+        if (input.route.profile === "default") {
+          return new Response("overloaded", { status: 503 });
+        }
+        return new Response("ok", { status: 200 });
+      },
+    };
+
+    const result = await requestLlmWithRetry({
+      provider,
+      profileConfig: config,
+      route: routeResult.route,
+      payload: { model: routeResult.route.llmModel, messages: [] },
+      signal: new AbortController().signal,
+    });
+
+    expect(seenProfiles).toEqual(["default", "default", "fallback"]);
+    expect(seenModels).toEqual(["test-model", "test-model", "fallback-model"]);
+    expect(result.route.profile).toBe("fallback");
+    expect(result.response.status).toBe(200);
   });
 });

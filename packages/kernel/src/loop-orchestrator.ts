@@ -1,6 +1,8 @@
 import type {
   LlmProfileConfig,
   LlmProviderAdapter,
+  LlmProviderExecutionLane,
+  LlmResolvedRoute,
   LlmToolCall,
   LoopTerminalStatus,
   ToolContract,
@@ -106,6 +108,252 @@ function sortedFailureHints(failures: Map<string, ActionFailureHint>): ActionFai
     );
 }
 
+const RETRYABLE_LLM_STATUS_CODES = new Set([408, 409, 429, 500, 502, 503, 504]);
+const DEFAULT_LLM_RETRY_BASE_DELAY_MS = 250;
+const DEFAULT_LOOP_MAX_STEPS = 50;
+
+export interface RequestLlmWithRetryOptions {
+  provider: LlmProviderAdapter;
+  profileConfig: LlmProfileConfig;
+  route: LlmResolvedRoute;
+  payload: Record<string, unknown>;
+  signal: AbortSignal;
+  lane?: LlmProviderExecutionLane;
+  sessionId?: string;
+  step?: number;
+}
+
+export interface RequestLlmWithRetryResult {
+  response: Response;
+  route: LlmResolvedRoute;
+  retryCount: number;
+}
+
+function createAbortError(reason?: unknown): Error {
+  if (reason instanceof Error) {
+    return reason;
+  }
+
+  const error = new Error(typeof reason === "string" ? reason : "The operation was aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function createTimeoutError(): Error {
+  const error = new Error("LLM request timed out");
+  error.name = "TimeoutError";
+  return error;
+}
+
+function parseRetryAfterDelayMs(value?: string | null, now = Date.now()): number | null {
+  const header = value?.trim();
+  if (!header) {
+    return null;
+  }
+
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) {
+    return Math.max(0, Math.round(seconds * 1000));
+  }
+
+  const retryAt = Date.parse(header);
+  if (Number.isNaN(retryAt)) {
+    return null;
+  }
+
+  return Math.max(0, retryAt - now);
+}
+
+export function calculateLlmRetryDelayMs(input: {
+  attempt: number;
+  maxDelayMs: number;
+  retryAfterHeader?: string | null;
+  now?: number;
+  baseDelayMs?: number;
+}): number {
+  const maxDelayMs = Math.max(0, input.maxDelayMs);
+  const retryAfterDelayMs = parseRetryAfterDelayMs(input.retryAfterHeader, input.now);
+  const backoffDelayMs =
+    (input.baseDelayMs ?? DEFAULT_LLM_RETRY_BASE_DELAY_MS) * 2 ** Math.max(0, input.attempt);
+  return Math.min(maxDelayMs, retryAfterDelayMs ?? backoffDelayMs);
+}
+
+async function waitForRetryDelay(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0) {
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(createAbortError(signal.reason));
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    function onAbort() {
+      clearTimeout(timeoutId);
+      signal.removeEventListener("abort", onAbort);
+      reject(createAbortError(signal.reason));
+    }
+
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function buildLlmFailureSignature(input: {
+  status?: number;
+  body?: string;
+  error?: unknown;
+}): string {
+  if (typeof input.status === "number") {
+    return `status:${input.status}:${(input.body ?? "").trim().slice(0, 200)}`;
+  }
+
+  if (input.error instanceof Error) {
+    return `error:${input.error.name}:${input.error.message}`;
+  }
+
+  return `error:${String(input.error ?? "unknown")}`;
+}
+
+function resolveEscalatedRoute(
+  profileConfig: LlmProfileConfig,
+  currentRoute: LlmResolvedRoute,
+): LlmResolvedRoute | null {
+  if (currentRoute.escalationPolicy !== "upgrade_only") {
+    return null;
+  }
+
+  const currentIndex = currentRoute.orderedProfiles.indexOf(currentRoute.profile);
+  if (currentIndex < 0) {
+    return null;
+  }
+
+  const nextProfile = currentRoute.orderedProfiles[currentIndex + 1];
+  if (!nextProfile) {
+    return null;
+  }
+
+  const nextRouteResult = resolveLlmRoute(profileConfig, nextProfile, currentRoute.role);
+  return nextRouteResult.ok ? nextRouteResult.route : null;
+}
+
+function isRetryableLlmStatus(status: number): boolean {
+  return RETRYABLE_LLM_STATUS_CODES.has(status);
+}
+
+export async function requestLlmWithRetry(
+  opts: RequestLlmWithRetryOptions,
+): Promise<RequestLlmWithRetryResult> {
+  let route = opts.route;
+  let retryCount = 0;
+  let previousFailureSignature: string | null = null;
+  let repeatedFailureCount = 0;
+
+  while (true) {
+    if (opts.signal.aborted) {
+      throw createAbortError(opts.signal.reason);
+    }
+
+    const ctrl = new AbortController();
+    const timeoutError = createTimeoutError();
+    const forwardAbort = () => ctrl.abort(opts.signal.reason);
+    opts.signal.addEventListener("abort", forwardAbort, { once: true });
+    const timeoutId = setTimeout(() => ctrl.abort(timeoutError), route.llmTimeoutMs);
+
+    let response: Response;
+    try {
+      response = await opts.provider.send({
+        route,
+        payload: { ...opts.payload, model: route.llmModel },
+        signal: ctrl.signal,
+        lane: opts.lane ?? "primary",
+        sessionId: opts.sessionId,
+        step: opts.step,
+      });
+    } catch (error) {
+      clearTimeout(timeoutId);
+      opts.signal.removeEventListener("abort", forwardAbort);
+
+      if (opts.signal.aborted) {
+        throw createAbortError(opts.signal.reason);
+      }
+
+      if (retryCount >= route.llmRetryMaxAttempts) {
+        throw error;
+      }
+
+      const failureSignature = buildLlmFailureSignature({ error });
+      repeatedFailureCount =
+        failureSignature === previousFailureSignature ? repeatedFailureCount + 1 : 1;
+      previousFailureSignature = failureSignature;
+
+      if (repeatedFailureCount >= 2) {
+        const escalatedRoute = resolveEscalatedRoute(opts.profileConfig, route);
+        if (escalatedRoute) {
+          route = escalatedRoute;
+          repeatedFailureCount = 0;
+          previousFailureSignature = null;
+        }
+      }
+
+      const delayMs = calculateLlmRetryDelayMs({
+        attempt: retryCount,
+        maxDelayMs: route.llmMaxRetryDelayMs,
+      });
+      retryCount += 1;
+      await waitForRetryDelay(delayMs, opts.signal);
+      continue;
+    }
+
+    clearTimeout(timeoutId);
+    opts.signal.removeEventListener("abort", forwardAbort);
+
+    if (response.ok) {
+      return { response, route, retryCount };
+    }
+
+    const errorBody = await response.text().catch(() => "");
+    if (!isRetryableLlmStatus(response.status) || retryCount >= route.llmRetryMaxAttempts) {
+      throw new Error(`LLM API error ${response.status}: ${errorBody}`);
+    }
+
+    const failureSignature = buildLlmFailureSignature({
+      status: response.status,
+      body: errorBody,
+    });
+    repeatedFailureCount =
+      failureSignature === previousFailureSignature ? repeatedFailureCount + 1 : 1;
+    previousFailureSignature = failureSignature;
+
+    if (repeatedFailureCount >= 2) {
+      const escalatedRoute = resolveEscalatedRoute(opts.profileConfig, route);
+      if (escalatedRoute) {
+        route = escalatedRoute;
+        repeatedFailureCount = 0;
+        previousFailureSignature = null;
+      }
+    }
+
+    const delayMs = calculateLlmRetryDelayMs({
+      attempt: retryCount,
+      maxDelayMs: route.llmMaxRetryDelayMs,
+      retryAfterHeader: response.headers.get("retry-after"),
+    });
+    retryCount += 1;
+    await waitForRetryDelay(delayMs, opts.signal);
+  }
+}
+
+function getLoopMaxSteps(kernel: Kernel): number {
+  const loop = kernel.loop as { getMaxSteps?: () => number };
+  return typeof loop.getMaxSteps === "function" ? loop.getMaxSteps() : DEFAULT_LOOP_MAX_STEPS;
+}
+
 export async function runLoop(
   opts: LoopOrchestratorOptions,
   input: RunLoopInput,
@@ -121,7 +369,7 @@ export async function runLoop(
   if (!routeResult.ok) {
     throw new Error(`LLM route resolution failed: ${routeResult.message}`);
   }
-  const route = routeResult.route;
+  let route = routeResult.route;
 
   // Project tools
   const tools = registry.projectTools();
@@ -156,7 +404,7 @@ export async function runLoop(
       const runState = kernel.getRunState(input.sessionId);
       const progressPrompt = buildTaskProgressMessage({
         llmStep: llmStepCount + 1,
-        maxLoopSteps: kernel.loop.getMaxSteps(),
+        maxLoopSteps: getLoopMaxSteps(kernel),
         toolStep: toolStepCount,
         retryAttempt: runState.retry.attempt,
         retryMaxAttempts: runState.retry.maxAttempts,
@@ -181,28 +429,18 @@ export async function runLoop(
       };
 
       // Send to LLM
-      const ctrl = new AbortController();
-      if (input.signal) {
-        input.signal.addEventListener("abort", () => ctrl.abort(), { once: true });
-      }
-
-      const timeoutId = setTimeout(() => ctrl.abort(), route.llmTimeoutMs);
-      let response: Response;
-      try {
-        response = await provider.send({
-          route,
-          payload,
-          signal: ctrl.signal,
-          lane: "primary",
-        });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      if (!response.ok) {
-        const errorBody = await response.text().catch(() => "");
-        throw new Error(`LLM API error ${response.status}: ${errorBody}`);
-      }
+      const requestResult = await requestLlmWithRetry({
+        provider,
+        profileConfig,
+        route,
+        payload,
+        signal: input.signal ?? new AbortController().signal,
+        lane: "primary",
+        sessionId: input.sessionId,
+        step: llmStepCount + 1,
+      });
+      const response = requestResult.response;
+      route = requestResult.route;
 
       if (!response.body) {
         throw new Error("LLM response has no body");

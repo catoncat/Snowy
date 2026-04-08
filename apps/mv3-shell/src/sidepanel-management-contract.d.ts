@@ -5,8 +5,7 @@ export const SIDEPANEL_MANAGEMENT_RESOURCE_IDS: readonly [
   "hosts.summary",
 ];
 
-export type SidepanelManagementResourceId =
-  (typeof SIDEPANEL_MANAGEMENT_RESOURCE_IDS)[number];
+export type SidepanelManagementResourceId = (typeof SIDEPANEL_MANAGEMENT_RESOURCE_IDS)[number];
 
 export const SIDEPANEL_MANAGEMENT_ACTION_KINDS: readonly [
   "runtime.capture_diagnostics",
@@ -21,8 +20,7 @@ export const SIDEPANEL_MANAGEMENT_ACTION_KINDS: readonly [
   "hosts.set_default",
 ];
 
-export type SidepanelManagementActionKind =
-  (typeof SIDEPANEL_MANAGEMENT_ACTION_KINDS)[number];
+export type SidepanelManagementActionKind = (typeof SIDEPANEL_MANAGEMENT_ACTION_KINDS)[number];
 
 export function isSidepanelManagementResourceId(
   value: unknown,
