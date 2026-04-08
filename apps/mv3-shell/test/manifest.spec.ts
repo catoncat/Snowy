@@ -10,7 +10,7 @@ import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCR
 import { createOffscreenRunnerBridge } from "../src/offscreen.js";
 // biome-ignore format: keep ts-ignore attached to single-line JS import
 // @ts-ignore source JS module has no declaration file yet
-import { createBackgroundRuntimeServices, createRemoteExecAdapter } from "../src/runtime-services.js";
+import { SIDEPANEL_MANAGEMENT_ACTION_KINDS, SIDEPANEL_MANAGEMENT_RESOURCE_IDS, createBackgroundRuntimeServices, createRemoteExecAdapter } from "../src/runtime-services.js";
 
 type MessageListener = (
   message: unknown,
@@ -2345,6 +2345,114 @@ describe("mv3-shell manifest", () => {
         code: "E_BAD_INPUT",
       },
     });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("locks sidepanel management to shared AI-surface resources and control-plane actions", async () => {
+    expect(SIDEPANEL_MANAGEMENT_RESOURCE_IDS).toEqual([
+      "runtime.summary",
+      "config.summary",
+      "skills.summary",
+      "hosts.summary",
+    ]);
+    expect(SIDEPANEL_MANAGEMENT_ACTION_KINDS).toEqual([
+      "runtime.capture_diagnostics",
+      "runtime.clear_error",
+      "config.update",
+      "skills.install",
+      "skills.enable",
+      "skills.disable",
+      "skills.uninstall",
+      "hosts.connect",
+      "hosts.disconnect",
+      "hosts.set_default",
+    ]);
+    expect(SIDEPANEL_MANAGEMENT_RESOURCE_IDS).not.toContain("runtime.bootstrap");
+    expect(SIDEPANEL_MANAGEMENT_ACTION_KINDS).not.toContain("runtime.bootstrap");
+
+    const harness = createChromeHarness({
+      activeTab: {
+        id: 31,
+        url: "https://fixture.test/management",
+        title: "Management fixture",
+      },
+      host: {
+        dispatch: vi.fn(),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0,
+        })),
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "config.update",
+        patch: {
+          model: {
+            provider: "openai",
+          },
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.install",
+        skillId: "skill.management",
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.enable",
+        skillId: "skill.management",
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.connect",
+        hostId: "local",
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.set_default",
+        hostId: "local",
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    for (const resourceId of SIDEPANEL_MANAGEMENT_RESOURCE_IDS) {
+      await expect(
+        harness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "resource.read",
+          resourceId,
+          world: "main",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          id: resourceId,
+          primitive: "resource",
+        },
+      });
+    }
 
     dispose();
     harness.cleanup();

@@ -237,6 +237,178 @@ describe("runLoop", () => {
     expect(toolCalls[0]?.id).toBe(toolMessage?.tool_call_id);
   });
 
+  it("injects task progress as a per-iteration system message", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    let callCount = 0;
+    const { kernel, registry, provider } = setup(async (input) => {
+      payloads.push(input.payload);
+      callCount++;
+      if (callCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_1",
+              function: { name: "tabs_navigate", arguments: '{"url":"https://example.com"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "tool_calls"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([chatChunk("Done."), chatChunk(undefined, undefined, "stop"), "[DONE]"]);
+    });
+
+    const session = await kernel.createSession();
+    await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Go to example.com" },
+    );
+
+    const firstMessages = payloads[0]?.messages as Array<Record<string, unknown>>;
+    const secondMessages = payloads[1]?.messages as Array<Record<string, unknown>>;
+    expect(firstMessages[1]).toEqual({
+      role: "system",
+      content: expect.stringContaining("loop_step: 1/50"),
+    });
+    expect(String(firstMessages[1]?.content)).toContain("tool_steps_done: 0");
+    expect(secondMessages[1]).toEqual({
+      role: "system",
+      content: expect.stringContaining("loop_step: 2/50"),
+    });
+    expect(String(secondMessages[1]?.content)).toContain("tool_steps_done: 1");
+  });
+
+  it("injects strategy hints after the same action target fails twice", async () => {
+    const failingDescriptor = {
+      ...TEST_DESCRIPTOR,
+      id: "page.click",
+      description: "Click an element by uid",
+      inputSchema: { type: "object", properties: { uid: { type: "string" } } },
+      executionBinding: { family: "page", operation: "click" },
+    };
+
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([failingDescriptor]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "page",
+      invoke: async () => {
+        throw new Error("Element is detached");
+      },
+    });
+
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      registry,
+      providers,
+    });
+
+    const payloads: Array<Record<string, unknown>> = [];
+    let callCount = 0;
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async (input) => {
+        payloads.push(input.payload);
+        callCount += 1;
+        if (callCount <= 2) {
+          return sseResponse([
+            chatChunk(undefined, [
+              {
+                index: 0,
+                id: `tc_${callCount}`,
+                function: { name: "page_click", arguments: '{"uid":"submit-button"}' },
+              },
+            ]),
+            chatChunk(undefined, undefined, "tool_calls"),
+            "[DONE]",
+          ]);
+        }
+        return sseResponse([
+          chatChunk("Use another tactic."),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      },
+    };
+
+    const session = await kernel.createSession();
+    await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Submit the form" },
+    );
+
+    const thirdMessages = payloads[2]?.messages as Array<Record<string, unknown>>;
+    expect(String(thirdMessages[1]?.content)).toContain("STRATEGY HINT");
+    expect(String(thirdMessages[1]?.content)).toContain("page_click");
+    expect(String(thirdMessages[1]?.content)).toContain("submit-button");
+  });
+
+  it("tracks repeated failures per target instead of aggregating different targets", async () => {
+    const failingDescriptor = {
+      ...TEST_DESCRIPTOR,
+      id: "page.click",
+      description: "Click an element by uid",
+      inputSchema: { type: "object", properties: { uid: { type: "string" } } },
+      executionBinding: { family: "page", operation: "click" },
+    };
+
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([failingDescriptor]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "page",
+      invoke: async () => {
+        throw new Error("Element is detached");
+      },
+    });
+
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      registry,
+      providers,
+    });
+
+    const payloads: Array<Record<string, unknown>> = [];
+    const requestedUids = ["submit-button", "cancel-button", "fallback-button"];
+    let callCount = 0;
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async (input) => {
+        payloads.push(input.payload);
+        const uid = requestedUids[callCount] ?? "fallback-button";
+        callCount += 1;
+        if (callCount <= requestedUids.length) {
+          return sseResponse([
+            chatChunk(undefined, [
+              {
+                index: 0,
+                id: `tc_${callCount}`,
+                function: { name: "page_click", arguments: JSON.stringify({ uid }) },
+              },
+            ]),
+            chatChunk(undefined, undefined, "tool_calls"),
+            "[DONE]",
+          ]);
+        }
+        return sseResponse([chatChunk("Done."), chatChunk(undefined, undefined, "stop"), "[DONE]"]);
+      },
+    };
+
+    const session = await kernel.createSession();
+    await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG, contextWindow: 1_000_000 },
+      { sessionId: session.id, prompt: "Try different buttons" },
+    );
+
+    const thirdMessages = payloads[2]?.messages as Array<Record<string, unknown>>;
+    expect(String(thirdMessages[1]?.content)).not.toContain("STRATEGY HINT");
+  });
+
   it("calls onDelta for streaming text", async () => {
     const { kernel, registry, provider } = setup(async () => {
       return sseResponse([chatChunk("part1"), chatChunk("part2"), "[DONE]"]);

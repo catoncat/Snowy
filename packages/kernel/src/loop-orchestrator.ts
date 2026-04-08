@@ -17,7 +17,12 @@ import {
 } from "./llm-message-model.js";
 import { resolveLlmRoute } from "./llm-profile-resolver.js";
 import { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
-import { type PromptBuilderOptions, buildSystemPromptBase } from "./prompt-builder.js";
+import {
+  type ActionFailureHint,
+  type PromptBuilderOptions,
+  buildSystemPromptBase,
+  buildTaskProgressMessage,
+} from "./prompt-builder.js";
 
 export interface LoopOrchestratorOptions {
   kernel: Kernel;
@@ -62,6 +67,45 @@ function toolContractsToOpenAiTools(tools: ToolContract[]): Array<Record<string,
   }));
 }
 
+function extractFailureTarget(args: unknown): string | undefined {
+  if (!args || typeof args !== "object" || Array.isArray(args)) {
+    return undefined;
+  }
+
+  const target = args as Record<string, unknown>;
+  if (typeof target.uid === "string" && target.uid.trim()) {
+    return `uid ${target.uid.trim()}`;
+  }
+  if (typeof target.url === "string" && target.url.trim()) {
+    return `url ${target.url.trim()}`;
+  }
+  if (typeof target.selector === "string" && target.selector.trim()) {
+    return `selector ${target.selector.trim()}`;
+  }
+  if (typeof target.id === "string" && target.id.trim()) {
+    return `id ${target.id.trim()}`;
+  }
+  if (typeof target.tabId === "number" && Number.isFinite(target.tabId)) {
+    return `tab ${target.tabId}`;
+  }
+
+  return undefined;
+}
+
+function buildFailureHintKey(capabilityId: string, args: unknown): string {
+  const target = extractFailureTarget(args);
+  return target ? `${capabilityId}::${target}` : capabilityId;
+}
+
+function sortedFailureHints(failures: Map<string, ActionFailureHint>): ActionFailureHint[] {
+  return [...failures.values()]
+    .filter((hint) => hint.failureCount >= 2)
+    .sort(
+      (left, right) =>
+        right.failureCount - left.failureCount || left.toolName.localeCompare(right.toolName),
+    );
+}
+
 export async function runLoop(
   opts: LoopOrchestratorOptions,
   input: RunLoopInput,
@@ -94,6 +138,9 @@ export async function runLoop(
   });
 
   let terminalStatus: LoopTerminalStatus | null = null;
+  let llmStepCount = 0;
+  let toolStepCount = 0;
+  const actionFailures = new Map<string, ActionFailureHint>();
 
   try {
     while (!terminalStatus) {
@@ -106,9 +153,22 @@ export async function runLoop(
       const context = await kernel.buildContext(input.sessionId);
       const llmMessages = contextMessagesToLlmMessages(context.messages);
       const apiMessages = llmMessagesToApiPayload(llmMessages);
+      const runState = kernel.getRunState(input.sessionId);
+      const progressPrompt = buildTaskProgressMessage({
+        llmStep: llmStepCount + 1,
+        maxLoopSteps: kernel.loop.getMaxSteps(),
+        toolStep: toolStepCount,
+        retryAttempt: runState.retry.attempt,
+        retryMaxAttempts: runState.retry.maxAttempts,
+        actionFailureHints: sortedFailureHints(actionFailures),
+      });
 
       // Prepend system message
-      const fullMessages = [{ role: "system", content: systemPrompt }, ...apiMessages];
+      const fullMessages = [
+        { role: "system", content: systemPrompt },
+        { role: "system", content: progressPrompt },
+        ...apiMessages,
+      ];
 
       // Build payload
       const payload: Record<string, unknown> = {
@@ -157,6 +217,7 @@ export async function runLoop(
         ...tc,
         id: normalizeToolCallId(tc.id),
       }));
+      llmStepCount += 1;
 
       await kernel.appendMessage(
         input.sessionId,
@@ -193,16 +254,34 @@ export async function runLoop(
           input: args,
         });
 
+        const failureKey = buildFailureHintKey(capabilityId, args);
+        const failureTarget = extractFailureTarget(args);
+        if (result.ok) {
+          actionFailures.delete(failureKey);
+        } else {
+          const previous = actionFailures.get(failureKey);
+          actionFailures.set(failureKey, {
+            toolName,
+            capabilityId,
+            target: failureTarget,
+            failureCount: (previous?.failureCount ?? 0) + 1,
+          });
+        }
+
         await kernel.appendMessage(
           input.sessionId,
           stepResultToToolMessagePayload(result, { toolCallId, toolName }),
         );
+        toolStepCount += 1;
 
         input.onToolResult?.(toolName, result);
 
         // Check terminal
         const status = kernel.loop.checkTerminal(input.sessionId, turn);
         if (status) {
+          if (!result.ok && (status === "failed_execute" || status === "timeout")) {
+            continue;
+          }
           terminalStatus = status;
           break;
         }

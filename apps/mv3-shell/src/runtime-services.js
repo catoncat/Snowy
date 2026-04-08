@@ -17,6 +17,26 @@ function isPlainObject(value) {
 }
 
 const DEFAULT_INTERVENTION_TIMEOUT_MS = 5 * 60 * 1000;
+// Lock the future sidepanel management surface to shared AI-surface resources/actions
+// instead of app-local bootstrap or mutation paths.
+export const SIDEPANEL_MANAGEMENT_RESOURCE_IDS = [
+  "runtime.summary",
+  "config.summary",
+  "skills.summary",
+  "hosts.summary",
+];
+export const SIDEPANEL_MANAGEMENT_ACTION_KINDS = [
+  "runtime.capture_diagnostics",
+  "runtime.clear_error",
+  "config.update",
+  "skills.install",
+  "skills.enable",
+  "skills.disable",
+  "skills.uninstall",
+  "hosts.connect",
+  "hosts.disconnect",
+  "hosts.set_default",
+];
 const SKILL_STATUS_BY_ACTION = {
   "skills.install": "installed",
   "skills.enable": "enabled",

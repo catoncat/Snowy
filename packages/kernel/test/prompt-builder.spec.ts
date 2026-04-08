@@ -5,6 +5,7 @@ import {
   type PromptSkillMetadata,
   buildAvailableSkillsPrompt,
   buildSystemPromptBase,
+  buildTaskProgressMessage,
 } from "../src/prompt-builder.js";
 
 const TEST_TOOLS: ToolContract[] = [
@@ -70,5 +71,28 @@ describe("buildAvailableSkillsPrompt", () => {
     expect(block).toContain('<skill rank="1" name="skill-1"');
     expect(block).toContain("<truncated remaining=");
     expect(block).not.toContain('name="skill-4"');
+  });
+});
+
+describe("buildTaskProgressMessage", () => {
+  it("includes strategy hints for repeated action failures", () => {
+    const message = buildTaskProgressMessage({
+      llmStep: 3,
+      maxLoopSteps: 50,
+      toolStep: 2,
+      actionFailureHints: [
+        {
+          toolName: "page_click",
+          capabilityId: "page.click",
+          target: "uid submit-button",
+          failureCount: 2,
+        },
+      ],
+    });
+
+    expect(message).toContain("STRATEGY HINT");
+    expect(message).toContain("page_click");
+    expect(message).toContain("uid submit-button");
+    expect(message).toContain("failed 2 times");
   });
 });

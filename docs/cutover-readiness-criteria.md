@@ -74,6 +74,12 @@
 - cutover 前必需
 - 或 cutover 后补
 
+**当前裁决：cutover 后补。**
+
+- Level 2 cutover 不以完整 Skill Studio / sidepanel management UI 为前置；Gate G 继续只要求 shared AI-surface summary/action 主链成立，而不是要求先补完整产品壳。
+- `ISSUE-085` 已交付 sidepanel chat shell，但它不等于 management UI；settings/runtime/skills/hosts 的产品面仍由 follow-up `ISSUE-093` 承接。
+- sidepanel management UI 的最小范围已锁定为：通过统一 `resource.read` 消费 `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary`，并通过 `runtime.capture_diagnostics` / `runtime.clear_error` / `config.update` / `skills.install|enable|disable|uninstall` / `hosts.connect|disconnect|set_default` 触发共享 control-plane 动作；不新增 app-local bootstrap truth。
+
 ### Soft Gate 2: Browser Automation Product Parity
 
 必须明确哪些旧 automation 能力属于 cutover 前必需。

@@ -201,6 +201,19 @@ export interface TaskProgressInput {
   toolStep: number;
   retryAttempt?: number;
   retryMaxAttempts?: number;
+  actionFailureHints?: ActionFailureHint[];
+}
+
+export interface ActionFailureHint {
+  toolName: string;
+  capabilityId: string;
+  target?: string;
+  failureCount: number;
+}
+
+function formatActionFailureHint(hint: ActionFailureHint): string {
+  const target = hint.target ? ` on ${hint.target}` : "";
+  return `- STRATEGY HINT: \`${hint.toolName}\`${target} failed ${hint.failureCount} times. Switch tactics: re-query state, choose a different target, or use an alternative tool instead of retrying the same action.`;
 }
 
 /**
@@ -212,6 +225,7 @@ export function buildTaskProgressMessage(input: TaskProgressInput): string {
   const tool = Math.max(0, input.toolStep);
   const retry = input.retryAttempt ?? 0;
   const retryMax = input.retryMaxAttempts ?? 0;
+  const actionFailureHints = input.actionFailureHints ?? [];
 
   const lines = [
     "Task progress (brief):",
@@ -221,6 +235,13 @@ export function buildTaskProgressMessage(input: TaskProgressInput): string {
 
   if (retry > 0) {
     lines.push(`- retry_state: ${retry}/${retryMax}`);
+  }
+
+  if (actionFailureHints.length > 0) {
+    lines.push("- repeated_action_failures:");
+    for (const hint of actionFailureHints) {
+      lines.push(formatActionFailureHint(hint));
+    }
   }
 
   lines.push("- Keep moving toward the same user goal; avoid repeating already completed steps.");
