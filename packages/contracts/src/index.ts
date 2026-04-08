@@ -16,6 +16,90 @@ export const AI_SURFACE_RESOURCE_IDS = [
 export type AiSurfaceResourceId = (typeof AI_SURFACE_RESOURCE_IDS)[number];
 export const AI_SURFACE_RESOURCE_AUDIENCES = ["chat", "skill", "system", "mcp"] as const;
 export type AiSurfaceResourceAudience = (typeof AI_SURFACE_RESOURCE_AUDIENCES)[number];
+export const AI_SURFACE_RESOURCE_PROJECTIONS = ["resource.read", "runtime.bootstrap"] as const;
+export type AiSurfaceResourceProjection = (typeof AI_SURFACE_RESOURCE_PROJECTIONS)[number];
+export const AI_SURFACE_RESOURCE_READ_OWNERS = [
+  "runtime",
+  "config",
+  "skills",
+  "hosts",
+  "audit",
+] as const;
+export type AiSurfaceResourceReadOwner = (typeof AI_SURFACE_RESOURCE_READ_OWNERS)[number];
+export interface AiSurfaceResourceMetadata<
+  ResourceId extends AiSurfaceResourceId = AiSurfaceResourceId,
+> {
+  id: ResourceId;
+  readOwner: AiSurfaceResourceReadOwner;
+  audiences: readonly AiSurfaceResourceAudience[];
+  projections: readonly AiSurfaceResourceProjection[];
+  bootstrapKey?: BootstrapResourceKey;
+}
+const ALL_AI_SURFACE_RESOURCE_AUDIENCES = [...AI_SURFACE_RESOURCE_AUDIENCES] as const;
+export const AI_SURFACE_RESOURCE_METADATA_REGISTRY = [
+  {
+    id: "runtime.summary",
+    readOwner: "runtime",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read", "runtime.bootstrap"],
+    bootstrapKey: "runtime",
+  },
+  {
+    id: "config.summary",
+    readOwner: "config",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read", "runtime.bootstrap"],
+    bootstrapKey: "config",
+  },
+  {
+    id: "skills.summary",
+    readOwner: "skills",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read", "runtime.bootstrap"],
+    bootstrapKey: "skills",
+  },
+  {
+    id: "hosts.summary",
+    readOwner: "hosts",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read", "runtime.bootstrap"],
+    bootstrapKey: "hosts",
+  },
+  {
+    id: "audit.tail",
+    readOwner: "audit",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read"],
+  },
+  {
+    id: "audit.intervention",
+    readOwner: "audit",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read"],
+  },
+] as const satisfies readonly AiSurfaceResourceMetadata[];
+const AI_SURFACE_RESOURCE_METADATA_BY_ID = AI_SURFACE_RESOURCE_METADATA_REGISTRY.reduce(
+  (acc, entry) => {
+    acc[entry.id] = entry;
+    return acc;
+  },
+  {} as Record<AiSurfaceResourceId, AiSurfaceResourceMetadata>,
+);
+export function getAiSurfaceResourceMetadata<ResourceId extends AiSurfaceResourceId>(
+  resourceId: ResourceId,
+): Extract<(typeof AI_SURFACE_RESOURCE_METADATA_REGISTRY)[number], { id: ResourceId }> {
+  return AI_SURFACE_RESOURCE_METADATA_BY_ID[resourceId] as Extract<
+    (typeof AI_SURFACE_RESOURCE_METADATA_REGISTRY)[number],
+    { id: ResourceId }
+  >;
+}
+export function listAiSurfaceResourcesForAudience(
+  audience: AiSurfaceResourceAudience,
+): AiSurfaceResourceMetadata[] {
+  return AI_SURFACE_RESOURCE_METADATA_REGISTRY.filter((entry) =>
+    entry.audiences.includes(audience),
+  );
+}
 export const CONFIG_RESOURCE_FIELDS = [
   "model",
   "automation",

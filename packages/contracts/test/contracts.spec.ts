@@ -16,13 +16,16 @@ import {
   type CapabilityTraceEntry,
   type CompactionDraft,
   type CompactionPayload,
+  type ConfigSummaryResource,
   DEFAULT_SKILL_VERSION_RETENTION,
   HOST_AUDIT_KINDS,
   HOST_AUDIT_STATUSES,
   HOST_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
+  type HostsSummaryResource,
   INTERVENTION_KINDS,
   INTERVENTION_TRIGGERS,
+  type InterventionAuditResource,
   type InterventionAuditSummary,
   type InterventionRecord,
   type InterventionRequest,
@@ -47,6 +50,7 @@ import {
   type SessionEntry,
   type SessionHeader,
   type SessionStorage,
+  type SkillsSummaryResource,
   allowedActorsForSkillTransition,
   assertCapabilityDescriptor,
   canActorGrantSkillTrusted,
@@ -63,6 +67,7 @@ import {
   skillVersionUri,
   transitionSkillState,
 } from "@bbl-next/contracts";
+import * as contractsModule from "@bbl-next/contracts";
 import { describe, expect, it } from "vitest";
 
 function buildDescriptor(overrides: Partial<CapabilityDescriptor> = {}): CapabilityDescriptor {
@@ -144,6 +149,45 @@ describe("contracts", () => {
     expect(AI_SURFACE_RESOURCE_AUDIENCES).toEqual(["chat", "skill", "system", "mcp"]);
   });
 
+  it("defines a first-class resource metadata registry with full id coverage", () => {
+    const registry = (contractsModule as Record<string, unknown>)
+      .AI_SURFACE_RESOURCE_METADATA_REGISTRY;
+    expect(Array.isArray(registry)).toBe(true);
+    expect((registry as Array<{ id: string }>).map((entry) => entry.id)).toEqual(
+      AI_SURFACE_RESOURCE_IDS,
+    );
+    expect(
+      (registry as Array<Record<string, unknown>>).find((entry) => entry.id === "runtime.summary"),
+    ).toMatchObject({
+      id: "runtime.summary",
+      readOwner: "runtime",
+      bootstrapKey: "runtime",
+      projections: ["resource.read", "runtime.bootstrap"],
+      audiences: ["chat", "skill", "system", "mcp"],
+    });
+    expect(
+      (registry as Array<Record<string, unknown>>).find(
+        (entry) => entry.id === "audit.intervention",
+      ),
+    ).toMatchObject({
+      id: "audit.intervention",
+      readOwner: "audit",
+      projections: ["resource.read"],
+      audiences: ["chat", "skill", "system", "mcp"],
+    });
+  });
+
+  it("projects resource metadata by audience", () => {
+    const projectForAudience = (contractsModule as Record<string, unknown>)
+      .listAiSurfaceResourcesForAudience;
+    expect(typeof projectForAudience).toBe("function");
+    expect(
+      (projectForAudience as (audience: string) => Array<{ id: string }>)("chat").map(
+        (entry) => entry.id,
+      ),
+    ).toEqual(AI_SURFACE_RESOURCE_IDS);
+  });
+
   it("accepts typed resource documents for runtime summary and audit tail", () => {
     const runtimeResource = {
       id: "runtime.summary",
@@ -199,11 +243,94 @@ describe("contracts", () => {
       },
     } satisfies AuditTailResource;
 
-    const resourceDocs = [runtimeResource, auditResource] satisfies AiSurfaceResourceDocument[];
+    const configResource = {
+      id: "config.summary",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:03.000Z",
+      data: {
+        status: "ready" as const,
+        fields: ["model", "automation"],
+        values: { model: { provider: "openai" } },
+        note: null,
+        updatedAt: "2026-03-30T00:00:03.000Z",
+      },
+    } satisfies ConfigSummaryResource;
+
+    const skillsResource = {
+      id: "skills.summary",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:04.000Z",
+      data: {
+        status: "ready" as const,
+        total: 1,
+        enabled: 1,
+        installed: 1,
+        items: [
+          {
+            skillId: "skill.test",
+            name: "Test skill",
+            status: "enabled" as const,
+            trusted: true,
+          },
+        ],
+      },
+    } satisfies SkillsSummaryResource;
+
+    const hostsResource = {
+      id: "hosts.summary",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:05.000Z",
+      data: {
+        status: "ready" as const,
+        defaultHostId: "local",
+        connectedCount: 1,
+        total: 1,
+        items: [
+          {
+            hostId: "local",
+            kind: "local" as const,
+            connected: true,
+            isDefault: true,
+            health: "healthy" as const,
+          },
+        ],
+      },
+    } satisfies HostsSummaryResource;
+
+    const interventionAuditResource = {
+      id: "audit.intervention",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:06.000Z",
+      data: {
+        status: "available" as const,
+        totalCount: 1,
+        entries: [
+          {
+            timestamp: "2026-03-30T00:00:06.000Z",
+            sessionId: "session-1",
+            kind: "intervention.requested",
+            interventionId: "int-1",
+            requestId: "req-1",
+            reason: "verification_failed",
+            status: "pending",
+          },
+        ],
+      },
+    } satisfies InterventionAuditResource;
+
+    const resourceDocs = [
+      runtimeResource,
+      auditResource,
+      configResource,
+      skillsResource,
+      hostsResource,
+      interventionAuditResource,
+    ] satisfies AiSurfaceResourceDocument[];
 
     expect(resourceDocs[0]?.id).toBe("runtime.summary");
     expect(auditResource.data.entries[0]?.kind).toBe("hosts.connect");
     expect(auditResource.data.entries[1]?.kind).toBe("config.update");
+    expect(resourceDocs[5]?.id).toBe("audit.intervention");
   });
 
   it("locks the minimal execution host control plane action set", () => {

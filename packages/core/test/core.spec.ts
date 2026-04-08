@@ -1,4 +1,5 @@
 import {
+  AI_SURFACE_RESOURCE_IDS,
   CONFIG_CONTROL_PLANE_ACTIONS,
   type CapabilityDescriptor,
   CapabilityError,
@@ -9,6 +10,7 @@ import {
   assertCapabilityDescriptor,
   capabilityNamespace,
 } from "@bbl-next/contracts";
+import * as contractsModule from "@bbl-next/contracts";
 import {
   AI_SURFACE_BOUNDARY,
   BUILTIN_BOOTSTRAP_RESOURCE_KEYS,
@@ -27,6 +29,7 @@ import {
   dispatchCapabilityCall,
   getBuiltinsByNamespace,
   hasPublicNamespaceCoverage,
+  readAiSurfaceResource,
   resolveHostSubstrateTarget,
   setDefaultExecutionHost,
   typedCapabilities,
@@ -185,6 +188,25 @@ describe("core", () => {
         description: "Clear the current runtime error state, idempotent if no error is present",
       },
     ]);
+  });
+
+  it("reads every registered AI surface resource via the unified lookup path", () => {
+    const registry = (contractsModule as Record<string, unknown>)
+      .AI_SURFACE_RESOURCE_METADATA_REGISTRY;
+    expect(Array.isArray(registry)).toBe(true);
+
+    const results = (registry as Array<{ id: (typeof AI_SURFACE_RESOURCE_IDS)[number] }>).map(
+      (entry) =>
+        readAiSurfaceResource({
+          resourceId: entry.id,
+          bootstrap: createBootstrapSummary(),
+          auditTail: { entries: [] },
+          interventionAudit: { entries: [] },
+        }),
+    );
+
+    expect(results.map((entry) => entry.id)).toEqual(AI_SURFACE_RESOURCE_IDS);
+    expect(results.every((entry) => entry.primitive === "resource")).toBe(true);
   });
 
   it("builds a healthy bootstrap summary bundle", () => {

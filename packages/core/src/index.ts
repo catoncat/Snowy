@@ -48,6 +48,7 @@ import {
   capabilityNamespace,
   descriptorToToolContract,
   descriptorsToCapabilityExportHandoffs,
+  getAiSurfaceResourceMetadata,
 } from "@bbl-next/contracts";
 
 export interface CapabilityProviderRequest {
@@ -1605,20 +1606,18 @@ export function createInterventionAuditResource(
 export function readAiSurfaceResource(
   input: ReadAiSurfaceResourceInput,
 ): AiSurfaceResourceDocument {
-  switch (input.resourceId) {
-    case "runtime.summary":
-      return createRuntimeSummaryResource(input.bootstrap);
-    case "config.summary":
-      return createConfigSummaryResource(input.bootstrap);
-    case "skills.summary":
-      return createSkillsSummaryResource(input.bootstrap);
-    case "hosts.summary":
-      return createHostsSummaryResource(input.bootstrap);
-    case "audit.tail":
-      return createAuditTailResource(input.auditTail ?? { entries: [] });
-    case "audit.intervention":
-      return createInterventionAuditResource(input.interventionAudit ?? { entries: [] });
-  }
+  const metadata = getAiSurfaceResourceMetadata(input.resourceId);
+  const readers: Record<AiSurfaceResourceId, () => AiSurfaceResourceDocument> = {
+    "runtime.summary": () => createRuntimeSummaryResource(input.bootstrap),
+    "config.summary": () => createConfigSummaryResource(input.bootstrap),
+    "skills.summary": () => createSkillsSummaryResource(input.bootstrap),
+    "hosts.summary": () => createHostsSummaryResource(input.bootstrap),
+    "audit.tail": () => createAuditTailResource(input.auditTail ?? { entries: [] }),
+    "audit.intervention": () =>
+      createInterventionAuditResource(input.interventionAudit ?? { entries: [] }),
+  };
+
+  return readers[metadata.id]();
 }
 
 export function createConfigControlPlane(
