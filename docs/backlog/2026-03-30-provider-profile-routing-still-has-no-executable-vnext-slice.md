@@ -1,7 +1,7 @@
 ---
 id: ISSUE-074
 title: "Review: provider/profile routing still has no executable vNext slice"
-status: open
+status: done
 priority: p2
 source: "current plan expansion 2026-03-30"
 created: 2026-03-30
@@ -45,3 +45,25 @@ check_cmd: "bun run check"
 - 明确 provider registry、profile resolution 与 kernel/core 之间的最小 contract，不再依赖 app-private 选择逻辑
 - 至少一条真实 app or kernel integration path 能接收 resolved provider/profile context，并有测试锁定边界
 - 文档说明哪些 provider/profile 能力属于后续 deferred 扩展，哪些属于 vNext 最小主链
+
+## Resolution
+
+ISSUE-083 实现了完整 provider/profile 层，本 issue 补齐 kernel 集成路径并关闭 gap。
+
+### vNext 最小主链（已实现）
+
+- `LlmProviderAdapter` / `LlmResolvedRoute` / `LlmMessage` 类型族 → contracts
+- `LlmProviderRegistry` — provider 注册表 → kernel
+- `resolveLlmRoute()` — single profile → route 解析 → kernel
+- `createOpenAiCompatibleProvider()` — OpenAI-compatible adapter → kernel
+- `readLlmMessageFromSseStream()` — SSE stream parser → kernel
+- `contextMessagesToLlmMessages()` / `llmMessagesToApiPayload()` — message model → kernel
+- `createKernelLlmFromProvider()` — provider/profile → KernelLlmAdapter 桥接 → kernel
+
+### Deferred 扩展（后续 slice）
+
+- Escalation / fallback profile 链式切换（profile ordered list 已预留，执行逻辑未实现）
+- Per-lane profile 选择（primary / compaction / title 已建模，路由未接入）
+- Provider health check / circuit breaker
+- Non-OpenAI provider adapters（Anthropic, etc.）
+- Rate limit / token budget 管理

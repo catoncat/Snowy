@@ -118,9 +118,9 @@
       "summary": "Provider registry, profile routing, escalation policy, and model-selection control flow.",
       "tracking_order": 15,
       "stage": "mainline",
-      "status": "not-started",
+      "status": "in-progress",
       "depends_on_modules": ["kernel", "ai-surface-control-plane"],
-      "code_roots": ["packages/core/src/index.ts", "packages/kernel/"],
+      "code_roots": ["packages/contracts/src/index.ts", "packages/kernel/"],
       "source_docs": [
         "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md",
         "docs/legacy-to-vnext-migration-matrix.md"
