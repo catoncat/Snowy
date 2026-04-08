@@ -1,23 +1,19 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-08T16:01:14.950Z",
+  "generated_at": "2026-04-08T16:04:11.367Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-089",
-      "issue_path": "docs/backlog/2026-04-08-action-failure-tracking.md",
-      "title": "Action failure tracking and strategy hints in prompt",
+      "issue_id": "ISSUE-091",
+      "issue_path": "docs/backlog/2026-04-08-no-progress-threshold-alignment.md",
+      "title": "Align no-progress detection threshold with old repo",
       "parallel_group": "kernel",
       "module_id": "kernel",
       "module_stage": "mainline",
       "tracking_kind": "gap",
       "check_cmd": "bun run check",
       "depends_on": [],
-      "write_scope": [
-        "packages/kernel/src/prompt-builder.ts",
-        "packages/kernel/src/loop-orchestrator.ts",
-        "packages/kernel/test/"
-      ]
+      "write_scope": ["packages/kernel/src/loop-engine.ts", "packages/kernel/test/"]
     },
     {
       "issue_id": "ISSUE-093",
