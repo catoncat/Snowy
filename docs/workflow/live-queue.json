@@ -1,24 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-08T16:19:40.717Z",
+  "generated_at": "2026-04-08T16:37:28.412Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-090",
-      "issue_path": "docs/backlog/2026-04-08-llm-request-retry-escalation.md",
-      "title": "LLM request retry with backoff and profile escalation",
-      "parallel_group": "kernel",
-      "module_id": "provider-profile-routing",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-083"],
-      "write_scope": [
-        "packages/kernel/src/loop-orchestrator.ts",
-        "packages/kernel/src/llm-profile-resolver.ts",
-        "packages/kernel/test/"
-      ]
-    },
     {
       "issue_id": "ISSUE-093",
       "issue_path": "docs/backlog/2026-04-08-sidepanel-management-ui-still-lacks-a-shared-control-plane-consumer.md",
