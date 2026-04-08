@@ -1,11 +1,11 @@
 ---
 id: ISSUE-075
 title: "Review: sidepanel still lacks an AI-surface-backed management UI"
-status: open
+status: done
 priority: p2
 source: "current plan expansion 2026-03-30"
 created: 2026-03-30
-assignee: unassigned
+assignee: codex-019d6dbd
 tags:
   - review
   - ui
@@ -27,6 +27,7 @@ write_scope:
   - docs/
 acceptance_ref: docs/cutover-readiness-criteria.md
 check_cmd: "bun run check"
+completed_at: 2026-04-08T16:01:14.950Z
 ---
 
 ## Goal
@@ -60,3 +61,24 @@ check_cmd: "bun run check"
 ## Sub Issues
 
 - `ISSUE-093` `Review: sidepanel management UI still lacks a shared control-plane consumer`
+
+## 工作总结
+
+### 实现了什么
+
+- 锁定 sidepanel management 只能消费 shared AI-surface resources/actions 的边界与测试入口。
+- 把 Soft Gate 1 明确为 cutover 后补，并同步到 cutover/parity/migration docs。
+- 新增 follow-up `ISSUE-093` 承接真正的 sidepanel management UI 实现。
+
+### 实际跑了什么检查
+
+- `bun run test -- apps/mv3-shell/test/manifest.spec.ts --testNamePattern='locks sidepanel management to shared AI-surface resources and control-plane actions'`
+- `./node_modules/.bin/biome check apps/mv3-shell/src/runtime-services.js apps/mv3-shell/test/manifest.spec.ts`
+
+### 残留风险
+
+- management UI 本体仍未实现；由 `ISSUE-093` 继续承接。
+
+## 相关 commits
+
+- `5b7dcf1` `chore(sidepanel): lock management control-plane boundary (ISSUE-075)`
