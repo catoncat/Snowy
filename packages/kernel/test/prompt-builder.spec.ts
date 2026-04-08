@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   type PromptSkillMetadata,
   buildAvailableSkillsPrompt,
+  buildSharedTabsContextMessage,
   buildSystemPromptBase,
+  buildSystemPromptMessages,
   buildTaskProgressMessage,
 } from "../src/prompt-builder.js";
 
@@ -94,5 +96,46 @@ describe("buildTaskProgressMessage", () => {
     expect(message).toContain("page_click");
     expect(message).toContain("uid submit-button");
     expect(message).toContain("failed 2 times");
+  });
+});
+
+describe("shared tabs prompt context", () => {
+  it("formats shared tabs metadata into an independent system message", () => {
+    const message = buildSharedTabsContextMessage([
+      {
+        tabId: 12,
+        title: "Docs",
+        url: "https://docs.example.test",
+      },
+      {
+        tabId: 28,
+        url: "https://app.example.test/dashboard",
+      },
+    ]);
+
+    expect(message).toContain("Shared Tabs Context");
+    expect(message).toContain("tab 12");
+    expect(message).toContain("Docs");
+    expect(message).toContain("https://docs.example.test");
+    expect(message).toContain("tab 28");
+    expect(message).toContain("https://app.example.test/dashboard");
+  });
+
+  it("emits shared tabs as a separate system message from the base prompt", () => {
+    const messages = buildSystemPromptMessages(TEST_TOOLS, {
+      sharedTabs: [
+        {
+          tabId: 3,
+          title: "Inbox",
+          url: "https://mail.example.test",
+        },
+      ],
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toContain("## Available Tools");
+    expect(messages[1]).toContain("Shared Tabs Context");
+    expect(messages[1]).toContain("tab 3");
+    expect(messages[0]).not.toContain("tab 3");
   });
 });

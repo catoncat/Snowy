@@ -32,6 +32,12 @@ export interface AvailableSkillsPromptOptions {
   characterBudget?: number;
 }
 
+export interface PromptSharedTabMetadata {
+  tabId: number;
+  url: string;
+  title?: string;
+}
+
 export interface PromptBuilderOptions {
   /** Additional instructions to append to the system prompt */
   customInstructions?: string;
@@ -43,6 +49,8 @@ export interface PromptBuilderOptions {
   availableSkills?: PromptSkillMetadata[];
   /** Character budget for the serialized available skills block */
   availableSkillsCharacterBudget?: number;
+  /** Shared tab metadata selected into prompt context */
+  sharedTabs?: PromptSharedTabMetadata[];
 }
 
 function escapeXml(text: string): string {
@@ -129,6 +137,40 @@ export function buildAvailableSkillsPrompt(
 /**
  * Build the base system prompt for the browser automation agent.
  */
+export function buildSharedTabsContextMessage(tabs: PromptSharedTabMetadata[]): string | null {
+  if (tabs.length === 0) {
+    return null;
+  }
+
+  const lines = [
+    "Shared Tabs Context",
+    "The user selected these browser tabs as relevant context:",
+  ];
+
+  for (const tab of tabs) {
+    const parts = [`- tab ${tab.tabId}`];
+    if (tab.title) {
+      parts.push(`title: ${tab.title}`);
+    }
+    parts.push(`url: ${tab.url}`);
+    lines.push(parts.join(" | "));
+  }
+
+  return lines.join("\n");
+}
+
+export function buildSystemPromptMessages(
+  tools: ToolContract[],
+  options?: PromptBuilderOptions,
+): string[] {
+  const messages = [buildSystemPromptBase(tools, options)];
+  const sharedTabsMessage = buildSharedTabsContextMessage(options?.sharedTabs ?? []);
+  if (sharedTabsMessage) {
+    messages.push(sharedTabsMessage);
+  }
+  return messages;
+}
+
 export function buildSystemPromptBase(
   tools: ToolContract[],
   options?: PromptBuilderOptions,
