@@ -153,7 +153,10 @@ export async function runLoop(
       const message = streamResult.message;
 
       const textContent = (message.content as string) || "";
-      const toolCalls = (message.tool_calls as LlmToolCall[] | undefined) ?? [];
+      const toolCalls = ((message.tool_calls as LlmToolCall[] | undefined) ?? []).map((tc) => ({
+        ...tc,
+        id: normalizeToolCallId(tc.id),
+      }));
 
       await kernel.appendMessage(
         input.sessionId,
@@ -171,7 +174,7 @@ export async function runLoop(
 
       // Execute each tool call
       for (const tc of toolCalls) {
-        const toolCallId = normalizeToolCallId(tc.id);
+        const toolCallId = tc.id;
         const toolName = tc.function.name;
         const capabilityId = toolNameToCapabilityId(toolName);
 

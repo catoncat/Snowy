@@ -151,6 +151,92 @@ describe("runLoop", () => {
     expect(toolCalls).toEqual(["tabs_navigate"]);
   });
 
+  it("replays persisted assistant contentBlocks back into the next llm request", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    let callCount = 0;
+    const { kernel, registry, provider } = setup(async (input) => {
+      payloads.push(input.payload);
+      callCount++;
+      if (callCount === 1) {
+        return sseResponse([
+          chatChunk("Navigating now.", [
+            {
+              index: 0,
+              id: "tc_1",
+              function: { name: "tabs_navigate", arguments: '{"url":"https://example.com"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "tool_calls"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([chatChunk("Done."), chatChunk(undefined, undefined, "stop"), "[DONE]"]);
+    });
+
+    const session = await kernel.createSession();
+    await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Go to example.com" },
+    );
+
+    const secondMessages = payloads[1]?.messages;
+    expect(Array.isArray(secondMessages)).toBe(true);
+    const assistantMessage = (secondMessages as Array<Record<string, unknown>>).find(
+      (msg) => msg.role === "assistant",
+    );
+    expect(assistantMessage).toEqual({
+      role: "assistant",
+      content: "Navigating now.",
+      tool_calls: [
+        {
+          id: "tc_1",
+          type: "function",
+          function: {
+            name: "tabs_navigate",
+            arguments: '{"url":"https://example.com"}',
+          },
+        },
+      ],
+    });
+  });
+
+  it("reuses the same normalized tool call id for assistant and tool result messages", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    let callCount = 0;
+    const { kernel, registry, provider } = setup(async (input) => {
+      payloads.push(input.payload);
+      callCount++;
+      if (callCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "",
+              function: { name: "tabs_navigate", arguments: '{"url":"https://example.com"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "tool_calls"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([chatChunk("Done."), chatChunk(undefined, undefined, "stop"), "[DONE]"]);
+    });
+
+    const session = await kernel.createSession();
+    await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Go to example.com" },
+    );
+
+    const secondMessages = payloads[1]?.messages as Array<Record<string, unknown>>;
+    const assistantMessage = secondMessages.find((msg) => msg.role === "assistant");
+    const toolMessage = secondMessages.find((msg) => msg.role === "tool");
+    const toolCalls =
+      (assistantMessage?.tool_calls as Array<Record<string, unknown>> | undefined) ?? [];
+    expect(toolCalls[0]?.id).toMatch(/^tc_/);
+    expect(toolCalls[0]?.id).toBe(toolMessage?.tool_call_id);
+  });
+
   it("calls onDelta for streaming text", async () => {
     const { kernel, registry, provider } = setup(async () => {
       return sseResponse([chatChunk("part1"), chatChunk("part2"), "[DONE]"]);

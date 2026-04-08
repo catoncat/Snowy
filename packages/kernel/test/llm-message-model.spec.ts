@@ -1,4 +1,5 @@
 import type { LlmToolCall, SessionContextMessage } from "@bbl-next/contracts";
+import * as kernelExports from "@bbl-next/kernel";
 import {
   buildAssistantContentBlocks,
   contextMessagesToLlmMessages,
@@ -278,5 +279,60 @@ describe("llmMessagesToApiPayload", () => {
     ]);
     expect(result[0].content).toBeNull();
     expect(result[0].tool_calls).toHaveLength(1);
+  });
+});
+
+describe("llmAssistantMessageToMessagePayload", () => {
+  it("converts mixed assistant content into message payload while preserving contentBlocks", () => {
+    const fn = (kernelExports as Record<string, unknown>).llmAssistantMessageToMessagePayload;
+    expect(typeof fn).toBe("function");
+    if (typeof fn !== "function") return;
+
+    const result = fn({
+      role: "assistant",
+      content: [
+        { type: "text", text: "Checking..." },
+        {
+          type: "toolCall",
+          id: "call_1",
+          name: "get_weather",
+          arguments: '{"city":"NYC"}',
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      role: "assistant",
+      text: "Checking...",
+      contentBlocks: [
+        { type: "text", text: "Checking..." },
+        {
+          type: "toolCall",
+          id: "call_1",
+          name: "get_weather",
+          arguments: '{"city":"NYC"}',
+        },
+      ],
+    });
+  });
+});
+
+describe("stepResultToToolMessagePayload", () => {
+  it("converts step result into persisted tool message payload", () => {
+    const fn = (kernelExports as Record<string, unknown>).stepResultToToolMessagePayload;
+    expect(typeof fn).toBe("function");
+    if (typeof fn !== "function") return;
+
+    const result = fn(
+      { ok: true, data: { navigated: true, url: "https://example.com" } },
+      { toolCallId: "call_1", toolName: "tabs_navigate" },
+    );
+
+    expect(result).toEqual({
+      role: "assistant",
+      text: '{"navigated":true,"url":"https://example.com"}',
+      toolCallId: "call_1",
+      toolName: "tabs_navigate",
+    });
   });
 });

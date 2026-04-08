@@ -6,8 +6,10 @@ import type {
   LlmTextBlock,
   LlmToolCall,
   LlmToolCallBlock,
+  MessagePayload,
   SessionContextMessage,
 } from "@bbl-next/contracts";
+import type { StepResult } from "./loop-engine.js";
 
 let toolCallFallbackSequence = 0;
 
@@ -50,6 +52,35 @@ export function buildAssistantContentBlocks(
   }
 
   return blocks;
+}
+
+function assistantContentText(content: LlmAssistantContentBlock[]): string {
+  return content
+    .filter((block): block is LlmTextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("");
+}
+
+export function llmAssistantMessageToMessagePayload(message: LlmAssistantMessage): MessagePayload {
+  return {
+    role: "assistant",
+    text: assistantContentText(message.content),
+    contentBlocks: message.content.length > 0 ? message.content : undefined,
+  };
+}
+
+export function stepResultToToolMessagePayload(
+  result: StepResult,
+  meta: { toolCallId: string; toolName: string },
+): MessagePayload {
+  return {
+    role: "assistant",
+    text: result.ok
+      ? JSON.stringify(result.data ?? { ok: true })
+      : JSON.stringify({ error: result.error }),
+    toolCallId: meta.toolCallId,
+    toolName: meta.toolName,
+  };
 }
 
 /**
