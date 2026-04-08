@@ -4,18 +4,33 @@ import type { ToolContract } from "@bbl-next/contracts";
 // Base System Prompt
 // ──────────────────────────────────────────────────────────
 
+const DEFAULT_AVAILABLE_SKILLS_CHARACTER_BUDGET = 6000;
+const AVAILABLE_SKILLS_OPEN_TAG = '<available_skills schema="compact-v1">';
+const AVAILABLE_SKILLS_CLOSE_TAG = "</available_skills>";
+
 const BASE_GUIDELINES = `
 ## Guidelines
 
-1. **Browser automation priority**: Use structured element queries (page.query) first, then targeted interactions (page.click, page.fill) by UID. Fall back to press_key or screenshot only when structured tools fail.
+1. **Browser automation priority**: Use structured element queries (\`page_query\`) first, then targeted interactions (\`page_click\`, \`page_fill\`) by UID. Fall back to \`page_press_key\` or \`page_screenshot\` only when structured tools fail.
 2. **File operations**: Use memfs.* for browser-side virtual files (mem:// protocol). Use host.* for host-side filesystem operations through the WebSocket bridge.
-3. **Verification**: After performing an action, verify the result before proceeding. Use page.query to confirm state changes.
+3. **Verification**: After performing an action, verify the result before proceeding. Use \`page_query\` to confirm state changes.
 4. **One step at a time**: Execute one tool call per turn when possible. Batch only when operations are independent.
 5. **Error handling**: If a tool call fails, try an alternative approach rather than repeating the same call. After 2 failures with the same tool, switch strategy.
 6. **Terminal behavior**: When the task is complete, respond with a text summary without any tool calls. This signals task completion.
 7. **Tool result interpretation**: Tool results are JSON. Parse them to decide next steps. Do not echo raw JSON to the user.
-8. **Tab awareness**: Always check the active tab before performing page actions. Use tabs.navigate to go to the right page first.
+8. **Tab awareness**: Always check the active tab before performing page actions. Use \`tabs_get_active\` and \`tabs_navigate\` to work on the right page first.
 `.trim();
+
+export interface PromptSkillMetadata {
+  name: string;
+  description?: string;
+  path?: string;
+  triggers?: string[];
+}
+
+export interface AvailableSkillsPromptOptions {
+  characterBudget?: number;
+}
 
 export interface PromptBuilderOptions {
   /** Additional instructions to append to the system prompt */
@@ -24,6 +39,91 @@ export interface PromptBuilderOptions {
   browserCwd?: string;
   /** Host working directory (if available) */
   hostCwd?: string;
+  /** Ranked skill metadata to inject into the prompt */
+  availableSkills?: PromptSkillMetadata[];
+  /** Character budget for the serialized available skills block */
+  availableSkillsCharacterBudget?: number;
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function formatSkillTag(skill: PromptSkillMetadata, rank: number): string {
+  const attrs = [`rank="${rank}"`, `name="${escapeXml(skill.name)}"`];
+  if (skill.path) {
+    attrs.push(`path="${escapeXml(skill.path)}"`);
+  }
+
+  const children: string[] = [];
+  if (skill.description) {
+    children.push(`<description>${escapeXml(skill.description)}</description>`);
+  }
+  if ((skill.triggers?.length ?? 0) > 0) {
+    children.push(`<triggers>${escapeXml(skill.triggers!.join(", "))}</triggers>`);
+  }
+
+  return `<skill ${attrs.join(" ")}>${children.join("")}</skill>`;
+}
+
+export function buildAvailableSkillsPrompt(
+  skills: PromptSkillMetadata[],
+  options?: AvailableSkillsPromptOptions,
+): string {
+  if (skills.length === 0) {
+    return `${AVAILABLE_SKILLS_OPEN_TAG}${AVAILABLE_SKILLS_CLOSE_TAG}`;
+  }
+
+  const minBudget = AVAILABLE_SKILLS_OPEN_TAG.length + AVAILABLE_SKILLS_CLOSE_TAG.length;
+  const characterBudget = Math.max(
+    minBudget,
+    options?.characterBudget ?? DEFAULT_AVAILABLE_SKILLS_CHARACTER_BUDGET,
+  );
+  const included: string[] = [];
+  let remaining = skills.length;
+
+  for (const [index, skill] of skills.entries()) {
+    const nextTag = formatSkillTag(skill, index + 1);
+    const nextBody = `${included.join("")}${nextTag}`;
+    if (
+      `${AVAILABLE_SKILLS_OPEN_TAG}${nextBody}${AVAILABLE_SKILLS_CLOSE_TAG}`.length <=
+      characterBudget
+    ) {
+      included.push(nextTag);
+      remaining -= 1;
+      continue;
+    }
+    break;
+  }
+
+  let body = included.join("");
+  if (remaining > 0) {
+    let truncated = `<truncated remaining="${remaining}" />`;
+    while (
+      included.length > 0 &&
+      `${AVAILABLE_SKILLS_OPEN_TAG}${body}${truncated}${AVAILABLE_SKILLS_CLOSE_TAG}`.length >
+        characterBudget
+    ) {
+      included.pop();
+      remaining += 1;
+      body = included.join("");
+      truncated = `<truncated remaining="${remaining}" />`;
+    }
+
+    if (
+      `${AVAILABLE_SKILLS_OPEN_TAG}${body}${truncated}${AVAILABLE_SKILLS_CLOSE_TAG}`.length <=
+      characterBudget
+    ) {
+      body += truncated;
+    }
+  }
+
+  return `${AVAILABLE_SKILLS_OPEN_TAG}${body}${AVAILABLE_SKILLS_CLOSE_TAG}`;
 }
 
 /**
@@ -67,6 +167,18 @@ export function buildSystemPromptBase(
 
 ${toolList}`.trim(),
   );
+
+  if ((options?.availableSkills?.length ?? 0) > 0) {
+    sections.push(
+      [
+        "## Available Skills",
+        "Use the ranked skills below when a skill-specific workflow matches the task.",
+        buildAvailableSkillsPrompt(options!.availableSkills!, {
+          characterBudget: options?.availableSkillsCharacterBudget,
+        }),
+      ].join("\n\n"),
+    );
+  }
 
   // Guidelines
   sections.push(BASE_GUIDELINES);

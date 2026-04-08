@@ -49,8 +49,11 @@ export {
   type RunLoopResult,
 } from "./loop-orchestrator.js";
 export {
+  buildAvailableSkillsPrompt,
   buildSystemPromptBase,
   buildTaskProgressMessage,
+  type AvailableSkillsPromptOptions,
   type PromptBuilderOptions,
+  type PromptSkillMetadata,
   type TaskProgressInput,
 } from "./prompt-builder.js";
