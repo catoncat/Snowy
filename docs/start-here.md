@@ -161,8 +161,8 @@ bun run workflow:queue:build
 
 再看旧仓：
 
-- `/Users/envvar/work/repos/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
-- `/Users/envvar/work/repos/browser-brain-loop/docs/kernel-architecture.md`
+- `/Users/envvar/work/repos/snowy/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
+- `/Users/envvar/work/repos/snowy/browser-brain-loop/docs/kernel-architecture.md`
 
 再看研究仓：
 

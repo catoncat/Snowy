@@ -44,13 +44,13 @@
 
 ### 2.1 旧仓核心材料
 
-- `/Users/envvar/work/repos/browser-brain-loop/docs/kernel-architecture.md`
-- `/Users/envvar/work/repos/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
-- `/Users/envvar/work/repos/browser-brain-loop/docs/background-mode-design-2026-06.md`
-- `/Users/envvar/work/repos/browser-brain-loop/docs/debug-interfaces.md`
-- `/Users/envvar/work/repos/browser-brain-loop/docs/runtime-debug-interface.md`
-- `/Users/envvar/work/repos/browser-brain-loop/docs/diagnostics-format.md`
-- `/Users/envvar/work/repos/browser-brain-loop/extension/src/sw/kernel/`
+- `/Users/envvar/work/repos/snowy/browser-brain-loop/docs/kernel-architecture.md`
+- `/Users/envvar/work/repos/snowy/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
+- `/Users/envvar/work/repos/snowy/browser-brain-loop/docs/background-mode-design-2026-06.md`
+- `/Users/envvar/work/repos/snowy/browser-brain-loop/docs/debug-interfaces.md`
+- `/Users/envvar/work/repos/snowy/browser-brain-loop/docs/runtime-debug-interface.md`
+- `/Users/envvar/work/repos/snowy/browser-brain-loop/docs/diagnostics-format.md`
+- `/Users/envvar/work/repos/snowy/browser-brain-loop/extension/src/sw/kernel/`
 
 重点复核了这些旧模块的真实职责：
 

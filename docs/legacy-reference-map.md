@@ -32,7 +32,7 @@
 
 ## Old Repo Hotspots
 
-旧仓根路径：`/Users/envvar/work/repos/browser-brain-loop`
+旧仓根路径：`/Users/envvar/work/repos/snowy/browser-brain-loop`
 
 ### Capability / Routing
 

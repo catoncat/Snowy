@@ -35,8 +35,8 @@
   - planning：`docs/source-of-truth-map.md` + `docs/module-tracking-ledger.json` + `docs/backlog/README.md`
   - architecture / public surface：`docs/locked-decisions-2026-03-29.md` + `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` + `docs/kernel-skeleton-design.md`
 - 如果要改 architecture-level 代码，再去读旧仓：
-  - `/Users/envvar/work/repos/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
-  - `/Users/envvar/work/repos/browser-brain-loop/docs/kernel-architecture.md`
+  - `/Users/envvar/work/repos/snowy/browser-brain-loop/docs/skill-runtime-site-capability-redesign-2026-03-29.md`
+  - `/Users/envvar/work/repos/snowy/browser-brain-loop/docs/kernel-architecture.md`
 
 ## 2. Architecture North Star
 
@@ -265,7 +265,7 @@
 
 ## 6. Old Repo Lookup Index
 
-旧仓根路径：`/Users/envvar/work/repos/browser-brain-loop`
+旧仓根路径：`/Users/envvar/work/repos/snowy/browser-brain-loop`
 
 ### 6.1 Kernel / Capability / Routing
 
