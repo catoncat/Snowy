@@ -1,4 +1,4 @@
-import { createRunnerHostCore } from "@bbl-next/js-runner";
+import { createCompositeHostAdapter, createRunnerHostCore } from "@bbl-next/js-runner";
 import { RUNNER_OFFSCREEN_TARGET } from "./background.js";
 import { createLocalHostAdapter } from "./local-host-adapter.js";
 
@@ -25,7 +25,14 @@ function toBridgeError(error, fallbackCode = "E_RUNTIME") {
 
 export function createOffscreenRunnerBridge({
   runtimeApi = globalThis.chrome?.runtime,
-  createHost = () => createRunnerHostCore({ hostAdapter: createLocalHostAdapter() }),
+  remoteHostAdapter,
+  createHost = () => {
+    const local = createLocalHostAdapter();
+    const hostAdapter = remoteHostAdapter
+      ? createCompositeHostAdapter({ local, remote: remoteHostAdapter })
+      : local;
+    return createRunnerHostCore({ hostAdapter });
+  },
   target = RUNNER_OFFSCREEN_TARGET,
 } = {}) {
   const host = createHost();

@@ -1,4 +1,9 @@
-import { JsRunnerHost, type RunnerRpcRequest, createRunnerHostCore } from "@bbl-next/js-runner";
+import {
+  JsRunnerHost,
+  type RunnerRpcRequest,
+  createCompositeHostAdapter,
+  createRunnerHostCore,
+} from "@bbl-next/js-runner";
 import { describe, expect, it, vi } from "vitest";
 
 describe("js-runner", () => {
@@ -514,6 +519,126 @@ describe("js-runner", () => {
       status: "idle",
       inflightCount: 0,
       consecutiveFailures: 0,
+    });
+  });
+
+  describe("createCompositeHostAdapter", () => {
+    it("routes read/write/edit to local and exec to remote", async () => {
+      const local = {
+        read: vi.fn(async (req) => ({ hostId: req.hostId, path: req.path, content: "local" })),
+        write: vi.fn(async (req) => ({ hostId: req.hostId, path: req.path, content: req.content })),
+        edit: vi.fn(async (req) => ({ hostId: req.hostId, path: req.path, content: req.patch })),
+      };
+      const remote = {
+        exec: vi.fn(async (req) => ({
+          hostId: req.hostId,
+          command: req.command,
+          exitCode: 0,
+          stdout: `remote:${req.command}`,
+          stderr: "",
+        })),
+      };
+      const composite = createCompositeHostAdapter({ local, remote });
+      const core = createRunnerHostCore({ hostAdapter: composite });
+
+      await expect(
+        core.dispatch({ kind: "read", requestId: "r1", hostId: "local", path: "/a.txt" }),
+      ).resolves.toMatchObject({ hostId: "local", path: "/a.txt", content: "local" });
+
+      await expect(
+        core.dispatch({
+          kind: "write",
+          requestId: "w1",
+          hostId: "local",
+          path: "/a.txt",
+          content: "data",
+        }),
+      ).resolves.toMatchObject({ content: "data" });
+
+      await expect(
+        core.dispatch({
+          kind: "edit",
+          requestId: "e1",
+          hostId: "local",
+          path: "/a.txt",
+          patch: "patch",
+        }),
+      ).resolves.toMatchObject({ content: "patch" });
+
+      await expect(
+        core.dispatch({ kind: "exec", requestId: "x1", hostId: "local", command: "pwd" }),
+      ).resolves.toMatchObject({
+        hostId: "local",
+        command: "pwd",
+        exitCode: 0,
+        stdout: "remote:pwd",
+      });
+
+      expect(local.read).toHaveBeenCalledTimes(1);
+      expect(local.write).toHaveBeenCalledTimes(1);
+      expect(local.edit).toHaveBeenCalledTimes(1);
+      expect(remote.exec).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to remote for read/write/edit when local is absent", async () => {
+      const remote = {
+        read: vi.fn(async (req) => ({ hostId: req.hostId, path: req.path, content: "remote" })),
+        exec: vi.fn(async (req) => ({
+          hostId: req.hostId,
+          command: req.command,
+          exitCode: 0,
+          stdout: "",
+          stderr: "",
+        })),
+      };
+      const composite = createCompositeHostAdapter({ remote });
+      const core = createRunnerHostCore({ hostAdapter: composite });
+
+      await expect(
+        core.dispatch({ kind: "read", requestId: "r1", hostId: "r", path: "/b.txt" }),
+      ).resolves.toMatchObject({ content: "remote" });
+
+      expect(remote.read).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to local exec when remote has no exec", async () => {
+      const local = {
+        read: vi.fn(async (req) => ({ hostId: req.hostId, path: req.path, content: "local" })),
+        exec: vi.fn(async (req) => ({
+          hostId: req.hostId,
+          command: req.command,
+          exitCode: 0,
+          stdout: "local-exec",
+          stderr: "",
+        })),
+      };
+      const composite = createCompositeHostAdapter({ local, remote: {} });
+      const core = createRunnerHostCore({ hostAdapter: composite });
+
+      await expect(
+        core.dispatch({ kind: "exec", requestId: "x1", hostId: "local", command: "ls" }),
+      ).resolves.toMatchObject({ stdout: "local-exec" });
+
+      expect(local.exec).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns operation_not_supported when neither adapter has exec", async () => {
+      const local = {
+        read: vi.fn(async (req) => ({ hostId: req.hostId, path: req.path, content: "ok" })),
+      };
+      const composite = createCompositeHostAdapter({ local });
+      const core = createRunnerHostCore({ hostAdapter: composite });
+
+      await expect(
+        core.dispatch({ kind: "exec", requestId: "x1", hostId: "local", command: "pwd" }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: {
+          code: "E_CAPABILITY_NOT_FOUND",
+          message: "Execution host adapter does not implement exec",
+          details: { kind: "exec", reason: "operation_not_supported" },
+        },
+      });
     });
   });
 });

@@ -9,7 +9,10 @@ import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCR
 // @ts-ignore source JS module has no declaration file yet
 import { createOffscreenRunnerBridge } from "../src/offscreen.js";
 // @ts-ignore source JS module has no declaration file yet
-import { createBackgroundRuntimeServices } from "../src/runtime-services.js";
+import {
+  createBackgroundRuntimeServices,
+  createRemoteExecAdapter,
+} from "../src/runtime-services.js";
 
 type MessageListener = (
   message: unknown,
@@ -2746,6 +2749,94 @@ describe("mv3-shell manifest", () => {
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(1);
     dispose();
     harness.cleanup();
+  });
+
+  it("offscreen bridge with remote exec adapter routes exec to remote and read/write/edit to local", async () => {
+    const messageBus = createMessageBus();
+    const runtimeApi = {
+      ...messageBus,
+      sendMessage: vi.fn((msg: unknown) => messageBus.sendMessage(msg)),
+      onInstalled: { addListener: vi.fn() },
+      getURL: (p: string) => `chrome-extension://test/${p}`,
+      getContexts: async () => [],
+    };
+
+    const remoteExecHandler = vi.fn(async (request: { hostId: string; command: string }) => ({
+      hostId: request.hostId,
+      command: request.command,
+      exitCode: 0,
+      stdout: `remote:${request.command}`,
+      stderr: "",
+    }));
+
+    const remoteHostAdapter = createRemoteExecAdapter(remoteExecHandler);
+
+    const bridge = createOffscreenRunnerBridge({
+      runtimeApi,
+      remoteHostAdapter,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    const write = await bridge.handleMessage({
+      target: "bbl-next.runner.offscreen",
+      kind: "host.write",
+      requestId: "w1",
+      hostId: "local",
+      path: "/workspace/test.txt",
+      content: "hello",
+    });
+    expect(write).toMatchObject({
+      ok: true,
+      data: { path: "/workspace/test.txt", content: "hello" },
+    });
+
+    const read = await bridge.handleMessage({
+      target: "bbl-next.runner.offscreen",
+      kind: "host.read",
+      requestId: "r1",
+      hostId: "local",
+      path: "/workspace/test.txt",
+    });
+    expect(read).toMatchObject({
+      ok: true,
+      data: { path: "/workspace/test.txt", content: "hello" },
+    });
+
+    const exec = await bridge.handleMessage({
+      target: "bbl-next.runner.offscreen",
+      kind: "host.exec",
+      requestId: "x1",
+      hostId: "local",
+      command: "pwd",
+    });
+    expect(exec).toMatchObject({
+      ok: true,
+      data: { hostId: "local", command: "pwd", exitCode: 0, stdout: "remote:pwd" },
+    });
+    expect(remoteExecHandler).toHaveBeenCalledTimes(1);
+
+    dispose();
+  });
+
+  it("createRemoteExecAdapter wraps errors into structured host error responses", async () => {
+    const failingHandler = vi.fn(async () => {
+      throw new Error("bridge unreachable");
+    });
+    const adapter = createRemoteExecAdapter(failingHandler);
+    const result = await adapter.exec({
+      kind: "exec",
+      requestId: "x1",
+      hostId: "remote",
+      command: "pwd",
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "E_RUNTIME",
+        message: "bridge unreachable",
+        details: { kind: "exec", hostId: "remote", reason: "remote_exec_failed" },
+      },
+    });
   });
 
   it("connects, checks health, sets default, and disconnects the local host", async () => {

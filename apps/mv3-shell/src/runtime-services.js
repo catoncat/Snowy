@@ -308,6 +308,123 @@ function buildPageActionRequest({ action, input, tab, scriptPath }) {
   }
 }
 
+function normalizeChatRunStatus(status) {
+  return status === "running" || status === "stopped" ? status : "idle";
+}
+
+function createChatMessageItem({ id, role, text, state = "complete" }) {
+  return {
+    id,
+    kind: "message",
+    role,
+    text,
+    state,
+  };
+}
+
+function createChatToolItem({ id, toolName, summary, detail }) {
+  return {
+    id,
+    kind: "tool",
+    toolName,
+    summary,
+    detail,
+    expanded: false,
+  };
+}
+
+function summarizeChatToolDetail(detail) {
+  const normalized = String(detail ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return "Tool completed";
+  }
+  return normalized.length > 96 ? `${normalized.slice(0, 93)}...` : normalized;
+}
+
+function toChatTranscriptItem(message) {
+  if (!message || typeof message !== "object") {
+    return null;
+  }
+  if (message.role === "user" || message.role === "assistant") {
+    if (typeof message.toolName === "string" && message.toolName.length > 0) {
+      return createChatToolItem({
+        id: message.toolCallId ?? message.entryId,
+        toolName: message.toolName,
+        summary: summarizeChatToolDetail(message.content),
+        detail: message.content,
+      });
+    }
+    return createChatMessageItem({
+      id: message.entryId,
+      role: message.role,
+      text: message.content,
+    });
+  }
+  return null;
+}
+
+async function emitRuntimeChatEvent(chromeApi, event) {
+  if (typeof chromeApi?.runtime?.sendMessage !== "function") {
+    return;
+  }
+  await chromeApi.runtime.sendMessage({
+    type: "bbl-next.runtime.chat.event",
+    event,
+  });
+}
+
+async function waitForStreamTurn(signal) {
+  if (signal?.aborted) {
+    throw new Error("Chat run aborted");
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  if (signal?.aborted) {
+    throw new Error("Chat run aborted");
+  }
+}
+
+function buildRuntimeBootstrapToolPayload({ activeTab, kernelState, sessionId }) {
+  return JSON.stringify(
+    {
+      sessionId,
+      activeTab: activeTab
+        ? {
+            tabId: activeTab.id,
+            url: activeTab.url,
+            title: typeof activeTab.title === "string" ? activeTab.title : undefined,
+          }
+        : null,
+      kernelRunPhase: kernelState?.runState?.phase ?? "idle",
+    },
+    null,
+    2,
+  );
+}
+
+export function createRemoteExecAdapter(sendExec) {
+  return {
+    exec(request) {
+      return Promise.resolve(sendExec(request)).catch((error) => ({
+        ok: false,
+        error: {
+          code:
+            error && typeof error === "object" && typeof error.code === "string"
+              ? error.code
+              : "E_RUNTIME",
+          message: error instanceof Error ? error.message : "Remote exec failed",
+          details: {
+            kind: "exec",
+            hostId: request.hostId,
+            reason: "remote_exec_failed",
+          },
+        },
+      }));
+    },
+  };
+}
+
 export function createBackgroundRuntimeServices({
   invokeRunner,
   pageHookBridge,
@@ -321,6 +438,8 @@ export function createBackgroundRuntimeServices({
 } = {}) {
   let servicesPromise = null;
   let sessionPromise = null;
+  let chatRunStatus = "idle";
+  let activeChatRun = null;
   const skillManager = createInMemorySkillManager();
 
   async function ensureServices() {
@@ -585,6 +704,174 @@ export function createBackgroundRuntimeServices({
     return skillManager.list();
   }
 
+  async function buildChatBootstrap() {
+    const [{ kernel }, session] = await Promise.all([ensureServices(), ensureSession()]);
+    const context = await kernel.buildContext(session.id);
+
+    return {
+      sessionId: session.id,
+      messages: context.messages.map((message) => toChatTranscriptItem(message)).filter(Boolean),
+      runState: {
+        status: normalizeChatRunStatus(chatRunStatus),
+      },
+    };
+  }
+
+  async function emitChatRunState(sessionId, status) {
+    chatRunStatus = normalizeChatRunStatus(status);
+    await emitRuntimeChatEvent(chromeApi, {
+      type: "run.state",
+      sessionId,
+      status: chatRunStatus,
+    });
+  }
+
+  async function sendChatPrompt({ text } = {}) {
+    const prompt = typeof text === "string" ? text.trim() : "";
+    if (!prompt) {
+      throw new CapabilityError("E_BAD_INPUT", "runtime.chat.send requires a non-empty text");
+    }
+
+    if (activeChatRun && chatRunStatus === "running") {
+      throw new CapabilityError(
+        "E_RUNTIME",
+        "runtime.chat.send requires the current run to finish",
+      );
+    }
+
+    const [{ kernel }, session] = await Promise.all([ensureServices(), ensureSession()]);
+    await kernel.appendMessage(session.id, {
+      role: "user",
+      text: prompt,
+    });
+
+    const runId = `chat-${crypto.randomUUID()}`;
+    const assistantMessageId = `assistant-${crypto.randomUUID()}`;
+    const toolMessageId = `tool-${crypto.randomUUID()}`;
+    const controller = new AbortController();
+    activeChatRun = {
+      id: runId,
+      sessionId: session.id,
+      assistantMessageId,
+      controller,
+    };
+
+    await emitChatRunState(session.id, "running");
+
+    void (async () => {
+      let finalAssistantText = "";
+      try {
+        const openingDelta = "Checking the runtime surface";
+        finalAssistantText += openingDelta;
+        await emitRuntimeChatEvent(chromeApi, {
+          type: "assistant.delta",
+          sessionId: session.id,
+          messageId: assistantMessageId,
+          chunk: openingDelta,
+        });
+        await waitForStreamTurn(controller.signal);
+
+        const [activeTab, kernelState] = await Promise.all([
+          queryActiveTab(chromeApi),
+          getKernelRuntimeState(),
+        ]);
+        const toolDetail = buildRuntimeBootstrapToolPayload({
+          activeTab,
+          kernelState,
+          sessionId: session.id,
+        });
+        const toolSummary = activeTab
+          ? `Active tab: ${activeTab.title ?? activeTab.url}`
+          : "No active tab is available";
+
+        await emitRuntimeChatEvent(chromeApi, {
+          type: "tool.result",
+          sessionId: session.id,
+          messageId: toolMessageId,
+          toolName: "runtime.bootstrap",
+          summary: toolSummary,
+          detail: toolDetail,
+        });
+        await waitForStreamTurn(controller.signal);
+
+        const closingDelta = activeTab
+          ? `. Ready to work with ${activeTab.title ?? activeTab.url}.`
+          : ". Ready to work once a tab is active.";
+        finalAssistantText += closingDelta;
+        await emitRuntimeChatEvent(chromeApi, {
+          type: "assistant.delta",
+          sessionId: session.id,
+          messageId: assistantMessageId,
+          chunk: closingDelta,
+        });
+        await waitForStreamTurn(controller.signal);
+
+        await kernel.appendMessage(session.id, {
+          role: "assistant",
+          text: toolDetail,
+          toolName: "runtime.bootstrap",
+          toolCallId: toolMessageId,
+        });
+        await kernel.appendMessage(session.id, {
+          role: "assistant",
+          text: finalAssistantText,
+        });
+
+        await emitRuntimeChatEvent(chromeApi, {
+          type: "assistant.done",
+          sessionId: session.id,
+          messageId: assistantMessageId,
+          text: finalAssistantText,
+        });
+
+        if (activeChatRun?.id === runId) {
+          activeChatRun = null;
+          await emitChatRunState(session.id, "idle");
+        }
+      } catch (error) {
+        if (controller.signal.aborted) {
+          if (activeChatRun?.id === runId) {
+            activeChatRun = null;
+          }
+          return;
+        }
+        if (activeChatRun?.id === runId) {
+          activeChatRun = null;
+          chatRunStatus = "idle";
+        }
+        await emitRuntimeChatEvent(chromeApi, {
+          type: "run.error",
+          sessionId: session.id,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        await emitChatRunState(session.id, "idle");
+      }
+    })();
+
+    return {
+      sessionId: session.id,
+      accepted: true,
+      runState: {
+        status: normalizeChatRunStatus(chatRunStatus),
+      },
+    };
+  }
+
+  async function stopChatRun() {
+    const session = await ensureSession();
+    if (activeChatRun?.controller) {
+      activeChatRun.controller.abort();
+      activeChatRun = null;
+    }
+    await emitChatRunState(session.id, "stopped");
+    return {
+      sessionId: session.id,
+      runState: {
+        status: normalizeChatRunStatus(chatRunStatus),
+      },
+    };
+  }
+
   async function invokeSiteSkill({
     skillId,
     action,
@@ -696,6 +983,7 @@ export function createBackgroundRuntimeServices({
   }
 
   return {
+    bootstrapChat: buildChatBootstrap,
     dispatchCapability,
     ensureServices,
     ensureSession,
@@ -709,5 +997,7 @@ export function createBackgroundRuntimeServices({
     readInterventionAudit,
     resolveIntervention,
     cancelIntervention,
+    sendChatPrompt,
+    stopChatRun,
   };
 }

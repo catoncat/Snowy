@@ -200,6 +200,24 @@ export type RunnerRpcResponse =
   | RunnerHostExecResponse
   | RunnerHostErrorResponse;
 
+export interface CompositeHostAdapterOptions {
+  local?: RunnerHostAdapter;
+  remote?: RunnerHostAdapter;
+}
+
+export function createCompositeHostAdapter(
+  options: CompositeHostAdapterOptions,
+): RunnerHostAdapter {
+  const { local, remote } = options;
+
+  return {
+    read: local?.read ?? remote?.read,
+    write: local?.write ?? remote?.write,
+    edit: local?.edit ?? remote?.edit,
+    exec: remote?.exec ?? local?.exec,
+  };
+}
+
 export interface JsRunnerHostOptions {
   hostAdapter?: RunnerHostAdapter;
 }
