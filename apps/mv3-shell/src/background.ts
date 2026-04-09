@@ -4,6 +4,7 @@ import {
   CONFIG_AUDIT_STATUSES,
   CONFIG_RESOURCE_FIELDS,
   BOOTSTRAP_RESOURCE_KEYS as CONTRACT_BOOTSTRAP_RESOURCE_KEYS,
+  CapabilityError,
   HOST_AUDIT_KINDS,
   HOST_AUDIT_STATUSES,
   LOOP_AUDIT_KINDS,
@@ -11,6 +12,7 @@ import {
   SKILL_AUDIT_KINDS,
 } from "@bbl-next/contracts";
 import { createBootstrapSummary, readAiSurfaceResource } from "@bbl-next/core";
+import { invokeSingleActionSiteSkill } from "@bbl-next/site-runtime";
 import { createPageHookBridge } from "./page-hook-bridge.js";
 import { createBackgroundRuntimeServices } from "./runtime-services.js";
 
@@ -877,6 +879,105 @@ export function createBackgroundRunnerBridge({
       return null;
     }
     return activeTab;
+  }
+
+  function createRunnerHostProxy() {
+    return {
+      async invoke(request) {
+        const response = await invoke(request);
+        if (!response.ok) {
+          const error = response.error ?? {
+            code: "E_RUNTIME",
+            message: "Runner bridge unavailable",
+          };
+          throw new CapabilityError(error.code, error.message, error.details);
+        }
+        if (response.data?.ok !== true) {
+          const error = response.data?.error ?? {
+            code: "E_RUNTIME",
+            message: "Runner invocation failed",
+          };
+          throw new CapabilityError(error.code, error.message, error.details);
+        }
+        return response.data.result;
+      },
+    };
+  }
+
+  async function createBackgroundAutomationTab(automationTarget) {
+    if (!automationTarget || automationTarget.lane !== "background") {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        "Background automation target requires lane=background",
+      );
+    }
+    if (typeof automationTarget.url !== "string" || !automationTarget.url.trim()) {
+      throw new CapabilityError("E_BAD_INPUT", "Background automation target requires a url");
+    }
+    if (typeof chromeApi?.tabs?.create !== "function") {
+      throw new CapabilityError(
+        "E_RUNTIME",
+        "chrome.tabs.create is required for background automation",
+      );
+    }
+
+    const createdTab = await chromeApi.tabs.create({
+      url: automationTarget.url.trim(),
+      active: false,
+    });
+    if (!createdTab || typeof createdTab.id !== "number" || typeof createdTab.url !== "string") {
+      throw new CapabilityError(
+        "E_RUNTIME",
+        "Background automation tab creation did not return tab metadata",
+      );
+    }
+
+    return {
+      tabId: createdTab.id,
+      url: createdTab.url,
+      active: createdTab.active === true,
+      ...(typeof createdTab.title === "string" ? { title: createdTab.title } : {}),
+    };
+  }
+
+  async function teardownBackgroundAutomationTab(tabId, cleanup) {
+    if ((cleanup ?? "close-tab") !== "close-tab" || typeof chromeApi?.tabs?.remove !== "function") {
+      return;
+    }
+    try {
+      await chromeApi.tabs.remove(tabId);
+    } catch {
+      // Cleanup must remain best-effort and must not hide the invoke result.
+    }
+  }
+
+  async function invokeBackgroundAutomationLane(message) {
+    if (!effectivePageHookBridge) {
+      throw new CapabilityError("E_RUNTIME", "Page hook bridge is not configured");
+    }
+
+    const automationTarget = message.automationTarget;
+    const backgroundTab = await createBackgroundAutomationTab(automationTarget);
+    try {
+      return await invokeSingleActionSiteSkill({
+        request: {
+          skillId: message.skillId,
+          action: message.action,
+          tab: backgroundTab,
+          lane: "background",
+          ...(message.input !== undefined ? { input: message.input } : {}),
+          ...(message.ctx ? { ctx: message.ctx } : {}),
+          plan: message.plan,
+          module: message.module,
+          ...(message.verifier ? { verifier: message.verifier } : {}),
+          ...(message.intervention ? { intervention: message.intervention } : {}),
+        },
+        runnerHost: createRunnerHostProxy(),
+        installer: effectivePageHookBridge,
+      });
+    } finally {
+      await teardownBackgroundAutomationTab(backgroundTab.tabId, automationTarget?.cleanup);
+    }
   }
 
   async function resolveMaybe(value) {
@@ -1823,7 +1924,11 @@ export function createBackgroundRunnerBridge({
           },
         };
       case "site.runtime.invoke":
-        return routeRuntimeService(() => getRuntimeServices().invokeSiteSkill(message));
+        return routeRuntimeService(() =>
+          message?.automationTarget?.lane === "background"
+            ? invokeBackgroundAutomationLane(message)
+            : getRuntimeServices().invokeSiteSkill(message),
+        );
       case "runtime.chat.bootstrap":
         return routeRuntimeService(() => getRuntimeServices().bootstrapChat());
       case "runtime.chat.send":

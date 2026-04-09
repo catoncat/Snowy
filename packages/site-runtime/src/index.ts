@@ -7,6 +7,7 @@ import {
 import type { JsRunnerHost, RunnerModule } from "@bbl-next/js-runner";
 
 export type SiteWorld = "content" | "main";
+export type SiteExecutionLane = "active" | "background";
 
 export interface ActiveTabMetadata {
   tabId: number;
@@ -127,6 +128,7 @@ export interface SingleActionSiteSkillRequest {
   skillId: string;
   action: string;
   tab: ActiveTabMetadata;
+  lane?: SiteExecutionLane;
   input?: unknown;
   ctx?: Record<string, unknown>;
   plan: InjectionPlan;
@@ -243,6 +245,7 @@ export async function invokeSingleActionSiteSkill(options: {
     skillId: options.request.skillId,
     action: options.request.action,
     tab: options.request.tab,
+    lane: options.request.lane,
     input: options.request.input,
     ctx: options.request.ctx,
     executeRunner: options.request.executeRunner,
@@ -262,13 +265,17 @@ export class SiteSkillRegistry {
     return this.#skills.get(skillId);
   }
 
+  matchTab(tab: ActiveTabMetadata): SiteSkillDefinition[] {
+    return [...this.#skills.values()].filter((skill) =>
+      skill.matches.some((pattern) => patternToRegExp(pattern).test(tab.url)),
+    );
+  }
+
   matchActiveTab(tab: ActiveTabMetadata): SiteSkillDefinition[] {
     if (!tab.active) {
       return [];
     }
-    return [...this.#skills.values()].filter((skill) =>
-      skill.matches.some((pattern) => patternToRegExp(pattern).test(tab.url)),
-    );
+    return this.matchTab(tab);
   }
 }
 
@@ -294,6 +301,7 @@ export class SiteSkillRuntime {
     skillId: string;
     action: string;
     tab: ActiveTabMetadata;
+    lane?: SiteExecutionLane;
     input?: unknown;
     ctx?: Record<string, unknown>;
     executeRunner?: SiteActionRunnerExecutor;
@@ -302,11 +310,19 @@ export class SiteSkillRuntime {
     if (!skill) {
       throw new CapabilityError("E_BAD_INPUT", `Unknown site skill: ${request.skillId}`);
     }
-    const matches = this.#registry
-      .matchActiveTab(request.tab)
-      .some((candidate) => candidate.skillId === request.skillId);
+    const lane = request.lane ?? "active";
+    const matches = (
+      lane === "background"
+        ? this.#registry.matchTab(request.tab)
+        : this.#registry.matchActiveTab(request.tab)
+    ).some((candidate) => candidate.skillId === request.skillId);
     if (!matches) {
-      throw new CapabilityError("E_BAD_INPUT", `Active tab does not match ${request.skillId}`);
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        lane === "background"
+          ? `Background tab does not match ${request.skillId}`
+          : `Active tab does not match ${request.skillId}`,
+      );
     }
     const action = skill.actions.find((candidate) => candidate.name === request.action);
     if (!action) {
@@ -316,7 +332,10 @@ export class SiteSkillRuntime {
       );
     }
 
-    const trace = [`match:${request.skillId}`];
+    const trace =
+      lane === "background"
+        ? [`lane:${lane}`, `match:${request.skillId}`]
+        : [`match:${request.skillId}`];
 
     // Phase 2: Plan & Install
     const plan = buildInjectionPlan(request.skillId, action);

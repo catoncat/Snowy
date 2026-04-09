@@ -106,11 +106,7 @@ function createDomSandbox() {
     }
   }
 
-  function createMockElement(
-    tag: string,
-    attrs: Record<string, string>,
-    text: string,
-  ) {
+  function createMockElement(tag: string, attrs: Record<string, string>, text: string) {
     const attrList = Object.entries(attrs).map(([name, value]) => ({ name, value }));
     const el: Record<string, unknown> = {
       tagName: tag.toUpperCase(),
@@ -211,11 +207,7 @@ function createScriptingChromeHarness() {
               for (const file of request.files) {
                 let filePath = resolve(testDir, "../../../apps/mv3-shell", file);
                 if (!existsSync(filePath) && file.endsWith(".js")) {
-                  filePath = resolve(
-                    testDir,
-                    "../../../apps/mv3-shell",
-                    `${file.slice(0, -3)}.ts`,
-                  );
+                  filePath = resolve(testDir, "../../../apps/mv3-shell", `${file.slice(0, -3)}.ts`);
                 }
                 const source = readFileSync(filePath, "utf8");
                 runInNewContext(source, context, {
@@ -454,6 +446,55 @@ describe("site-runtime", () => {
       message: "Active tab does not match twitter.search",
     });
     expect(installer.install).not.toHaveBeenCalled();
+  });
+
+  it("allows explicit background lane dispatch on a matching inactive tab", async () => {
+    const runtime = new SiteSkillRuntime({
+      registry: new SiteSkillRegistry([
+        {
+          skillId: "twitter.search",
+          matches: ["https://x.com/*"],
+          actions: [
+            {
+              name: "search_posts",
+              module: {
+                id: "twitter.search",
+                source:
+                  "exports.default = async ({ ctx, input }) => ({ url: ctx.tab.url, active: ctx.tab.active, query: input.query });",
+              },
+            },
+          ],
+        },
+      ]),
+      runnerHost: new JsRunnerHost(),
+    });
+
+    const result = await runtime.invoke({
+      skillId: "twitter.search",
+      action: "search_posts",
+      lane: "background",
+      tab: {
+        ...tab,
+        active: false,
+      },
+      input: {
+        query: "background lane",
+      },
+    });
+
+    expect(result).toMatchObject({
+      verified: true,
+      result: {
+        url: "https://x.com/home",
+        active: false,
+        query: "background lane",
+      },
+    });
+    expect(result.trace).toEqual([
+      "lane:background",
+      "match:twitter.search",
+      "invoke:search_posts",
+    ]);
   });
 
   it("rejects invoke when the tab is inactive even if the URL matches", async () => {
@@ -1072,9 +1113,17 @@ describe("site-runtime", () => {
     };
 
     const installer = {
-      install: async (step: { world: string; scriptId: string; jsPath?: string; runAt?: string }, currentTab: { tabId: number; url: string; active: boolean }) =>
-        pageHookBridge.install(step, currentTab),
-      invoke: async ({ installation, action, input, tab: currentTab, ctx }: Record<string, unknown>) =>
+      install: async (
+        step: { world: string; scriptId: string; jsPath?: string; runAt?: string },
+        currentTab: { tabId: number; url: string; active: boolean },
+      ) => pageHookBridge.install(step, currentTab),
+      invoke: async ({
+        installation,
+        action,
+        input,
+        tab: currentTab,
+        ctx,
+      }: Record<string, unknown>) =>
         pageHookBridge.invoke({
           installation,
           action,
@@ -1117,7 +1166,9 @@ describe("site-runtime", () => {
       }),
     });
 
-    const inputUid = (queryResult.result as Record<string, unknown> & { elements: Array<{ uid: string }> }).elements[0].uid;
+    const inputUid = (
+      queryResult.result as Record<string, unknown> & { elements: Array<{ uid: string }> }
+    ).elements[0].uid;
 
     // Step 2: Fill the input field
     const fillResult = await runtime.invoke({
@@ -1146,7 +1197,9 @@ describe("site-runtime", () => {
       input: { selector: "button" },
     });
 
-    const buttonUid = (buttonQuery.result as Record<string, unknown> & { elements: Array<{ uid: string }> }).elements[0].uid;
+    const buttonUid = (
+      buttonQuery.result as Record<string, unknown> & { elements: Array<{ uid: string }> }
+    ).elements[0].uid;
 
     const clickResult = await runtime.invoke({
       skillId: "fixture.page",

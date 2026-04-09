@@ -297,6 +297,13 @@ function createChromeHarness({
         ...currentActiveTab,
       };
     }),
+    create: vi.fn(async ({ url, active = false }: { url?: string; active?: boolean }) => ({
+      id: Math.max(currentActiveTab?.id ?? 0, Date.now()) + 1,
+      url: typeof url === "string" ? url : "about:blank",
+      active: active === true,
+      title: active === true ? "Active Tab" : "Background Tab",
+    })),
+    remove: vi.fn(async (_tabId: number) => undefined),
     captureVisibleTab: vi.fn(
       async (windowId: number | undefined, options?: { format?: string; quality?: number }) => {
         if (!currentActiveTab) {
@@ -4173,6 +4180,124 @@ describe("mv3-shell manifest", () => {
         },
       },
     });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("routes site runtime invoke through an explicit background lane target and tears the tab down", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/home",
+      },
+      host: {
+        dispatch: vi.fn(async (request) => {
+          if (request.kind === "invoke") {
+            return {
+              kind: "invoke_result",
+              requestId: request.requestId,
+              ok: true,
+              result: {
+                result: {
+                  query: request.invocation.input.query,
+                  tabUrl: request.invocation.ctx.tab.url,
+                  active: request.invocation.ctx.tab.active,
+                  installationCount: request.invocation.ctx.site.installations.length,
+                },
+                durationMs: 1,
+              },
+            };
+          }
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0,
+            },
+          };
+        }),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0,
+        })),
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge: createPageHookBridge({
+        chromeApi: harness.chromeApi,
+      }),
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "site.runtime.invoke",
+        automationTarget: {
+          lane: "background",
+          url: "https://fixture.test/background",
+          cleanup: "close-tab",
+        },
+        skillId: "fixture.page",
+        action: "execute_fixture",
+        input: {
+          query: "background lane",
+        },
+        plan: {
+          skillId: "fixture.page",
+          action: "execute_fixture",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.fixture",
+              jsPath: "src/page-hook.js",
+            },
+          ],
+        },
+        module: {
+          id: "fixture.page.execute",
+          source: `
+            exports.default = async ({ ctx, input }) => ({
+              query: input.query,
+              tabUrl: ctx.tab.url,
+              active: ctx.tab.active,
+              installationCount: ctx.site.installations.length
+            });
+          `,
+        },
+        verifier: "page_hook_ok",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        verified: true,
+        result: {
+          ok: true,
+          action: "execute_fixture",
+          input: {
+            query: "background lane",
+            tabUrl: "https://fixture.test/background",
+            active: false,
+            installationCount: 1,
+          },
+          tabUrl: "https://fixture.test/background",
+        },
+      },
+    });
+
+    expect(harness.tabsApi.query).not.toHaveBeenCalled();
+    expect(harness.tabsApi.create).toHaveBeenCalledWith({
+      url: "https://fixture.test/background",
+      active: false,
+    });
+    expect(harness.tabsApi.remove).toHaveBeenCalledWith(expect.any(Number));
 
     dispose();
     harness.cleanup();
