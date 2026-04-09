@@ -1,4 +1,5 @@
 import type {
+  InterventionRequest,
   LlmProfileConfig,
   LlmProviderAdapter,
   LlmProviderSendInput,
@@ -99,6 +100,21 @@ const TEST_DESCRIPTOR = {
   executionBinding: { family: "tabs", operation: "navigate" },
 };
 
+const TEST_SITE_DESCRIPTOR = {
+  id: "site.runtime.invoke",
+  version: 1,
+  description: "Invoke a site runtime action",
+  inputSchema: { type: "object", properties: { action: { type: "string" } } },
+  risk: "medium" as const,
+  sideEffects: "writes" as const,
+  permissions: [],
+  supportsVerify: true,
+  supportsStreaming: false,
+  outputSchema: { type: "object" },
+  exportable: false,
+  executionBinding: { family: "siteRuntime", operation: "invoke" },
+};
+
 describe("runLoop", () => {
   function setup(mockSendFn: (input: LlmProviderSendInput) => Promise<Response>) {
     const storage: SessionStorage = new InMemorySessionStorage();
@@ -184,6 +200,154 @@ describe("runLoop", () => {
     expect(result.terminalStatus).toBe("done");
     expect(callCount).toBe(2);
     expect(toolCalls).toEqual(["tabs_navigate"]);
+  });
+
+  it("continues after a site verify failure is resolved via intervention lifecycle", async () => {
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([TEST_SITE_DESCRIPTOR]);
+    const providers = new FamilyProviderRegistry();
+    const interventionStatuses: string[] = [];
+    const innerTerminalStatuses: Array<string | null> = [];
+
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      registry,
+      providers,
+      executeSiteStep: async () => ({
+        ok: true,
+        verified: false,
+        data: {
+          result: {
+            attempted: true,
+          },
+          verified: false,
+          trace: ["invoke:secure_login", "verify:page_hook_ok"],
+          intervention: {
+            id: "ivr:fixture.page:secure_login:verify_failed:11:page_hook_ok",
+            kind: "takeover",
+            trigger: "verify_failed",
+            status: "requested",
+            title: "Manual verify required",
+            message: "Finish the verification flow manually.",
+            skillId: "fixture.page",
+            action: "secure_login",
+            tabId: 11,
+            payload: {
+              tabUrl: "https://fixture.test/login",
+              verifier: "page_hook_ok",
+            },
+          },
+        },
+      }),
+    });
+
+    providers.register({
+      family: "siteRuntime",
+      invoke: async ({ context, input }) => {
+        const sessionId = context?.sessionId;
+        if (!sessionId) {
+          throw new Error("Expected provider context to include a sessionId");
+        }
+        const executed = await kernel.executeStep(sessionId, {
+          kind: "site",
+          capabilityId: "site.runtime.invoke",
+          skillId: "fixture.page",
+          action: "secure_login",
+          tab: {
+            tabId: 11,
+            url: "https://fixture.test/login",
+            active: true,
+          },
+          input: {
+            input,
+            plan: {
+              skillId: "fixture.page",
+              action: "secure_login",
+              steps: [],
+            },
+            module: {
+              id: "fixture.page.secure-login",
+              source: "exports.default = async ({ input }) => input;",
+            },
+            verifier: "page_hook_ok",
+            intervention: {
+              kind: "takeover",
+              title: "Manual verify required",
+              message: "Finish the verification flow manually.",
+              trigger: "verify_failed",
+            },
+          },
+        });
+
+        innerTerminalStatuses.push(kernel.checkTerminal(sessionId, executed.turn));
+        const siteData = executed.result.data as { intervention?: InterventionRequest } | undefined;
+        if (!siteData?.intervention) {
+          throw new Error("Expected a site intervention request");
+        }
+
+        const requested = kernel.requestIntervention(sessionId, siteData.intervention, {
+          timeoutMs: 10_000,
+          now: Date.parse("2026-04-09T00:00:00.000Z"),
+        });
+        interventionStatuses.push(requested.status);
+
+        const resolved = kernel.resolveIntervention(
+          requested.id,
+          { resolution: "resume" },
+          { now: Date.parse("2026-04-09T00:00:01.000Z") },
+        );
+        interventionStatuses.push(resolved.status);
+
+        return {
+          ok: true,
+          interventionId: requested.id,
+          resolution: resolved.resolution,
+        };
+      },
+    });
+
+    let callCount = 0;
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return sseResponse([
+            chatChunk(undefined, [
+              {
+                index: 0,
+                id: "tc_site_1",
+                function: {
+                  name: "site_runtime_invoke",
+                  arguments: '{"action":"secure_login","username":"alice"}',
+                },
+              },
+            ]),
+            chatChunk(undefined, undefined, "tool_calls"),
+            "[DONE]",
+          ]);
+        }
+
+        return sseResponse([
+          chatChunk("Manual verification completed. Continue the run."),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      },
+    };
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Log me in and continue after manual verification" },
+    );
+
+    expect(result.terminalStatus).toBe("done");
+    expect(callCount).toBe(2);
+    expect(innerTerminalStatuses).toEqual(["failed_verify"]);
+    expect(interventionStatuses).toEqual(["requested", "resolved"]);
   });
 
   it("replays persisted assistant contentBlocks back into the next llm request", async () => {

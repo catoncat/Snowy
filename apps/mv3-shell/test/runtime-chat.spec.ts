@@ -242,6 +242,109 @@ function chatChunk(content?: string, toolCalls?: unknown[], finishReason?: strin
   });
 }
 
+function createFixtureChromeApi() {
+  return {
+    runtime: {
+      getURL: (path: string) => path,
+      sendMessage: vi.fn(async () => undefined),
+    },
+    tabs: {
+      query: vi.fn(async () => [
+        { id: 11, url: "https://fixture.test/login", active: true, title: "Fixture Login" },
+      ]),
+    },
+    offscreen: {},
+  };
+}
+
+function createFixturePageHookBridge({ verified = false }: { verified?: boolean } = {}) {
+  return {
+    install: vi.fn(async (step: { scriptId: string }) => ({
+      installationId: `${step.scriptId}:1`,
+    })),
+    invoke: vi.fn(
+      async ({
+        installation,
+        action,
+        input,
+        tab,
+      }: {
+        installation: { step: { scriptId: string }; result: { installationId: string } };
+        action: string;
+        input: unknown;
+        tab: { url: string };
+      }) => ({
+        ok: true,
+        action,
+        input,
+        installationId: installation.result.installationId,
+        installedScriptId: installation.step.scriptId,
+        tabUrl: tab.url,
+      }),
+    ),
+    verify: vi.fn(async () => verified),
+  };
+}
+
+function buildSiteRuntimeInvokeRequest({
+  action = "secure_login",
+  verifier = "page_hook_ok",
+}: {
+  action?: string;
+  verifier?: string;
+} = {}) {
+  return {
+    skillId: "fixture.page",
+    action,
+    tab: {
+      tabId: 11,
+      url: "https://fixture.test/login",
+      active: true,
+    },
+    input: {
+      username: "alice",
+    },
+    plan: {
+      skillId: "fixture.page",
+      action,
+      steps: [
+        {
+          world: "main" as const,
+          scriptId: "bbl-next.page-hook.fixture",
+        },
+      ],
+    },
+    module: {
+      id: `fixture.page.${action}`,
+      source: `
+        exports.default = async ({ input }) => ({
+          username: input.username
+        });
+      `,
+    },
+    verifier,
+    intervention: {
+      kind: "takeover" as const,
+      title: "Manual verify required",
+      message: "Finish the verification flow manually.",
+      trigger: "verify_failed" as const,
+    },
+  };
+}
+
+function createRunnerInvoke() {
+  return async (invocation: { input: unknown }) => ({
+    ok: true,
+    data: {
+      ok: true,
+      result: {
+        result: invocation.input,
+        durationMs: 1,
+      },
+    },
+  });
+}
+
 describe("mv3-shell end-to-end loop integration", () => {
   const TEST_PROFILE_CONFIG: LlmProfileConfig = {
     profiles: [
@@ -409,6 +512,244 @@ describe("mv3-shell end-to-end loop integration", () => {
         }),
       ],
       defaultProfile: "default",
+    });
+  });
+});
+
+describe("mv3-shell intervention bridge integration", () => {
+  it("routes intervention.list and intervention.resolve with kernel-backed state", async () => {
+    const chromeApi = createFixtureChromeApi();
+    const runtimeServices = createBackgroundRuntimeServices({
+      chromeApi,
+      invokeRunner: createRunnerInvoke(),
+      pageHookBridge: createFixturePageHookBridge(),
+      sessionStorage: new InMemorySessionStorage(),
+      interventionTimeoutMs: 10_000,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi,
+      runtimeServices,
+    });
+
+    const invoked = await runtimeServices.invokeSiteSkill(buildSiteRuntimeInvokeRequest());
+    const intervention = invoked.intervention;
+
+    expect(intervention).toMatchObject({
+      id: "ivr:fixture.page:secure_login:verify_failed:11:page_hook_ok",
+      status: "requested",
+      trigger: "verify_failed",
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        summary: {
+          status: "requested",
+          activeCount: 1,
+        },
+        items: [
+          expect.objectContaining({
+            id: intervention.id,
+            status: "requested",
+          }),
+        ],
+      },
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.resolve",
+        interventionId: intervention.id,
+        resolution: {
+          resolution: "resume",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        intervention: {
+          id: intervention.id,
+          status: "resolved",
+          resolution: {
+            resolution: "resume",
+          },
+        },
+      },
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        summary: {
+          status: "settled",
+          activeCount: 0,
+        },
+        items: [
+          expect.objectContaining({
+            id: intervention.id,
+            status: "resolved",
+          }),
+        ],
+      },
+    });
+  });
+
+  it("exposes cancellation and timeout paths through the intervention bridge", async () => {
+    const chromeApi = createFixtureChromeApi();
+    const runtimeServices = createBackgroundRuntimeServices({
+      chromeApi,
+      invokeRunner: createRunnerInvoke(),
+      pageHookBridge: createFixturePageHookBridge(),
+      sessionStorage: new InMemorySessionStorage(),
+      interventionTimeoutMs: 5,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi,
+      runtimeServices,
+    });
+
+    const cancelledInvoke = await runtimeServices.invokeSiteSkill(
+      buildSiteRuntimeInvokeRequest({
+        action: "secure_login_cancel",
+        verifier: "page_hook_cancel",
+      }),
+    );
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.cancel",
+        interventionId: cancelledInvoke.intervention.id,
+        reason: "user_cancelled",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        intervention: {
+          id: cancelledInvoke.intervention.id,
+          status: "cancelled",
+          resolution: {
+            reason: "user_cancelled",
+          },
+        },
+      },
+    });
+
+    const timedOutInvoke = await runtimeServices.invokeSiteSkill(
+      buildSiteRuntimeInvokeRequest({
+        action: "secure_login_timeout",
+        verifier: "page_hook_timeout",
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        summary: {
+          status: "settled",
+          activeCount: 0,
+        },
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            id: cancelledInvoke.intervention.id,
+            status: "cancelled",
+          }),
+          expect.objectContaining({
+            id: timedOutInvoke.intervention.id,
+            status: "timed_out",
+          }),
+        ]),
+      },
+    });
+  });
+
+  it("rehydrates pending interventions across runtime service restart", async () => {
+    const sessionStorage = new InMemorySessionStorage();
+    const firstChromeApi = createFixtureChromeApi();
+    const firstRuntimeServices = createBackgroundRuntimeServices({
+      chromeApi: firstChromeApi,
+      invokeRunner: createRunnerInvoke(),
+      pageHookBridge: createFixturePageHookBridge(),
+      sessionStorage,
+      interventionTimeoutMs: 10_000,
+    });
+
+    const firstInvoke = await firstRuntimeServices.invokeSiteSkill(buildSiteRuntimeInvokeRequest());
+
+    const secondChromeApi = createFixtureChromeApi();
+    const secondRuntimeServices = createBackgroundRuntimeServices({
+      chromeApi: secondChromeApi,
+      invokeRunner: createRunnerInvoke(),
+      pageHookBridge: createFixturePageHookBridge(),
+      sessionStorage,
+      interventionTimeoutMs: 10_000,
+    });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondChromeApi,
+      runtimeServices: secondRuntimeServices,
+    });
+
+    // Trigger session initialization to rehydrate persisted interventions
+    await secondRuntimeServices.ensureSession();
+
+    await expect(
+      secondBridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        summary: {
+          status: "requested",
+          activeCount: 1,
+        },
+        items: [
+          expect.objectContaining({
+            id: firstInvoke.intervention.id,
+            status: "requested",
+          }),
+        ],
+      },
+    });
+
+    const kernelState = await secondRuntimeServices.getKernelRuntimeState();
+    expect(kernelState.session.id).toBe(firstInvoke.intervention.sessionId);
+
+    await expect(
+      secondBridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "intervention.resolve",
+        interventionId: firstInvoke.intervention.id,
+        resolution: {
+          resolution: "resume",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        intervention: {
+          id: firstInvoke.intervention.id,
+          status: "resolved",
+        },
+      },
     });
   });
 });
