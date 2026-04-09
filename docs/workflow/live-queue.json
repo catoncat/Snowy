@@ -1,23 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T02:01:07.123Z",
+  "generated_at": "2026-04-09T02:26:34.927Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-096",
-      "issue_path": "docs/backlog/2026-04-09-session-entry-payload-types.md",
-      "title": "Add typed interfaces for all SessionEntry payload kinds",
-      "parallel_group": "contracts-core",
-      "module_id": "kernel",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run packages/contracts/test/contracts.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "packages/contracts/src/index.ts",
-        "packages/contracts/test/contracts.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-097",
       "issue_path": "docs/backlog/2026-04-09-kernel-provider-profile-facade.md",
@@ -31,6 +16,22 @@
       "write_scope": [
         "packages/kernel/src/kernel-facade.ts",
         "packages/kernel/test/kernel-facade.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-095",
+      "issue_path": "docs/backlog/2026-04-09-loop-execution-telemetry.md",
+      "title": "Add loop execution telemetry to audit surface",
+      "parallel_group": "kernel",
+      "module_id": "observability-audit",
+      "module_stage": "mainline",
+      "tracking_kind": "gap",
+      "check_cmd": "bunx vitest run packages/kernel/test/loop-orchestrator.spec.ts",
+      "depends_on": ["ISSUE-094"],
+      "write_scope": [
+        "packages/kernel/src/loop-orchestrator.ts",
+        "packages/contracts/src/index.ts",
+        "apps/mv3-shell/src/background.ts"
       ]
     },
     {
