@@ -1,12 +1,15 @@
 ---
 id: ISSUE-112
-title: Loop 内 policy-driven intervention 调度
-status: open
+title: "Loop 内 policy-driven intervention 调度"
+status: done
 priority: p1
-source: next-batch-planner coverage review 2026-04-09
+source: "next-batch-planner coverage review 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
-tags: [intervention, loop, policy]
+assignee: codex-019d70f6
+tags:
+  - intervention
+  - loop
+  - policy
 kind: slice
 epic: EPIC-kernel
 parallel_group: kernel
@@ -20,6 +23,7 @@ write_scope:
   - packages/kernel/test/kernel-facade.spec.ts
 acceptance_ref: docs/reviews/2026-03-29-vnext-architecture-recovery-report.md
 check_cmd: "bunx vitest run packages/kernel/test/loop-orchestrator.spec.ts packages/kernel/test/kernel-facade.spec.ts"
+completed_at: 2026-04-09T11:21:26.805Z
 ---
 
 ## Goal
@@ -36,3 +40,21 @@ check_cmd: "bunx vitest run packages/kernel/test/loop-orchestrator.spec.ts packa
 - [ ] 至少支持 high-risk / side-effectful step 与 verify-failed 两类自动 intervention 入口
 - [ ] intervention pending 时 loop / run state 能进入暂停态，并在 resolve 后恢复到可继续执行的状态
 - [ ] 测试覆盖：policy 命中触发 intervention、pending 时暂停、resolve 后恢复执行
+
+## 工作总结
+
+### 实现了什么
+- 在 runLoop 中增加统一 intervention policy seam
+- 支持 high-risk confirm_policy 与 verify_failed 两类自动 intervention 入口
+- pending 时 pause，resolve 后 resume 并继续 loop
+
+### 实际跑了什么检查
+- bunx vitest run packages/kernel/test/loop-orchestrator.spec.ts packages/kernel/test/kernel-facade.spec.ts
+- ./node_modules/.bin/biome check packages/kernel/src/loop-orchestrator.ts packages/kernel/test/loop-orchestrator.spec.ts packages/kernel/test/kernel-facade.spec.ts
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `ca48291c77a6` feat(kernel): 增加 loop intervention policy seam

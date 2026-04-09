@@ -1,24 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T11:10:48.976Z",
+  "generated_at": "2026-04-09T11:21:26.819Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-112",
-      "issue_path": "docs/backlog/2026-04-09-loop-policy-driven-intervention.md",
-      "title": "Loop 内 policy-driven intervention 调度",
-      "parallel_group": "kernel",
-      "module_id": "intervention-handoff",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run packages/kernel/test/loop-orchestrator.spec.ts packages/kernel/test/kernel-facade.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "packages/kernel/src/loop-orchestrator.ts",
-        "packages/kernel/test/loop-orchestrator.spec.ts",
-        "packages/kernel/test/kernel-facade.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-106",
       "issue_path": "docs/backlog/2026-04-09-config-control-plane-persistence.md",
@@ -37,21 +21,34 @@
       ]
     },
     {
-      "issue_id": "ISSUE-108",
-      "issue_path": "docs/backlog/2026-04-09-js-runner-execution-engine.md",
-      "title": "JS Runner offscreen 集成与隔离加固",
-      "parallel_group": "js-runner",
-      "module_id": "execution-host-bridge",
+      "issue_id": "ISSUE-110",
+      "issue_path": "docs/backlog/2026-04-09-background-automation-mode.md",
+      "title": "Background automation lane 基础设施",
+      "parallel_group": "site-runtime",
+      "module_id": "site-runtime-browser-automation",
       "module_stage": "secondary",
       "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run packages/js-runner/test/js-runner.spec.ts apps/mv3-shell/test/manifest.spec.ts",
-      "depends_on": [],
+      "check_cmd": "bunx vitest run packages/site-runtime/test/site-runtime.spec.ts apps/mv3-shell/test/manifest.spec.ts",
+      "depends_on": ["ISSUE-112"],
       "write_scope": [
-        "packages/js-runner/src/runner-host-core.ts",
-        "packages/js-runner/test/js-runner.spec.ts",
-        "apps/mv3-shell/src/offscreen.ts",
+        "packages/site-runtime/src/index.ts",
+        "packages/site-runtime/test/site-runtime.spec.ts",
+        "apps/mv3-shell/src/background.ts",
+        "apps/mv3-shell/src/page-hook.ts",
         "apps/mv3-shell/test/manifest.spec.ts"
       ]
+    },
+    {
+      "issue_id": "ISSUE-107",
+      "issue_path": "docs/backlog/2026-04-09-module-tracking-ledger-refresh.md",
+      "title": "Module tracking ledger 与 kernel skeleton 状态校准",
+      "parallel_group": "sdk-docs",
+      "module_id": "repo-workflow-dx",
+      "module_stage": "deferred",
+      "tracking_kind": "doc-debt",
+      "check_cmd": "bun run workflow:queue:build",
+      "depends_on": ["ISSUE-103", "ISSUE-104", "ISSUE-111", "ISSUE-112"],
+      "write_scope": ["docs/module-tracking-ledger.json", "docs/kernel-skeleton-design.md"]
     }
   ]
 }
