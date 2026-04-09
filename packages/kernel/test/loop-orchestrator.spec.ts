@@ -144,6 +144,37 @@ describe("runLoop", () => {
     return { kernel, registry, provider, storage };
   }
 
+  function setupWithCompaction(
+    mockSendFn: (input: LlmProviderSendInput) => Promise<Response>,
+    llmSummary = "Compacted summary.",
+  ) {
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([TEST_DESCRIPTOR]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "tabs",
+      invoke: async ({ input }) => {
+        return { navigated: true, url: (input as Record<string, unknown>).url };
+      },
+    });
+
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => llmSummary },
+      registry,
+      providers,
+      compaction: { keepRecentTokens: 1 },
+    });
+
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: mockSendFn,
+    };
+
+    return { kernel, registry, provider, storage };
+  }
+
   it("completes a simple text-only response", async () => {
     let callCount = 0;
     const { kernel, registry, provider } = setup(async () => {
@@ -201,6 +232,122 @@ describe("runLoop", () => {
     expect(result.terminalStatus).toBe("done");
     expect(callCount).toBe(2);
     expect(toolCalls).toEqual(["tabs_navigate"]);
+  });
+
+  it("uses threshold compaction between turns and rebuilds context before continuing", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const requestPhases: string[] = [];
+    let sessionId = "";
+    let callCount = 0;
+
+    const { kernel, registry, provider } = setupWithCompaction(async (input) => {
+      payloads.push(input.payload);
+      if (sessionId) {
+        requestPhases.push(kernel.getRunState(sessionId).phase);
+      }
+      callCount += 1;
+
+      if (callCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_threshold",
+              function: { name: "tabs_navigate", arguments: '{"url":"https://example.com"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "tool_calls"),
+          "[DONE]",
+        ]);
+      }
+
+      return sseResponse([
+        chatChunk("Threshold compaction recovered the context."),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }, "Threshold summary.");
+
+    const session = await kernel.createSession();
+    sessionId = session.id;
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG, contextWindow: 200 },
+      {
+        sessionId: session.id,
+        prompt: `Go to example.com and keep detailed notes ${"x".repeat(1_200)}`,
+      },
+    );
+
+    const entries = await kernel.sessions.getEntries(session.id);
+    const compactionEntries = entries.filter((entry) => entry.type === "compaction");
+    expect(result.terminalStatus).toBe("done");
+    expect(callCount).toBe(2);
+    expect(requestPhases).toEqual(["running", "running"]);
+    expect(compactionEntries).toHaveLength(1);
+    expect((compactionEntries[0]?.payload as { reason?: string }).reason).toBe("threshold");
+
+    const secondMessages = payloads[1]?.messages as Array<Record<string, unknown>>;
+    expect(
+      secondMessages.some(
+        (message) =>
+          message.role === "system" &&
+          String(message.content).includes("[Previous conversation summary]\nThreshold summary."),
+      ),
+    ).toBe(true);
+  });
+
+  it("compacts on context overflow errors and retries the llm request with rebuilt context", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const requestPhases: string[] = [];
+    let sessionId = "";
+    let callCount = 0;
+
+    const { kernel, registry, provider } = setupWithCompaction(async (input) => {
+      payloads.push(input.payload);
+      if (sessionId) {
+        requestPhases.push(kernel.getRunState(sessionId).phase);
+      }
+      callCount += 1;
+
+      if (callCount === 1) {
+        return new Response('{"error":{"message":"context window exceeded"}}', { status: 400 });
+      }
+
+      return sseResponse([
+        chatChunk("Overflow compaction recovered the context."),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }, "Overflow summary.");
+
+    const session = await kernel.createSession();
+    sessionId = session.id;
+    await kernel.appendMessage(session.id, {
+      role: "assistant",
+      text: `Historical context ${"y".repeat(1_200)}`,
+    });
+
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG, contextWindow: 4_096 },
+      { sessionId: session.id, prompt: "Retry after compaction" },
+    );
+
+    const entries = await kernel.sessions.getEntries(session.id);
+    const compactionEntries = entries.filter((entry) => entry.type === "compaction");
+    expect(result.terminalStatus).toBe("done");
+    expect(callCount).toBe(2);
+    expect(requestPhases).toEqual(["running", "running"]);
+    expect(compactionEntries).toHaveLength(1);
+    expect((compactionEntries[0]?.payload as { reason?: string }).reason).toBe("overflow");
+
+    const secondMessages = payloads[1]?.messages as Array<Record<string, unknown>>;
+    expect(
+      secondMessages.some(
+        (message) =>
+          message.role === "system" &&
+          String(message.content).includes("[Previous conversation summary]\nOverflow summary."),
+      ),
+    ).toBe(true);
   });
 
   it("continues after a site verify failure is resolved via intervention lifecycle", async () => {

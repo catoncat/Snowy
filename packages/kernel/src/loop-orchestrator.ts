@@ -131,6 +131,16 @@ function shouldContinueAfterToolFailure(input: {
 
 const RETRYABLE_LLM_STATUS_CODES = new Set([408, 409, 429, 500, 502, 503, 504]);
 const DEFAULT_LLM_RETRY_BASE_DELAY_MS = 250;
+const CONTEXT_OVERFLOW_ERROR_PATTERNS = [
+  "context window exceeded",
+  "context length exceeded",
+  "maximum context length",
+  "maximum context",
+  "context overflow",
+  "too many tokens",
+  "prompt is too long",
+  "token limit exceeded",
+] as const;
 
 export interface RequestLlmWithRetryOptions {
   provider: LlmProviderAdapter;
@@ -373,6 +383,12 @@ function getLoopMaxSteps(kernel: Kernel): number {
   return kernel.getMaxSteps();
 }
 
+function isContextOverflowError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+  return CONTEXT_OVERFLOW_ERROR_PATTERNS.some((pattern) => normalized.includes(pattern));
+}
+
 export async function runLoop(
   opts: LoopOrchestratorOptions,
   input: RunLoopInput,
@@ -449,16 +465,25 @@ export async function runLoop(
       };
 
       // Send to LLM
-      const requestResult = await requestLlmWithRetry({
-        provider,
-        profileConfig,
-        route,
-        payload,
-        signal: input.signal ?? new AbortController().signal,
-        lane: "primary",
-        sessionId: input.sessionId,
-        step: llmStepCount + 1,
-      });
+      let requestResult: RequestLlmWithRetryResult;
+      try {
+        requestResult = await requestLlmWithRetry({
+          provider,
+          profileConfig,
+          route,
+          payload,
+          signal: input.signal ?? new AbortController().signal,
+          lane: "primary",
+          sessionId: input.sessionId,
+          step: llmStepCount + 1,
+        });
+      } catch (error) {
+        if (isContextOverflowError(error)) {
+          await kernel.triggerCompaction(input.sessionId, "overflow");
+          continue;
+        }
+        throw error;
+      }
       const response = requestResult.response;
       route = requestResult.route;
 
@@ -570,7 +595,7 @@ export async function runLoop(
       if (!terminalStatus) {
         const shouldCompact = await kernel.shouldCompact(input.sessionId, contextWindow);
         if (shouldCompact) {
-          await kernel.triggerCompaction(input.sessionId, "overflow");
+          await kernel.triggerCompaction(input.sessionId, "threshold");
         }
       }
     }
