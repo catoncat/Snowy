@@ -12,4 +12,15 @@ describe("sidepanel app entry", () => {
     expect(source).not.toContain('"runtime.bootstrap"');
     expect(source).not.toContain("runtime.bootstrap");
   });
+
+  it("wires assistant rich rendering and readable tool trace helpers into the chat pane", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("renderMessageRichText");
+    expect(source).toContain("renderToolTrace");
+    expect(source).toContain("renderedChatItems");
+    expect(source).toContain('v-html="item.rendered.html"');
+    expect(source).toContain("item.rendered.preview");
+    expect(source).toContain("item.rendered.structured");
+  });
 });

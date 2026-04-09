@@ -23,3 +23,64 @@ body,
 body {
   min-height: 100vh;
 }
+
+.sidepanel-rich-text,
+.sidepanel-tool-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sidepanel-rich-text p,
+.sidepanel-rich-text ul,
+.sidepanel-rich-text ol,
+.sidepanel-tool-trace pre,
+.sidepanel-tool-trace section {
+  margin: 0;
+}
+
+.sidepanel-rich-text ul,
+.sidepanel-rich-text ol {
+  padding-left: 1.25rem;
+}
+
+.sidepanel-rich-text code,
+.sidepanel-tool-trace code {
+  font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.sidepanel-rich-text :not(pre) > code {
+  border-radius: 0.375rem;
+  background: #e2e8f0;
+  padding: 0.125rem 0.375rem;
+}
+
+.sidepanel-rich-text pre,
+.sidepanel-tool-trace pre {
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.75rem 0.875rem;
+}
+
+.sidepanel-rich-text a {
+  color: #2563eb;
+  text-decoration: underline;
+  word-break: break-word;
+}
+
+.sidepanel-tool-trace section {
+  border-radius: 0.875rem;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 0.75rem;
+}
+
+.sidepanel-tool-trace h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #92400e;
+}

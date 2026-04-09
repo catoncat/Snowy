@@ -3,6 +3,9 @@ import {
   applyBootstrapState,
   applyChatEvent,
   createInitialChatState,
+  renderMessageRichText,
+  renderToolTrace,
+  toggleToolExpanded,
 } from "../src/sidepanel/state";
 
 describe("sidepanel chat state", () => {
@@ -79,5 +82,67 @@ describe("sidepanel chat state", () => {
         expanded: false,
       }),
     ]);
+  });
+
+  it("renders assistant markdown into rich text html", () => {
+    const rendered = renderMessageRichText(
+      [
+        "Agent summary",
+        "",
+        "- first step",
+        "- second step",
+        "",
+        "Use `ctx.call()` and read [docs](https://example.com/docs).",
+        "",
+        "```ts",
+        "const answer = 42;",
+        "```",
+      ].join("\n"),
+    );
+
+    expect(rendered.mode).toBe("rich");
+    expect(rendered.html).toContain("<ul>");
+    expect(rendered.html).toContain("<code>");
+    expect(rendered.html).toContain("<pre");
+    expect(rendered.html).toContain('href="https://example.com/docs"');
+  });
+
+  it("falls back to plain text html when markdown syntax is absent", () => {
+    const rendered = renderMessageRichText("Just a plain runtime update.");
+
+    expect(rendered.mode).toBe("plain");
+    expect(rendered.html).toContain("Just a plain runtime update.");
+    expect(rendered.html).not.toContain("<ul>");
+    expect(rendered.html).not.toContain("<pre");
+  });
+
+  it("formats tool trace details into readable sections and toggles expansion", () => {
+    let state = applyChatEvent(createInitialChatState(), {
+      type: "tool.result",
+      sessionId: "s-1",
+      messageId: "tool-2",
+      toolName: "page.query",
+      summary: "Collected DOM snapshot",
+      detail: JSON.stringify({
+        status: "ok",
+        durationMs: 42,
+        input: { selector: "main article" },
+        output: { nodes: 3, title: "Overview" },
+      }),
+    });
+
+    state = toggleToolExpanded(state, "tool-2");
+    const toolItem = state.items.find((item) => item.kind === "tool" && item.id === "tool-2");
+    const trace = renderToolTrace(
+      "Collected DOM snapshot",
+      toolItem?.kind === "tool" ? toolItem.detail : "",
+    );
+
+    expect(toolItem).toMatchObject({ expanded: true });
+    expect(trace.structured).toBe(true);
+    expect(trace.preview).toEqual(expect.arrayContaining(["status ok", "42 ms"]));
+    expect(trace.html).toContain("Input");
+    expect(trace.html).toContain("Output");
+    expect(trace.html).toContain("main article");
   });
 });

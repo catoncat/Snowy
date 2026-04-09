@@ -4,10 +4,16 @@ import {
   applyBootstrapState,
   applyChatEvent,
   createInitialChatState,
+  renderMessageRichText,
+  renderToolTrace,
   toggleToolExpanded,
   type ChatEvent,
   type ChatItem,
+  type ChatMessageItem,
   type ChatState,
+  type ChatToolItem,
+  type RichTextRenderResult,
+  type ToolTraceRenderResult,
 } from "./state";
 import {
   applyManagementResourceDocument,
@@ -80,6 +86,33 @@ const skillsSummary = computed(() => managementState.value.skills?.data ?? null)
 const hostsSummary = computed(() => managementState.value.hosts?.data ?? null);
 const hostItems = computed(() => hostsSummary.value?.items ?? []);
 const activeTabId = computed(() => runtimeSummary.value?.activeTab?.tabId ?? null);
+
+type RenderedMessageItem = ChatMessageItem & {
+  rendered: RichTextRenderResult;
+};
+
+type RenderedToolItem = ChatToolItem & {
+  rendered: ToolTraceRenderResult;
+};
+
+type RenderedChatItem = RenderedMessageItem | RenderedToolItem;
+
+const renderedChatItems = computed<RenderedChatItem[]>(() =>
+  chatState.value.items.map((item) =>
+    item.kind === "message"
+      ? {
+          ...item,
+          rendered:
+            item.role === "assistant"
+              ? renderMessageRichText(item.text)
+              : { mode: "plain", html: "" },
+        }
+      : {
+          ...item,
+          rendered: renderToolTrace(item.summary, item.detail),
+        },
+  ),
+);
 
 function readStringField(record: unknown, field: string): string {
   if (!record || typeof record !== "object" || Array.isArray(record)) {
@@ -570,7 +603,7 @@ onUnmounted(() => {
         Send a message to start the minimal runtime demo.
       </div>
 
-      <template v-for="item in chatState.items" :key="item.id">
+      <template v-for="item in renderedChatItems" :key="item.id">
         <article
           v-if="item.kind === 'message'"
           class="rounded-2xl px-4 py-3 shadow-sm"
@@ -584,7 +617,12 @@ onUnmounted(() => {
             <span>{{ item.role }}</span>
             <span>{{ item.state }}</span>
           </div>
-          <p class="whitespace-pre-wrap text-sm leading-6">{{ item.text }}</p>
+          <div
+            v-if="item.role === 'assistant' && item.rendered.mode === 'rich'"
+            class="sidepanel-rich-text text-sm leading-6"
+            v-html="item.rendered.html"
+          />
+          <p v-else class="whitespace-pre-wrap text-sm leading-6">{{ item.text }}</p>
         </article>
 
         <article v-else class="mr-8 overflow-hidden rounded-2xl bg-amber-50 ring-1 ring-amber-200">
@@ -592,20 +630,32 @@ onUnmounted(() => {
             class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
             @click="toggleTool(item.id)"
           >
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                {{ item.toolName }}
-              </p>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                  {{ item.toolName }}
+                </p>
+                <span
+                  v-for="preview in item.rendered.preview"
+                  :key="`${item.id}-${preview}`"
+                  class="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200"
+                >
+                  {{ preview }}
+                </span>
+              </div>
               <p class="mt-1 text-sm text-amber-950">{{ item.summary }}</p>
             </div>
             <span class="text-xs font-medium text-amber-700">
               {{ item.expanded ? 'Hide' : 'Show' }}
             </span>
           </button>
-          <pre
+          <div
             v-if="item.expanded"
-            class="overflow-x-auto border-t border-amber-200 px-4 py-3 text-xs leading-5 text-amber-950"
-          ><code>{{ item.detail }}</code></pre>
+            class="border-t border-amber-200 px-4 py-3"
+            :data-structured="item.rendered.structured"
+          >
+            <div class="sidepanel-tool-trace text-xs leading-5 text-amber-950" v-html="item.rendered.html" />
+          </div>
         </article>
       </template>
     </main>
