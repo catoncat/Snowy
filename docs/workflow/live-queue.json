@@ -1,23 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T12:12:27.748Z",
+  "generated_at": "2026-04-09T12:12:46.648Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-115",
-      "issue_path": "docs/backlog/2026-04-09-runtime-history-and-debug-export-boundary-is-still-incomplete.md",
-      "title": "Review: runtime history and debug export boundary is still incomplete",
+      "issue_id": "ISSUE-122",
+      "issue_path": "docs/backlog/2026-04-09-follow-up-expose-runtime-history-through-a-shared-observability-resource-surface.md",
+      "title": "Follow-up: expose runtime history through a shared observability resource surface",
       "parallel_group": "mv3-shell",
       "module_id": "observability-audit",
       "module_stage": "mainline",
-      "tracking_kind": "gap",
+      "tracking_kind": "follow-up",
       "check_cmd": "bun run check",
-      "depends_on": [],
+      "depends_on": ["ISSUE-115"],
       "write_scope": [
         "packages/contracts/src/index.ts",
         "packages/core/src/index.ts",
         "apps/mv3-shell/src/background.ts",
-        "apps/mv3-shell/src/sidepanel/management.ts",
         "apps/mv3-shell/test"
       ]
     }
