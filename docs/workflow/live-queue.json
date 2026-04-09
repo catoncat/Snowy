@@ -1,25 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T11:36:11.955Z",
+  "generated_at": "2026-04-09T11:40:21.968Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-108",
-      "issue_path": "docs/backlog/2026-04-09-js-runner-execution-engine.md",
-      "title": "JS Runner offscreen 集成与隔离加固",
-      "parallel_group": "js-runner",
-      "module_id": "execution-host-bridge",
-      "module_stage": "secondary",
-      "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run packages/js-runner/test/js-runner.spec.ts apps/mv3-shell/test/manifest.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "packages/js-runner/src/runner-host-core.ts",
-        "packages/js-runner/test/js-runner.spec.ts",
-        "apps/mv3-shell/src/offscreen.ts",
-        "apps/mv3-shell/test/manifest.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-107",
       "issue_path": "docs/backlog/2026-04-09-module-tracking-ledger-refresh.md",
