@@ -1,11 +1,11 @@
 ---
 id: ISSUE-101
 title: "Add kernel runtime summary facade for session diagnostics"
-status: open
+status: done
 priority: p2
 source: "next-batch planning 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
+assignee: codex-20260409
 tags:
   - kernel
   - diagnostics
@@ -24,6 +24,7 @@ write_scope:
   - packages/kernel/test/kernel-facade.spec.ts
 acceptance_ref: docs/kernel-skeleton-design.md
 check_cmd: "bunx vitest run packages/kernel/test/kernel-facade.spec.ts"
+completed_at: 2026-04-09T04:43:40.803Z
 ---
 
 ## Goal
@@ -47,3 +48,20 @@ Add a minimal runtime-summary API on the Kernel facade so callers can inspect pe
 - The Kernel facade exposes a stable per-session runtime summary API for diagnostics/introspection.
 - The summary is derived from existing subsystem state and does not add a parallel state model.
 - `packages/kernel/test/kernel-facade.spec.ts` verifies the runtime summary across idle, queued prompt, running, and intervention-active states.
+
+## 工作总结
+
+### 实现了什么
+- 在 Kernel facade 暴露 per-session getRuntimeSummary 诊断读面
+- 基于现有 run、loop、intervention 状态拼装 summary，不新增平行状态模型
+
+### 实际跑了什么检查
+- bunx biome check packages/kernel/src/kernel-facade.ts packages/kernel/test/kernel-facade.spec.ts
+- bunx vitest run packages/kernel/test/kernel-facade.spec.ts
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `610c9315cf6e` feat(kernel): 补齐 runtime summary facade

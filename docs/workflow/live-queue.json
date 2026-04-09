@@ -1,23 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T03:48:52.599Z",
+  "generated_at": "2026-04-09T04:43:40.810Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-101",
-      "issue_path": "docs/backlog/2026-04-09-kernel-runtime-summary-facade.md",
-      "title": "Add kernel runtime summary facade for session diagnostics",
-      "parallel_group": "kernel",
-      "module_id": "kernel",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run packages/kernel/test/kernel-facade.spec.ts",
-      "depends_on": ["ISSUE-095"],
-      "write_scope": [
-        "packages/kernel/src/kernel-facade.ts",
-        "packages/kernel/test/kernel-facade.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-100",
       "issue_path": "docs/backlog/2026-04-09-intervention-runtime-observability-surface.md",
