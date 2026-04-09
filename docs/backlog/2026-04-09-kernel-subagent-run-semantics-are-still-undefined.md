@@ -42,3 +42,15 @@ Review whether browser-side kernel mainline now needs an explicit child-run / su
 - Clarify whether vNext mainline requires a minimal child-run / subagent contract or an explicit deferral decision.
 - If needed, land follow-up backlog slices that define state, queue, and trace ownership for child runs; otherwise update planning docs to record the intentional boundary.
 - Anchor the review in current contracts/kernel code and tests rather than old-repo labels alone.
+
+## Resolution
+
+- Reviewed current `packages/contracts` / `packages/kernel` run-state surfaces against the recovery report and old-repo kernel materials.
+- Conclusion: this should remain a visible kernel mainline gap, not a silent deferral. The missing piece is now narrowed to child-run contract and ownership semantics, rather than full external agent transport or dispatch-plan execution.
+- Current vNext only has `parentSessionId` plus session-local run queues; that is not enough to represent old-repo-style `runSessionId`, subagent lifecycle events, or child-run diagnostics ownership.
+
+## Sub Issues
+
+- `ISSUE-120` `Follow-up: define kernel child-run contract for subagent orchestration`
+  - 原因：把剩余缺口收窄为 contracts/kernel 层的 child-run model、parent ownership、diagnostics seam。
+  - 结果：继续由 kernel lane 承接，不把 subagent 语义回退为 app-local glue。
