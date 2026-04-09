@@ -3683,6 +3683,127 @@ describe("mv3-shell manifest", () => {
     secondHarness.cleanup();
   });
 
+  it("trims audit entries exceeding retention maxEntries on save and load", async () => {
+    const auditStore = createAuditStoreHarness();
+    const host = {
+      dispatch: vi.fn(async (request) => ({
+        kind: "health_result",
+        requestId: (request as { requestId: string }).requestId,
+        ok: true,
+        health: { status: "idle", inflightCount: 0, consecutiveFailures: 0 },
+      })),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0,
+      })),
+    };
+
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      sessionId: "session-retention-1",
+      auditStore,
+      auditRetention: { maxEntries: 5, maxAgeMs: 7 * 24 * 60 * 60 * 1000 },
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    // Trigger 8 host connect events to generate audit entries
+    // Must use hostId "local" — the only accepted host id
+    for (let i = 0; i < 8; i++) {
+      await harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.connect",
+        hostId: "local",
+      });
+    }
+
+    // In-memory tail should be trimmed to maxEntries
+    const tail = bridge.getAuditTail(100);
+    expect(tail).toHaveLength(5);
+
+    // Persisted store should also have trimmed entries
+    const persisted = await auditStore.load();
+    expect(persisted).toHaveLength(5);
+
+    // Restart with new bridge — should load trimmed entries
+    dispose();
+    harness.cleanup();
+
+    const secondHarness = createChromeHarness({ host });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+      auditStore,
+      auditRetention: { maxEntries: 5, maxAgeMs: 7 * 24 * 60 * 60 * 1000 },
+    });
+    secondBridge.registerRuntimeListener();
+
+    // getAuditTail waits for auditReady internally before returning loaded entries
+    // Send a bootstrap message to trigger auditReady path
+    await secondHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "runtime.bootstrap",
+      world: "main",
+    });
+    expect(secondBridge.getAuditTail(100)).toHaveLength(5);
+
+    secondHarness.cleanup();
+  });
+
+  it("trims audit entries older than retention maxAgeMs on load", async () => {
+    const now = Date.now();
+    const oldTimestamp = new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString(); // 4 days ago
+    const recentTimestamp = new Date(now - 1000).toISOString(); // 1 second ago
+
+    const initialEntries = [
+      { timestamp: oldTimestamp, sessionId: "s1", kind: "hosts.connect", hostId: "old", status: "connected" },
+      { timestamp: oldTimestamp, sessionId: "s1", kind: "hosts.disconnect", hostId: "old", status: "disconnected" },
+      { timestamp: recentTimestamp, sessionId: "s2", kind: "hosts.connect", hostId: "recent", status: "connected" },
+    ];
+
+    // Pre-populate storage with old + recent entries
+    const storedData: Record<string, unknown> = {
+      "bbl-next.audit.tail.v1": initialEntries,
+    };
+    const chromeApi = {
+      runtime: {
+        getURL: (path: string) => path,
+        onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
+      },
+      storage: {
+        local: {
+          get: vi.fn(async (keys: string[]) => {
+            const result: Record<string, unknown> = {};
+            for (const key of keys) {
+              if (storedData[key] !== undefined) result[key] = storedData[key];
+            }
+            return result;
+          }),
+          set: vi.fn(async (items: Record<string, unknown>) => {
+            Object.assign(storedData, items);
+          }),
+        },
+      },
+      offscreen: {},
+    };
+
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi,
+      timeoutMs: 50,
+      // maxAgeMs = 3 days → 4-day-old entries should be trimmed
+      auditRetention: { maxEntries: 1000, maxAgeMs: 3 * 24 * 60 * 60 * 1000 },
+    });
+    bridge.registerRuntimeListener();
+
+    // auditReady loads from chrome storage and trims; wait a tick for it to settle
+    await new Promise((r) => setTimeout(r, 10));
+    const tail = bridge.getAuditTail(100);
+    expect(tail).toHaveLength(1);
+    expect(tail[0].hostId).toBe("recent");
+  });
+
   it("clears runtime error state via runtime.clear_error and returns consistent bootstrap", async () => {
     const host = {
       dispatch: vi.fn(async (request) => {

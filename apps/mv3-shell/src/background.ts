@@ -29,6 +29,10 @@ export const BOOTSTRAP_RESOURCE_KEYS = [...CONTRACT_BOOTSTRAP_RESOURCE_KEYS];
 const LOCAL_HOST_ID = "local";
 const AUDIT_STORAGE_KEY = "bbl-next.audit.tail.v1";
 const LEGACY_AUDIT_STORAGE_KEYS = ["bbl-next.audit.host.v1"];
+const AUDIT_RETENTION_DEFAULTS = {
+  maxEntries: 500,
+  maxAgeMs: 7 * 24 * 60 * 60 * 1000,
+};
 
 function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   if (error && typeof error === "object" && "code" in error && "message" in error) {
@@ -140,32 +144,57 @@ function normalizeAuditEntry(value) {
   return null;
 }
 
+function trimByRetention(entries, retention) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return entries;
+  }
+  const { maxEntries, maxAgeMs } = retention;
+  let result = entries;
+  if (typeof maxAgeMs === "number" && maxAgeMs > 0) {
+    const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+    result = result.filter(
+      (entry) => typeof entry?.timestamp === "string" && entry.timestamp >= cutoff,
+    );
+  }
+  if (typeof maxEntries === "number" && maxEntries > 0 && result.length > maxEntries) {
+    result = result.slice(-maxEntries);
+  }
+  return result;
+}
+
 function createChromeAuditStore(
   chromeApi,
   storageKey = AUDIT_STORAGE_KEY,
   legacyStorageKeys = LEGACY_AUDIT_STORAGE_KEYS,
+  retention = AUDIT_RETENTION_DEFAULTS,
 ) {
   const storageArea = chromeApi?.storage?.local;
   if (typeof storageArea?.get !== "function" || typeof storageArea?.set !== "function") {
     return undefined;
   }
   return {
+    retention,
     async load() {
       const keys = [storageKey, ...legacyStorageKeys];
       const loaded = await storageArea.get(keys);
+      let raw;
       if (Array.isArray(loaded?.[storageKey])) {
-        return loaded[storageKey];
-      }
-      for (const legacyKey of legacyStorageKeys) {
-        if (Array.isArray(loaded?.[legacyKey])) {
-          return loaded[legacyKey];
+        raw = loaded[storageKey];
+      } else {
+        raw = [];
+        for (const legacyKey of legacyStorageKeys) {
+          if (Array.isArray(loaded?.[legacyKey])) {
+            raw = loaded[legacyKey];
+            break;
+          }
         }
       }
-      return [];
+      return trimByRetention(raw, retention);
     },
     async save(entries) {
+      const trimmed = trimByRetention(entries, retention);
       await storageArea.set({
-        [storageKey]: entries,
+        [storageKey]: trimmed,
       });
     },
   };
@@ -440,6 +469,7 @@ export function createBackgroundRunnerBridge({
   interventionTimeoutMs = undefined,
   auditStore = undefined,
   auditStorageKey = AUDIT_STORAGE_KEY,
+  auditRetention = AUDIT_RETENTION_DEFAULTS,
   sendRemoteExec = undefined,
 }: any = {}): any {
   const effectivePageHookBridge =
@@ -449,11 +479,13 @@ export function createBackgroundRunnerBridge({
       : undefined);
   let creating = null;
   let requestSequence = 0;
-  const AUDIT_MAX_ENTRIES = 64;
+  const resolvedRetention = auditRetention ?? AUDIT_RETENTION_DEFAULTS;
+  const AUDIT_MAX_ENTRIES = resolvedRetention.maxEntries;
   const TELEMETRY_MAX_ENTRIES = 128;
   const auditEntries = [];
   const loopTelemetryEntries = [];
-  const resolvedAuditStore = auditStore ?? createChromeAuditStore(chromeApi, auditStorageKey);
+  const resolvedAuditStore =
+    auditStore ?? createChromeAuditStore(chromeApi, auditStorageKey, LEGACY_AUDIT_STORAGE_KEYS, resolvedRetention);
   const state = {
     defaultHostId: null,
     hostReady: false,
