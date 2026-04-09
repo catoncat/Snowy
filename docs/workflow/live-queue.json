@@ -1,24 +1,23 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T11:51:56.254Z",
+  "generated_at": "2026-04-09T11:57:28.227Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-120",
-      "issue_path": "docs/backlog/2026-04-09-follow-up-define-kernel-child-run-contract-for-subagent-orchestration.md",
-      "title": "Follow-up: define kernel child-run contract for subagent orchestration",
-      "parallel_group": "kernel",
-      "module_id": "kernel",
+      "issue_id": "ISSUE-114",
+      "issue_path": "docs/backlog/2026-04-09-provider-profile-escalation-and-per-lane-routing-remain-underdefined.md",
+      "title": "Review: provider/profile escalation and per-lane routing remain underdefined",
+      "parallel_group": "contracts-core",
+      "module_id": "provider-profile-routing",
       "module_stage": "mainline",
-      "tracking_kind": "follow-up",
+      "tracking_kind": "gap",
       "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-113"],
+      "depends_on": [],
       "write_scope": [
         "packages/contracts/src/index.ts",
-        "packages/kernel/src/kernel-facade.ts",
-        "packages/kernel/src/run-controller.ts",
-        "packages/kernel/test",
-        "docs/kernel-skeleton-design.md"
+        "packages/kernel/src/llm-profile-resolver.ts",
+        "packages/kernel/src/llm-kernel-adapter.ts",
+        "packages/kernel/test"
       ]
     },
     {
