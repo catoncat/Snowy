@@ -1288,6 +1288,7 @@ export interface LlmProfileConfig {
   defaultProfile: string;
   fallbackProfile?: string;
   auxProfile?: string;
+  laneProfiles?: Partial<Record<LlmProviderExecutionLane, string[]>>;
 }
 
 export type ResolveLlmRouteResult =

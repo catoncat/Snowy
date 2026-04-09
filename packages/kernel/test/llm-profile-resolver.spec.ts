@@ -253,6 +253,97 @@ describe("resolveLlmRoute", () => {
     expect(result.route.role).toBe("worker");
   });
 
+  it("uses auxProfile as the default root for compaction and title lanes", () => {
+    const config = makeConfig({
+      profiles: [
+        {
+          id: "default",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-default",
+          llmModel: "gpt-4",
+        },
+        {
+          id: "summary",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-summary",
+          llmModel: "gpt-4.1-mini",
+        },
+        {
+          id: "fallback",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-fallback",
+          llmModel: "gpt-4.1",
+        },
+      ],
+      auxProfile: "summary",
+      fallbackProfile: "fallback",
+    });
+
+    const compaction = resolveLlmRoute(config, undefined, "worker", {
+      lane: "compaction",
+    });
+    const title = resolveLlmRoute(config, undefined, "worker", {
+      lane: "title",
+    });
+
+    expect(compaction.ok).toBe(true);
+    expect(title.ok).toBe(true);
+    if (!compaction.ok || !title.ok) return;
+    expect(compaction.route.profile).toBe("summary");
+    expect(compaction.route.orderedProfiles).toEqual(["summary", "fallback"]);
+    expect(title.route.profile).toBe("summary");
+    expect(title.route.orderedProfiles).toEqual(["summary", "fallback"]);
+  });
+
+  it("uses laneProfiles ordered chains and resumes from an explicit target within that chain", () => {
+    const config = makeConfig({
+      profiles: [
+        {
+          id: "default",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-default",
+          llmModel: "gpt-4",
+        },
+        {
+          id: "balanced",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-balanced",
+          llmModel: "gpt-4.1-mini",
+        },
+        {
+          id: "fallback",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-fallback",
+          llmModel: "gpt-4.1",
+        },
+      ],
+      fallbackProfile: "fallback",
+      laneProfiles: {
+        primary: ["default", "balanced", "fallback"],
+      },
+    });
+
+    const initial = resolveLlmRoute(config, undefined, "worker", {
+      lane: "primary",
+    });
+    const resumed = resolveLlmRoute(config, "balanced", "worker", {
+      lane: "primary",
+    });
+
+    expect(initial.ok).toBe(true);
+    expect(resumed.ok).toBe(true);
+    if (!initial.ok || !resumed.ok) return;
+    expect(initial.route.orderedProfiles).toEqual(["default", "balanced", "fallback"]);
+    expect(resumed.route.profile).toBe("balanced");
+    expect(resumed.route.orderedProfiles).toEqual(["balanced", "fallback"]);
+  });
+
   it("skips down providers and resolves the next eligible fallback profile", () => {
     const config = makeConfig({
       profiles: [

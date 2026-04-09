@@ -8,6 +8,7 @@ import type {
   KernelDiagnosticsSnapshot,
   KernelLlmAdapter,
   LlmProfileConfig,
+  LlmProviderExecutionLane,
   LoopTerminalStatus,
   LoopTurn,
   MessagePayload,
@@ -159,7 +160,7 @@ export interface Kernel {
   triggerCompaction(sessionId: string, reason: CompactionReason): Promise<CompactionDraft>;
 
   // Provider/profile management
-  getActiveProfile(): ResolveLlmRouteResult | null;
+  getActiveProfile(lane?: LlmProviderExecutionLane): ResolveLlmRouteResult | null;
   setProfileConfig(config: LlmProfileConfig): void;
   getProviderRegistry(): LlmProviderRegistry | null;
 
@@ -346,6 +347,7 @@ export function createKernel(opts: KernelOptions): Kernel {
     const activeRoute =
       profileConfig != null
         ? resolveLlmRoute(profileConfig, undefined, "worker", {
+            lane: "primary",
             providerRegistry: providerRegistry ?? undefined,
           })
         : null;
@@ -485,9 +487,10 @@ export function createKernel(opts: KernelOptions): Kernel {
     },
 
     // Provider/profile management
-    getActiveProfile: () =>
+    getActiveProfile: (lane: LlmProviderExecutionLane = "primary") =>
       profileConfig
         ? resolveLlmRoute(profileConfig, undefined, "worker", {
+            lane,
             providerRegistry: providerRegistry ?? undefined,
           })
         : null,

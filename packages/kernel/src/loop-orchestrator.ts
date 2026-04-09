@@ -441,6 +441,7 @@ function resolveEscalatedRoute(
   profileConfig: LlmProfileConfig,
   providerRegistry: LlmProviderRegistry | undefined,
   currentRoute: LlmResolvedRoute,
+  lane: LlmProviderExecutionLane,
 ): LlmResolvedRoute | null {
   if (currentRoute.escalationPolicy !== "upgrade_only") {
     return null;
@@ -457,6 +458,7 @@ function resolveEscalatedRoute(
   }
 
   const nextRouteResult = resolveLlmRoute(profileConfig, nextProfile, currentRoute.role, {
+    lane,
     providerRegistry,
   });
   return nextRouteResult.ok ? nextRouteResult.route : null;
@@ -517,6 +519,7 @@ export async function requestLlmWithRetry(
           opts.profileConfig,
           opts.providerRegistry,
           route,
+          opts.lane ?? "primary",
         );
         if (escalatedRoute) {
           route = escalatedRoute;
@@ -607,6 +610,7 @@ export async function runLoop(
 
   // Resolve LLM route
   const routeResult = resolveLlmRoute(profileConfig, undefined, "worker", {
+    lane: "primary",
     providerRegistry,
   });
   if (!routeResult.ok) {

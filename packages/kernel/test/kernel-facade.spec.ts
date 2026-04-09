@@ -743,5 +743,48 @@ describe("KernelFacade (createKernel)", () => {
       expect(active.route.profile).toBe("fallback");
       expect(active.route.provider).toBe("fallback_provider");
     });
+
+    it("supports lane-aware active profile inspection while keeping primary as the default", () => {
+      const wiredKernel = createKernelWithFacadeOptions({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        profileConfig: {
+          ...TEST_PROFILE_CONFIG,
+          auxProfile: "summary",
+          profiles: [
+            ...TEST_PROFILE_CONFIG.profiles,
+            {
+              id: "summary",
+              providerId: "openai_compatible",
+              llmBase: "https://llm.example.com",
+              llmKey: "test-key",
+              llmModel: "gpt-4.1-nano",
+            },
+          ],
+        },
+      });
+
+      const primary = callKernelMethod<[], ResolveLlmRouteResult | null>(
+        wiredKernel,
+        "getActiveProfile",
+      );
+      const compaction = callKernelMethod<[string], ResolveLlmRouteResult | null>(
+        wiredKernel,
+        "getActiveProfile",
+        "compaction",
+      );
+
+      expect(primary).not.toBeNull();
+      expect(compaction).not.toBeNull();
+      expect(primary?.ok).toBe(true);
+      expect(compaction?.ok).toBe(true);
+      if (!primary || !primary.ok || !compaction || !compaction.ok) {
+        throw new Error("expected active profile routes");
+      }
+
+      expect(primary.route.profile).toBe("default");
+      expect(compaction.route.profile).toBe("summary");
+      expect(compaction.route.orderedProfiles).toEqual(["summary", "fallback"]);
+    });
   });
 });

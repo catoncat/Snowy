@@ -95,6 +95,59 @@ describe("createKernelLlmFromProvider", () => {
     expect(body.max_tokens).toBe(100);
   });
 
+  it("defaults kernel adapter routing to the compaction lane when auxProfile is configured", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(sseBody([sseTextChunk("Summary profile"), "data: [DONE]"]), {
+        status: 200,
+      }),
+    );
+
+    const registry = new LlmProviderRegistry();
+    registry.register(createOpenAiCompatibleProvider());
+    registry.register({
+      id: "summary_provider",
+      resolveRequestUrl: () => "https://summary.example.test/chat/completions",
+      send: async (input) =>
+        fetch(input.requestUrl ?? "https://summary.example.test/chat/completions", {
+          method: "POST",
+          body: JSON.stringify(input.payload),
+        }),
+    });
+
+    const adapter = createKernelLlmFromProvider(registry, {
+      profiles: [
+        {
+          id: "default",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-default",
+          llmModel: "gpt-4",
+        },
+        {
+          id: "summary",
+          providerId: "summary_provider",
+          llmBase: "https://summary.example.test",
+          llmKey: "sk-summary",
+          llmModel: "gpt-4.1-mini",
+        },
+      ],
+      defaultProfile: "default",
+      auxProfile: "summary",
+    });
+
+    const result = await adapter.complete({
+      systemPrompt: "Summarize this session.",
+      messages: [{ role: "user", content: "Context" }],
+    });
+
+    expect(result).toBe("Summary profile");
+
+    const [url, opts] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://summary.example.test/chat/completions");
+    const body = JSON.parse(opts.body);
+    expect(body.model).toBe("gpt-4.1-mini");
+  });
+
   it("negotiates to the fallback route when the default provider is down", async () => {
     fetchSpy.mockResolvedValue(
       new Response(sseBody([sseTextChunk("Hello from fallback!"), "data: [DONE]"]), {

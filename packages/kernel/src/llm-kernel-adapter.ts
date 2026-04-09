@@ -1,4 +1,8 @@
-import type { KernelLlmAdapter, LlmProfileConfig } from "@bbl-next/contracts";
+import type {
+  KernelLlmAdapter,
+  LlmProfileConfig,
+  LlmProviderExecutionLane,
+} from "@bbl-next/contracts";
 import { resolveLlmRoute } from "./llm-profile-resolver.js";
 import type { LlmProviderRegistry } from "./llm-provider-registry.js";
 import { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
@@ -32,6 +36,11 @@ function withTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortS
   return controller.signal;
 }
 
+export interface CreateKernelLlmFromProviderOptions {
+  lane?: LlmProviderExecutionLane;
+  role?: string;
+}
+
 /**
  * Bridge the provider/profile layer into the kernel's KernelLlmAdapter interface.
  *
@@ -42,11 +51,16 @@ export function createKernelLlmFromProvider(
   registry: LlmProviderRegistry,
   profileConfig: LlmProfileConfig,
   profileId?: string,
+  options: CreateKernelLlmFromProviderOptions = {},
 ): KernelLlmAdapter {
+  const lane = options.lane ?? "compaction";
+  const role = options.role ?? "worker";
+
   return {
     async complete({ systemPrompt, messages, maxTokens, signal }) {
-      const routeResult = resolveLlmRoute(profileConfig, profileId, "worker", {
+      const routeResult = resolveLlmRoute(profileConfig, profileId, role, {
         providerRegistry: registry,
+        lane,
       });
       if (!routeResult.ok) {
         throw new Error(`LLM route resolution failed: ${routeResult.message}`);
@@ -71,6 +85,7 @@ export function createKernelLlmFromProvider(
           stream: true,
           ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
         },
+        lane,
         signal: withTimeout(signal, route.llmTimeoutMs),
       });
 

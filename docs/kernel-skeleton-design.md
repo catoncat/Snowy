@@ -18,14 +18,14 @@ Recovery Report 确认：新仓已完成底座重构（contracts / core / browse
 截至 2026-04-09，下面这些能力已经有代码与测试落地，但仍不应被描述成“整体 shipped / 旧仓 parity 完成”：
 
 - `packages/kernel` 已具备 session store、run controller、loop engine、compaction manager 与 facade 主路径。
-- kernel mainline follow-up 已补到 diagnostics snapshot / runtime summary、provider health + base profile routing、loop 内 policy-driven intervention。
+- kernel mainline follow-up 已补到 diagnostics snapshot / runtime summary、provider health + lane-aware profile routing、loop 内 policy-driven intervention。
 - secondary follow-up 已补到 generic config persistence、background automation lane、offscreen runner host integration regression。
 
 当前仍应保留为“partial / secondary follow-up 继续推进”的部分：
 
 - 更完整的 browser automation stabilization / DOM lane 扩展。
 - 更广的 execution-host / remote-host cutover 语义。
-- provider/profile routing 仍缺 execution-lane-aware 初始 profile 选择与 ordered profile chain contract；当前 loop / compaction 仍主要落在 implicit worker/primary defaults。
+- provider/profile routing 的更广 provider policy hardening 仍在 follow-up；当前 resolver / kernel adapter 已具备 execution-lane-aware profile 选择与 ordered profile chain contract。
 - minimal child-run / subagent contract 仍未进入当前 kernel run model；现状仍只有 session-local run queue。
 - browser-vfs、skill-sdk / studio、repo workflow DX 等 deferred 模块。
 
@@ -472,7 +472,7 @@ loop step 执行边界：
 
 - `packages/kernel/src/intervention-controller.ts` — intervention lifecycle / summary / audit 共享状态
 - `packages/kernel/src/vfs-session-storage.ts` — VFS-backed session persistence adapter
-- `packages/kernel/src/llm-provider-registry.ts` / `llm-profile-resolver.ts` / `llm-openai-provider.ts` / `llm-stream-parser.ts` — provider/profile/transport 基础层（execution-lane-aware routing 仍 follow-up）
+- `packages/kernel/src/llm-provider-registry.ts` / `llm-profile-resolver.ts` / `llm-openai-provider.ts` / `llm-stream-parser.ts` — provider/profile/transport 基础层（含 execution-lane-aware route resolution）
 - `packages/kernel/src/llm-kernel-adapter.ts` / `llm-message-model.ts` — provider 到 kernel loop 的消息转换与适配层
 - `packages/kernel/src/loop-orchestrator.ts` / `prompt-builder.ts` — 主 LLM loop 与 system prompt/task progress 注入
 - 对应验证入口见 `packages/kernel/test/*.spec.ts`

@@ -1,6 +1,7 @@
 import type {
   LlmProfileConfig,
   LlmProfileDef,
+  LlmProviderExecutionLane,
   LlmResolvedRoute,
   ResolveLlmRouteResult,
 } from "@bbl-next/contracts";
@@ -17,6 +18,7 @@ const MAX_RETRY = 6;
 const DEFAULT_MAX_RETRY_DELAY_MS = 4_000;
 
 export interface ResolveLlmRouteOptions {
+  lane?: LlmProviderExecutionLane;
   providerRegistry?: LlmProviderRegistry;
   requiredCapabilities?: string[];
 }
@@ -31,12 +33,42 @@ function normalizeCapabilities(capabilities: string[] | undefined): string[] {
   );
 }
 
-function buildOrderedProfiles(config: LlmProfileConfig, targetProfile: string): string[] {
-  const orderedProfiles = [targetProfile];
-  if (config.fallbackProfile && config.fallbackProfile !== targetProfile) {
-    orderedProfiles.push(config.fallbackProfile);
+function normalizeProfileChain(values: Array<string | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+function buildLaneBaseProfiles(config: LlmProfileConfig, lane: LlmProviderExecutionLane): string[] {
+  const explicitLaneProfiles = normalizeProfileChain(config.laneProfiles?.[lane] ?? []);
+  if (explicitLaneProfiles.length > 0) {
+    return explicitLaneProfiles;
   }
-  return orderedProfiles;
+
+  if (lane === "primary") {
+    return normalizeProfileChain([config.defaultProfile, config.fallbackProfile]);
+  }
+
+  return normalizeProfileChain([
+    config.auxProfile ?? config.defaultProfile,
+    config.fallbackProfile,
+  ]);
+}
+
+function buildOrderedProfiles(
+  config: LlmProfileConfig,
+  lane: LlmProviderExecutionLane,
+  targetProfile?: string,
+): string[] {
+  const baseProfiles = buildLaneBaseProfiles(config, lane);
+  if (!targetProfile) {
+    return baseProfiles;
+  }
+
+  const targetIndex = baseProfiles.indexOf(targetProfile);
+  if (targetIndex >= 0) {
+    return baseProfiles.slice(targetIndex);
+  }
+
+  return normalizeProfileChain([targetProfile, ...baseProfiles]);
 }
 
 function findProfile(config: LlmProfileConfig, profileId: string): LlmProfileDef | undefined {
@@ -111,7 +143,9 @@ export function resolveLlmRoute(
   role = "worker",
   options: ResolveLlmRouteOptions = {},
 ): ResolveLlmRouteResult {
-  const targetProfile = profileId || config.defaultProfile || "default";
+  const lane = options.lane ?? "primary";
+  const orderedProfiles = buildOrderedProfiles(config, lane, profileId);
+  const targetProfile = orderedProfiles[0] ?? profileId ?? config.defaultProfile ?? "default";
   const initialProfile = findProfile(config, targetProfile);
   if (!initialProfile) {
     return {
@@ -122,7 +156,6 @@ export function resolveLlmRoute(
     };
   }
 
-  const orderedProfiles = buildOrderedProfiles(config, targetProfile);
   const requiredCapabilities = normalizeCapabilities(options.requiredCapabilities);
 
   for (const candidateProfileId of orderedProfiles) {
