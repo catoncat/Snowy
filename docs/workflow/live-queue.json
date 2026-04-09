@@ -1,19 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T11:41:53.722Z",
+  "generated_at": "2026-04-09T11:42:20.637Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-107",
-      "issue_path": "docs/backlog/2026-04-09-module-tracking-ledger-refresh.md",
-      "title": "Module tracking ledger 与 kernel skeleton 状态校准",
-      "parallel_group": "sdk-docs",
-      "module_id": "repo-workflow-dx",
-      "module_stage": "deferred",
-      "tracking_kind": "doc-debt",
-      "check_cmd": "bun run workflow:queue:build",
-      "depends_on": ["ISSUE-103", "ISSUE-104", "ISSUE-111", "ISSUE-112"],
-      "write_scope": ["docs/module-tracking-ledger.json", "docs/kernel-skeleton-design.md"]
-    }
-  ]
+  "entries": []
 }

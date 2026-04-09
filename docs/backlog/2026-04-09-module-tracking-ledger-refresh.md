@@ -1,12 +1,15 @@
 ---
 id: ISSUE-107
-title: Module tracking ledger 与 kernel skeleton 状态校准
-status: open
+title: "Module tracking ledger 与 kernel skeleton 状态校准"
+status: done
 priority: p1
-source: next-batch-planner review 2026-04-09
+source: "next-batch-planner review 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
-tags: [doc-debt, workflow, planning]
+assignee: codex-019d70f6
+tags:
+  - doc-debt
+  - workflow
+  - planning
 kind: doc-debt
 epic: EPIC-workflow
 parallel_group: sdk-docs
@@ -23,6 +26,7 @@ write_scope:
   - docs/kernel-skeleton-design.md
 acceptance_ref: docs/source-of-truth-map.md
 check_cmd: "bun run workflow:queue:build"
+completed_at: 2026-04-09T11:42:20.613Z
 ---
 
 ## Goal
@@ -39,3 +43,20 @@ check_cmd: "bun run workflow:queue:build"
 - [ ] `docs/kernel-skeleton-design.md` 的实施状态与后续扩展层描述同步到当前 landed 状态
 - [ ] 文档刷新不把仍处于 open 的 mainline gap 误记为已收口
 - [ ] 变更完成后重建 live queue，确认 planning truth 与 dispatch truth 对齐
+
+## 工作总结
+
+### 实现了什么
+- 刷新 module tracking ledger 的 updated_at、代码根路径与 provider-profile-routing 状态口径
+- 补齐 kernel skeleton 文档的 2026-04-09 落地快照，不把当前仓库误记为 shipped/parity complete
+- 重建 live queue，确认 planning truth 与 dispatch truth 对齐
+
+### 实际跑了什么检查
+- bun run workflow:queue:build
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `2373125f757e` docs(workflow): 校准 module ledger 与 kernel skeleton
