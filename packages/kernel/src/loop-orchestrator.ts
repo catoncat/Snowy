@@ -131,6 +131,7 @@ function shouldContinueAfterToolFailure(input: {
 
 const RETRYABLE_LLM_STATUS_CODES = new Set([408, 409, 429, 500, 502, 503, 504]);
 const DEFAULT_LLM_RETRY_BASE_DELAY_MS = 250;
+const MAX_OVERFLOW_COMPACTION_ATTEMPTS = 1;
 const CONTEXT_OVERFLOW_ERROR_PATTERNS = [
   "context window exceeded",
   "context length exceeded",
@@ -389,6 +390,13 @@ function isContextOverflowError(error: unknown): boolean {
   return CONTEXT_OVERFLOW_ERROR_PATTERNS.some((pattern) => normalized.includes(pattern));
 }
 
+function createPersistentOverflowError(error: unknown, attempts: number): Error {
+  const message = error instanceof Error ? error.message : String(error ?? "unknown");
+  return new Error(
+    `LLM context overflow persisted after ${attempts} compaction attempt${attempts === 1 ? "" : "s"}: ${message}`,
+  );
+}
+
 export async function runLoop(
   opts: LoopOrchestratorOptions,
   input: RunLoopInput,
@@ -423,6 +431,7 @@ export async function runLoop(
   let terminalStatus: LoopTerminalStatus | null = null;
   let llmStepCount = 0;
   let toolStepCount = 0;
+  let overflowCompactionAttempts = 0;
   const actionFailures = new Map<string, ActionFailureHint>();
   const telemetryEntries: LoopTelemetryEntry[] = [];
 
@@ -479,6 +488,10 @@ export async function runLoop(
         });
       } catch (error) {
         if (isContextOverflowError(error)) {
+          if (overflowCompactionAttempts >= MAX_OVERFLOW_COMPACTION_ATTEMPTS) {
+            throw createPersistentOverflowError(error, overflowCompactionAttempts);
+          }
+          overflowCompactionAttempts += 1;
           await kernel.triggerCompaction(input.sessionId, "overflow");
           continue;
         }
@@ -486,6 +499,7 @@ export async function runLoop(
       }
       const response = requestResult.response;
       route = requestResult.route;
+      overflowCompactionAttempts = 0;
 
       if (!response.body) {
         throw new Error("LLM response has no body");

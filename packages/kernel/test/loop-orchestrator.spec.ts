@@ -350,6 +350,30 @@ describe("runLoop", () => {
     ).toBe(true);
   });
 
+  it("fails after overflow compaction retry budget is exhausted", async () => {
+    let callCount = 0;
+    const { kernel, registry, provider } = setupWithCompaction(async () => {
+      callCount += 1;
+      return new Response('{"error":{"message":"context window exceeded"}}', { status: 400 });
+    }, "Overflow summary.");
+
+    const session = await kernel.createSession();
+    await kernel.appendMessage(session.id, {
+      role: "assistant",
+      text: `Historical context ${"z".repeat(1_200)}`,
+    });
+
+    await expect(
+      runLoop(
+        { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG, contextWindow: 4_096 },
+        { sessionId: session.id, prompt: "Keep retrying forever?" },
+      ),
+    ).rejects.toThrow("LLM context overflow persisted after 1 compaction attempt");
+
+    expect(callCount).toBe(2);
+    expect(kernel.getRunState(session.id).phase).toBe("stopped");
+  });
+
   it("continues after a site verify failure is resolved via intervention lifecycle", async () => {
     const storage: SessionStorage = new InMemorySessionStorage();
     const registry = new CapabilityRegistry([TEST_SITE_DESCRIPTOR]);
