@@ -294,6 +294,7 @@ export interface InterventionSummary {
   activeCount: number;
   recentCount: number;
   active: InterventionRecord[];
+  recent: InterventionRecord[];
 }
 
 export interface InterventionAuditSummary {

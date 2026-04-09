@@ -515,12 +515,14 @@ function buildInterventionSummary(
   input: InterventionSummaryInput | undefined,
 ): InterventionSummary {
   const active = Array.isArray(input?.active) ? input.active.map(cloneInterventionRecord) : [];
+  const recent = Array.isArray(input?.recent) ? input.recent.map(cloneInterventionRecord) : [];
   return {
     status: input?.status ?? (active.length > 0 ? "requested" : "empty"),
     totalCount: input?.totalCount ?? active.length,
     activeCount: input?.activeCount ?? active.length,
-    recentCount: input?.recentCount ?? 0,
+    recentCount: input?.recentCount ?? recent.length,
     active,
+    recent,
   };
 }
 

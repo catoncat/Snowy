@@ -188,6 +188,51 @@ function emptyInterventionState() {
     activeCount: 0,
     recentCount: 0,
     active: [],
+    recent: [],
+  };
+}
+
+function cloneInterventionRecord(entry) {
+  return {
+    id: entry.id,
+    kind: entry.kind,
+    trigger: entry.trigger,
+    status: entry.status,
+    title: entry.title,
+    message: entry.message,
+    sessionId: entry.sessionId ?? null,
+    skillId: entry.skillId ?? undefined,
+    action: entry.action ?? undefined,
+    tabId: entry.tabId ?? null,
+    payload: entry.payload,
+    requestedAt: entry.requestedAt,
+    updatedAt: entry.updatedAt,
+    expiresAt: entry.expiresAt,
+    resolution: entry.resolution,
+  };
+}
+
+function buildInterventionObservabilitySummary(summary, items) {
+  const records = Array.isArray(items) ? items.map((entry) => cloneInterventionRecord(entry)) : [];
+  const active = records.filter((entry) => entry.status === "requested");
+  const recent = records.filter((entry) => entry.status !== "requested");
+  return {
+    ...(summary && typeof summary === "object" && "sessionId" in summary
+      ? { sessionId: summary.sessionId ?? null }
+      : {}),
+    status:
+      typeof summary?.status === "string"
+        ? summary.status
+        : records.length === 0
+          ? "empty"
+          : active.length > 0
+            ? "requested"
+            : "settled",
+    totalCount: typeof summary?.totalCount === "number" ? summary.totalCount : records.length,
+    activeCount: typeof summary?.activeCount === "number" ? summary.activeCount : active.length,
+    recentCount: recent.length,
+    active,
+    recent,
   };
 }
 
@@ -268,6 +313,22 @@ function defaultBootstrapSummaryBuilder(input) {
     resourceKeys: Array.isArray(input.resourceKeys)
       ? [...input.resourceKeys]
       : [...BOOTSTRAP_RESOURCE_KEYS],
+  };
+}
+
+async function readInterventionObservabilitySnapshot(runtimeServiceApi) {
+  const [summary, items] = await Promise.all([
+    typeof runtimeServiceApi.getInterventionState === "function"
+      ? runtimeServiceApi.getInterventionState()
+      : emptyInterventionState(),
+    typeof runtimeServiceApi.listInterventions === "function"
+      ? runtimeServiceApi.listInterventions()
+      : [],
+  ]);
+
+  return {
+    items,
+    summary: buildInterventionObservabilitySummary(summary, items),
   };
 }
 
@@ -1212,10 +1273,8 @@ export function createBackgroundRunnerBridge({
     const capturedAt = isoNow();
     const offscreenPresent = await hasOffscreenDocument();
     const runtimeServiceApi = getRuntimeServices();
-    const interventionState =
-      typeof runtimeServiceApi.getInterventionState === "function"
-        ? await runtimeServiceApi.getInterventionState()
-        : emptyInterventionState();
+    const interventionSnapshot = await readInterventionObservabilitySnapshot(runtimeServiceApi);
+    const interventionState = interventionSnapshot.summary;
 
     const runnerResponse = offscreenPresent
       ? await sendToOffscreen("runner.diagnostics")
@@ -1378,10 +1437,7 @@ export function createBackgroundRunnerBridge({
             note: "Config control plane is not implemented yet.",
             updatedAt: null,
           };
-    const interventionState =
-      typeof getRuntimeServices().getInterventionState === "function"
-        ? await getRuntimeServices().getInterventionState()
-        : emptyInterventionState();
+    const interventionState = runtimeDiagnostics.interventions ?? emptyInterventionState();
 
     return {
       generatedAt,
@@ -1404,23 +1460,8 @@ export function createBackgroundRunnerBridge({
           totalCount: interventionState.totalCount,
           activeCount: interventionState.activeCount,
           recentCount: interventionState.recentCount,
-          active: interventionState.active.map((entry) => ({
-            id: entry.id,
-            kind: entry.kind,
-            trigger: entry.trigger,
-            status: entry.status,
-            title: entry.title,
-            message: entry.message,
-            sessionId: entry.sessionId ?? null,
-            skillId: entry.skillId ?? undefined,
-            action: entry.action ?? undefined,
-            tabId: entry.tabId ?? null,
-            payload: entry.payload,
-            requestedAt: entry.requestedAt,
-            updatedAt: entry.updatedAt,
-            expiresAt: entry.expiresAt,
-            resolution: entry.resolution,
-          })),
+          active: interventionState.active.map((entry) => cloneInterventionRecord(entry)),
+          recent: interventionState.recent.map((entry) => cloneInterventionRecord(entry)),
         },
         actionCapabilities: {
           total: 0,
@@ -1656,20 +1697,16 @@ export function createBackgroundRunnerBridge({
           resourceId: "audit.intervention",
           limit: message.limit,
         });
-      case "intervention.list":
+      case "intervention.list": {
+        const snapshot = await readInterventionObservabilitySnapshot(getRuntimeServices());
         return {
           ok: true,
           data: {
-            items:
-              typeof getRuntimeServices().listInterventions === "function"
-                ? await getRuntimeServices().listInterventions()
-                : [],
-            summary:
-              typeof getRuntimeServices().getInterventionState === "function"
-                ? await getRuntimeServices().getInterventionState()
-                : emptyInterventionState(),
+            items: snapshot.items,
+            summary: snapshot.summary,
           },
         };
+      }
       case "intervention.resolve":
         return {
           ok: true,

@@ -804,6 +804,33 @@ describe("mv3-shell intervention bridge integration", () => {
     await expect(
       bridge.route({
         target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "runtime.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "runtime.summary",
+        data: {
+          interventions: {
+            status: "requested",
+            activeCount: 1,
+            recentCount: 0,
+            active: [
+              expect.objectContaining({
+                id: intervention.id,
+                status: "requested",
+              }),
+            ],
+            recent: [],
+          },
+        },
+      },
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
         kind: "intervention.resolve",
         interventionId: intervention.id,
         resolution: {
@@ -841,6 +868,33 @@ describe("mv3-shell intervention bridge integration", () => {
             status: "resolved",
           }),
         ],
+      },
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "runtime.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "runtime.summary",
+        data: {
+          interventions: {
+            status: "settled",
+            activeCount: 0,
+            recentCount: 1,
+            active: [],
+            recent: [
+              expect.objectContaining({
+                id: intervention.id,
+                status: "resolved",
+              }),
+            ],
+          },
+        },
       },
     });
   });
@@ -916,6 +970,37 @@ describe("mv3-shell intervention bridge integration", () => {
             status: "timed_out",
           }),
         ]),
+      },
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "runtime.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "runtime.summary",
+        data: {
+          interventions: {
+            status: "settled",
+            activeCount: 0,
+            recentCount: 2,
+            active: [],
+            recent: expect.arrayContaining([
+              expect.objectContaining({
+                id: cancelledInvoke.intervention.id,
+                status: "cancelled",
+              }),
+              expect.objectContaining({
+                id: timedOutInvoke.intervention.id,
+                status: "timed_out",
+              }),
+            ]),
+          },
+        },
       },
     });
   });
