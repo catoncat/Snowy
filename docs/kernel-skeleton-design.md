@@ -1,7 +1,7 @@
 # Kernel 骨架设计
 
 > design-date: 2026-03-29
-> status: locked-decisions; slices B-1/B-2/B-3 delivered
+> status: locked-decisions; kernel skeleton 与 2026-04-09 主线 follow-ups 已落地
 > scope: packages/kernel 整体设计、与现有模块关系、三个 slice 的实施计划
 > prerequisite: docs/reviews/2026-03-29-vnext-architecture-recovery-report.md
 
@@ -12,6 +12,20 @@
 Recovery Report 确认：新仓已完成底座重构（contracts / core / browser-vfs / js-runner / site-runtime / mv3-shell），但尚未补回浏览器侧 agent kernel 主层。
 
 本文档锁定 `packages/kernel` 的骨架设计，使其成为新仓的 "browser-side brain"——负责 session lifecycle、run state machine、loop turn orchestration、memory compaction、以及未来的 diagnostics / intervention / provider routing。
+
+### 0.1 当前落地快照（2026-04-09）
+
+截至 2026-04-09，下面这些能力已经有代码与测试落地，但仍不应被描述成“整体 shipped / 旧仓 parity 完成”：
+
+- `packages/kernel` 已具备 session store、run controller、loop engine、compaction manager 与 facade 主路径。
+- kernel mainline follow-up 已补到 diagnostics snapshot / runtime summary、provider health + profile routing、loop 内 policy-driven intervention。
+- secondary follow-up 已补到 generic config persistence、background automation lane、offscreen runner host integration regression。
+
+当前仍应保留为“partial / secondary follow-up 继续推进”的部分：
+
+- 更完整的 browser automation stabilization / DOM lane 扩展。
+- 更广的 execution-host / remote-host cutover 语义。
+- browser-vfs、skill-sdk / studio、repo workflow DX 等 deferred 模块。
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-03-30",
+  "updated_at": "2026-04-09",
   "modules": [
     {
       "module_id": "kernel",
@@ -29,7 +29,7 @@
       "code_roots": [
         "packages/contracts/src/index.ts",
         "packages/core/src/index.ts",
-        "apps/mv3-shell/src/background.js"
+        "apps/mv3-shell/src/background.ts"
       ],
       "source_docs": [
         "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md",
@@ -85,8 +85,8 @@
       "depends_on_modules": ["kernel", "intervention-handoff"],
       "code_roots": [
         "packages/site-runtime/",
-        "apps/mv3-shell/src/page-hook.js",
-        "apps/mv3-shell/src/background.js"
+        "apps/mv3-shell/src/page-hook.ts",
+        "apps/mv3-shell/src/background.ts"
       ],
       "source_docs": [
         "docs/cutover-readiness-criteria.md",
@@ -105,8 +105,8 @@
       "depends_on_modules": ["kernel"],
       "code_roots": [
         "packages/js-runner/",
-        "apps/mv3-shell/src/offscreen.js",
-        "apps/mv3-shell/src/background.js"
+        "apps/mv3-shell/src/offscreen.ts",
+        "apps/mv3-shell/src/background.ts"
       ],
       "source_docs": ["docs/migration-parity-dashboard.md", "docs/cutover-readiness-criteria.md"],
       "cutover_gate": "Gate C",
@@ -118,7 +118,7 @@
       "summary": "Provider registry, profile routing, escalation policy, and model-selection control flow.",
       "tracking_order": 15,
       "stage": "mainline",
-      "status": "in-progress",
+      "status": "partial",
       "depends_on_modules": ["kernel", "ai-surface-control-plane"],
       "code_roots": ["packages/contracts/src/index.ts", "packages/kernel/"],
       "source_docs": [
