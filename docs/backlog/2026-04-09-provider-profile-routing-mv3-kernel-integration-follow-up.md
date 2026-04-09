@@ -1,11 +1,11 @@
 ---
 id: ISSUE-099
 title: "Follow-up: route mv3-shell provider/profile management through Kernel facade"
-status: open
+status: done
 priority: p1
 source: "next-batch planning 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
+assignee: codex-019d703b
 tags:
   - kernel
   - provider
@@ -26,6 +26,7 @@ write_scope:
   - apps/mv3-shell/test/runtime-chat.spec.ts
 acceptance_ref: docs/kernel-skeleton-design.md
 check_cmd: "bunx vitest run apps/mv3-shell/test/runtime-chat.spec.ts"
+completed_at: 2026-04-09T03:43:41.470Z
 ---
 
 ## Goal
@@ -49,3 +50,20 @@ Make `mv3-shell` treat `packages/kernel` as the primary provider/profile managem
 - `runtime-services` uses the Kernel facade as the primary source for active profile/provider access on the main runtime/chat path.
 - The main runtime path no longer keeps a duplicate profile-resolution branch outside the kernel for the same flow.
 - `apps/mv3-shell/test/runtime-chat.spec.ts` covers profile/provider access through kernel-managed state and verifies the app observes profile updates without reconstructing the runtime wiring.
+
+## 工作总结
+
+### 实现了什么
+- runtime-services 改为通过 Kernel facade 暴露并消费 active profile/provider registry
+- updateLlmConfig 原地同步 kernel-managed profile state，不再依赖重建 runtime wiring
+
+### 实际跑了什么检查
+- bunx vitest run apps/mv3-shell/test/runtime-chat.spec.ts
+- ./node_modules/.bin/biome check apps/mv3-shell/src/runtime-services.ts apps/mv3-shell/test/runtime-chat.spec.ts
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `5a3088fe104b` fix(mv3-shell): 走内核门面同步 provider/profile

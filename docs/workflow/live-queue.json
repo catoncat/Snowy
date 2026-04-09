@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T03:20:15.954Z",
+  "generated_at": "2026-04-09T03:43:41.476Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
@@ -16,21 +16,6 @@
       "write_scope": [
         "packages/kernel/src/kernel-facade.ts",
         "packages/kernel/test/kernel-facade.spec.ts"
-      ]
-    },
-    {
-      "issue_id": "ISSUE-099",
-      "issue_path": "docs/backlog/2026-04-09-provider-profile-routing-mv3-kernel-integration-follow-up.md",
-      "title": "Follow-up: route mv3-shell provider/profile management through Kernel facade",
-      "parallel_group": "mv3-shell",
-      "module_id": "provider-profile-routing",
-      "module_stage": "mainline",
-      "tracking_kind": "follow-up",
-      "check_cmd": "bunx vitest run apps/mv3-shell/test/runtime-chat.spec.ts",
-      "depends_on": ["ISSUE-095", "ISSUE-097"],
-      "write_scope": [
-        "apps/mv3-shell/src/runtime-services.ts",
-        "apps/mv3-shell/test/runtime-chat.spec.ts"
       ]
     },
     {
