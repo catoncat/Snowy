@@ -185,6 +185,71 @@ describe("js-runner", () => {
     });
   });
 
+  it("does not leak cancellation state into the next invocation", async () => {
+    const core = createRunnerHostCore();
+    const inflight = core.dispatch({
+      kind: "invoke",
+      requestId: "req-cancel-leak",
+      invocation: {
+        module: {
+          id: "slow",
+          source: "exports.default = async () => new Promise(() => {});",
+        },
+        ctx: {},
+        input: null,
+        timeoutMs: 100,
+      },
+    });
+
+    await expect(
+      core.dispatch({
+        kind: "cancel",
+        requestId: "cancel-cancel-leak",
+        targetRequestId: "req-cancel-leak",
+      }),
+    ).resolves.toMatchObject({
+      kind: "cancel_result",
+      targetRequestId: "req-cancel-leak",
+      cancelled: true,
+    });
+
+    await expect(inflight).resolves.toMatchObject({
+      kind: "invoke_result",
+      requestId: "req-cancel-leak",
+      ok: false,
+      error: {
+        code: "E_TIMEOUT",
+        details: {
+          reason: "cancelled",
+        },
+      },
+    });
+
+    await expect(
+      core.dispatch({
+        kind: "invoke",
+        requestId: "req-after-cancel",
+        invocation: {
+          module: {
+            id: "after-cancel",
+            source: "exports.default = async ({ signal }) => ({ aborted: signal.aborted });",
+          },
+          ctx: {},
+          input: null,
+        },
+      }),
+    ).resolves.toMatchObject({
+      kind: "invoke_result",
+      requestId: "req-after-cancel",
+      ok: true,
+      result: {
+        result: {
+          aborted: false,
+        },
+      },
+    });
+  });
+
   it("treats cancelling an unknown request as a no-op", async () => {
     const host = new JsRunnerHost();
 

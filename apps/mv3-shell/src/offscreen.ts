@@ -88,15 +88,20 @@ function createBackgroundRemoteExecAdapter({ runtimeApi, target = RUNNER_BACKGRO
   };
 }
 
+export function createDefaultOffscreenRunnerHost({
+  runtimeApi = globalThis.chrome?.runtime,
+  remoteHostAdapter,
+}: any = {}) {
+  const local = createLocalHostAdapter();
+  const remote = remoteHostAdapter ?? createBackgroundRemoteExecAdapter({ runtimeApi });
+  const hostAdapter = createCompositeHostAdapter({ local, remote });
+  return createRunnerHostCore({ hostAdapter });
+}
+
 export function createOffscreenRunnerBridge({
   runtimeApi = globalThis.chrome?.runtime,
   remoteHostAdapter,
-  createHost = () => {
-    const local = createLocalHostAdapter();
-    const remote = remoteHostAdapter ?? createBackgroundRemoteExecAdapter({ runtimeApi });
-    const hostAdapter = createCompositeHostAdapter({ local, remote });
-    return createRunnerHostCore({ hostAdapter });
-  },
+  createHost = () => createDefaultOffscreenRunnerHost({ runtimeApi, remoteHostAdapter }),
   target = RUNNER_OFFSCREEN_TARGET,
 }: any = {}): any {
   const host = createHost();

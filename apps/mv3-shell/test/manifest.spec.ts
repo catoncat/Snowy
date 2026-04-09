@@ -11,7 +11,7 @@ import {
   createBackgroundRunnerBridge,
   createPageHookBridge,
 } from "../src/background.js";
-import { createOffscreenRunnerBridge } from "../src/offscreen.js";
+import { createDefaultOffscreenRunnerHost, createOffscreenRunnerBridge } from "../src/offscreen.js";
 import {
   SIDEPANEL_MANAGEMENT_ACTION_KINDS,
   SIDEPANEL_MANAGEMENT_RESOURCE_IDS,
@@ -3383,6 +3383,62 @@ describe("mv3-shell manifest", () => {
     expect(remoteExecHandler).toHaveBeenCalledTimes(1);
 
     dispose();
+  });
+
+  it("default offscreen runner host executes through RunnerHostCore and isolates module state", async () => {
+    const host = createDefaultOffscreenRunnerHost({
+      runtimeApi: {
+        sendMessage: vi.fn(async () => ({
+          ok: false,
+          error: {
+            code: "E_CAPABILITY_NOT_FOUND",
+            message: "remote unavailable",
+          },
+        })),
+      },
+    });
+    const module = {
+      id: "counter",
+      source: "let counter = 0; exports.default = async () => ++counter;",
+    };
+
+    await expect(
+      host.dispatch({
+        kind: "invoke",
+        requestId: "counter-1",
+        invocation: {
+          module,
+          ctx: {},
+          input: null,
+        },
+      }),
+    ).resolves.toMatchObject({
+      kind: "invoke_result",
+      requestId: "counter-1",
+      ok: true,
+      result: {
+        result: 1,
+      },
+    });
+
+    await expect(
+      host.dispatch({
+        kind: "invoke",
+        requestId: "counter-2",
+        invocation: {
+          module,
+          ctx: {},
+          input: null,
+        },
+      }),
+    ).resolves.toMatchObject({
+      kind: "invoke_result",
+      requestId: "counter-2",
+      ok: true,
+      result: {
+        result: 1,
+      },
+    });
   });
 
   it("createRemoteExecAdapter wraps errors into structured host error responses", async () => {
