@@ -1,23 +1,27 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T12:02:36.192Z",
+  "generated_at": "2026-04-09T12:03:27.005Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-114",
-      "issue_path": "docs/backlog/2026-04-09-provider-profile-escalation-and-per-lane-routing-remain-underdefined.md",
-      "title": "Review: provider/profile escalation and per-lane routing remain underdefined",
+      "issue_id": "ISSUE-121",
+      "issue_path": "docs/backlog/2026-04-09-follow-up-add-execution-lane-aware-profile-routing-to-the-kernel-llm-path.md",
+      "title": "Follow-up: add execution-lane-aware profile routing to the kernel LLM path",
       "parallel_group": "contracts-core",
       "module_id": "provider-profile-routing",
       "module_stage": "mainline",
-      "tracking_kind": "gap",
+      "tracking_kind": "follow-up",
       "check_cmd": "bun run check",
-      "depends_on": [],
+      "depends_on": ["ISSUE-114"],
       "write_scope": [
         "packages/contracts/src/index.ts",
         "packages/kernel/src/llm-profile-resolver.ts",
         "packages/kernel/src/llm-kernel-adapter.ts",
-        "packages/kernel/test"
+        "packages/kernel/src/loop-orchestrator.ts",
+        "packages/kernel/src/compaction-manager.ts",
+        "packages/kernel/src/kernel-facade.ts",
+        "packages/kernel/test",
+        "docs/kernel-skeleton-design.md"
       ]
     },
     {
