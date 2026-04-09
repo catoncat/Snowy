@@ -512,6 +512,87 @@ export function createBackgroundRunnerBridge({
     });
   }
 
+  function createDiagnosticsEntriesSummary(entries, limit = 10) {
+    const max = typeof limit === "number" && limit > 0 ? limit : 10;
+    const sliced = entries.slice(-max).map((entry) => ({ ...entry }));
+    return {
+      status: sliced.length > 0 ? "available" : "empty",
+      totalCount: sliced.length,
+      entries: sliced,
+    };
+  }
+
+  function createDiagnosticsRunSummary(runtimeKernelState) {
+    if (!runtimeKernelState?.session?.id || !runtimeKernelState?.runState) {
+      return null;
+    }
+    return {
+      sessionId: runtimeKernelState.session.id,
+      phase: runtimeKernelState.runState.phase,
+      queuedPrompts: {
+        steer: Array.isArray(runtimeKernelState.runState.queue?.steer)
+          ? runtimeKernelState.runState.queue.steer.length
+          : 0,
+        followUp: Array.isArray(runtimeKernelState.runState.queue?.followUp)
+          ? runtimeKernelState.runState.queue.followUp.length
+          : 0,
+      },
+      retry: runtimeKernelState.runState.retry
+        ? {
+            active: runtimeKernelState.runState.retry.active === true,
+            attempt: runtimeKernelState.runState.retry.attempt ?? 0,
+            maxAttempts: runtimeKernelState.runState.retry.maxAttempts ?? 0,
+          }
+        : {
+            active: false,
+            attempt: 0,
+            maxAttempts: 0,
+          },
+    };
+  }
+
+  function createDiagnosticsErrorSummary() {
+    const lastError = getRuntimeError();
+    const recentAudit = createDiagnosticsEntriesSummary(
+      getAuditTail(10).filter((entry) => typeof entry.error === "string" && entry.error.length > 0),
+    );
+
+    return {
+      status: lastError
+        ? "active"
+        : state.lastRuntimeErrorClearedAt
+          ? "cleared"
+          : recentAudit.totalCount > 0
+            ? "recent"
+            : "empty",
+      lastError: lastError ? { ...lastError } : null,
+      clearedAt: state.lastRuntimeErrorClearedAt,
+      recentAudit,
+    };
+  }
+
+  function createDiagnosticsLoopSummary(runtimeKernelState) {
+    const run = createDiagnosticsRunSummary(runtimeKernelState);
+    const telemetry = createDiagnosticsEntriesSummary(getLoopTelemetry(10));
+    const recentAudit = createDiagnosticsEntriesSummary(
+      getAuditTail(10).filter((entry) => entry.kind === "loop.step"),
+    );
+    const hasActiveRun =
+      run != null &&
+      (run.phase !== "idle" || run.queuedPrompts.steer > 0 || run.queuedPrompts.followUp > 0);
+
+    return {
+      status: hasActiveRun
+        ? "active"
+        : telemetry.totalCount > 0 || recentAudit.totalCount > 0
+          ? "recent"
+          : "empty",
+      run,
+      telemetry,
+      recentAudit,
+    };
+  }
+
   function setRuntimeError(error) {
     if (error) {
       state.lastRuntimeError = {
@@ -519,6 +600,7 @@ export function createBackgroundRunnerBridge({
         message: error.message ?? String(error),
         capturedAt: isoNow(),
       };
+      state.lastRuntimeErrorClearedAt = null;
     }
   }
 
@@ -1129,9 +1211,10 @@ export function createBackgroundRunnerBridge({
   async function diagnostics({ tabId, world = "main" } = {}) {
     const capturedAt = isoNow();
     const offscreenPresent = await hasOffscreenDocument();
+    const runtimeServiceApi = getRuntimeServices();
     const interventionState =
-      typeof getRuntimeServices().getInterventionState === "function"
-        ? await getRuntimeServices().getInterventionState()
+      typeof runtimeServiceApi.getInterventionState === "function"
+        ? await runtimeServiceApi.getInterventionState()
         : emptyInterventionState();
 
     const runnerResponse = offscreenPresent
@@ -1193,6 +1276,15 @@ export function createBackgroundRunnerBridge({
       !runner.reachable ||
       runner.health?.status === "degraded" ||
       site.status === "degraded";
+    const runtimeError = runner.error ?? site.error ?? null;
+    if (runtimeError) {
+      setRuntimeError(runtimeError);
+    }
+    await auditReady;
+    const runtimeKernelState =
+      typeof runtimeServiceApi.getKernelRuntimeState === "function"
+        ? await runtimeServiceApi.getKernelRuntimeState()
+        : null;
 
     return {
       ok: true,
@@ -1206,6 +1298,10 @@ export function createBackgroundRunnerBridge({
         interventions: interventionState,
         runner,
         site,
+        debug: {
+          error: createDiagnosticsErrorSummary(),
+          loop: createDiagnosticsLoopSummary(runtimeKernelState),
+        },
       },
     };
   }
@@ -1224,10 +1320,7 @@ export function createBackgroundRunnerBridge({
     const runtimeDiagnostics = diagnosticsResult.data;
     const runnerHealth = runtimeDiagnostics.runner?.health;
     const activeTabSummary = activeTab ? toBootstrapActiveTab(activeTab, world) : null;
-    const runtimeKernelState =
-      sessionId == null && typeof getRuntimeServices().getKernelRuntimeState === "function"
-        ? await getRuntimeServices().getKernelRuntimeState()
-        : null;
+    const runtimeLoopRun = runtimeDiagnostics.debug?.loop?.run ?? null;
     const runtimeStatus =
       runtimeDiagnostics.status === "degraded"
         ? activeTabSummary || runtimeDiagnostics.bridge.offscreenPresent
@@ -1296,12 +1389,10 @@ export function createBackgroundRunnerBridge({
       runtime: {
         status: runtimeStatus,
         mode: currentMode,
-        sessionId: sessionId ?? runtimeKernelState?.session.id ?? null,
+        sessionId: sessionId ?? runtimeLoopRun?.sessionId ?? null,
         activeTab: activeTabSummary,
         loopState:
-          runtimeKernelState?.runState.phase ??
-          runnerHealth?.status ??
-          (activeTabSummary ? "idle" : null),
+          runtimeLoopRun?.phase ?? runnerHealth?.status ?? (activeTabSummary ? "idle" : null),
         lastError: effectiveError
           ? {
               code: effectiveError.code,

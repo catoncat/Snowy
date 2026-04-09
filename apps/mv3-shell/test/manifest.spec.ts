@@ -891,6 +891,255 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("captures runtime error lifecycle in runtime.capture_diagnostics snapshots", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0,
+            },
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1,
+          },
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0,
+      })),
+    };
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.capture_diagnostics",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "degraded",
+        debug: {
+          error: {
+            status: "active",
+            lastError: {
+              code: "E_RUNTIME",
+              message: "Offscreen document is not available",
+              capturedAt: expect.any(String),
+            },
+            clearedAt: null,
+          },
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.clear_error",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        cleared: true,
+      },
+    });
+
+    await bridge.ensureHost();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.capture_diagnostics",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "healthy",
+        debug: {
+          error: {
+            status: "cleared",
+            lastError: null,
+            clearedAt: expect.any(String),
+          },
+        },
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("includes recent loop activity in runtime.capture_diagnostics snapshots", async () => {
+    const auditStore = createAuditStoreHarness([
+      {
+        timestamp: "2026-04-09T03:20:11.000Z",
+        sessionId: "session-loop-1",
+        kind: "loop.step",
+        status: "executed",
+        capabilityId: "page.query",
+        durationMs: 12,
+      },
+      {
+        timestamp: "2026-04-09T03:20:12.000Z",
+        sessionId: "session-loop-1",
+        kind: "loop.step",
+        status: "failed",
+        capabilityId: "page.click",
+        durationMs: 33,
+        error: "E_TIMEOUT",
+      },
+    ]);
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "health") {
+          return {
+            kind: "health_result",
+            requestId: request.requestId,
+            ok: true,
+            health: {
+              status: "idle",
+              inflightCount: 0,
+              consecutiveFailures: 0,
+            },
+          };
+        }
+        return {
+          kind: "invoke_result",
+          requestId: request.requestId,
+          ok: true,
+          result: {
+            result: "ok",
+            durationMs: 1,
+          },
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0,
+      })),
+    };
+    const runtimeServices = {
+      getKernelRuntimeState: vi.fn(async () => ({
+        session: {
+          id: "session-loop-1",
+          title: "mv3-shell runtime session",
+          createdAt: "2026-04-09T03:20:00.000Z",
+        },
+        runState: {
+          sessionId: "session-loop-1",
+          phase: "running",
+          retry: {
+            active: true,
+            attempt: 1,
+            maxAttempts: 2,
+          },
+          queue: {
+            steer: [
+              {
+                id: "qp-1",
+                text: "continue loop",
+                enqueuedAt: "2026-04-09T03:20:10.000Z",
+              },
+            ],
+            followUp: [],
+          },
+        },
+      })),
+      getInterventionState: vi.fn(async () => ({
+        sessionId: "session-loop-1",
+        status: "empty",
+        totalCount: 0,
+        activeCount: 0,
+        recentCount: 0,
+        active: [],
+      })),
+    };
+    const harness = createChromeHarness({ host });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      runtimeServices,
+      auditStore,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await bridge.ensureHost();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.capture_diagnostics",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        status: "healthy",
+        debug: {
+          loop: {
+            status: "active",
+            run: {
+              sessionId: "session-loop-1",
+              phase: "running",
+              queuedPrompts: {
+                steer: 1,
+                followUp: 0,
+              },
+              retry: {
+                active: true,
+                attempt: 1,
+                maxAttempts: 2,
+              },
+            },
+            recentAudit: {
+              status: "available",
+              totalCount: 2,
+              entries: [
+                expect.objectContaining({
+                  capabilityId: "page.query",
+                  status: "executed",
+                  durationMs: 12,
+                }),
+                expect.objectContaining({
+                  capabilityId: "page.click",
+                  status: "failed",
+                  durationMs: 33,
+                  error: "E_TIMEOUT",
+                }),
+              ],
+            },
+          },
+        },
+      },
+    });
+
+    expect(runtimeServices.getKernelRuntimeState).toHaveBeenCalled();
+    expect(runtimeServices.getInterventionState).toHaveBeenCalled();
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("exposes an empty runtime diagnostics snapshot when no page hook is installed", async () => {
     const host = {
       dispatch: vi.fn(async (request) => {
