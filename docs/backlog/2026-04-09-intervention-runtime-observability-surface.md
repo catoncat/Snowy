@@ -1,11 +1,11 @@
 ---
 id: ISSUE-100
 title: "Follow-up: expose intervention status on runtime observability surface"
-status: open
+status: done
 priority: p1
 source: "next-batch planning 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
+assignee: codex-019d703b
 tags:
   - intervention
   - observability
@@ -27,6 +27,7 @@ write_scope:
   - apps/mv3-shell/test/runtime-chat.spec.ts
 acceptance_ref: docs/cutover-readiness-criteria.md
 check_cmd: "bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts"
+completed_at: 2026-04-09T04:44:12.440Z
 ---
 
 ## Goal
@@ -50,3 +51,21 @@ Expose intervention runtime state through a stable observability/control-plane s
 - The runtime observability surface exposes intervention summary data that includes current pending state and recent lifecycle outcomes.
 - Callers can inspect intervention runtime state without parsing raw audit entries manually.
 - Targeted tests verify that request / resolve / cancel / timeout transitions are reflected in the exposed runtime summary.
+
+## 工作总结
+
+### 实现了什么
+- contracts/core 为 runtime.summary.interventions 补充 recent outcome 结构化字段
+- background runtime 通过 intervention summary+items 暴露 active/recent observability 状态
+- runtime-chat 回归测试覆盖 request/resolve/cancel/timeout 在 runtime.summary 的可见性
+
+### 实际跑了什么检查
+- bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts
+- ./node_modules/.bin/biome check packages/contracts/src/index.ts packages/core/src/index.ts apps/mv3-shell/src/background.ts apps/mv3-shell/test/runtime-chat.spec.ts
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `2a45a0069ae0` fix(intervention): 暴露运行态 intervention 摘要
