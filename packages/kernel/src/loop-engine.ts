@@ -253,6 +253,10 @@ export class LoopEngine {
     return this.#stepCounts.get(sessionId) ?? 0;
   }
 
+  getMaxSteps(): number {
+    return this.#maxSteps;
+  }
+
   resetSession(sessionId: string): void {
     this.#stepCounts.delete(sessionId);
     this.#signatureHistory.delete(sessionId);

@@ -57,19 +57,24 @@ check_cmd: "bun run check"
 
 2. **`remoteHostAdapter` option** in `apps/mv3-shell/src/offscreen.js`
    - `createOffscreenRunnerBridge` now accepts an optional remote adapter
-   - Automatically composes local + remote into a composite adapter
+   - 默认 runtime path 也会通过 background `runner.remote_exec` 走远端 exec 桥
 
-3. **`createRemoteExecAdapter(sendExec)`** in `apps/mv3-shell/src/runtime-services.js`
+3. **`sendRemoteExec` bridge path** in `apps/mv3-shell/src/background.js`
+   - `createBackgroundRunnerBridge` accepts injectable `sendRemoteExec`
+   - Offscreen `host.exec` now reaches background runtime path instead of stopping在 local-only adapter
+
+4. **`createRemoteExecAdapter(sendExec)`** in `apps/mv3-shell/src/runtime-services.js`
    - Wraps any async exec function into a `RunnerHostAdapter` with structured error handling
-   - Error model: `E_RUNTIME` + `remote_exec_failed` + original error message
+   - Error model: preserves source `code`/message and always tags `remote_exec_failed`, including sync throw
 
-4. **6 new tests** across `js-runner.spec.ts` and `manifest.spec.ts`
+5. **8 tests** across `js-runner.spec.ts` and `manifest.spec.ts`
    - Composite routes exec→remote, read/write/edit→local
    - Fallback when remote has no exec (uses local)
    - Fallback when local is absent (uses remote for read)
    - Structured error when neither adapter has exec
    - End-to-end offscreen bridge with remote adapter
-   - `createRemoteExecAdapter` error wrapping
+   - Background→offscreen→remote exec runtime path
+   - `createRemoteExecAdapter` async + sync error wrapping
 
 ### Routing rules (locked, tested)
 
@@ -83,5 +88,4 @@ check_cmd: "bun run check"
 ### What is NOT included
 
 - No concrete bridge transport (WebSocket / native messaging) — the remote adapter is injectable, actual transport is a separate concern
-- No changes to `background.js` host routing — existing `routeHostSubstrate` still sends all ops to offscreen, which now has the composite adapter
 - No changes to `hosts.*` control plane multi-host support — still single "local" host in background.js

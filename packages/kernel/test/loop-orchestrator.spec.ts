@@ -3,6 +3,7 @@ import type {
   LlmProviderAdapter,
   LlmProviderSendInput,
   SessionStorage,
+  ToolContract,
 } from "@bbl-next/contracts";
 import { CapabilityRegistry, FamilyProviderRegistry } from "@bbl-next/core";
 import { describe, expect, it } from "vitest";
@@ -14,6 +15,7 @@ import {
   requestLlmWithRetry,
   runLoop,
 } from "../src/loop-orchestrator.js";
+import { buildSystemPromptBase } from "../src/prompt-builder.js";
 
 function sseResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -379,6 +381,63 @@ describe("runLoop", () => {
     expect(String(thirdMessages[1]?.content)).toContain("submit-button");
   });
 
+  it("keeps timeout failures terminal even with failure tracking enabled", async () => {
+    const failingDescriptor = {
+      ...TEST_DESCRIPTOR,
+      id: "page.click",
+      description: "Click an element by uid",
+      inputSchema: { type: "object", properties: { uid: { type: "string" } } },
+      executionBinding: { family: "page", operation: "click" },
+    };
+
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([failingDescriptor]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "page",
+      invoke: async () => {
+        const error = new Error("request timeout");
+        throw error;
+      },
+    });
+
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      registry,
+      providers,
+    });
+
+    let callCount = 0;
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async () => {
+        callCount += 1;
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_timeout",
+              function: { name: "page_click", arguments: '{"uid":"submit-button"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "tool_calls"),
+          "[DONE]",
+        ]);
+      },
+    };
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Submit the form" },
+    );
+
+    expect(result.terminalStatus).toBe("timeout");
+    expect(callCount).toBe(1);
+  });
+
   it("tracks repeated failures per target instead of aggregating different targets", async () => {
     const failingDescriptor = {
       ...TEST_DESCRIPTOR,
@@ -480,6 +539,101 @@ describe("runLoop", () => {
     );
 
     expect(result.terminalStatus).toBe("stopped");
+  });
+});
+
+describe("buildSystemPromptBase", () => {
+  it("uses actual tool names in guidance", () => {
+    const tools: ToolContract[] = [
+      {
+        name: "page_query",
+        capabilityId: "page.query",
+        description: "q",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        annotations: {
+          risk: "low",
+          sideEffects: "reads",
+          supportsVerify: false,
+          supportsStreaming: false,
+        },
+      },
+      {
+        name: "page_click",
+        capabilityId: "page.click",
+        description: "c",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        annotations: {
+          risk: "medium",
+          sideEffects: "writes",
+          supportsVerify: true,
+          supportsStreaming: false,
+        },
+      },
+      {
+        name: "page_fill",
+        capabilityId: "page.fill",
+        description: "f",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        annotations: {
+          risk: "medium",
+          sideEffects: "writes",
+          supportsVerify: true,
+          supportsStreaming: false,
+        },
+      },
+      {
+        name: "page_press_key",
+        capabilityId: "page.press_key",
+        description: "k",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        annotations: {
+          risk: "medium",
+          sideEffects: "writes",
+          supportsVerify: false,
+          supportsStreaming: false,
+        },
+      },
+      {
+        name: "page_screenshot",
+        capabilityId: "page.screenshot",
+        description: "s",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        annotations: {
+          risk: "low",
+          sideEffects: "reads",
+          supportsVerify: false,
+          supportsStreaming: false,
+        },
+      },
+      {
+        name: "tabs_navigate",
+        capabilityId: "tabs.navigate",
+        description: "n",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        annotations: {
+          risk: "low",
+          sideEffects: "writes",
+          supportsVerify: false,
+          supportsStreaming: false,
+        },
+      },
+    ];
+
+    const prompt = buildSystemPromptBase(tools);
+    expect(prompt).toContain("page_query");
+    expect(prompt).toContain("page_click");
+    expect(prompt).toContain("page_fill");
+    expect(prompt).toContain("page_press_key");
+    expect(prompt).toContain("page_screenshot");
+    expect(prompt).toContain("tabs_navigate");
+    expect(prompt).not.toContain("page.query");
+    expect(prompt).not.toContain("tabs.navigate");
   });
 });
 

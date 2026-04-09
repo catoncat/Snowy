@@ -178,7 +178,7 @@ bun run workflow:claim:json -- --name=<agent-name>
 4. 再执行 claim / preview
 5. 拿到 ticket 后进入对应 issue
 6. 完成后回写 issue
-7. 如有必要再重建 queue
+7. 用 `workflow:done` 收尾并重建 queue
 
 ## 当 Queue 为空时
 
@@ -200,6 +200,21 @@ bun run workflow:claim:json -- --name=<agent-name>
   - 还有什么残留风险或外部 blocker
 - `## 相关 commits` 必须写对应 code commit 的 hash 和 message；不要保留 `未提交`
 - 如果仓库级 `bun run check` 被 write scope 外的并行改动阻塞，可以在 issue 中注明 blocker，但仍要把本 slice 已通过的聚焦检查写清楚
+
+默认用 `workflow:done` 完成收尾；它会：
+
+1. 校验当前 agent 持有的 live lease
+2. 要求至少一个 `--commit`、`--implemented`、`--check`
+3. 回写 issue 为 `done` 并追加 completion sections
+4. 释放 lease
+5. 重建 `docs/workflow/live-queue.json`
+
+命令：
+
+```bash
+BBL_AGENT_NAME=<agent-name> bun run workflow:done -- --commit=HEAD --implemented="..." --check="bun run test -- <target>"
+BBL_AGENT_NAME=<agent-name> bun run workflow:done:json -- --commit=HEAD --implemented="..." --check="bun run test -- <target>"
+```
 
 ## Review Follow-ups
 

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 export type ModuleStage = "mainline" | "secondary" | "deferred";
-export type ModuleStatus = "shipped" | "partial" | "not-started";
+export type ModuleStatus = "shipped" | "partial" | "not-started" | "in-progress";
 
 export interface ModuleRecord {
   module_id: string;
@@ -35,7 +35,9 @@ function isModuleStage(value: unknown): value is ModuleStage {
 }
 
 function isModuleStatus(value: unknown): value is ModuleStatus {
-  return value === "shipped" || value === "partial" || value === "not-started";
+  return (
+    value === "shipped" || value === "partial" || value === "not-started" || value === "in-progress"
+  );
 }
 
 function expectString(value: unknown, field: string): string {

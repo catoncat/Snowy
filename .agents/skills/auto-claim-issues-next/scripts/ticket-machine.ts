@@ -93,6 +93,23 @@ function leaseLockPath(repoRoot: string, opts?: TicketMachineOptions): string {
   return `${leaseStatePath(repoRoot, opts)}.lock`;
 }
 
+function issueFilePath(repoRoot: string, issuePath: string): string {
+  return path.join(repoRoot, issuePath);
+}
+
+function issueFileExists(repoRoot: string, issuePath: string): boolean {
+  try {
+    const stats = statSync(issueFilePath(repoRoot, issuePath));
+    return stats.isFile();
+  } catch {
+    return false;
+  }
+}
+
+function missingIssueFileReason(entry: QueueEntry): string {
+  return `issue ${entry.issue_id} file ${entry.issue_path} is missing; run bun run workflow:queue:build`;
+}
+
 export function loadLiveQueue(repoRoot: string): LiveQueue {
   const raw = JSON.parse(readFileSync(liveQueuePath(repoRoot), "utf8")) as Partial<LiveQueue>;
   if (raw.schema_version !== 1 || !Array.isArray(raw.entries)) {
@@ -183,9 +200,9 @@ function saveLeaseState(repoRoot: string, state: LeaseState, opts?: TicketMachin
   writeFileSync(filePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
-function cleanupLeaseState(queue: LiveQueue, state: LeaseState): boolean {
+function cleanupLeaseState(entries: QueueEntry[], state: LeaseState): boolean {
   let changed = false;
-  const validIssueIds = new Set(queue.entries.map((entry) => entry.issue_id));
+  const validIssueIds = new Set(entries.map((entry) => entry.issue_id));
 
   for (const [sessionId, lease] of Object.entries(state.leases_by_session)) {
     if (!validIssueIds.has(lease.issue_id)) {
@@ -205,8 +222,8 @@ function cleanupLeaseState(queue: LiveQueue, state: LeaseState): boolean {
   return changed;
 }
 
-function entryByIssueId(queue: LiveQueue, issueId: string): QueueEntry | undefined {
-  return queue.entries.find((entry) => entry.issue_id === issueId);
+function entryByIssueId(entries: QueueEntry[], issueId: string): QueueEntry | undefined {
+  return entries.find((entry) => entry.issue_id === issueId);
 }
 
 function sessionLeaseEntry(
@@ -218,7 +235,7 @@ function sessionLeaseEntry(
   if (!lease) {
     return undefined;
   }
-  const entry = entryByIssueId(queue, lease.issue_id);
+  const entry = entryByIssueId(queue.entries, lease.issue_id);
   if (!entry) {
     delete state.leases_by_session[sessionId];
     return undefined;
@@ -312,7 +329,10 @@ export async function takeTicket(args: TakeTicketArgs): Promise<TakeTicketResult
       throw error;
     }
     const state = loadLeaseState(args.repoRoot, args);
-    cleanupLeaseState(queue, state);
+    const entriesWithFiles = queue.entries.filter((entry) =>
+      issueFileExists(args.repoRoot, entry.issue_path),
+    );
+    cleanupLeaseState(entriesWithFiles, state);
 
     const current = sessionLeaseEntry(queue, state, args.sessionId);
     if (current && (!args.issueId || args.issueId === current.entry.issue_id)) {
@@ -326,12 +346,19 @@ export async function takeTicket(args: TakeTicketArgs): Promise<TakeTicketResult
     }
 
     if (args.issueId) {
-      const requested = entryByIssueId(queue, args.issueId);
+      const requested = entryByIssueId(queue.entries, args.issueId);
       if (!requested) {
         saveLeaseState(args.repoRoot, state, args);
         return {
           kind: "queue_empty",
           reason: `issue ${args.issueId} is not present in live queue`,
+        };
+      }
+      if (!issueFileExists(args.repoRoot, requested.issue_path)) {
+        saveLeaseState(args.repoRoot, state, args);
+        return {
+          kind: "queue_empty",
+          reason: missingIssueFileReason(requested),
         };
       }
       const owner = state.leases_by_issue[requested.issue_id];
@@ -355,7 +382,7 @@ export async function takeTicket(args: TakeTicketArgs): Promise<TakeTicketResult
       };
     }
 
-    for (const entry of queue.entries) {
+    for (const entry of entriesWithFiles) {
       if (state.leases_by_issue[entry.issue_id]) {
         continue;
       }
@@ -407,7 +434,10 @@ export function activeLeases(repoRoot: string, opts?: TicketMachineOptions): Tic
   const state = loadLeaseState(repoRoot, opts);
   try {
     const queue = loadLiveQueue(repoRoot);
-    if (cleanupLeaseState(queue, state)) {
+    const entriesWithFiles = queue.entries.filter((entry) =>
+      issueFileExists(repoRoot, entry.issue_path),
+    );
+    if (cleanupLeaseState(entriesWithFiles, state)) {
       saveLeaseState(repoRoot, state, opts);
     }
   } catch {}

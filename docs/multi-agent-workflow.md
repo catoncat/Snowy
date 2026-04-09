@@ -87,6 +87,14 @@
 - live 锁只写入 `~/.codex/workflow-leases/browser-brain-loop-next.json`
 - `status: in-progress` 不再充当 dispatch lock
 
+### Parallel Hygiene Rule
+
+- 默认假设别的 Agent 正在并行开发，不要把陌生改动直接视为错误或自动回滚。
+- worker 默认只对自己 slice / `write_scope` 内的 lint、test、check 结果负责。
+- 若 repo 级 `check_cmd` 被其他活跃 slice 挡住，要在 issue 中记录 blocker，并同时写清自己已通过的聚焦检查。
+- 拆 slice 与 claim 时优先避免共享写域；能拆开的共享文件不要让多个 Agent 同时改。
+- 若必须进入共享代码区，只做最小改动、小步提交，并显式意识到可能存在并行编辑。
+
 ### Hook Rule
 
 - repo-local `UserPromptSubmit` hook 只在显式触发 `$agent-workflow-next` 或 `$auto-claim-issues-next` 时取号
@@ -168,15 +176,25 @@ bun run workflow:queue:build
 2. 读 `acceptance_ref`
 3. 必要时叠加 `worker` stance
 4. 按 TDD 推进
-5. 跑该 issue 的 `check_cmd`
-6. 若触及 public/core surface，执行 Doc Freshness Gate
-7. 按 Definition Of Done 检查是否缺 follow-up issue
-8. 提交代码
-9. 回写 issue：
-   - `status: done`
-   - `## 工作总结`
-   - `## 相关 commits`
-10. 若完成状态影响 dispatch，重建 live queue
+5. 先跑自己 `write_scope` 内的聚焦 lint / test
+6. 再视情况补跑该 issue 的 `check_cmd`
+   - 若被其他活跃 slice 挡住，记录 blocker，不顺手修 unrelated 文件
+7. 若触及 public/core surface，执行 Doc Freshness Gate
+8. 按 Definition Of Done 检查是否缺 follow-up issue
+9. 小步提交、单一目的提交
+10. 用 `workflow:done` 收尾：
+   - 校验当前 lease
+   - 回写 `status: done`
+   - 追加 `## 工作总结`
+   - 追加 `## 相关 commits`
+   - 释放 lease
+   - 重建 live queue
+
+命令：
+
+```bash
+BBL_AGENT_NAME=<agent-name> bun run workflow:done -- --commit=HEAD --implemented="..." --check="bun run test -- <target>"
+```
 
 ## Planning Loop
 
@@ -210,6 +228,8 @@ bun run workflow:plan:json
 
 - 让 hook 直接扫描 backlog、module ledger、review 文档再决定下一步
 - 把 `in-progress` frontmatter 当成真正的分布式锁
+- 因为 repo 级 lint 失败就顺手修其他 Agent 正在做的文件
+- 在共享文件看到陌生 diff 就直接 revert
 - backlog 已变化却不重建 queue
 - queue 为空就直接停工，不进入 planning
 - 把 batch snapshot 当成 live dispatch queue

@@ -1,16 +1,24 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { InMemorySessionStorage } from "@bbl-next/kernel";
 import { describe, expect, it, vi } from "vitest";
 import manifest from "../manifest.json";
-// biome-ignore format: keep ts-ignore attached to single-line JS import
-// @ts-ignore source JS module has no declaration file yet
-import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_DOCUMENT_PATH, RUNNER_OFFSCREEN_REASONS, createBackgroundRunnerBridge, createPageHookBridge } from "../src/background.js";
-// @ts-ignore source JS module has no declaration file yet
+import {
+  RUNNER_BACKGROUND_TARGET,
+  RUNNER_OFFSCREEN_DOCUMENT_PATH,
+  RUNNER_OFFSCREEN_REASONS,
+  createBackgroundRunnerBridge,
+  createPageHookBridge,
+} from "../src/background.js";
 import { createOffscreenRunnerBridge } from "../src/offscreen.js";
-// biome-ignore format: keep ts-ignore attached to single-line JS import
-// @ts-ignore source JS module has no declaration file yet
-import { SIDEPANEL_MANAGEMENT_ACTION_KINDS, SIDEPANEL_MANAGEMENT_RESOURCE_IDS, createBackgroundRuntimeServices, createRemoteExecAdapter, isSidepanelManagementActionKind, isSidepanelManagementResourceId } from "../src/runtime-services.js";
+import {
+  SIDEPANEL_MANAGEMENT_ACTION_KINDS,
+  SIDEPANEL_MANAGEMENT_RESOURCE_IDS,
+  createBackgroundRuntimeServices,
+  createRemoteExecAdapter,
+  isSidepanelManagementActionKind,
+  isSidepanelManagementResourceId,
+} from "../src/runtime-services.js";
 
 type MessageListener = (
   message: unknown,
@@ -118,6 +126,20 @@ function createMessageBus() {
     onMessage,
     sendMessage,
   };
+}
+
+function resolveSourceFixturePath(file: string): URL {
+  const direct = new URL(`../${file}`, import.meta.url);
+  if (existsSync(direct)) {
+    return direct;
+  }
+  if (file.endsWith(".js")) {
+    const tsFallback = new URL(`../${file.slice(0, -3)}.ts`, import.meta.url);
+    if (existsSync(tsFallback)) {
+      return tsFallback;
+    }
+  }
+  return direct;
 }
 
 function cloneValue<T>(value: T): T {
@@ -317,7 +339,7 @@ function createScriptingHarness() {
 
             if (request.files) {
               for (const file of request.files) {
-                const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+                const source = readFileSync(resolveSourceFixturePath(file), "utf8");
                 runInNewContext(source, context, {
                   filename: file,
                 });
@@ -397,13 +419,13 @@ describe("mv3-shell manifest", () => {
   });
 
   it("keeps the offscreen entry free of TypeScript source imports", () => {
-    const source = readFileSync(new URL("../src/offscreen.js", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../src/offscreen.ts", import.meta.url), "utf8");
 
     expect(source).not.toMatch(/\.ts["']/);
   });
 
   it("wires the offscreen entry to the workspace js-runner package", () => {
-    const source = readFileSync(new URL("../src/offscreen.js", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../src/offscreen.ts", import.meta.url), "utf8");
 
     expect(source).toMatch(/@bbl-next\/js-runner/);
     expect(source).not.toMatch(/\.\/runner-host-core\.js/);
@@ -2864,6 +2886,68 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("background bridge routes exec through remote adapter when configured", async () => {
+    const harness = createChromeHarness({});
+    const sendRemoteExec = vi.fn(
+      async (request: { hostId: string; command: string; timeoutMs?: number }) => ({
+        hostId: request.hostId,
+        command: request.command,
+        exitCode: 0,
+        stdout: `remote:${request.command}`,
+        stderr: "",
+      }),
+    );
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      sendRemoteExec,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.set_default",
+        hostId: "local",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "local",
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.exec",
+        command: "pwd",
+        timeoutMs: 123,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "local",
+        command: "pwd",
+        exitCode: 0,
+        stdout: "remote:pwd",
+        stderr: "",
+      },
+    });
+
+    expect(sendRemoteExec).toHaveBeenCalledTimes(1);
+    expect(sendRemoteExec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: "local",
+        command: "pwd",
+        timeoutMs: 123,
+      }),
+    );
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("offscreen bridge with remote exec adapter routes exec to remote and read/write/edit to local", async () => {
     const messageBus = createMessageBus();
     const runtimeApi = {
@@ -2946,6 +3030,31 @@ describe("mv3-shell manifest", () => {
       ok: false,
       error: {
         code: "E_RUNTIME",
+        message: "bridge unreachable",
+        details: { kind: "exec", hostId: "remote", reason: "remote_exec_failed" },
+      },
+    });
+  });
+
+  it("createRemoteExecAdapter wraps synchronous throws into structured host error responses", async () => {
+    const adapter = createRemoteExecAdapter(() => {
+      const error = new Error("bridge unreachable");
+      // @ts-expect-error test-only code field
+      error.code = "E_REMOTE";
+      throw error;
+    });
+
+    await expect(
+      adapter.exec({
+        kind: "exec",
+        requestId: "x-sync",
+        hostId: "remote",
+        command: "pwd",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_REMOTE",
         message: "bridge unreachable",
         details: { kind: "exec", hostId: "remote", reason: "remote_exec_failed" },
       },

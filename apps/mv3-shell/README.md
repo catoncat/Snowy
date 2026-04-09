@@ -15,12 +15,12 @@ Build output is emitted to `apps/mv3-shell/dist/` and is the directory intended 
 ```
 dist/               Built extension payload
 src/
-  background.js    Background worker — composition root + message routing
+  background.ts    Background worker — composition root + message routing
   offscreen.html   Offscreen document container
-  offscreen.js     Runner host / offscreen entry
-  page-hook.js     MAIN world injection script (single-file)
+  offscreen.ts     Runner host / offscreen entry
+  page-hook.ts     MAIN world injection script (single-file)
 manifest.json      Chrome MV3 manifest
-vite.config.js     Extension packaging config
+vite.config.ts     Extension packaging config
 ```
 
 ## Key Exports

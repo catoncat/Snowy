@@ -261,18 +261,11 @@ describe("contracts", () => {
       primitive: "resource",
       generatedAt: "2026-03-30T00:00:04.000Z",
       data: {
-        status: "ready" as const,
-        total: 1,
-        enabled: 1,
-        installed: 1,
-        items: [
-          {
-            skillId: "skill.test",
-            name: "Test skill",
-            status: "enabled" as const,
-            trusted: true,
-          },
-        ],
+        status: "healthy" as const,
+        installedCount: 1,
+        enabledCount: 1,
+        trustedCount: 1,
+        recentChange: "skills.enable",
       },
     } satisfies SkillsSummaryResource;
 
@@ -281,17 +274,17 @@ describe("contracts", () => {
       primitive: "resource",
       generatedAt: "2026-03-30T00:00:05.000Z",
       data: {
-        status: "ready" as const,
+        status: "healthy" as const,
         defaultHostId: "local",
         connectedCount: 1,
-        total: 1,
+        totalCount: 1,
         items: [
           {
             hostId: "local",
             kind: "local" as const,
             connected: true,
             isDefault: true,
-            health: "healthy" as const,
+            state: "connected" as const,
           },
         ],
       },
@@ -306,13 +299,17 @@ describe("contracts", () => {
         totalCount: 1,
         entries: [
           {
+            eventId: "evt-1",
             timestamp: "2026-03-30T00:00:06.000Z",
             sessionId: "session-1",
-            kind: "intervention.requested",
             interventionId: "int-1",
-            requestId: "req-1",
-            reason: "verification_failed",
-            status: "pending",
+            kind: "confirm",
+            trigger: "verify_failed",
+            status: "requested",
+            details: {
+              requestId: "req-1",
+              reason: "verification_failed",
+            },
           },
         ],
       },

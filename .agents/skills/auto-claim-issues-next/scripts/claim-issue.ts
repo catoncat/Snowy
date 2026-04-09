@@ -283,7 +283,7 @@ export function loadIssueFile(filePath: string): IssueFile {
   };
 }
 
-function writeIssueFile(issue: IssueFile): void {
+export function writeIssueFile(issue: IssueFile): void {
   const next = `${serializeFrontmatter(issue.frontmatter)}\n${issue.body.replace(/^\n*/, "")}`;
   writeFileSync(issue.path, next, "utf8");
 }

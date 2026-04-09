@@ -3,22 +3,20 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
-import { defineConfig } from "vite";
 
 const appRoot = fileURLToPath(new URL(".", import.meta.url));
 const staticFiles = [
   ["manifest.json", "manifest.json"],
   ["src/offscreen.html", "src/offscreen.html"],
-  ["src/page-hook.js", "src/page-hook.js"],
-];
+] as const;
 
 function copyStaticExtensionFiles() {
   let outDir = resolve(appRoot, "dist");
 
   return {
     name: "copy-static-extension-files",
-    apply: "build",
-    configResolved(config) {
+    apply: "build" as const,
+    configResolved(config: { root: string; build: { outDir: string } }) {
       outDir = resolve(config.root, config.build.outDir);
     },
     closeBundle() {
@@ -32,7 +30,7 @@ function copyStaticExtensionFiles() {
   };
 }
 
-export default defineConfig({
+const viteConfig = {
   base: "./",
   root: appRoot,
   plugins: [tailwindcss(), vue(), copyStaticExtensionFiles()],
@@ -42,8 +40,9 @@ export default defineConfig({
     target: "chrome116",
     rollupOptions: {
       input: {
-        background: resolve(appRoot, "src/background.js"),
-        offscreen: resolve(appRoot, "src/offscreen.js"),
+        background: resolve(appRoot, "src/background.ts"),
+        offscreen: resolve(appRoot, "src/offscreen.ts"),
+        "page-hook": resolve(appRoot, "src/page-hook.ts"),
         sidepanel: resolve(appRoot, "src/sidepanel.html"),
       },
       output: {
@@ -53,4 +52,6 @@ export default defineConfig({
       },
     },
   },
-});
+};
+
+export default viteConfig;

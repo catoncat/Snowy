@@ -67,13 +67,15 @@ completed_at: 2026-04-08T16:01:14.950Z
 ### 实现了什么
 
 - 锁定 sidepanel management 只能消费 shared AI-surface resources/actions 的边界与测试入口。
+- 把 shared control-plane contract 抽到 `apps/mv3-shell/src/sidepanel-management-contract.js`，补上 `isSidepanelManagementResourceId()` / `isSidepanelManagementActionKind()` guard helpers，并由 `runtime-services.js` re-export、`sidepanel/management.ts` 直接复用。
 - 把 Soft Gate 1 明确为 cutover 后补，并同步到 cutover/parity/migration docs。
-- 新增 follow-up `ISSUE-093` 承接真正的 sidepanel management UI 实现。
+- 新增 follow-up `ISSUE-093` 承接真正的 sidepanel management UI 实现；当前完成的是 contract/boundary lock，不是 management UI 本体。
 
 ### 实际跑了什么检查
 
-- `bun run test -- apps/mv3-shell/test/manifest.spec.ts --testNamePattern='locks sidepanel management to shared AI-surface resources and control-plane actions'`
-- `./node_modules/.bin/biome check apps/mv3-shell/src/runtime-services.js apps/mv3-shell/test/manifest.spec.ts`
+- `bun test apps/mv3-shell/test/manifest.spec.ts --test-name-pattern 'guard helpers|sidepanel management'`
+- `bun test apps/mv3-shell/test/sidepanel-management.spec.ts`
+- `./node_modules/.bin/biome check --write apps/mv3-shell/src/runtime-services.js apps/mv3-shell/src/sidepanel-management-contract.js apps/mv3-shell/src/sidepanel/management.ts apps/mv3-shell/test/manifest.spec.ts apps/mv3-shell/test/sidepanel-management.spec.ts`
 
 ### 残留风险
 

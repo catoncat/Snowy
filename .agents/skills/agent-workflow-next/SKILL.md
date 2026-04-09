@@ -114,6 +114,13 @@ bun run workflow:queue:build
 - `docs/backlog/*.md` 是 issue registry，不再直接等于 live queue
 - `in-progress` frontmatter 不再充当 dispatch lock
 
+## 并行开发补充规则
+
+- 默认假设其他 Agent 也在并行改动；看到陌生 diff 先判断是不是并行工作，不要直接回滚。
+- 实现 issue 时，先跑自己 `write_scope` 内的聚焦 lint / test；repo 级 `check_cmd` 若被别的活跃 slice 阻塞，要记录 blocker，不顺手修 unrelated 文件。
+- 提交要小步、单一目的，减少共享文件冲突。
+- 拆 slice / claim / 实现时都优先避开共享写域；若必须进入共享区域，只做最小改动并明确风险。
+
 ## Helper Commands
 
 ```bash
@@ -135,6 +142,7 @@ bun run workflow:plan:json
 - 若进入 issue 实现：
   - 最终要提交代码
   - 若触及 public/core surface，先执行 Doc Freshness Gate
+  - 先给出自己 slice 的聚焦验证结果；repo 级 gate 若被并行改动阻塞，要显式记录
   - 用 Definition Of Done 判断是否需要 follow-up issue
   - 回写 `status: done`
   - 追加 `## 工作总结`

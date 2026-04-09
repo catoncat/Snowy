@@ -22,6 +22,8 @@
     "workflow:claim": "bun .agents/skills/auto-claim-issues-next/scripts/claim-issue.ts",
     "workflow:claim:preview": "bun .agents/skills/auto-claim-issues-next/scripts/claim-issue.ts --dry-run",
     "workflow:claim:json": "bun .agents/skills/auto-claim-issues-next/scripts/claim-issue.ts --json",
+    "workflow:done": "bun .agents/skills/auto-claim-issues-next/scripts/complete-issue.ts",
+    "workflow:done:json": "bun .agents/skills/auto-claim-issues-next/scripts/complete-issue.ts --json",
     "workflow:queue:build": "bun .agents/skills/auto-claim-issues-next/scripts/build-live-queue.ts",
     "workflow:queue:preview": "bun .agents/skills/auto-claim-issues-next/scripts/build-live-queue.ts --dry-run",
     "workflow:queue:json": "bun .agents/skills/auto-claim-issues-next/scripts/build-live-queue.ts --json",

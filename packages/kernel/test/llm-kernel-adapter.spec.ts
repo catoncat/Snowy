@@ -95,6 +95,64 @@ describe("createKernelLlmFromProvider", () => {
     expect(body.max_tokens).toBe(100);
   });
 
+  it("still enforces route timeout when caller passes a signal", async () => {
+    vi.useFakeTimers();
+    try {
+      const registry = new LlmProviderRegistry();
+      registry.register({
+        id: "slow_provider",
+        resolveRequestUrl() {
+          return "https://slow.example.test/chat/completions";
+        },
+        async send({ signal }) {
+          return await new Promise<Response>((_resolve, reject) => {
+            signal.addEventListener("abort", () => reject(signal.reason ?? new Error("aborted")), {
+              once: true,
+            });
+          });
+        },
+      });
+
+      const adapter = createKernelLlmFromProvider(
+        registry,
+        {
+          profiles: [
+            {
+              id: "default",
+              providerId: "slow_provider",
+              llmBase: "https://slow.example.test",
+              llmKey: "sk-test",
+              llmModel: "gpt-4",
+              llmTimeoutMs: 1000,
+            },
+          ],
+          defaultProfile: "default",
+        },
+        "default",
+      );
+
+      const controller = new AbortController();
+      const completion = adapter
+        .complete({
+          systemPrompt: "",
+          messages: [],
+          signal: controller.signal,
+        })
+        .then(
+          () => ({ ok: true as const }),
+          (error) => error,
+        );
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      const result = await completion;
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).name).toBe("TimeoutError");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("throws when profile not found", async () => {
     const registry = new LlmProviderRegistry();
     registry.register(createOpenAiCompatibleProvider());

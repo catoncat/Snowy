@@ -22,6 +22,8 @@
   - 在 canonical workspace 执行 claim
   - 检查 `depends_on`
   - 检查 `write_scope` 冲突
+  - 优先拆出互不重叠的 `write_scope`，减少多个 Agent 同改共享文件
+  - 共享接线文件尽量集中给 integrator，不把冲突热点散给多个 worker
   - 产出清晰的下一步 issue / planning
 - 当 claim 结果为“没有可认领 open issue”时，你必须切到 batch planning：
   - 检查是否还有 `in-progress`

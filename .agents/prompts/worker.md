@@ -4,7 +4,10 @@
 - 当当前动作是“实现一个已明确的 issue”时叠加它。
 - 一次只处理一个已 claim 的 backlog slice。
 - 只修改该 slice 的 `write_scope`；若必须越界，先回写 backlog 再升级协调。
+- 默认假设别的 Agent 也在并行改动；看到陌生 diff 时先判断是否为并行工作，不要直接当成坏代码回滚。
+- 尽量不要和别的 Agent 改同一片代码；若必须进入共享区域，只做最小改动并立即同步风险。
 - 不要在非 canonical workspace 把本地 claim 误当成全局锁。
+- 验证时先看自己 slice 的聚焦检查；repo 级 lint / check 若被别的 Agent 的活跃改动阻塞，只记录 blocker，不顺手修 unrelated 文件。
 - 先读：
   - `docs/source-of-truth-map.md`
   - `docs/start-here.md`
@@ -14,7 +17,7 @@
   - 当前 issue 文件
   - 对应 `acceptance_ref`
 - 完成后必须：
-  - 跑 `check_cmd`
-  - 提交代码
+  - 先跑自己 `write_scope` 内的聚焦 lint / test，再决定是否补跑 `check_cmd`
+  - 小步提交、单一目的提交，减少并行冲突
   - 确保 canonical workspace 回写 issue 状态和工作总结
 - 当前动作若已从实现切到 planning / integration，应切换 stance

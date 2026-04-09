@@ -5,17 +5,30 @@
  * exec is not supported in the browser-only local adapter.
  */
 
-function hostAdapterError(code, message, details) {
+import type { CapabilityErrorCode } from "@bbl-next/contracts";
+import type {
+  RunnerHostAdapter,
+  RunnerHostEditRequest,
+  RunnerHostErrorResponse,
+  RunnerHostReadRequest,
+  RunnerHostWriteRequest,
+} from "@bbl-next/js-runner";
+
+function hostAdapterError(
+  code: CapabilityErrorCode,
+  message: string,
+  details: Record<string, unknown>,
+): RunnerHostErrorResponse {
   return {
     ok: false,
     error: { code, message, details },
   };
 }
 
-export function createLocalHostAdapter() {
-  const files = new Map();
+export function createLocalHostAdapter(): RunnerHostAdapter {
+  const files = new Map<string, string>();
 
-  function read(request) {
+  function read(request: RunnerHostReadRequest) {
     const content = files.get(request.path) ?? null;
     return {
       hostId: request.hostId,
@@ -24,7 +37,7 @@ export function createLocalHostAdapter() {
     };
   }
 
-  function write(request) {
+  function write(request: RunnerHostWriteRequest) {
     if (typeof request.path !== "string" || !request.path) {
       return hostAdapterError("E_BAD_INPUT", "write requires a non-empty path", {
         kind: "write",
@@ -41,7 +54,7 @@ export function createLocalHostAdapter() {
     };
   }
 
-  function edit(request) {
+  function edit(request: RunnerHostEditRequest) {
     if (typeof request.path !== "string" || !request.path) {
       return hostAdapterError("E_BAD_INPUT", "edit requires a non-empty path", {
         kind: "edit",

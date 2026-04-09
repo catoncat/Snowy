@@ -43,16 +43,19 @@ check_cmd: "bun run check"
 ## 工作总结
 
 ### 实现了什么
-- 在 `packages/kernel/src/loop-orchestrator.ts` 里按 capability+target 统计失败次数；同一 target 连续失败达到 2 次后继续 loop，并把 strategy hint 注入下一轮 progress system message。
+- 在 `packages/kernel/src/loop-orchestrator.ts` 里按 capability+target 统计失败次数，并把重复失败的 strategy hint 注入下一轮 progress system message。
+- 把 failure tracking 与 loop terminal policy 解耦：只有明确可恢复的 action execution failure 才允许继续换策略；`timeout` 仍保持 terminal。
 - 在 `packages/kernel/src/prompt-builder.ts` 增加 repeated action failure hint 格式化与 prompt section。
-- 在 `packages/kernel/test/prompt-builder.spec.ts`、`packages/kernel/test/loop-orchestrator.spec.ts` 增加回归测试，覆盖重复失败提示与不同 target 不串算。
+- 在 `packages/kernel/test/prompt-builder.spec.ts`、`packages/kernel/test/loop-orchestrator.spec.ts` 增加回归测试，覆盖重复失败提示、不同 target 不串算、以及 timeout 仍为 terminal。
 
 ### 实际跑了什么检查
-- `bun run test -- packages/kernel/test/prompt-builder.spec.ts packages/kernel/test/loop-orchestrator.spec.ts`
-- `./node_modules/.bin/biome check packages/kernel/src/prompt-builder.ts packages/kernel/src/loop-orchestrator.ts packages/kernel/test/prompt-builder.spec.ts`
+- `bun test packages/kernel/test/loop-orchestrator.spec.ts --test-name-pattern 'timeout failures terminal|strategy hints|different target'`
+- `bun test packages/kernel/test/prompt-builder.spec.ts`
+- `./node_modules/.bin/biome check packages/kernel/src/prompt-builder.ts packages/kernel/src/loop-orchestrator.ts packages/kernel/test/prompt-builder.spec.ts packages/kernel/test/loop-orchestrator.spec.ts`
 
 ### 残留风险
-- 实现已落在共享提交 `5b7dcf105116` 中；本次收尾只补 workflow/document closure，未重跑全仓 `bun run check`。
+- 当前恢复策略仍按 capability 前缀白名单判断“是否允许失败后继续”，后续若 action taxonomy 扩展，需要把这层 policy 收进更稳定的 contract。
+- 本次聚焦验证通过；未在并行工作树上重跑全仓 `bun run check`。
 
 ## 相关 commits
 

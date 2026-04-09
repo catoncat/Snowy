@@ -1,5 +1,6 @@
+// @ts-nocheck
 import { createCompositeHostAdapter, createRunnerHostCore } from "@bbl-next/js-runner";
-import { RUNNER_OFFSCREEN_TARGET } from "./background.js";
+import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_TARGET } from "./background.js";
 import { createLocalHostAdapter } from "./local-host-adapter.js";
 
 function toBridgeError(error, fallbackCode = "E_RUNTIME") {
@@ -23,18 +24,81 @@ function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   };
 }
 
+function createOperationNotSupportedError(request) {
+  return {
+    ok: false,
+    error: {
+      code: "E_CAPABILITY_NOT_FOUND",
+      message: "Execution host adapter does not implement exec",
+      details: {
+        kind: "exec",
+        hostId: request.hostId ?? null,
+        reason: "operation_not_supported",
+      },
+    },
+  };
+}
+
+function createBackgroundRemoteExecAdapter({ runtimeApi, target = RUNNER_BACKGROUND_TARGET } = {}) {
+  return {
+    async exec(request) {
+      if (!runtimeApi?.sendMessage) {
+        return createOperationNotSupportedError(request);
+      }
+      try {
+        const response = await runtimeApi.sendMessage({
+          target,
+          kind: "runner.remote_exec",
+          requestId: request.requestId,
+          hostId: request.hostId,
+          command: request.command,
+          timeoutMs: request.timeoutMs,
+        });
+        if (response?.ok === true) {
+          return response.data;
+        }
+        return (
+          response ?? {
+            ok: false,
+            error: {
+              code: "E_RUNTIME",
+              message: "Remote exec bridge unavailable",
+              details: {
+                kind: "exec",
+                hostId: request.hostId ?? null,
+                reason: "remote_exec_failed",
+              },
+            },
+          }
+        );
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            ...toBridgeError(error),
+            details: {
+              kind: "exec",
+              hostId: request.hostId ?? null,
+              reason: "remote_exec_failed",
+            },
+          },
+        };
+      }
+    },
+  };
+}
+
 export function createOffscreenRunnerBridge({
   runtimeApi = globalThis.chrome?.runtime,
   remoteHostAdapter,
   createHost = () => {
     const local = createLocalHostAdapter();
-    const hostAdapter = remoteHostAdapter
-      ? createCompositeHostAdapter({ local, remote: remoteHostAdapter })
-      : local;
+    const remote = remoteHostAdapter ?? createBackgroundRemoteExecAdapter({ runtimeApi });
+    const hostAdapter = createCompositeHostAdapter({ local, remote });
     return createRunnerHostCore({ hostAdapter });
   },
   target = RUNNER_OFFSCREEN_TARGET,
-} = {}) {
+}: any = {}): any {
   const host = createHost();
 
   async function dispatchHostOperation(kind, message) {
@@ -160,7 +224,7 @@ export function createOffscreenRunnerBridge({
   };
 }
 
-export function startOffscreenRunnerBridge(options = {}) {
+export function startOffscreenRunnerBridge(options: any = {}): any {
   const runtimeApi = options.runtimeApi ?? globalThis.chrome?.runtime;
   if (!runtimeApi?.onMessage?.addListener) {
     return null;

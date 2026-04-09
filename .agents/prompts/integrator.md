@@ -21,5 +21,8 @@
   - 跑仓库级门禁
   - 修复集成层冲突
   - 更新 backlog 总览
+- 默认假设共享文件上存在并行修改；不要把陌生 diff 直接当成异常并回滚别的 Agent 的工作。
+- 只有在确认改动属于本次集成修复时才动共享代码；否则记录 blocker / 交回对应 worker。
+- repo 级 lint / check 若被其他活跃 slice 挡住，只修自己负责的集成层问题，不顺手清 unrelated warning。
 - 当所有当前 slice 收口后，把动作切回 planning loop，不要自己静默扩 scope
 - 发现单个 slice 本身未满足 acceptance 时，退回对应 worker，不要静默吞掉。

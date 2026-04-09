@@ -3,6 +3,35 @@ import { resolveLlmRoute } from "./llm-profile-resolver.js";
 import type { LlmProviderRegistry } from "./llm-provider-registry.js";
 import { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
 
+function withTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    if (!controller.signal.aborted) {
+      controller.abort(new DOMException("The operation timed out.", "TimeoutError"));
+    }
+  }, timeoutMs);
+
+  const clear = () => clearTimeout(timeoutId);
+  controller.signal.addEventListener("abort", clear, { once: true });
+
+  if (!signal) {
+    return controller.signal;
+  }
+
+  if (signal.aborted) {
+    controller.abort(signal.reason);
+    return controller.signal;
+  }
+
+  const onAbort = () => controller.abort(signal.reason);
+  signal.addEventListener("abort", onAbort, { once: true });
+  controller.signal.addEventListener("abort", () => signal.removeEventListener("abort", onAbort), {
+    once: true,
+  });
+
+  return controller.signal;
+}
+
 /**
  * Bridge the provider/profile layer into the kernel's KernelLlmAdapter interface.
  *
@@ -40,7 +69,7 @@ export function createKernelLlmFromProvider(
           stream: true,
           ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
         },
-        signal: signal ?? AbortSignal.timeout(route.llmTimeoutMs),
+        signal: withTimeout(signal, route.llmTimeoutMs),
       });
 
       if (!response.ok) {
