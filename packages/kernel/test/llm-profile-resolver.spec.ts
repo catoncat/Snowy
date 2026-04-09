@@ -1,5 +1,5 @@
-import type { LlmProfileConfig } from "@bbl-next/contracts";
-import { resolveLlmRoute } from "@bbl-next/kernel";
+import type { LlmProfileConfig, LlmProviderAdapter } from "@bbl-next/contracts";
+import { LlmProviderRegistry, resolveLlmRoute } from "@bbl-next/kernel";
 import { describe, expect, it } from "vitest";
 
 function makeConfig(overrides: Partial<LlmProfileConfig> = {}): LlmProfileConfig {
@@ -16,6 +16,31 @@ function makeConfig(overrides: Partial<LlmProfileConfig> = {}): LlmProfileConfig
     defaultProfile: "default",
     ...overrides,
   };
+}
+
+function stubProvider(id: string): LlmProviderAdapter {
+  return {
+    id,
+    resolveRequestUrl: () => `https://stub/${id}`,
+    send: async () => new Response("ok"),
+  };
+}
+
+function makeRegistry(
+  entries: Array<{
+    id: string;
+    healthStatus?: "healthy" | "degraded" | "down";
+    capabilities?: string[];
+  }>,
+): LlmProviderRegistry {
+  const registry = new LlmProviderRegistry();
+  for (const entry of entries) {
+    registry.register(stubProvider(entry.id), {
+      healthStatus: entry.healthStatus,
+      capabilities: entry.capabilities,
+    });
+  }
+  return registry;
 }
 
 describe("resolveLlmRoute", () => {
@@ -226,5 +251,97 @@ describe("resolveLlmRoute", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.route.role).toBe("worker");
+  });
+
+  it("skips down providers and resolves the next eligible fallback profile", () => {
+    const config = makeConfig({
+      profiles: [
+        {
+          id: "default",
+          providerId: "primary_provider",
+          llmBase: "https://primary.example/v1",
+          llmKey: "sk-primary",
+          llmModel: "gpt-4.1-mini",
+        },
+        {
+          id: "fallback",
+          providerId: "fallback_provider",
+          llmBase: "https://fallback.example/v1",
+          llmKey: "sk-fallback",
+          llmModel: "gpt-4.1",
+        },
+      ],
+      fallbackProfile: "fallback",
+    });
+    const registry = makeRegistry([
+      { id: "primary_provider", healthStatus: "down", capabilities: ["chat"] },
+      { id: "fallback_provider", healthStatus: "healthy", capabilities: ["chat"] },
+    ]);
+
+    const result = resolveLlmRoute(config, undefined, "worker", {
+      providerRegistry: registry,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.route.profile).toBe("fallback");
+    expect(result.route.provider).toBe("fallback_provider");
+    expect(result.route.orderedProfiles).toEqual(["default", "fallback"]);
+  });
+
+  it("rejects routes when required capabilities are unavailable", () => {
+    const registry = makeRegistry([
+      { id: "openai_compatible", healthStatus: "healthy", capabilities: ["chat"] },
+    ]);
+
+    const result = resolveLlmRoute(makeConfig(), undefined, "worker", {
+      providerRegistry: registry,
+      requiredCapabilities: ["vision"],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("profile_not_found");
+    expect(result.message).toContain("required capabilities");
+  });
+
+  it("selects the first fallback provider that satisfies required capabilities", () => {
+    const config = makeConfig({
+      profiles: [
+        {
+          id: "default",
+          providerId: "primary_provider",
+          llmBase: "https://primary.example/v1",
+          llmKey: "sk-primary",
+          llmModel: "gpt-4.1-mini",
+        },
+        {
+          id: "fallback",
+          providerId: "fallback_provider",
+          llmBase: "https://fallback.example/v1",
+          llmKey: "sk-fallback",
+          llmModel: "gpt-4.1",
+        },
+      ],
+      fallbackProfile: "fallback",
+    });
+    const registry = makeRegistry([
+      { id: "primary_provider", healthStatus: "healthy", capabilities: ["chat"] },
+      {
+        id: "fallback_provider",
+        healthStatus: "healthy",
+        capabilities: ["chat", "vision"],
+      },
+    ]);
+
+    const result = resolveLlmRoute(config, undefined, "worker", {
+      providerRegistry: registry,
+      requiredCapabilities: ["vision"],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.route.profile).toBe("fallback");
+    expect(result.route.provider).toBe("fallback_provider");
   });
 });

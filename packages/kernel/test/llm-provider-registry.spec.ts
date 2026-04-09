@@ -25,11 +25,46 @@ describe("LlmProviderRegistry", () => {
     expect(registry.get("openai")).toBe(p);
   });
 
-  it("lists registered providers", () => {
-    registry.register(stubProvider("a"));
-    registry.register(stubProvider("b"));
+  it("stores provider health status and capability declarations", () => {
+    registry.register(stubProvider("openai"), {
+      healthStatus: "degraded",
+      capabilities: ["chat", "vision", "chat"],
+    });
 
-    expect(registry.list()).toEqual([{ id: "a" }, { id: "b" }]);
+    expect(registry.getState("openai")).toEqual({
+      healthStatus: "degraded",
+      capabilities: ["chat", "vision"],
+    });
+  });
+
+  it("updates provider runtime state without replacing the provider", () => {
+    const provider = stubProvider("openai");
+    registry.register(provider, {
+      healthStatus: "healthy",
+      capabilities: ["chat"],
+    });
+
+    registry.setHealthStatus("openai", "down");
+    registry.setCapabilities("openai", ["vision"]);
+
+    expect(registry.get("openai")).toBe(provider);
+    expect(registry.getState("openai")).toEqual({
+      healthStatus: "down",
+      capabilities: ["vision"],
+    });
+  });
+
+  it("lists registered providers with their negotiation state", () => {
+    registry.register(stubProvider("a"), { capabilities: ["chat"] });
+    registry.register(stubProvider("b"), {
+      healthStatus: "degraded",
+      capabilities: ["vision"],
+    });
+
+    expect(registry.list()).toEqual([
+      { id: "a", healthStatus: "healthy", capabilities: ["chat"] },
+      { id: "b", healthStatus: "degraded", capabilities: ["vision"] },
+    ]);
   });
 
   it("throws on duplicate registration without replace", () => {
@@ -41,11 +76,22 @@ describe("LlmProviderRegistry", () => {
   });
 
   it("allows replacing a provider with replace option", () => {
-    registry.register(stubProvider("openai"));
+    registry.register(stubProvider("openai"), {
+      healthStatus: "degraded",
+      capabilities: ["chat"],
+    });
     const replacement = stubProvider("openai");
-    registry.register(replacement, { replace: true });
+    registry.register(replacement, {
+      replace: true,
+      healthStatus: "healthy",
+      capabilities: ["chat", "vision"],
+    });
 
     expect(registry.get("openai")).toBe(replacement);
+    expect(registry.getState("openai")).toEqual({
+      healthStatus: "healthy",
+      capabilities: ["chat", "vision"],
+    });
   });
 
   it("throws on empty id", () => {
@@ -64,6 +110,7 @@ describe("LlmProviderRegistry", () => {
     expect(registry.unregister("openai")).toBe(true);
     expect(registry.has("openai")).toBe(false);
     expect(registry.get("openai")).toBeUndefined();
+    expect(registry.getState("openai")).toBeUndefined();
   });
 
   it("unregister returns false for unknown id", () => {
