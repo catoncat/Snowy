@@ -1,6 +1,52 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T01:37:12.791Z",
+  "generated_at": "2026-04-09T01:58:08.160Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": []
+  "entries": [
+    {
+      "issue_id": "ISSUE-094",
+      "issue_path": "docs/backlog/2026-04-09-kernel-facade-loop-introspection.md",
+      "title": "Expose loop introspection methods on Kernel facade",
+      "parallel_group": "kernel",
+      "module_id": "kernel",
+      "module_stage": "mainline",
+      "tracking_kind": "gap",
+      "check_cmd": "bunx vitest run packages/kernel/test/kernel-facade.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "packages/kernel/src/kernel-facade.ts",
+        "packages/kernel/test/kernel-facade.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-096",
+      "issue_path": "docs/backlog/2026-04-09-session-entry-payload-types.md",
+      "title": "Add typed interfaces for all SessionEntry payload kinds",
+      "parallel_group": "contracts-core",
+      "module_id": "kernel",
+      "module_stage": "mainline",
+      "tracking_kind": "gap",
+      "check_cmd": "bunx vitest run packages/contracts/test/contracts.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/test/contracts.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-098",
+      "issue_path": "docs/backlog/2026-04-09-e2e-verify-intervention-cycle.md",
+      "title": "End-to-end test: verify → intervention → resolution cycle",
+      "parallel_group": "site-runtime",
+      "module_id": "intervention-handoff",
+      "module_stage": "mainline",
+      "tracking_kind": "gap",
+      "check_cmd": "bunx vitest run apps/mv3-shell/test/runtime-chat.spec.ts packages/kernel/test/loop-orchestrator.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "apps/mv3-shell/test/runtime-chat.spec.ts",
+        "packages/kernel/test/loop-orchestrator.spec.ts"
+      ]
+    }
+  ]
 }
