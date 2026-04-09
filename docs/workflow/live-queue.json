@@ -1,25 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T11:21:26.819Z",
+  "generated_at": "2026-04-09T11:29:50.761Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-106",
-      "issue_path": "docs/backlog/2026-04-09-config-control-plane-persistence.md",
-      "title": "Generic config control plane 持久化对齐",
-      "parallel_group": "contracts-core",
-      "module_id": "ai-surface-control-plane",
-      "module_stage": "secondary",
-      "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "packages/core/src/index.ts",
-        "packages/core/test/core.spec.ts",
-        "apps/mv3-shell/src/runtime-services.ts",
-        "apps/mv3-shell/test/runtime-chat.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-110",
       "issue_path": "docs/backlog/2026-04-09-background-automation-mode.md",
