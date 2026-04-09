@@ -1,23 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T11:29:50.761Z",
+  "generated_at": "2026-04-09T11:36:11.955Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-110",
-      "issue_path": "docs/backlog/2026-04-09-background-automation-mode.md",
-      "title": "Background automation lane 基础设施",
-      "parallel_group": "site-runtime",
-      "module_id": "site-runtime-browser-automation",
+      "issue_id": "ISSUE-108",
+      "issue_path": "docs/backlog/2026-04-09-js-runner-execution-engine.md",
+      "title": "JS Runner offscreen 集成与隔离加固",
+      "parallel_group": "js-runner",
+      "module_id": "execution-host-bridge",
       "module_stage": "secondary",
       "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run packages/site-runtime/test/site-runtime.spec.ts apps/mv3-shell/test/manifest.spec.ts",
-      "depends_on": ["ISSUE-112"],
+      "check_cmd": "bunx vitest run packages/js-runner/test/js-runner.spec.ts apps/mv3-shell/test/manifest.spec.ts",
+      "depends_on": [],
       "write_scope": [
-        "packages/site-runtime/src/index.ts",
-        "packages/site-runtime/test/site-runtime.spec.ts",
-        "apps/mv3-shell/src/background.ts",
-        "apps/mv3-shell/src/page-hook.ts",
+        "packages/js-runner/src/runner-host-core.ts",
+        "packages/js-runner/test/js-runner.spec.ts",
+        "apps/mv3-shell/src/offscreen.ts",
         "apps/mv3-shell/test/manifest.spec.ts"
       ]
     },

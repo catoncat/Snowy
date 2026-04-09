@@ -1,12 +1,15 @@
 ---
 id: ISSUE-110
-title: Background automation lane 基础设施
-status: open
+title: "Background automation lane 基础设施"
+status: done
 priority: p2
-source: next-batch-planner review 2026-04-09
+source: "next-batch-planner review 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
-tags: [site-runtime, automation, background]
+assignee: codex-019d70f6
+tags:
+  - site-runtime
+  - automation
+  - background
 kind: slice
 epic: EPIC-browser-automation
 parallel_group: site-runtime
@@ -23,6 +26,7 @@ write_scope:
   - apps/mv3-shell/test/manifest.spec.ts
 acceptance_ref: docs/reviews/2026-03-29-vnext-architecture-recovery-report.md
 check_cmd: "bunx vitest run packages/site-runtime/test/site-runtime.spec.ts apps/mv3-shell/test/manifest.spec.ts"
+completed_at: 2026-04-09T11:36:11.934Z
 ---
 
 ## Goal
@@ -39,3 +43,21 @@ check_cmd: "bunx vitest run packages/site-runtime/test/site-runtime.spec.ts apps
 - [ ] page-hook 能在 background lane 下完成 install / invoke，且不破坏现有 active-tab path
 - [ ] site-runtime 保持现有 active-tab 行为，同时新增 background lane 的独立 dispatch seam
 - [ ] background lane 支持 cleanup / teardown 策略，并有测试覆盖创建、路由与收尾
+
+## 工作总结
+
+### 实现了什么
+- 为 site-runtime 增加 explicit background lane dispatch seam
+- 让 background bridge 能显式创建 background tab、执行 page-hook invoke 并按策略 teardown
+- 保持 active-tab path 不变，同时补齐 background lane 路由与测试覆盖
+
+### 实际跑了什么检查
+- bunx vitest run packages/site-runtime/test/site-runtime.spec.ts apps/mv3-shell/test/manifest.spec.ts
+- ./node_modules/.bin/biome check packages/site-runtime/src/index.ts packages/site-runtime/test/site-runtime.spec.ts apps/mv3-shell/src/background.ts apps/mv3-shell/src/page-hook.ts apps/mv3-shell/test/manifest.spec.ts
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `f0ef556dc7ec` feat(site-runtime): 增加 background automation lane
