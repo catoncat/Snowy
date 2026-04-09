@@ -658,6 +658,106 @@ describe("mv3-shell end-to-end loop integration", () => {
     });
   });
 
+  it("persists config.update state across runtime service restart and rehydrates model + automation", async () => {
+    const storedData: Record<string, unknown> = {};
+    const createStorageArea = () => ({
+      get: vi.fn(async (keys) => {
+        const result: Record<string, unknown> = {};
+        for (const key of Array.isArray(keys) ? keys : [keys]) {
+          if (storedData[key]) {
+            result[key] = storedData[key];
+          }
+        }
+        return result;
+      }),
+      set: vi.fn(async (items) => {
+        Object.assign(storedData, items);
+      }),
+    });
+
+    const firstRuntimeServices = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        ...createFixtureChromeApi(),
+        storage: {
+          local: createStorageArea(),
+        },
+      },
+    });
+
+    const updated = await firstRuntimeServices.dispatchCapability({
+      capabilityId: "config.update",
+      input: {
+        patch: {
+          model: {
+            provider: "openai",
+            model: "gpt-5.4",
+          },
+          automation: {
+            activeTabOnly: true,
+          },
+        },
+      },
+    });
+
+    expect(updated).toMatchObject({
+      config: {
+        status: "ready",
+        values: {
+          model: {
+            provider: "openai",
+            model: "gpt-5.4",
+          },
+          automation: {
+            activeTabOnly: true,
+          },
+        },
+      },
+    });
+    expect(storedData["bbl-next.llm.config.v1"]).toMatchObject({
+      profiles: [
+        expect.objectContaining({
+          id: "default",
+          llmModel: "gpt-5.4",
+        }),
+      ],
+      defaultProfile: "default",
+    });
+
+    const secondRuntimeServices = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        ...createFixtureChromeApi(),
+        storage: {
+          local: createStorageArea(),
+        },
+      },
+    });
+
+    await expect(secondRuntimeServices.getConfigBootstrapSummary()).resolves.toMatchObject({
+      status: "ready",
+      values: {
+        model: {
+          provider: "openai",
+          model: "gpt-5.4",
+        },
+        automation: {
+          activeTabOnly: true,
+        },
+      },
+      updatedAt: expect.any(String),
+    });
+
+    const restartedKernelState = await secondRuntimeServices.getKernelRuntimeState();
+    expect(restartedKernelState.activeProfile).toMatchObject({
+      ok: true,
+      route: expect.objectContaining({
+        profile: "default",
+        llmModel: "gpt-5.4",
+      }),
+    });
+  });
+
   it("updateLlmConfig stores and updates kernel-managed profile state without resetting services", async () => {
     const storedData: Record<string, unknown> = {};
     const initialProfileConfig: LlmProfileConfig = {
@@ -752,6 +852,47 @@ describe("mv3-shell end-to-end loop integration", () => {
         }),
       ],
       defaultProfile: "fallback",
+    });
+
+    await expect(services.getConfigBootstrapSummary()).resolves.toMatchObject({
+      status: "ready",
+      values: {
+        model: {
+          model: "claude-3-opus",
+        },
+      },
+      updatedAt: expect.any(String),
+    });
+
+    const restartedServices = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        runtime: { sendMessage: vi.fn(async () => undefined) },
+        storage: {
+          local: {
+            get: vi.fn(async (keys) => {
+              const result: Record<string, unknown> = {};
+              for (const key of Array.isArray(keys) ? keys : [keys]) {
+                if (storedData[key]) result[key] = storedData[key];
+              }
+              return result;
+            }),
+            set: vi.fn(async (items) => {
+              Object.assign(storedData, items);
+            }),
+          },
+        },
+      },
+    });
+
+    await expect(restartedServices.getConfigBootstrapSummary()).resolves.toMatchObject({
+      status: "ready",
+      values: {
+        model: {
+          model: "claude-3-opus",
+        },
+      },
+      updatedAt: expect.any(String),
     });
   });
 });

@@ -23,6 +23,7 @@ import {
   SkillInvocationService,
   connectExecutionHost,
   createBootstrapSummary,
+  createConfigControlPlane,
   createHostControlPlaneSnapshot,
   createSkillRuntimeContext,
   disconnectExecutionHost,
@@ -350,6 +351,88 @@ describe("core", () => {
       },
       note: null,
       updatedAt: "2026-03-30T00:00:00.000Z",
+    });
+  });
+
+  it("rehydrates config control plane state from persisted summary and persists updates", async () => {
+    let persistedSummary = {
+      status: "ready" as const,
+      fields: ["model", "automation", "permissions", "preferences"],
+      values: {
+        automation: {
+          activeTabOnly: true,
+        },
+      },
+      note: null,
+      updatedAt: "2026-04-09T00:00:00.000Z",
+    };
+    const persistedSnapshots: unknown[] = [];
+
+    const controlPlane = createConfigControlPlane({
+      summary: async () => persistedSummary,
+      persist: async (summary) => {
+        persistedSnapshots.push(summary);
+        persistedSummary = summary;
+      },
+    });
+
+    await expect(controlPlane.getBootstrapSummary()).resolves.toMatchObject({
+      status: "ready",
+      values: {
+        automation: {
+          activeTabOnly: true,
+        },
+      },
+      updatedAt: "2026-04-09T00:00:00.000Z",
+    });
+
+    const updated = await controlPlane.update({
+      preferences: {
+        theme: "dark",
+      },
+    });
+
+    expect(updated.config).toMatchObject({
+      status: "ready",
+      values: {
+        automation: {
+          activeTabOnly: true,
+        },
+        preferences: {
+          theme: "dark",
+        },
+      },
+      updatedAt: expect.any(String),
+    });
+    expect(persistedSnapshots).toEqual([
+      expect.objectContaining({
+        status: "ready",
+        values: {
+          automation: {
+            activeTabOnly: true,
+          },
+          preferences: {
+            theme: "dark",
+          },
+        },
+      }),
+    ]);
+
+    const rehydrated = createConfigControlPlane({
+      summary: async () => persistedSummary,
+    });
+
+    await expect(rehydrated.getBootstrapSummary()).resolves.toMatchObject({
+      status: "ready",
+      values: {
+        automation: {
+          activeTabOnly: true,
+        },
+        preferences: {
+          theme: "dark",
+        },
+      },
+      updatedAt: expect.any(String),
     });
   });
 

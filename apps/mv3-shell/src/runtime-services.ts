@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { BrowserVfs } from "@bbl-next/browser-vfs";
-import { CapabilityError } from "@bbl-next/contracts";
-import type { LlmProfileConfig } from "@bbl-next/contracts";
+import { CONFIG_RESOURCE_FIELDS, CapabilityError } from "@bbl-next/contracts";
+import type { ConfigBootstrapSummary, LlmProfileConfig } from "@bbl-next/contracts";
 import {
   BUILTIN_CAPABILITIES,
   CapabilityRegistry,
@@ -30,6 +30,13 @@ export {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+async function resolveMaybe(value) {
+  if (typeof value === "function") {
+    return value();
+  }
+  return value;
 }
 
 const DEFAULT_INTERVENTION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -416,6 +423,7 @@ export function createRemoteExecAdapter(sendExec: any): any {
 }
 
 const LLM_CONFIG_STORAGE_KEY = "bbl-next.llm.config.v1";
+const CONFIG_CONTROL_PLANE_STORAGE_KEY = "bbl-next.config.control-plane.v1";
 
 async function loadLlmProfileConfig(chromeApi): Promise<LlmProfileConfig | null> {
   const storageArea = chromeApi?.storage?.local;
@@ -466,6 +474,231 @@ function syncLlmProfileConfig(target, source) {
   return target;
 }
 
+function createEmptyConfigSummary() {
+  return {
+    status: "placeholder",
+    fields: [...CONFIG_RESOURCE_FIELDS],
+    values: {},
+    note: "Config control plane is not implemented yet.",
+    updatedAt: null,
+  };
+}
+
+function cloneConfigSummary(summary) {
+  if (!isPlainObject(summary)) {
+    return null;
+  }
+
+  const values = {};
+  const sourceValues = isPlainObject(summary.values) ? summary.values : {};
+  for (const field of CONFIG_RESOURCE_FIELDS) {
+    if (isPlainObject(sourceValues[field])) {
+      values[field] = { ...sourceValues[field] };
+    }
+  }
+
+  const hasValues = Object.keys(values).length > 0;
+  return {
+    status: summary.status === "ready" || hasValues ? "ready" : "placeholder",
+    fields: [...CONFIG_RESOURCE_FIELDS],
+    values,
+    note:
+      hasValues || summary.status === "ready"
+        ? null
+        : typeof summary.note === "string"
+          ? summary.note
+          : "Config control plane is not implemented yet.",
+    updatedAt: typeof summary.updatedAt === "string" ? summary.updatedAt : null,
+  };
+}
+
+async function loadConfigControlPlaneSummary(chromeApi): Promise<ConfigBootstrapSummary | null> {
+  const storageArea = chromeApi?.storage?.local;
+  if (typeof storageArea?.get !== "function") {
+    return null;
+  }
+  const result = await storageArea.get(CONFIG_CONTROL_PLANE_STORAGE_KEY);
+  return cloneConfigSummary(result?.[CONFIG_CONTROL_PLANE_STORAGE_KEY]);
+}
+
+async function saveConfigControlPlaneSummary(
+  chromeApi,
+  summary,
+): Promise<ConfigBootstrapSummary | null> {
+  const normalized = cloneConfigSummary(summary);
+  if (!normalized) {
+    return null;
+  }
+
+  const storageArea = chromeApi?.storage?.local;
+  if (typeof storageArea?.set === "function") {
+    await storageArea.set({ [CONFIG_CONTROL_PLANE_STORAGE_KEY]: normalized });
+  }
+  return normalized;
+}
+
+function toConfigModelProvider(providerId) {
+  return providerId === "openai_compatible" ? "openai" : providerId;
+}
+
+function toProfileProviderId(provider) {
+  return provider === "openai" ? "openai_compatible" : provider;
+}
+
+function createDefaultLlmProfile(profileId = "default") {
+  return {
+    id: profileId,
+    providerId: "openai_compatible",
+    llmBase: "https://api.openai.com/v1",
+    llmKey: "",
+    llmModel: "",
+  };
+}
+
+function createEmptyLlmProfileConfig() {
+  return {
+    profiles: [],
+    defaultProfile: "default",
+  };
+}
+
+function buildConfigModelValues(profileConfig) {
+  const normalized = cloneLlmProfileConfig(profileConfig);
+  if (!normalized || !Array.isArray(normalized.profiles) || normalized.profiles.length === 0) {
+    return undefined;
+  }
+
+  const activeProfileId =
+    typeof normalized.defaultProfile === "string" && normalized.defaultProfile.trim()
+      ? normalized.defaultProfile.trim()
+      : normalized.profiles[0]?.id;
+  const activeProfile =
+    normalized.profiles.find((profile) => profile.id === activeProfileId) ?? normalized.profiles[0];
+  if (!activeProfile) {
+    return undefined;
+  }
+
+  const model = {};
+  if (typeof activeProfile.providerId === "string" && activeProfile.providerId.trim()) {
+    model.provider = toConfigModelProvider(activeProfile.providerId.trim());
+  }
+  if (typeof activeProfile.llmModel === "string" && activeProfile.llmModel.trim()) {
+    model.model = activeProfile.llmModel.trim();
+  }
+
+  return Object.keys(model).length > 0 ? model : undefined;
+}
+
+function buildConfigControlPlaneSummary({ baseSummary, persistedSummary, profileConfig }) {
+  const base = cloneConfigSummary(baseSummary) ?? createEmptyConfigSummary();
+  const persisted = cloneConfigSummary(persistedSummary);
+  const values = {};
+
+  for (const field of CONFIG_RESOURCE_FIELDS) {
+    if (isPlainObject(base.values[field])) {
+      values[field] = { ...base.values[field] };
+    }
+    if (persisted && isPlainObject(persisted.values[field])) {
+      values[field] = {
+        ...(values[field] ?? {}),
+        ...persisted.values[field],
+      };
+    }
+  }
+
+  const modelValues = buildConfigModelValues(profileConfig);
+  if (modelValues) {
+    values.model = {
+      ...(values.model ?? {}),
+      ...modelValues,
+    };
+  }
+
+  const hasValues = Object.keys(values).length > 0;
+  return {
+    status:
+      hasValues || base.status === "ready" || persisted?.status === "ready"
+        ? "ready"
+        : "placeholder",
+    fields: [...CONFIG_RESOURCE_FIELDS],
+    values,
+    note: hasValues
+      ? null
+      : (persisted?.note ?? base.note ?? "Config control plane is not implemented yet."),
+    updatedAt: persisted?.updatedAt ?? base.updatedAt ?? null,
+  };
+}
+
+function applyConfigModelPatchToProfileConfig(currentConfig, modelPatch) {
+  if (!isPlainObject(modelPatch)) {
+    return null;
+  }
+
+  const next = cloneLlmProfileConfig(currentConfig) ?? createEmptyLlmProfileConfig();
+  const defaultProfileId =
+    typeof next.defaultProfile === "string" && next.defaultProfile.trim()
+      ? next.defaultProfile.trim()
+      : "default";
+  next.defaultProfile = defaultProfileId;
+
+  let profile = next.profiles.find((entry) => entry.id === defaultProfileId);
+  if (!profile) {
+    profile = createDefaultLlmProfile(defaultProfileId);
+    next.profiles.unshift(profile);
+  }
+
+  let changed = false;
+  if (typeof modelPatch.provider === "string" && modelPatch.provider.trim()) {
+    const providerId = toProfileProviderId(modelPatch.provider.trim());
+    if (profile.providerId !== providerId) {
+      profile.providerId = providerId;
+      changed = true;
+    }
+  }
+  if (typeof modelPatch.model === "string" && modelPatch.model.trim()) {
+    const llmModel = modelPatch.model.trim();
+    if (profile.llmModel !== llmModel) {
+      profile.llmModel = llmModel;
+      changed = true;
+    }
+  }
+  if (typeof modelPatch.baseUrl === "string" && modelPatch.baseUrl.trim()) {
+    const llmBase = modelPatch.baseUrl.trim();
+    if (profile.llmBase !== llmBase) {
+      profile.llmBase = llmBase;
+      changed = true;
+    }
+  } else if (!profile.llmBase) {
+    profile.llmBase = "https://api.openai.com/v1";
+    changed = true;
+  }
+
+  return changed ? next : null;
+}
+
+async function persistConfigSummaryFromProfileConfig(chromeApi, profileConfig) {
+  const current = (await loadConfigControlPlaneSummary(chromeApi)) ?? createEmptyConfigSummary();
+  const modelValues = buildConfigModelValues(profileConfig);
+  if (!modelValues) {
+    return current;
+  }
+
+  const next = {
+    ...current,
+    status: "ready",
+    note: null,
+    updatedAt: new Date().toISOString(),
+    values: {
+      ...current.values,
+      model: {
+        ...(current.values.model ?? {}),
+        ...modelValues,
+      },
+    },
+  };
+  return saveConfigControlPlaneSummary(chromeApi, next);
+}
+
 export function createBackgroundRuntimeServices({
   invokeRunner,
   pageHookBridge,
@@ -485,6 +718,40 @@ export function createBackgroundRuntimeServices({
   let activeChatRun = null;
   const skillManager = createInMemorySkillManager();
 
+  async function setManagedProfileConfig(activeServices, nextProfileConfig) {
+    const nextManagedProfileConfig = syncLlmProfileConfig(
+      activeServices?.profileConfig,
+      nextProfileConfig,
+    );
+    profileConfig = nextManagedProfileConfig;
+    if (activeServices) {
+      activeServices.profileConfig = nextManagedProfileConfig;
+      activeServices.kernel.setProfileConfig(nextManagedProfileConfig);
+    }
+    await persistConfigSummaryFromProfileConfig(chromeApi, nextManagedProfileConfig);
+    return nextManagedProfileConfig;
+  }
+
+  async function syncProfileConfigFromConfigPatch(patch, activeServices) {
+    const modelPatch = isPlainObject(patch) ? patch.model : undefined;
+    if (!isPlainObject(modelPatch)) {
+      return;
+    }
+
+    const current =
+      cloneLlmProfileConfig(activeServices?.profileConfig) ??
+      cloneLlmProfileConfig(profileConfig) ??
+      (await loadLlmProfileConfig(chromeApi)) ??
+      createEmptyLlmProfileConfig();
+    const updated = applyConfigModelPatchToProfileConfig(current, modelPatch);
+    if (!updated) {
+      return;
+    }
+
+    await saveLlmProfileConfig(chromeApi, updated);
+    await setManagedProfileConfig(activeServices, updated);
+  }
+
   async function ensureServices() {
     if (!servicesPromise) {
       servicesPromise = (async () => {
@@ -494,7 +761,20 @@ export function createBackgroundRuntimeServices({
         });
         const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
         const providers = new FamilyProviderRegistry();
-        const configControlPlane = createConfigControlPlane({ summary: configSummary });
+        const managedProfileConfig: LlmProfileConfig | null = cloneLlmProfileConfig(
+          profileConfig ?? (await loadLlmProfileConfig(chromeApi)),
+        );
+        const configControlPlane = createConfigControlPlane({
+          summary: async () =>
+            buildConfigControlPlaneSummary({
+              baseSummary: await resolveMaybe(configSummary),
+              persistedSummary: await loadConfigControlPlaneSummary(chromeApi),
+              profileConfig: managedProfileConfig,
+            }),
+          persist: async (summary) => {
+            await saveConfigControlPlaneSummary(chromeApi, summary);
+          },
+        });
 
         providers.register(createTabsCapabilityProvider(createChromeTabsTransport({ chromeApi })));
         providers.register(createConfigCapabilityProvider(configControlPlane));
@@ -592,10 +872,6 @@ export function createBackgroundRuntimeServices({
         const llmProviderRegistry = new LlmProviderRegistry();
         llmProviderRegistry.register(createOpenAiCompatibleProvider());
 
-        const managedProfileConfig: LlmProfileConfig | null = cloneLlmProfileConfig(
-          profileConfig ?? (await loadLlmProfileConfig(chromeApi)),
-        );
-
         const resolvedLlmAdapter =
           llmAdapter ??
           (managedProfileConfig
@@ -651,10 +927,16 @@ export function createBackgroundRuntimeServices({
     skillId = "mv3-shell.background",
     permissions = ["*"],
   }) {
-    const [{ registry, providers }, session] = await Promise.all([
-      ensureServices(),
-      ensureSession(),
-    ]);
+    const [services, session] = await Promise.all([ensureServices(), ensureSession()]);
+    if (capabilityId === "config.update") {
+      if (!isPlainObject(input)) {
+        throw new CapabilityError("E_BAD_INPUT", "Capability input must be an object");
+      }
+      await syncProfileConfigFromConfigPatch(input.patch, services);
+      return services.configControlPlane.update(input.patch);
+    }
+
+    const { registry, providers } = services;
     return dispatchCapabilityCall({
       registry,
       providers,
@@ -1153,12 +1435,7 @@ export function createBackgroundRuntimeServices({
 
     await saveLlmProfileConfig(chromeApi, updated);
 
-    const nextManagedProfileConfig = syncLlmProfileConfig(activeServices?.profileConfig, updated);
-    profileConfig = nextManagedProfileConfig;
-    if (activeServices) {
-      activeServices.profileConfig = nextManagedProfileConfig;
-      activeServices.kernel.setProfileConfig(nextManagedProfileConfig);
-    }
+    await setManagedProfileConfig(activeServices, updated);
 
     return { updated: true, profileCount: updated.profiles.length };
   }

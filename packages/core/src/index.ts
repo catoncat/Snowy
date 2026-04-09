@@ -343,6 +343,7 @@ export interface CreateConfigControlPlaneOptions {
     | Promise<Partial<ConfigBootstrapSummary> | undefined>
     | (() => Partial<ConfigBootstrapSummary> | Promise<Partial<ConfigBootstrapSummary> | undefined>)
     | undefined;
+  persist?: ((summary: ConfigBootstrapSummary) => Promise<void> | void) | undefined;
 }
 
 export interface TabsCapabilityRecord {
@@ -1679,6 +1680,7 @@ export function createConfigControlPlane(
       note: null,
       updatedAt,
     };
+    await options.persist?.(config);
 
     return {
       config,
