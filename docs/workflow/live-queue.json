@@ -1,23 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T02:26:34.927Z",
+  "generated_at": "2026-04-09T02:35:42.369Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-097",
-      "issue_path": "docs/backlog/2026-04-09-kernel-provider-profile-facade.md",
-      "title": "Integrate provider/profile management into Kernel facade",
-      "parallel_group": "kernel",
-      "module_id": "provider-profile-routing",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run packages/kernel/test/kernel-facade.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "packages/kernel/src/kernel-facade.ts",
-        "packages/kernel/test/kernel-facade.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-095",
       "issue_path": "docs/backlog/2026-04-09-loop-execution-telemetry.md",

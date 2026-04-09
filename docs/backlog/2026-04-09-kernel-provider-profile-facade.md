@@ -1,11 +1,12 @@
 ---
 id: ISSUE-097
 title: "Integrate provider/profile management into Kernel facade"
-status: open
+status: done
 priority: p1
 source: "next-batch planning 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
+assignee: codex-019d700a
+completed_at: 2026-04-09T02:35:27Z
 tags:
   - kernel
   - provider
@@ -43,3 +44,24 @@ Expose provider/profile management on the Kernel facade so callers can query act
 - Profile config can be updated at runtime without kernel reconstruction
 - External orchestrators can access provider registry through kernel
 - mv3-shell can optionally delegate provider management to kernel
+
+## 工作总结
+
+### 实现了什么
+
+- 在 `KernelOptions` 暴露 `providerRegistry` / `profileConfig` 注入，并在 Kernel facade 暴露 `getActiveProfile()`、`setProfileConfig()`、`getProviderRegistry()`。
+- 让 facade 在不重建 kernel 的前提下维护当前 profile config，并通过 `resolveLlmRoute()` 返回当前解析后的 active profile。
+- 补充 `kernel-facade` provider/profile 管理测试，覆盖空配置、provider registry 暴露与 profile 切换。
+
+### 实际跑了什么检查
+
+- `bunx vitest run packages/kernel/test/kernel-facade.spec.ts`
+- `./node_modules/.bin/biome check packages/kernel/src/kernel-facade.ts packages/kernel/test/kernel-facade.spec.ts`
+
+### 残留风险
+
+- `workflow:done` 当前未识别本次 lease 的 `session_id` 形态，已手动完成 issue/queue/lease 收口；后续建议单独修复 workflow 脚本对非 `cli:<agent>` session 的支持。
+
+## 相关 commits
+
+- `d964003` `feat(kernel): 补齐 provider profile facade`
