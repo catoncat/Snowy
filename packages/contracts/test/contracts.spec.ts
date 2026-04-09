@@ -32,8 +32,10 @@ import {
   type KernelLlmAdapter,
   LOOP_TERMINAL_STATUSES,
   LOOP_TURN_STATUSES,
+  type LabelPayload,
   type LoopTurn,
   type MessagePayload,
+  type ModelChangePayload,
   NO_PROGRESS_REASONS,
   PUBLIC_CAPABILITY_NAMESPACES,
   RUNTIME_CONTROL_PLANE_ACTIONS,
@@ -48,9 +50,13 @@ import {
   type SessionContext,
   type SessionContextMessage,
   type SessionEntry,
+  type SessionEntryPayloadMap,
   type SessionHeader,
+  type SessionInfoPayload,
   type SessionStorage,
   type SkillsSummaryResource,
+  THINKING_LEVELS,
+  type ThinkingLevelChangePayload,
   allowedActorsForSkillTransition,
   assertCapabilityDescriptor,
   canActorGrantSkillTrusted,
@@ -755,6 +761,77 @@ describe("contracts", () => {
       };
       expect(entry.type).toBe("compaction");
       expect((entry.payload as CompactionPayload).reason).toBe("threshold");
+    });
+
+    it("accepts a valid thinking_level_change entry", () => {
+      const payload: ThinkingLevelChangePayload = { level: "high" };
+      const entry: SessionEntry = {
+        entryId: "e-020",
+        type: "thinking_level_change",
+        timestamp: "2026-04-09T00:00:00.000Z",
+        payload,
+      };
+      expect(entry.type).toBe("thinking_level_change");
+      expect((entry.payload as ThinkingLevelChangePayload).level).toBe("high");
+      expect(THINKING_LEVELS).toEqual(["low", "medium", "high"]);
+    });
+
+    it("accepts a valid model_change entry", () => {
+      const payload: ModelChangePayload = {
+        from: "gpt-4o",
+        to: "claude-opus-4-6",
+        reason: "escalation",
+      };
+      const entry: SessionEntry = {
+        entryId: "e-021",
+        type: "model_change",
+        timestamp: "2026-04-09T00:00:00.000Z",
+        payload,
+      };
+      expect(entry.type).toBe("model_change");
+      expect((entry.payload as ModelChangePayload).from).toBe("gpt-4o");
+      expect((entry.payload as ModelChangePayload).to).toBe("claude-opus-4-6");
+      expect((entry.payload as ModelChangePayload).reason).toBe("escalation");
+    });
+
+    it("accepts a valid label entry", () => {
+      const payload: LabelPayload = { label: "debugging", color: "#ff0000" };
+      const entry: SessionEntry = {
+        entryId: "e-022",
+        type: "label",
+        timestamp: "2026-04-09T00:00:00.000Z",
+        payload,
+      };
+      expect(entry.type).toBe("label");
+      expect((entry.payload as LabelPayload).label).toBe("debugging");
+      expect((entry.payload as LabelPayload).color).toBe("#ff0000");
+    });
+
+    it("accepts a valid session_info entry", () => {
+      const payload: SessionInfoPayload = { key: "workspaceId", value: "ws-001" };
+      const entry: SessionEntry = {
+        entryId: "e-023",
+        type: "session_info",
+        timestamp: "2026-04-09T00:00:00.000Z",
+        payload,
+      };
+      expect(entry.type).toBe("session_info");
+      expect((entry.payload as SessionInfoPayload).key).toBe("workspaceId");
+      expect((entry.payload as SessionInfoPayload).value).toBe("ws-001");
+    });
+
+    it("SessionEntryPayloadMap covers all entry types", () => {
+      const allTypes: readonly string[] = SESSION_ENTRY_TYPES;
+      const mapKeys: Array<keyof SessionEntryPayloadMap> = [
+        "message",
+        "compaction",
+        "thinking_level_change",
+        "model_change",
+        "label",
+        "session_info",
+      ];
+      expect(mapKeys).toEqual(expect.arrayContaining([...allTypes]));
+      expect(allTypes).toEqual(expect.arrayContaining(mapKeys));
     });
 
     it("accepts a valid SessionContext with compaction summary", () => {

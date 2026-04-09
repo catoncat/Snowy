@@ -872,6 +872,38 @@ export interface CompactionPayload {
   tokensAfter: number;
 }
 
+export const THINKING_LEVELS = ["low", "medium", "high"] as const;
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+
+export interface ThinkingLevelChangePayload {
+  level: ThinkingLevel;
+}
+
+export interface ModelChangePayload {
+  from: string;
+  to: string;
+  reason?: string;
+}
+
+export interface LabelPayload {
+  label: string;
+  color?: string;
+}
+
+export interface SessionInfoPayload {
+  key: string;
+  value: unknown;
+}
+
+export interface SessionEntryPayloadMap {
+  message: MessagePayload;
+  compaction: CompactionPayload;
+  thinking_level_change: ThinkingLevelChangePayload;
+  model_change: ModelChangePayload;
+  label: LabelPayload;
+  session_info: SessionInfoPayload;
+}
+
 export interface SessionContext {
   sessionId: string;
   entries: SessionEntry[];
