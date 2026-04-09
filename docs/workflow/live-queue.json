@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T03:09:49.299Z",
+  "generated_at": "2026-04-09T03:20:15.954Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
@@ -32,6 +32,18 @@
         "apps/mv3-shell/src/runtime-services.ts",
         "apps/mv3-shell/test/runtime-chat.spec.ts"
       ]
+    },
+    {
+      "issue_id": "ISSUE-102",
+      "issue_path": "docs/backlog/2026-04-09-observability-runtime-debug-snapshot-follow-up.md",
+      "title": "Follow-up: add level-1 runtime debug snapshot to observability surface",
+      "parallel_group": "mv3-shell",
+      "module_id": "observability-audit",
+      "module_stage": "mainline",
+      "tracking_kind": "follow-up",
+      "check_cmd": "bunx vitest run apps/mv3-shell/test/manifest.spec.ts",
+      "depends_on": ["ISSUE-095"],
+      "write_scope": ["apps/mv3-shell/src/background.ts", "apps/mv3-shell/test/manifest.spec.ts"]
     }
   ]
 }
