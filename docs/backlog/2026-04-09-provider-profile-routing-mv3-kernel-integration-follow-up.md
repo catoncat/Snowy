@@ -1,0 +1,51 @@
+---
+id: ISSUE-099
+title: "Follow-up: route mv3-shell provider/profile management through Kernel facade"
+status: open
+priority: p1
+source: "next-batch planning 2026-04-09"
+created: 2026-04-09
+assignee: unassigned
+tags:
+  - kernel
+  - provider
+  - profile
+  - mv3-shell
+  - integration
+module_id: provider-profile-routing
+module_stage: mainline
+tracking_kind: follow-up
+kind: slice
+epic: EPIC-kernel
+parallel_group: mv3-shell
+depends_on:
+  - ISSUE-095
+  - ISSUE-097
+write_scope:
+  - apps/mv3-shell/src/runtime-services.ts
+  - apps/mv3-shell/test/runtime-chat.spec.ts
+acceptance_ref: docs/kernel-skeleton-design.md
+check_cmd: "bunx vitest run apps/mv3-shell/test/runtime-chat.spec.ts"
+---
+
+## Goal
+
+Make `mv3-shell` treat `packages/kernel` as the primary provider/profile management entrypoint so runtime chat and related app flows no longer maintain a parallel provider/profile wiring path outside the kernel.
+
+## Review Finding
+
+- `ISSUE-097` already exposed `providerRegistry` / `profileConfig` management on the Kernel facade.
+- `apps/mv3-shell/src/runtime-services.ts` still owns part of the provider/profile routing logic and does not fully treat the kernel as the single source of truth for active profile/provider access.
+- This leaves the `provider-profile-routing` module in a partially integrated state: the kernel supports the API, but the main app runtime path can still drift from kernel-managed state.
+
+## Scope
+
+1. Update `runtime-services` to construct and consume provider/profile state through the Kernel facade where possible.
+2. Remove or reduce duplicate app-side profile/provider reads on the main runtime/chat path.
+3. Add or update mv3-shell tests that prove profile changes are observed via kernel-managed state.
+
+## Acceptance
+
+- `runtime-services` uses the Kernel facade as the primary source for active profile/provider access on the main runtime/chat path.
+- The main runtime path no longer keeps a duplicate profile-resolution branch outside the kernel for the same flow.
+- `apps/mv3-shell/test/runtime-chat.spec.ts` covers profile/provider access through kernel-managed state and verifies the app observes profile updates without reconstructing the runtime wiring.
