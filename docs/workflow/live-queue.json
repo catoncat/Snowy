@@ -1,45 +1,24 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T12:03:27.005Z",
+  "generated_at": "2026-04-09T12:10:10.462Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-121",
-      "issue_path": "docs/backlog/2026-04-09-follow-up-add-execution-lane-aware-profile-routing-to-the-kernel-llm-path.md",
-      "title": "Follow-up: add execution-lane-aware profile routing to the kernel LLM path",
-      "parallel_group": "contracts-core",
-      "module_id": "provider-profile-routing",
+      "issue_id": "ISSUE-115",
+      "issue_path": "docs/backlog/2026-04-09-runtime-history-and-debug-export-boundary-is-still-incomplete.md",
+      "title": "Review: runtime history and debug export boundary is still incomplete",
+      "parallel_group": "mv3-shell",
+      "module_id": "observability-audit",
       "module_stage": "mainline",
-      "tracking_kind": "follow-up",
-      "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-114"],
-      "write_scope": [
-        "packages/contracts/src/index.ts",
-        "packages/kernel/src/llm-profile-resolver.ts",
-        "packages/kernel/src/llm-kernel-adapter.ts",
-        "packages/kernel/src/loop-orchestrator.ts",
-        "packages/kernel/src/compaction-manager.ts",
-        "packages/kernel/src/kernel-facade.ts",
-        "packages/kernel/test",
-        "docs/kernel-skeleton-design.md"
-      ]
-    },
-    {
-      "issue_id": "ISSUE-118",
-      "issue_path": "docs/backlog/2026-04-09-background-automation-lane-still-lacks-stabilization-and-failure-tracking-scope.md",
-      "title": "Review: background automation lane still lacks stabilization and failure-tracking scope",
-      "parallel_group": "site-runtime",
-      "module_id": "site-runtime-browser-automation",
-      "module_stage": "secondary",
       "tracking_kind": "gap",
       "check_cmd": "bun run check",
       "depends_on": [],
       "write_scope": [
-        "packages/site-runtime/src/index.ts",
-        "packages/site-runtime/test/site-runtime.spec.ts",
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
         "apps/mv3-shell/src/background.ts",
-        "apps/mv3-shell/src/page-hook.ts",
-        "apps/mv3-shell/test/manifest.spec.ts"
+        "apps/mv3-shell/src/sidepanel/management.ts",
+        "apps/mv3-shell/test"
       ]
     }
   ]
