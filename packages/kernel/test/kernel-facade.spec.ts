@@ -244,6 +244,60 @@ describe("KernelFacade (createKernel)", () => {
     });
   });
 
+  describe("loop introspection", () => {
+    it("getMaxSteps returns the configured maximum", () => {
+      expect(kernel.getMaxSteps()).toBe(50);
+    });
+
+    it("getMaxSteps returns custom value when configured", () => {
+      const custom = createKernel({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        loop: { maxSteps: 10 },
+      });
+      expect(custom.getMaxSteps()).toBe(10);
+    });
+
+    it("checkTerminal returns null for a successful non-terminal turn", async () => {
+      const session = await kernel.createSession();
+      kernel.startRun(session.id);
+      const turn = kernel.createTurn(session.id, { capabilityId: "test.op" });
+      const updated = kernel.recordTurnResult(turn, { ok: true, data: {} });
+      expect(kernel.checkTerminal(session.id, updated)).toBeNull();
+    });
+
+    it("checkTerminal returns failed_execute for a non-retryable failure", async () => {
+      const session = await kernel.createSession();
+      kernel.startRun(session.id);
+      const turn = kernel.createTurn(session.id, { capabilityId: "test.op" });
+      const updated = kernel.recordTurnResult(turn, { ok: false, error: "boom" });
+      expect(kernel.checkTerminal(session.id, updated)).toBe("failed_execute");
+    });
+
+    it("checkTerminal returns stopped when opts.stopped is true", async () => {
+      const session = await kernel.createSession();
+      kernel.startRun(session.id);
+      const turn = kernel.createTurn(session.id, { capabilityId: "test.op" });
+      expect(kernel.checkTerminal(session.id, turn, { stopped: true })).toBe("stopped");
+    });
+
+    it("checkNoProgress returns null initially", async () => {
+      const session = await kernel.createSession();
+      expect(kernel.checkNoProgress(session.id)).toBeNull();
+    });
+
+    it("resetLoopState clears step count and progress tracking", async () => {
+      const session = await kernel.createSession();
+      kernel.startRun(session.id);
+      const turn = kernel.createTurn(session.id, { capabilityId: "test.op" });
+      kernel.recordTurnResult(turn, { ok: true, data: {} });
+      expect(kernel.getStepCount(session.id)).toBe(1);
+
+      kernel.resetLoopState(session.id);
+      expect(kernel.getStepCount(session.id)).toBe(0);
+    });
+  });
+
   describe("subsystem access", () => {
     it("exposes all four subsystems", () => {
       expect(kernel.sessions).toBeDefined();

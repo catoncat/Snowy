@@ -108,9 +108,26 @@ function sortedFailureHints(failures: Map<string, ActionFailureHint>): ActionFai
     );
 }
 
+const ACTION_FAILURE_RECOVERY_PREFIXES = ["page.", "tabs.", "site.invoke:"] as const;
+
+function supportsActionFailureRecovery(capabilityId: string): boolean {
+  return ACTION_FAILURE_RECOVERY_PREFIXES.some((prefix) => capabilityId.startsWith(prefix));
+}
+
+function shouldContinueAfterToolFailure(input: {
+  capabilityId: string;
+  result: { ok: boolean };
+  status: LoopTerminalStatus;
+}): boolean {
+  return (
+    !input.result.ok &&
+    input.status === "failed_execute" &&
+    supportsActionFailureRecovery(input.capabilityId)
+  );
+}
+
 const RETRYABLE_LLM_STATUS_CODES = new Set([408, 409, 429, 500, 502, 503, 504]);
 const DEFAULT_LLM_RETRY_BASE_DELAY_MS = 250;
-const DEFAULT_LOOP_MAX_STEPS = 50;
 
 export interface RequestLlmWithRetryOptions {
   provider: LlmProviderAdapter;
@@ -350,8 +367,7 @@ export async function requestLlmWithRetry(
 }
 
 function getLoopMaxSteps(kernel: Kernel): number {
-  const loop = kernel.loop as { getMaxSteps?: () => number };
-  return typeof loop.getMaxSteps === "function" ? loop.getMaxSteps() : DEFAULT_LOOP_MAX_STEPS;
+  return kernel.getMaxSteps();
 }
 
 export async function runLoop(
@@ -515,9 +531,9 @@ export async function runLoop(
         input.onToolResult?.(toolName, result);
 
         // Check terminal
-        const status = kernel.loop.checkTerminal(input.sessionId, turn);
+        const status = kernel.checkTerminal(input.sessionId, turn);
         if (status) {
-          if (!result.ok && (status === "failed_execute" || status === "timeout")) {
+          if (shouldContinueAfterToolFailure({ capabilityId, result, status })) {
             continue;
           }
           terminalStatus = status;

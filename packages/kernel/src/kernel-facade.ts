@@ -4,8 +4,10 @@ import type {
   CompactionReason,
   InterventionRequest,
   KernelLlmAdapter,
+  LoopTerminalStatus,
   LoopTurn,
   MessagePayload,
+  NoProgressReason,
   QueuedPrompt,
   RunState,
   SessionContext,
@@ -96,6 +98,14 @@ export interface Kernel {
     step: StepRequest,
   ): Promise<{ turn: LoopTurn; result: StepResult }>;
   getStepCount(sessionId: string): number;
+  checkTerminal(
+    sessionId: string,
+    turn: LoopTurn,
+    opts?: { stopped?: boolean },
+  ): LoopTerminalStatus | null;
+  checkNoProgress(sessionId: string): NoProgressReason | null;
+  getMaxSteps(): number;
+  resetLoopState(sessionId: string): void;
 
   // Compaction
   shouldCompact(sessionId: string, contextWindow: number, currentTokens?: number): Promise<boolean>;
@@ -275,6 +285,10 @@ export function createKernel(opts: KernelOptions): Kernel {
     recordTurnResult: (turn, result) => loop.recordTurnResult(turn, result),
     executeStep,
     getStepCount: (id) => loop.getStepCount(id),
+    checkTerminal: (id, turn, checkOpts) => loop.checkTerminal(id, turn, checkOpts),
+    checkNoProgress: (id) => loop.checkNoProgress(id),
+    getMaxSteps: () => loop.getMaxSteps(),
+    resetLoopState: (id) => loop.resetSession(id),
 
     // Compaction
     shouldCompact: (id, cw, ct) => compaction.shouldCompact(id, cw, ct),
