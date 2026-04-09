@@ -1,6 +1,60 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T04:49:10.081Z",
+  "generated_at": "2026-04-09T06:44:44.746Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": []
+  "entries": [
+    {
+      "issue_id": "ISSUE-111",
+      "issue_path": "docs/backlog/2026-04-09-provider-health-and-capability-negotiation.md",
+      "title": "Provider health 状态与 route negotiation 收敛",
+      "parallel_group": "kernel",
+      "module_id": "provider-profile-routing",
+      "module_stage": "mainline",
+      "tracking_kind": "gap",
+      "check_cmd": "bunx vitest run packages/kernel/test/llm-provider-registry.spec.ts packages/kernel/test/llm-profile-resolver.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "packages/kernel/src/llm-provider-registry.ts",
+        "packages/kernel/src/llm-profile-resolver.ts",
+        "packages/kernel/test/llm-provider-registry.spec.ts",
+        "packages/kernel/test/llm-profile-resolver.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-104",
+      "issue_path": "docs/backlog/2026-04-09-diagnostics-capture-payload-structure.md",
+      "title": "Diagnostics payload contract 化与 kernel-owned snapshot 收敛",
+      "parallel_group": "mv3-shell",
+      "module_id": "observability-audit",
+      "module_stage": "mainline",
+      "tracking_kind": "gap",
+      "check_cmd": "bunx vitest run packages/contracts/test/contracts.spec.ts packages/kernel/test/kernel-facade.spec.ts apps/mv3-shell/test/manifest.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/test/contracts.spec.ts",
+        "packages/kernel/src/kernel-facade.ts",
+        "packages/kernel/test/kernel-facade.spec.ts",
+        "apps/mv3-shell/src/background.ts",
+        "apps/mv3-shell/test/manifest.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-106",
+      "issue_path": "docs/backlog/2026-04-09-config-control-plane-persistence.md",
+      "title": "Generic config control plane 持久化对齐",
+      "parallel_group": "contracts-core",
+      "module_id": "ai-surface-control-plane",
+      "module_stage": "secondary",
+      "tracking_kind": "gap",
+      "check_cmd": "bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "packages/core/src/index.ts",
+        "packages/core/test/core.spec.ts",
+        "apps/mv3-shell/src/runtime-services.ts",
+        "apps/mv3-shell/test/runtime-chat.spec.ts"
+      ]
+    }
+  ]
 }
