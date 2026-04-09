@@ -59,7 +59,7 @@ Add integration tests that exercise the full verify → intervention request →
 
 ### 残留风险
 
-- `workflow:done` 仍未兼容当前 lease 的非 `cli:<agent>` session_id，本次已手动完成 issue / queue / lease 收口。
+- 无。原 `workflow:done` 对非 `cli:<agent>` session lease 的兼容问题已由后续 workflow 修复收口，不再影响当前 issue。
 
 ## 相关 commits
 

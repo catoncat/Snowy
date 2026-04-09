@@ -60,7 +60,7 @@ Expose provider/profile management on the Kernel facade so callers can query act
 
 ### 残留风险
 
-- `workflow:done` 当前未识别本次 lease 的 `session_id` 形态，已手动完成 issue/queue/lease 收口；后续建议单独修复 workflow 脚本对非 `cli:<agent>` session 的支持。
+- 无。原 `workflow:done` 对非 `cli:<agent>` session lease 的兼容问题已由后续 workflow 修复收口，不再影响当前 issue。
 
 ## 相关 commits
 
