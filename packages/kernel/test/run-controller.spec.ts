@@ -122,6 +122,66 @@ describe("RunController", () => {
     });
   });
 
+  describe("child runs", () => {
+    it("registers child runs outside the steer/followUp queue", () => {
+      ctrl.transition(sid, "start");
+
+      const child = ctrl.registerChildRun(sid, {
+        childSessionId: "s-child-001",
+        parentTurnId: "turn-001",
+        title: "Research helper",
+        task: "Check a secondary path",
+      });
+
+      expect(child.parentSessionId).toBe(sid);
+      expect(child.childSessionId).toBe("s-child-001");
+      expect(child.status).toBe("pending");
+      expect(ctrl.getState(sid).queue).toEqual({ steer: [], followUp: [] });
+      expect(ctrl.listChildRuns(sid)).toEqual([child]);
+      expect(ctrl.getChildRunSummary(sid)).toMatchObject({
+        totalCount: 1,
+        activeCount: 1,
+        items: [
+          expect.objectContaining({
+            id: child.id,
+            childSessionId: "s-child-001",
+            parentTurnId: "turn-001",
+          }),
+        ],
+      });
+    });
+
+    it("transitions child runs through lifecycle states", () => {
+      ctrl.transition(sid, "start");
+      const child = ctrl.registerChildRun(sid, {
+        childSessionId: "s-child-001",
+      });
+
+      const running = ctrl.updateChildRunStatus(sid, child.id, "running");
+      expect(running.status).toBe("running");
+
+      const completed = ctrl.updateChildRunStatus(sid, child.id, "completed");
+      expect(completed.status).toBe("completed");
+      expect(ctrl.getChildRunSummary(sid)).toMatchObject({
+        totalCount: 1,
+        activeCount: 0,
+      });
+    });
+
+    it("rejects illegal child-run transitions", () => {
+      ctrl.transition(sid, "start");
+      const child = ctrl.registerChildRun(sid, {
+        childSessionId: "s-child-001",
+      });
+
+      ctrl.updateChildRunStatus(sid, child.id, "completed");
+
+      expect(() => ctrl.updateChildRunStatus(sid, child.id, "running")).toThrow(
+        "Illegal child run status transition",
+      );
+    });
+  });
+
   describe("retry management", () => {
     it("starts with retry inactive", () => {
       expect(ctrl.shouldRetry(sid)).toBe(false);

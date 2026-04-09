@@ -1,8 +1,12 @@
 import {
   CapabilityError,
+  type ChildRunRecord,
+  type ChildRunStatus,
+  type ChildRunSummary,
   type QueuedPrompt,
   type RunPhase,
   type RunState,
+  canTransitionChildRunStatus,
   canTransitionRunPhase,
 } from "@bbl-next/contracts";
 
@@ -44,8 +48,21 @@ function generatePromptId(): string {
   return `qp-${crypto.randomUUID()}`;
 }
 
+function generateChildRunId(): string {
+  return `cr-${crypto.randomUUID()}`;
+}
+
+function cloneChildRun(record: ChildRunRecord): ChildRunRecord {
+  return { ...record };
+}
+
+function cloneChildRuns(records: ChildRunRecord[]): ChildRunRecord[] {
+  return records.map((record) => cloneChildRun(record));
+}
+
 export class RunController {
   readonly #states = new Map<string, RunState>();
+  readonly #childRuns = new Map<string, ChildRunRecord[]>();
 
   #requireState(sessionId: string): RunState {
     const state = this.#states.get(sessionId);
@@ -105,6 +122,80 @@ export class RunController {
     const state = this.#requireState(sessionId);
     const items = state.queue[behavior].splice(0);
     return items;
+  }
+
+  registerChildRun(
+    sessionId: string,
+    input: {
+      childSessionId: string;
+      parentTurnId?: string;
+      title?: string;
+      task?: string;
+      now?: string;
+    },
+  ): ChildRunRecord {
+    this.#requireState(sessionId);
+    const records = this.#childRuns.get(sessionId) ?? [];
+    const now = input.now ?? new Date().toISOString();
+    const record: ChildRunRecord = {
+      id: generateChildRunId(),
+      parentSessionId: sessionId,
+      childSessionId: input.childSessionId,
+      status: "pending",
+      createdAt: now,
+      updatedAt: now,
+      ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
+      ...(input.title ? { title: input.title } : {}),
+      ...(input.task ? { task: input.task } : {}),
+    };
+    records.push(record);
+    this.#childRuns.set(sessionId, records);
+    return cloneChildRun(record);
+  }
+
+  updateChildRunStatus(
+    sessionId: string,
+    childRunId: string,
+    status: ChildRunStatus,
+    opts: { now?: string } = {},
+  ): ChildRunRecord {
+    const records = this.#childRuns.get(sessionId) ?? [];
+    const index = records.findIndex((record) => record.id === childRunId);
+    if (index < 0) {
+      throw new CapabilityError("E_RUNTIME", `Child run not found: ${childRunId}`);
+    }
+
+    const current = records[index];
+    if (!canTransitionChildRunStatus(current.status, status)) {
+      throw new CapabilityError(
+        "E_RUNTIME",
+        `Illegal child run status transition: ${current.status} → ${status}`,
+      );
+    }
+
+    const updated: ChildRunRecord = {
+      ...current,
+      status,
+      updatedAt: opts.now ?? new Date().toISOString(),
+    };
+    records[index] = updated;
+    return cloneChildRun(updated);
+  }
+
+  listChildRuns(sessionId: string): ChildRunRecord[] {
+    return cloneChildRuns(this.#childRuns.get(sessionId) ?? []);
+  }
+
+  getChildRunSummary(sessionId: string): ChildRunSummary {
+    const items = this.listChildRuns(sessionId);
+    const activeCount = items.filter(
+      (record) => record.status === "pending" || record.status === "running",
+    ).length;
+    return {
+      totalCount: items.length,
+      activeCount,
+      items,
+    };
   }
 
   shouldRetry(sessionId: string): boolean {

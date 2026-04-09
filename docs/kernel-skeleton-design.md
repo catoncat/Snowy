@@ -25,6 +25,7 @@ Recovery Report 确认：新仓已完成底座重构（contracts / core / browse
 
 - 更完整的 browser automation stabilization / DOM lane 扩展。
 - 更广的 execution-host / remote-host cutover 语义。
+- minimal child-run / subagent contract 仍未进入当前 kernel run model；现状仍只有 session-local run queue。
 - browser-vfs、skill-sdk / studio、repo workflow DX 等 deferred 模块。
 
 ---

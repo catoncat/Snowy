@@ -1091,6 +1091,45 @@ export interface RunState {
   queue: RunQueue;
 }
 
+export const CHILD_RUN_STATUSES = [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+export type ChildRunStatus = (typeof CHILD_RUN_STATUSES)[number];
+
+export interface ChildRunRecord {
+  id: string;
+  parentSessionId: string;
+  childSessionId: string;
+  status: ChildRunStatus;
+  createdAt: string;
+  updatedAt: string;
+  parentTurnId?: string;
+  title?: string;
+  task?: string;
+}
+
+export interface ChildRunSummary {
+  totalCount: number;
+  activeCount: number;
+  items: ChildRunRecord[];
+}
+
+export const CHILD_RUN_STATUS_TRANSITIONS: Record<ChildRunStatus, readonly ChildRunStatus[]> = {
+  pending: ["running", "completed", "failed", "cancelled"],
+  running: ["completed", "failed", "cancelled"],
+  completed: [],
+  failed: [],
+  cancelled: [],
+};
+
+export function canTransitionChildRunStatus(from: ChildRunStatus, to: ChildRunStatus): boolean {
+  return (CHILD_RUN_STATUS_TRANSITIONS[from] as readonly string[]).includes(to);
+}
+
 /** Legal transitions for the run phase state machine. */
 export const RUN_PHASE_TRANSITIONS: Record<RunPhase, readonly RunPhase[]> = {
   idle: ["running"],

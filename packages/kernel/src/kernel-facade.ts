@@ -1,5 +1,7 @@
 import { CapabilityError } from "@bbl-next/contracts";
 import type {
+  ChildRunRecord,
+  ChildRunSummary,
   CompactionDraft,
   CompactionReason,
   InterventionRequest,
@@ -61,6 +63,7 @@ export interface KernelRuntimeSummary {
     stepCount: number;
     noProgress: NoProgressReason | null;
   };
+  childRuns: ChildRunSummary;
   interventions: KernelInterventionSummary;
 }
 
@@ -115,6 +118,24 @@ export interface Kernel {
   // Queue
   enqueue(sessionId: string, behavior: "steer" | "followUp", text: string): QueuedPrompt;
   dequeue(sessionId: string, behavior: "steer" | "followUp"): QueuedPrompt[];
+  registerChildRun(
+    sessionId: string,
+    input: {
+      childSessionId: string;
+      parentTurnId?: string;
+      title?: string;
+      task?: string;
+      now?: string;
+    },
+  ): ChildRunRecord;
+  updateChildRunStatus(
+    sessionId: string,
+    childRunId: string,
+    status: ChildRunRecord["status"],
+    opts?: { now?: string },
+  ): ChildRunRecord;
+  listChildRuns(sessionId: string): ChildRunRecord[];
+  getChildRunSummary(sessionId: string): ChildRunSummary;
 
   // Loop
   createTurn(sessionId: string, step: StepRequest): LoopTurn;
@@ -307,6 +328,7 @@ export function createKernel(opts: KernelOptions): Kernel {
         stepCount: loop.getStepCount(sessionId),
         noProgress: loop.checkNoProgress(sessionId),
       },
+      childRuns: runs.getChildRunSummary(sessionId),
       interventions: interventions.getSummary({ sessionId }),
     };
   };
@@ -424,6 +446,11 @@ export function createKernel(opts: KernelOptions): Kernel {
     // Queue
     enqueue: (id, behavior, text) => runs.enqueue(id, behavior, text),
     dequeue: (id, behavior) => runs.dequeue(id, behavior),
+    registerChildRun: (id, input) => runs.registerChildRun(id, input),
+    updateChildRunStatus: (id, childRunId, status, requestOpts) =>
+      runs.updateChildRunStatus(id, childRunId, status, requestOpts),
+    listChildRuns: (id) => runs.listChildRuns(id),
+    getChildRunSummary: (id) => runs.getChildRunSummary(id),
 
     // Loop
     createTurn: (id, step) => loop.createTurn(id, step),

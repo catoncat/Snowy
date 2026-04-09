@@ -441,6 +441,53 @@ describe("KernelFacade (createKernel)", () => {
         ],
       });
     });
+
+    it("returns child-run summary through the facade runtime summary", async () => {
+      const session = await kernel.createSession();
+      kernel.startRun(session.id);
+      const child = kernel.registerChildRun(session.id, {
+        childSessionId: "s-child-001",
+        parentTurnId: "turn-001",
+        title: "Research helper",
+      });
+      kernel.updateChildRunStatus(session.id, child.id, "running");
+
+      const summary = callKernelMethod<[string], any>(kernel, "getRuntimeSummary", session.id);
+
+      expect(summary.childRuns).toMatchObject({
+        totalCount: 1,
+        activeCount: 1,
+        items: [
+          expect.objectContaining({
+            id: child.id,
+            childSessionId: "s-child-001",
+            status: "running",
+          }),
+        ],
+      });
+    });
+  });
+
+  describe("child-run facade", () => {
+    it("exposes explicit child-run registration and lifecycle APIs", async () => {
+      const session = await kernel.createSession();
+      kernel.startRun(session.id);
+
+      const child = kernel.registerChildRun(session.id, {
+        childSessionId: "s-child-001",
+        parentTurnId: "turn-001",
+        title: "Research helper",
+      });
+
+      expect(kernel.listChildRuns(session.id)).toEqual([child]);
+
+      const completed = kernel.updateChildRunStatus(session.id, child.id, "completed");
+      expect(completed.status).toBe("completed");
+      expect(kernel.getChildRunSummary(session.id)).toMatchObject({
+        totalCount: 1,
+        activeCount: 0,
+      });
+    });
   });
 
   describe("diagnostics facade", () => {
