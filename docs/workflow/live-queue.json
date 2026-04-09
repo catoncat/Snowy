@@ -1,22 +1,23 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T12:12:46.648Z",
+  "generated_at": "2026-04-09T12:18:24.020Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-122",
-      "issue_path": "docs/backlog/2026-04-09-follow-up-expose-runtime-history-through-a-shared-observability-resource-surface.md",
-      "title": "Follow-up: expose runtime history through a shared observability resource surface",
-      "parallel_group": "mv3-shell",
-      "module_id": "observability-audit",
+      "issue_id": "ISSUE-116",
+      "issue_path": "docs/backlog/2026-04-09-intervention-control-plane-actions-are-still-background-private.md",
+      "title": "Review: intervention control-plane actions are still background-private",
+      "parallel_group": "site-runtime",
+      "module_id": "intervention-handoff",
       "module_stage": "mainline",
-      "tracking_kind": "follow-up",
+      "tracking_kind": "gap",
       "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-115"],
+      "depends_on": [],
       "write_scope": [
         "packages/contracts/src/index.ts",
         "packages/core/src/index.ts",
         "apps/mv3-shell/src/background.ts",
+        "apps/mv3-shell/src/runtime-services.ts",
         "apps/mv3-shell/test"
       ]
     }
