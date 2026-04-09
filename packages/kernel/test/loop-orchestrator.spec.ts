@@ -1,5 +1,4 @@
 import type {
-  InterventionRequest,
   LlmProfileConfig,
   LlmProviderAdapter,
   LlmProviderSendInput,
@@ -100,6 +99,21 @@ const TEST_DESCRIPTOR = {
   outputSchema: { type: "object" },
   exportable: false,
   executionBinding: { family: "tabs", operation: "navigate" },
+};
+
+const TEST_HIGH_RISK_DESCRIPTOR = {
+  id: "tabs.close.tab",
+  version: 1,
+  description: "Close the current tab",
+  inputSchema: { type: "object", properties: { tabId: { type: "number" } } },
+  risk: "high" as const,
+  sideEffects: "writes" as const,
+  permissions: [],
+  supportsVerify: false,
+  supportsStreaming: false,
+  outputSchema: { type: "object" },
+  exportable: false,
+  executionBinding: { family: "tabs", operation: "close_tab" },
 };
 
 const TEST_SITE_DESCRIPTOR = {
@@ -496,6 +510,7 @@ describe("runLoop", () => {
     const providers = new FamilyProviderRegistry();
     const interventionStatuses: string[] = [];
     const innerTerminalStatuses: Array<string | null> = [];
+    const providerPhases: string[] = [];
 
     const kernel = createKernel({
       storage,
@@ -537,6 +552,7 @@ describe("runLoop", () => {
         if (!sessionId) {
           throw new Error("Expected provider context to include a sessionId");
         }
+        providerPhases.push(kernel.getRunState(sessionId).phase);
         const executed = await kernel.executeStep(sessionId, {
           kind: "site",
           capabilityId: "site.runtime.invoke",
@@ -569,28 +585,17 @@ describe("runLoop", () => {
         });
 
         innerTerminalStatuses.push(kernel.checkTerminal(sessionId, executed.turn));
-        const siteData = executed.result.data as { intervention?: InterventionRequest } | undefined;
+        const siteData = executed.result.data as
+          | { intervention?: Record<string, unknown>; verified?: boolean }
+          | undefined;
         if (!siteData?.intervention) {
           throw new Error("Expected a site intervention request");
         }
 
-        const requested = kernel.requestIntervention(sessionId, siteData.intervention, {
-          timeoutMs: 10_000,
-          now: Date.parse("2026-04-09T00:00:00.000Z"),
-        });
-        interventionStatuses.push(requested.status);
-
-        const resolved = kernel.resolveIntervention(
-          requested.id,
-          { resolution: "resume" },
-          { now: Date.parse("2026-04-09T00:00:01.000Z") },
-        );
-        interventionStatuses.push(resolved.status);
-
         return {
           ok: true,
-          interventionId: requested.id,
-          resolution: resolved.resolution,
+          verified: siteData.verified,
+          intervention: siteData.intervention,
         };
       },
     });
@@ -629,13 +634,166 @@ describe("runLoop", () => {
     const session = await kernel.createSession();
     const result = await runLoop(
       { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
-      { sessionId: session.id, prompt: "Log me in and continue after manual verification" },
+      {
+        sessionId: session.id,
+        prompt: "Log me in and continue after manual verification",
+        onIntervention(record) {
+          interventionStatuses.push(`${record.status}:${kernel.getRunState(session.id).phase}`);
+          return { resolution: { resolution: "resume" } };
+        },
+      },
     );
 
     expect(result.terminalStatus).toBe("done");
     expect(callCount).toBe(2);
     expect(innerTerminalStatuses).toEqual(["failed_verify"]);
+    expect(interventionStatuses).toEqual(["requested:paused", "resolved:paused"]);
+    expect(providerPhases).toEqual(["running"]);
+    expect(kernel.getInterventionSummary({ sessionId: session.id })).toMatchObject({
+      status: "settled",
+      totalCount: 1,
+      activeCount: 0,
+      recentCount: 2,
+    });
+  });
+
+  it("requests confirm-policy intervention before executing a high-risk side-effectful step", async () => {
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([TEST_HIGH_RISK_DESCRIPTOR]);
+    const providers = new FamilyProviderRegistry();
+    const invokedPhases: string[] = [];
+    const interventionPhases: string[] = [];
+    const interventionStatuses: string[] = [];
+
+    providers.register({
+      family: "tabs",
+      invoke: async ({ context, input }) => {
+        if (!context?.sessionId) {
+          throw new Error("Expected provider context to include a sessionId");
+        }
+        invokedPhases.push(kernel.getRunState(context.sessionId).phase);
+        return {
+          closed: true,
+          tabId: (input as { tabId?: number }).tabId ?? null,
+        };
+      },
+    });
+
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      registry,
+      providers,
+    });
+
+    let callCount = 0;
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return sseResponse([
+            chatChunk(undefined, [
+              {
+                index: 0,
+                id: "tc_risk_1",
+                function: { name: "tabs_close_tab", arguments: '{"tabId":7}' },
+              },
+            ]),
+            chatChunk(undefined, undefined, "tool_calls"),
+            "[DONE]",
+          ]);
+        }
+
+        return sseResponse([
+          chatChunk("The tab was closed after confirmation."),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      },
+    };
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      {
+        sessionId: session.id,
+        prompt: "Close the current tab",
+        onIntervention(record, context) {
+          interventionPhases.push(`${context.phase}:${kernel.getRunState(session.id).phase}`);
+          interventionStatuses.push(record.status);
+          return { resolution: { confirmed: true } };
+        },
+      },
+    );
+
+    expect(result.terminalStatus).toBe("done");
+    expect(callCount).toBe(2);
     expect(interventionStatuses).toEqual(["requested", "resolved"]);
+    expect(interventionPhases).toEqual(["requested:paused", "resolved:paused"]);
+    expect(invokedPhases).toEqual(["running"]);
+    expect(kernel.getInterventionSummary({ sessionId: session.id })).toMatchObject({
+      status: "settled",
+      totalCount: 1,
+      activeCount: 0,
+      recentCount: 2,
+    });
+  });
+
+  it("pauses the run when a high-risk intervention is pending without a resolver", async () => {
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([TEST_HIGH_RISK_DESCRIPTOR]);
+    const providers = new FamilyProviderRegistry();
+    const invoked: string[] = [];
+
+    providers.register({
+      family: "tabs",
+      invoke: async () => {
+        invoked.push("called");
+        return { closed: true };
+      },
+    });
+
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      registry,
+      providers,
+    });
+
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async () =>
+        sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_risk_pending",
+              function: { name: "tabs_close_tab", arguments: '{"tabId":7}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "tool_calls"),
+          "[DONE]",
+        ]),
+    };
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Close the current tab" },
+    );
+
+    expect(result.terminalStatus).toBe("stopped");
+    expect(invoked).toEqual([]);
+    expect(kernel.getRunState(session.id).phase).toBe("paused");
+    expect(kernel.getInterventionSummary({ sessionId: session.id })).toMatchObject({
+      status: "requested",
+      totalCount: 1,
+      activeCount: 1,
+      recentCount: 1,
+    });
   });
 
   it("replays persisted assistant contentBlocks back into the next llm request", async () => {

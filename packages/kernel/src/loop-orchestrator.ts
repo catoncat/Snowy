@@ -1,4 +1,7 @@
 import type {
+  CapabilityDescriptor,
+  InterventionRecord,
+  InterventionRequest,
   LlmProfileConfig,
   LlmProviderAdapter,
   LlmProviderExecutionLane,
@@ -36,6 +39,7 @@ export interface LoopOrchestratorOptions {
   systemPromptBuilder?: (tools: ToolContract[]) => string;
   promptOptions?: PromptBuilderOptions;
   contextWindow?: number;
+  interventionPolicy?: LoopInterventionPolicy;
 }
 
 export interface RunLoopInput {
@@ -45,6 +49,13 @@ export interface RunLoopInput {
   onToolCall?: (toolName: string, args: unknown) => void;
   onToolResult?: (toolName: string, result: unknown) => void;
   onStepTelemetry?: (entry: LoopTelemetryEntry) => void | Promise<void>;
+  onIntervention?: (
+    record: InterventionRecord,
+    context: LoopInterventionContext & { phase: "requested" | "resolved" },
+  ) =>
+    | undefined
+    | LoopInterventionHandlerResult
+    | Promise<undefined | LoopInterventionHandlerResult>;
   signal?: AbortSignal;
 }
 
@@ -52,6 +63,27 @@ export interface RunLoopResult {
   terminalStatus: LoopTerminalStatus;
   stepCount: number;
   telemetry: LoopTelemetryEntry[];
+}
+
+export interface LoopInterventionContext {
+  sessionId: string;
+  toolCallId: string;
+  toolName: string;
+  capabilityId: string;
+  args: unknown;
+  descriptor?: CapabilityDescriptor;
+  result?: { ok: boolean; data?: unknown; error?: string; verified?: boolean };
+  status?: LoopTerminalStatus | null;
+}
+
+export interface LoopInterventionHandlerResult {
+  resume?: boolean;
+  resolution?: Record<string, unknown>;
+}
+
+export interface LoopInterventionPolicy {
+  beforeStep?(context: LoopInterventionContext): InterventionRequest | null;
+  afterStep?(context: LoopInterventionContext): InterventionRequest | null;
 }
 
 function toolNameToCapabilityId(toolName: string): string {
@@ -101,6 +133,158 @@ function extractFailureTarget(args: unknown): string | undefined {
 function buildFailureHintKey(capabilityId: string, args: unknown): string {
   const target = extractFailureTarget(args);
   return target ? `${capabilityId}::${target}` : capabilityId;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function cloneInterventionPayload(payload: unknown): Record<string, unknown> | undefined {
+  return isPlainObject(payload) ? { ...payload } : undefined;
+}
+
+function normalizeInterventionRequest(value: unknown): InterventionRequest | null {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  if (
+    typeof value.id !== "string" ||
+    typeof value.kind !== "string" ||
+    typeof value.trigger !== "string" ||
+    typeof value.title !== "string" ||
+    typeof value.message !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    kind: value.kind as InterventionRequest["kind"],
+    trigger: value.trigger as InterventionRequest["trigger"],
+    status: "requested",
+    title: value.title,
+    message: value.message,
+    ...(typeof value.skillId === "string" ? { skillId: value.skillId } : {}),
+    ...(typeof value.action === "string" ? { action: value.action } : {}),
+    ...(typeof value.sessionId === "string" || value.sessionId === null
+      ? { sessionId: value.sessionId }
+      : {}),
+    ...(typeof value.tabId === "number" || value.tabId === null ? { tabId: value.tabId } : {}),
+    ...(cloneInterventionPayload(value.payload)
+      ? { payload: cloneInterventionPayload(value.payload) }
+      : {}),
+  };
+}
+
+function createConfirmPolicyIntervention(
+  context: LoopInterventionContext,
+): InterventionRequest | null {
+  const descriptor = context.descriptor;
+  if (!descriptor) {
+    return null;
+  }
+
+  const sideEffectful =
+    descriptor.sideEffects === "writes" || descriptor.sideEffects === "external";
+  if (descriptor.risk !== "high" || !sideEffectful) {
+    return null;
+  }
+
+  return {
+    id: `ivr:${context.toolCallId}:confirm_policy`,
+    kind: "confirm",
+    trigger: "confirm_policy",
+    status: "requested",
+    title: `Confirm ${context.capabilityId} before execution`,
+    message: `High-risk step ${context.capabilityId} requires confirmation before execution.`,
+    payload: {
+      capabilityId: context.capabilityId,
+      risk: descriptor.risk,
+      sideEffects: descriptor.sideEffects,
+      args: isPlainObject(context.args) ? { ...context.args } : context.args,
+    },
+  };
+}
+
+function createVerifyFailedIntervention(
+  context: LoopInterventionContext,
+): InterventionRequest | null {
+  const provided = normalizeInterventionRequest(
+    isPlainObject(context.result?.data) ? context.result?.data.intervention : undefined,
+  );
+  if (provided) {
+    return provided;
+  }
+
+  const verifyFailed =
+    context.status === "failed_verify" ||
+    context.result?.verified === false ||
+    (isPlainObject(context.result?.data) && context.result.data.verified === false);
+  if (!verifyFailed) {
+    return null;
+  }
+
+  return {
+    id: `ivr:${context.toolCallId}:verify_failed`,
+    kind: "takeover",
+    trigger: "verify_failed",
+    status: "requested",
+    title: `Manual verification required for ${context.capabilityId}`,
+    message: `Verification failed after ${context.capabilityId}; manual intervention is required.`,
+    payload: {
+      capabilityId: context.capabilityId,
+      args: isPlainObject(context.args) ? { ...context.args } : context.args,
+    },
+  };
+}
+
+const DEFAULT_INTERVENTION_POLICY: LoopInterventionPolicy = {
+  beforeStep: createConfirmPolicyIntervention,
+  afterStep: createVerifyFailedIntervention,
+};
+
+async function handlePolicyIntervention(input: {
+  kernel: Kernel;
+  sessionId: string;
+  request: InterventionRequest;
+  context: LoopInterventionContext;
+  handler?: RunLoopInput["onIntervention"];
+}): Promise<{
+  resolved: boolean;
+  requested: InterventionRecord;
+  resolvedRecord?: InterventionRecord;
+}> {
+  const requested = input.kernel.requestIntervention(input.sessionId, input.request);
+  input.kernel.pause(input.sessionId);
+
+  if (!input.handler) {
+    return { resolved: false, requested };
+  }
+
+  const handlerResult = await input.handler(requested, {
+    ...input.context,
+    phase: "requested",
+  });
+  if (handlerResult && typeof handlerResult === "object" && handlerResult.resume === false) {
+    return { resolved: false, requested };
+  }
+
+  const resolution =
+    handlerResult && typeof handlerResult === "object" && isPlainObject(handlerResult.resolution)
+      ? { ...handlerResult.resolution }
+      : undefined;
+  const resolvedRecord = input.kernel.resolveIntervention(requested.id, resolution);
+  await input.handler(resolvedRecord, {
+    ...input.context,
+    phase: "resolved",
+  });
+  input.kernel.resume(input.sessionId);
+
+  return {
+    resolved: true,
+    requested,
+    resolvedRecord,
+  };
 }
 
 function sortedFailureHints(failures: Map<string, ActionFailureHint>): ActionFailureHint[] {
@@ -434,9 +618,23 @@ export async function runLoop(
   const tools = registry.projectTools();
   const openAiTools = toolContractsToOpenAiTools(tools);
   const systemPrompt = buildSystemPrompt(tools);
+  const interventionPolicy = opts.interventionPolicy ?? DEFAULT_INTERVENTION_POLICY;
 
   // Start run
-  kernel.startRun(input.sessionId);
+  const initialRunState = kernel.getRunState(input.sessionId);
+  if (initialRunState.phase === "paused") {
+    const interventionSummary = kernel.getInterventionSummary({ sessionId: input.sessionId });
+    if (interventionSummary.activeCount > 0) {
+      return {
+        terminalStatus: "stopped",
+        stepCount: kernel.getStepCount(input.sessionId),
+        telemetry: [],
+      };
+    }
+    kernel.resume(input.sessionId);
+  } else {
+    kernel.startRun(input.sessionId);
+  }
 
   // Append user message
   await kernel.appendMessage(input.sessionId, {
@@ -548,10 +746,12 @@ export async function runLoop(
       }
 
       // Execute each tool call
+      let continueAfterResolvedIntervention = false;
       for (const tc of toolCalls) {
         const toolCallId = tc.id;
         const toolName = tc.function.name;
         const capabilityId = toolNameToCapabilityId(toolName);
+        const descriptor = registry.get(capabilityId);
 
         let args: unknown;
         try {
@@ -561,6 +761,35 @@ export async function runLoop(
         }
 
         input.onToolCall?.(toolName, args);
+
+        const preStepIntervention = interventionPolicy.beforeStep?.({
+          sessionId: input.sessionId,
+          toolCallId,
+          toolName,
+          capabilityId,
+          args,
+          descriptor,
+        });
+        if (preStepIntervention) {
+          const handled = await handlePolicyIntervention({
+            kernel,
+            sessionId: input.sessionId,
+            request: preStepIntervention,
+            context: {
+              sessionId: input.sessionId,
+              toolCallId,
+              toolName,
+              capabilityId,
+              args,
+              descriptor,
+            },
+            handler: input.onIntervention,
+          });
+          if (!handled.resolved) {
+            terminalStatus = "stopped";
+            break;
+          }
+        }
 
         // Execute via kernel with timing
         const stepStartedAt = new Date();
@@ -613,6 +842,40 @@ export async function runLoop(
 
         // Check terminal
         const status = kernel.checkTerminal(input.sessionId, turn);
+        const postStepIntervention = interventionPolicy.afterStep?.({
+          sessionId: input.sessionId,
+          toolCallId,
+          toolName,
+          capabilityId,
+          args,
+          descriptor,
+          result,
+          status,
+        });
+        if (postStepIntervention) {
+          const handled = await handlePolicyIntervention({
+            kernel,
+            sessionId: input.sessionId,
+            request: postStepIntervention,
+            context: {
+              sessionId: input.sessionId,
+              toolCallId,
+              toolName,
+              capabilityId,
+              args,
+              descriptor,
+              result,
+              status,
+            },
+            handler: input.onIntervention,
+          });
+          if (!handled.resolved) {
+            terminalStatus = "stopped";
+            break;
+          }
+          continueAfterResolvedIntervention = true;
+          break;
+        }
         if (status) {
           if (shouldContinueAfterToolFailure({ capabilityId, result, status })) {
             continue;
@@ -620,6 +883,10 @@ export async function runLoop(
           terminalStatus = status;
           break;
         }
+      }
+
+      if (continueAfterResolvedIntervention) {
+        continue;
       }
 
       // Check compaction
@@ -632,7 +899,9 @@ export async function runLoop(
     }
   } finally {
     try {
-      kernel.stop(input.sessionId);
+      if (kernel.getRunState(input.sessionId).phase === "running") {
+        kernel.stop(input.sessionId);
+      }
     } catch {
       // Already stopped or not running
     }
