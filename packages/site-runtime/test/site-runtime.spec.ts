@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
@@ -38,6 +38,10 @@ interface PageHookBridgeState {
     }>;
     invocations: Array<Record<string, unknown>>;
     verifications: Array<{ action: string; verified: boolean }>;
+    keyEvents?: Array<Record<string, unknown>>;
+    queryResults?: Array<Record<string, unknown>>;
+    clickEvents?: Array<Record<string, unknown>>;
+    fillEvents?: Array<Record<string, unknown>>;
   };
 }
 
@@ -73,6 +77,65 @@ function createDomSandbox() {
     }
   }
 
+  class MouseEvent {
+    readonly type: string;
+    readonly bubbles: boolean;
+    readonly cancelable: boolean;
+    constructor(type: string, init: Record<string, unknown> = {}) {
+      this.type = type;
+      this.bubbles = init.bubbles === true;
+      this.cancelable = init.cancelable === true;
+    }
+  }
+
+  class InputEvent {
+    readonly type: string;
+    readonly bubbles: boolean;
+    constructor(type: string, init: Record<string, unknown> = {}) {
+      this.type = type;
+      this.bubbles = init.bubbles === true;
+    }
+  }
+
+  class Event {
+    readonly type: string;
+    readonly bubbles: boolean;
+    constructor(type: string, init: Record<string, unknown> = {}) {
+      this.type = type;
+      this.bubbles = init.bubbles === true;
+    }
+  }
+
+  function createMockElement(
+    tag: string,
+    attrs: Record<string, string>,
+    text: string,
+  ) {
+    const attrList = Object.entries(attrs).map(([name, value]) => ({ name, value }));
+    const el: Record<string, unknown> = {
+      tagName: tag.toUpperCase(),
+      textContent: text,
+      value: attrs.value ?? "",
+      attributes: Object.assign(attrList, { length: attrList.length }),
+      dispatchEvent(event: { type: string }) {
+        dispatchLog.push({ target: `${tag}#${attrs.id ?? "?"}`, type: event.type });
+        return true;
+      },
+      click() {
+        (el as Record<string, unknown> & { dispatchEvent: (e: unknown) => boolean }).dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+      },
+    };
+    return el;
+  }
+
+  const mockElements = [
+    createMockElement("button", { id: "submit-btn", class: "primary" }, "Submit"),
+    createMockElement("input", { id: "email", type: "email" }, ""),
+    createMockElement("div", { id: "content", class: "main" }, "Hello World"),
+  ];
+
   const activeElement = createTarget("activeElement");
   const body = createTarget("body");
   const documentElement = createTarget("documentElement");
@@ -81,12 +144,33 @@ function createDomSandbox() {
     body,
     documentElement,
     dispatchEvent: createTarget("document").dispatchEvent,
+    querySelectorAll(selector: string) {
+      if (selector === "*") return [...mockElements];
+      return mockElements.filter((el) => {
+        if ((el.tagName as string).toLowerCase() === selector.toLowerCase()) return true;
+        if (selector.startsWith("#")) {
+          return (el.attributes as Array<{ name: string; value: string }>).some(
+            (a) => a.name === "id" && a.value === selector.slice(1),
+          );
+        }
+        if (selector.startsWith(".")) {
+          return (el.attributes as Array<{ name: string; value: string }>).some(
+            (a) => a.name === "class" && (a.value as string).split(" ").includes(selector.slice(1)),
+          );
+        }
+        return false;
+      });
+    },
     __dispatchLog: dispatchLog,
+    __mockElements: mockElements,
   };
 
   return {
     document,
     KeyboardEvent,
+    MouseEvent,
+    InputEvent,
+    Event,
   };
 }
 
@@ -125,10 +209,15 @@ function createScriptingChromeHarness() {
 
             if (request.files) {
               for (const file of request.files) {
-                const source = readFileSync(
-                  resolve(testDir, "../../../apps/mv3-shell", file),
-                  "utf8",
-                );
+                let filePath = resolve(testDir, "../../../apps/mv3-shell", file);
+                if (!existsSync(filePath) && file.endsWith(".js")) {
+                  filePath = resolve(
+                    testDir,
+                    "../../../apps/mv3-shell",
+                    `${file.slice(0, -3)}.ts`,
+                  );
+                }
+                const source = readFileSync(filePath, "utf8");
                 runInNewContext(source, context, {
                   filename: file,
                 });
@@ -824,6 +913,273 @@ describe("site-runtime", () => {
         "verify:page_press_key",
       ],
     });
+  });
+
+  it("dispatches query through the real page-hook bridge and returns serialized elements", async () => {
+    const scriptingHarness = createScriptingChromeHarness();
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: scriptingHarness.chromeApi,
+    });
+
+    const result = await invokeSingleActionSiteSkill({
+      request: {
+        skillId: "fixture.page",
+        action: "query",
+        tab: {
+          tabId: 15,
+          url: "https://fixture.test/demo",
+          active: true,
+        },
+        input: {
+          selector: "button",
+        },
+        plan: {
+          skillId: "fixture.page",
+          action: "query",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "fixture.page.query",
+          source: "exports.default = async ({ input }) => ({ selector: input.selector });",
+        },
+        verifier: "page_query",
+      },
+      runnerHost: new JsRunnerHost(),
+      installer: {
+        install: async (step, currentTab) => pageHookBridge.install(step, currentTab),
+        invoke: async ({ installation, action, input, tab: currentTab, ctx }) =>
+          pageHookBridge.invoke({
+            installation,
+            action,
+            input,
+            tab: currentTab,
+            ctx,
+          }),
+        verify: async ({ installation, action, result, tab: currentTab }) =>
+          pageHookBridge.verify({
+            installation,
+            action,
+            result,
+            tab: currentTab,
+          }),
+      },
+    });
+
+    expect(result).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "query",
+        selector: "button",
+        count: 1,
+        elements: [
+          expect.objectContaining({
+            tagName: "button",
+            textContent: "Submit",
+          }),
+        ],
+        installationId: "bbl-next.page-hook.page:1",
+      },
+      trace: [
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:query",
+        "verify:page_query",
+      ],
+    });
+
+    const snapshot = (await pageHookBridge.snapshotState({
+      tabId: 15,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+
+    expect(snapshot?.queryResults).toHaveLength(1);
+    expect(snapshot?.queryResults?.[0]).toMatchObject({
+      action: "query",
+      selector: "button",
+      count: 1,
+    });
+  });
+
+  it("dispatches query → click → fill through the real page-hook bridge as a multi-step flow", async () => {
+    const scriptingHarness = createScriptingChromeHarness();
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: scriptingHarness.chromeApi,
+    });
+
+    const pageSkill = {
+      skillId: "fixture.page",
+      matches: ["https://fixture.test/*"],
+      actions: [
+        {
+          name: "query",
+          injectionSteps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle",
+            },
+          ],
+          verifier: "page_query",
+          module: {
+            id: "fixture.page.query",
+            source: "exports.default = async ({ input }) => ({ selector: input.selector });",
+          },
+        },
+        {
+          name: "click",
+          injectionSteps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle",
+            },
+          ],
+          verifier: "page_click",
+          module: {
+            id: "fixture.page.click",
+            source: "exports.default = async ({ input }) => ({ uid: input.uid });",
+          },
+        },
+        {
+          name: "fill",
+          injectionSteps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle",
+            },
+          ],
+          verifier: "page_fill",
+          module: {
+            id: "fixture.page.fill",
+            source:
+              "exports.default = async ({ input }) => ({ uid: input.uid, value: input.value });",
+          },
+        },
+      ],
+    };
+
+    const installer = {
+      install: async (step: { world: string; scriptId: string; jsPath?: string; runAt?: string }, currentTab: { tabId: number; url: string; active: boolean }) =>
+        pageHookBridge.install(step, currentTab),
+      invoke: async ({ installation, action, input, tab: currentTab, ctx }: Record<string, unknown>) =>
+        pageHookBridge.invoke({
+          installation,
+          action,
+          input,
+          tab: currentTab,
+          ctx,
+        }),
+      verify: async ({ installation, action, result, tab: currentTab }: Record<string, unknown>) =>
+        pageHookBridge.verify({
+          installation,
+          action,
+          result,
+          tab: currentTab,
+        }),
+    };
+
+    const runtime = new SiteSkillRuntime({
+      registry: new SiteSkillRegistry([pageSkill]),
+      runnerHost: new JsRunnerHost(),
+      installer: installer as unknown as import("@bbl-next/site-runtime").SiteScriptInstaller,
+    });
+
+    const testTab = { tabId: 16, url: "https://fixture.test/demo", active: true };
+
+    // Step 1: Query to get element uids
+    const queryResult = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "query",
+      tab: testTab,
+      input: { selector: "input" },
+    });
+
+    expect(queryResult).toMatchObject({
+      verified: true,
+      result: expect.objectContaining({
+        ok: true,
+        action: "query",
+        count: 1,
+        elements: [expect.objectContaining({ tagName: "input" })],
+      }),
+    });
+
+    const inputUid = (queryResult.result as Record<string, unknown> & { elements: Array<{ uid: string }> }).elements[0].uid;
+
+    // Step 2: Fill the input field
+    const fillResult = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "fill",
+      tab: testTab,
+      input: { uid: inputUid, value: "test@example.com" },
+    });
+
+    expect(fillResult).toMatchObject({
+      verified: true,
+      result: expect.objectContaining({
+        ok: true,
+        action: "fill",
+        uid: inputUid,
+        value: "test@example.com",
+        tagName: "input",
+      }),
+    });
+
+    // Step 3: Query button and click it
+    const buttonQuery = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "query",
+      tab: testTab,
+      input: { selector: "button" },
+    });
+
+    const buttonUid = (buttonQuery.result as Record<string, unknown> & { elements: Array<{ uid: string }> }).elements[0].uid;
+
+    const clickResult = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "click",
+      tab: testTab,
+      input: { uid: buttonUid },
+    });
+
+    expect(clickResult).toMatchObject({
+      verified: true,
+      result: expect.objectContaining({
+        ok: true,
+        action: "click",
+        uid: buttonUid,
+        tagName: "button",
+      }),
+    });
+
+    // Verify full state
+    const snapshot = (await pageHookBridge.snapshotState({
+      tabId: 16,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+
+    expect(snapshot?.queryResults).toHaveLength(2);
+    expect(snapshot?.clickEvents).toHaveLength(1);
+    expect(snapshot?.fillEvents).toHaveLength(1);
+    expect(snapshot?.verifications).toEqual([
+      { action: "query", verified: true },
+      { action: "fill", verified: true },
+      { action: "query", verified: true },
+      { action: "click", verified: true },
+    ]);
   });
 
   describe("InjectionPlan", () => {
