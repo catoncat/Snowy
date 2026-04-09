@@ -41,3 +41,15 @@ Review the remaining routing contract around provider/profile escalation and lan
 - Decide the minimal vNext contract for per-lane profile selection and ordered fallback / escalation.
 - Either create executable follow-up slices for routing semantics or document explicit deferred boundaries in planning truth.
 - Keep tests and docs pointing at one source of truth for route negotiation responsibilities.
+
+## Resolution
+
+- Reviewed the current provider/profile path in `packages/contracts`, `llm-profile-resolver`, `llm-kernel-adapter`, `kernel-facade`, `loop-orchestrator`, and `compaction-manager`.
+- Conclusion: this is still a visible `provider-profile-routing` mainline gap, but it is now narrowed to execution-lane-aware initial route selection plus an explicit ordered profile chain contract. It should not be silently deferred back into app-private heuristics.
+- Today the model already exposes `LLM_PROVIDER_EXECUTION_LANES`, `LlmProviderSendInput.lane`, and `auxProfile`, yet route resolution still only builds `[targetProfile, fallbackProfile]`, `createKernelLlmFromProvider()` hard-codes a worker snapshot, and compaction/title-facing paths cannot declare a lane-specific route root.
+
+## Sub Issues
+
+- `ISSUE-121` `Follow-up: add execution-lane-aware profile routing to the kernel LLM path`
+  - 原因：把剩余缺口收窄为 lane-aware 初始 profile 选择、ordered profile chain，以及 loop/compaction/title entrypoint 的显式接线。
+  - 结果：继续由 `provider-profile-routing` 模块承接，不把 provider policy 回退为 app-local glue。
