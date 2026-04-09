@@ -1,10 +1,15 @@
-import type { CapabilityDescriptor, KernelLlmAdapter } from "@bbl-next/contracts";
+import type {
+  CapabilityDescriptor,
+  KernelLlmAdapter,
+  LlmProfileConfig,
+  ResolveLlmRouteResult,
+} from "@bbl-next/contracts";
 import {
   type CapabilityProviderRequest,
   CapabilityRegistry,
   FamilyProviderRegistry,
 } from "@bbl-next/core";
-import { InMemorySessionStorage, createKernel } from "@bbl-next/kernel";
+import { InMemorySessionStorage, LlmProviderRegistry, createKernel } from "@bbl-next/kernel";
 import type { Kernel } from "@bbl-next/kernel";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -31,6 +36,48 @@ function createDescriptor(id: string): CapabilityDescriptor {
       operation,
     },
   };
+}
+
+const TEST_PROFILE_CONFIG: LlmProfileConfig = {
+  defaultProfile: "default",
+  fallbackProfile: "fallback",
+  profiles: [
+    {
+      id: "default",
+      providerId: "openai_compatible",
+      llmBase: "https://llm.example.com",
+      llmKey: "test-key",
+      llmModel: "gpt-4.1-mini",
+    },
+    {
+      id: "fallback",
+      providerId: "openai_compatible",
+      llmBase: "https://llm.example.com",
+      llmKey: "test-key",
+      llmModel: "gpt-4.1",
+    },
+  ],
+};
+
+function callKernelMethod<Args extends unknown[], Result>(
+  target: object,
+  method: string,
+  ...args: Args
+): Result {
+  const fn = Reflect.get(target, method);
+  if (typeof fn !== "function") {
+    throw new Error(`Kernel method not available: ${method}`);
+  }
+  return Reflect.apply(fn, target, args) as Result;
+}
+
+function createKernelWithFacadeOptions(
+  options: Parameters<typeof createKernel>[0] & {
+    providerRegistry?: LlmProviderRegistry;
+    profileConfig?: LlmProfileConfig;
+  },
+): Kernel {
+  return createKernel(options as Parameters<typeof createKernel>[0]);
 }
 
 describe("KernelFacade (createKernel)", () => {
@@ -304,6 +351,71 @@ describe("KernelFacade (createKernel)", () => {
       expect(kernel.runs).toBeDefined();
       expect(kernel.loop).toBeDefined();
       expect(kernel.compaction).toBeDefined();
+    });
+  });
+
+  describe("provider/profile management", () => {
+    it("returns null profile/provider management when kernel was created without them", () => {
+      expect(
+        callKernelMethod<[], ResolveLlmRouteResult | null>(kernel, "getActiveProfile"),
+      ).toBeNull();
+      expect(
+        callKernelMethod<[], LlmProviderRegistry | null>(kernel, "getProviderRegistry"),
+      ).toBeNull();
+    });
+
+    it("exposes the managed provider registry for external orchestrators", () => {
+      const providerRegistry = new LlmProviderRegistry();
+      const wiredKernel = createKernelWithFacadeOptions({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        providerRegistry,
+        profileConfig: TEST_PROFILE_CONFIG,
+      });
+
+      expect(
+        callKernelMethod<[], LlmProviderRegistry | null>(wiredKernel, "getProviderRegistry"),
+      ).toBe(providerRegistry);
+    });
+
+    it("resolves the active profile and updates it when profile config changes", () => {
+      const wiredKernel = createKernelWithFacadeOptions({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        profileConfig: TEST_PROFILE_CONFIG,
+      });
+
+      const initial = callKernelMethod<[], ResolveLlmRouteResult | null>(
+        wiredKernel,
+        "getActiveProfile",
+      );
+
+      expect(initial).not.toBeNull();
+      expect(initial?.ok).toBe(true);
+      if (!initial || !initial.ok) {
+        throw new Error("expected initial active profile route");
+      }
+      expect(initial.route.profile).toBe("default");
+      expect(initial.route.llmModel).toBe("gpt-4.1-mini");
+
+      callKernelMethod<[LlmProfileConfig], void>(wiredKernel, "setProfileConfig", {
+        ...TEST_PROFILE_CONFIG,
+        defaultProfile: "fallback",
+      });
+
+      const updated = callKernelMethod<[], ResolveLlmRouteResult | null>(
+        wiredKernel,
+        "getActiveProfile",
+      );
+
+      expect(updated).not.toBeNull();
+      expect(updated?.ok).toBe(true);
+      if (!updated || !updated.ok) {
+        throw new Error("expected updated active profile route");
+      }
+      expect(updated.route.profile).toBe("fallback");
+      expect(updated.route.llmModel).toBe("gpt-4.1");
+      expect(updated.route.orderedProfiles).toEqual(["fallback"]);
     });
   });
 });

@@ -4,11 +4,13 @@ import type {
   CompactionReason,
   InterventionRequest,
   KernelLlmAdapter,
+  LlmProfileConfig,
   LoopTerminalStatus,
   LoopTurn,
   MessagePayload,
   NoProgressReason,
   QueuedPrompt,
+  ResolveLlmRouteResult,
   RunState,
   SessionContext,
   SessionEntry,
@@ -28,6 +30,8 @@ import {
   type KernelInterventionRecord,
   type KernelInterventionSummary,
 } from "./intervention-controller.js";
+import { resolveLlmRoute } from "./llm-profile-resolver.js";
+import type { LlmProviderRegistry } from "./llm-provider-registry.js";
 import {
   LoopEngine,
   type LoopEngineOptions,
@@ -47,6 +51,8 @@ export interface KernelOptions {
   llm: KernelLlmAdapter;
   registry?: CapabilityRegistry;
   providers?: FamilyProviderRegistry;
+  providerRegistry?: LlmProviderRegistry;
+  profileConfig?: LlmProfileConfig;
   dispatch?: KernelDispatchConfig;
   executeRunnerStep?: (request: {
     sessionId: string;
@@ -111,6 +117,11 @@ export interface Kernel {
   shouldCompact(sessionId: string, contextWindow: number, currentTokens?: number): Promise<boolean>;
   triggerCompaction(sessionId: string, reason: CompactionReason): Promise<CompactionDraft>;
 
+  // Provider/profile management
+  getActiveProfile(): ResolveLlmRouteResult | null;
+  setProfileConfig(config: LlmProfileConfig): void;
+  getProviderRegistry(): LlmProviderRegistry | null;
+
   // Intervention lifecycle
   requestIntervention(
     sessionId: string,
@@ -159,6 +170,8 @@ export function createKernel(opts: KernelOptions): Kernel {
   const loop = new LoopEngine(opts.loop);
   const compaction = new CompactionManager(sessions, opts.llm, opts.compaction);
   const interventions = new InterventionController();
+  const providerRegistry = opts.providerRegistry ?? null;
+  let profileConfig = opts.profileConfig;
 
   const executeStep = async (
     sessionId: string,
@@ -311,6 +324,13 @@ export function createKernel(opts: KernelOptions): Kernel {
         throw error;
       }
     },
+
+    // Provider/profile management
+    getActiveProfile: () => (profileConfig ? resolveLlmRoute(profileConfig) : null),
+    setProfileConfig(config) {
+      profileConfig = config;
+    },
+    getProviderRegistry: () => providerRegistry,
 
     // Intervention lifecycle
     requestIntervention: (sessionId, request, requestOpts) =>
