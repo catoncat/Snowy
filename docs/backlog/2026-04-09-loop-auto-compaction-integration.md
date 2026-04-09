@@ -44,9 +44,11 @@ completed_at: 2026-04-09T06:42:00.000Z
 ### 实现了什么
 - 在 `packages/kernel/src/loop-orchestrator.ts` 把 turn 间自动 compaction 的 reason 从固定 `overflow` 改为 `threshold`
 - 为 LLM 请求增加 context overflow 识别；命中 `context window exceeded`/`context length exceeded`/`too many tokens` 等真实超窗错误时，走 `overflow` compaction 后继续下一轮请求
+- 为连续 overflow 场景补上 compaction retry budget，避免 compaction 无法缩小上下文时陷入无限 `overflow -> compact -> continue` 热循环
 - 保持 compaction 完成后的运行态可继续推进，并在 `packages/kernel/test/loop-orchestrator.spec.ts` 增补 threshold/overflow 两条集成测试，验证 compaction summary 会进入下一次请求上下文
 
 ### 实际跑了什么检查
+- `bunx vitest run packages/kernel/test/loop-orchestrator.spec.ts -t "fails after overflow compaction retry budget is exhausted"`
 - `bunx vitest run packages/kernel/test/loop-orchestrator.spec.ts`
 - `bunx vitest run packages/kernel/test/loop-orchestrator.spec.ts packages/kernel/test/kernel-facade.spec.ts`
 - `./node_modules/.bin/biome check packages/kernel/src/loop-orchestrator.ts packages/kernel/test/loop-orchestrator.spec.ts`
@@ -57,3 +59,4 @@ completed_at: 2026-04-09T06:42:00.000Z
 ## 相关 commits
 
 - `1bc78a618764` fix(kernel): 对齐 loop compaction 触发语义
+- `95ac77d2837c` fix(kernel): 限制 overflow compaction 重试
