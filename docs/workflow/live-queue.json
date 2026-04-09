@@ -1,25 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T07:36:25.772Z",
+  "generated_at": "2026-04-09T11:10:48.976Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-104",
-      "issue_path": "docs/backlog/2026-04-09-diagnostics-capture-payload-structure.md",
-      "title": "Diagnostics payload contract 化与 kernel-owned snapshot 收敛",
-      "parallel_group": "mv3-shell",
-      "module_id": "observability-audit",
+      "issue_id": "ISSUE-112",
+      "issue_path": "docs/backlog/2026-04-09-loop-policy-driven-intervention.md",
+      "title": "Loop 内 policy-driven intervention 调度",
+      "parallel_group": "kernel",
+      "module_id": "intervention-handoff",
       "module_stage": "mainline",
       "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run packages/contracts/test/contracts.spec.ts packages/kernel/test/kernel-facade.spec.ts apps/mv3-shell/test/manifest.spec.ts",
+      "check_cmd": "bunx vitest run packages/kernel/test/loop-orchestrator.spec.ts packages/kernel/test/kernel-facade.spec.ts",
       "depends_on": [],
       "write_scope": [
-        "packages/contracts/src/index.ts",
-        "packages/contracts/test/contracts.spec.ts",
-        "packages/kernel/src/kernel-facade.ts",
-        "packages/kernel/test/kernel-facade.spec.ts",
-        "apps/mv3-shell/src/background.ts",
-        "apps/mv3-shell/test/manifest.spec.ts"
+        "packages/kernel/src/loop-orchestrator.ts",
+        "packages/kernel/test/loop-orchestrator.spec.ts",
+        "packages/kernel/test/kernel-facade.spec.ts"
       ]
     },
     {
@@ -37,6 +34,23 @@
         "packages/core/test/core.spec.ts",
         "apps/mv3-shell/src/runtime-services.ts",
         "apps/mv3-shell/test/runtime-chat.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-108",
+      "issue_path": "docs/backlog/2026-04-09-js-runner-execution-engine.md",
+      "title": "JS Runner offscreen 集成与隔离加固",
+      "parallel_group": "js-runner",
+      "module_id": "execution-host-bridge",
+      "module_stage": "secondary",
+      "tracking_kind": "gap",
+      "check_cmd": "bunx vitest run packages/js-runner/test/js-runner.spec.ts apps/mv3-shell/test/manifest.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "packages/js-runner/src/runner-host-core.ts",
+        "packages/js-runner/test/js-runner.spec.ts",
+        "apps/mv3-shell/src/offscreen.ts",
+        "apps/mv3-shell/test/manifest.spec.ts"
       ]
     }
   ]

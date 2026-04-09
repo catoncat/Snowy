@@ -1,12 +1,15 @@
 ---
 id: ISSUE-104
-title: Diagnostics payload contract 化与 kernel-owned snapshot 收敛
-status: open
+title: "Diagnostics payload contract 化与 kernel-owned snapshot 收敛"
+status: done
 priority: p0
-source: next-batch-planner review 2026-04-09
+source: "next-batch-planner review 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
-tags: [observability, diagnostics, kernel]
+assignee: codex-019d70f6
+tags:
+  - observability
+  - diagnostics
+  - kernel
 kind: slice
 epic: EPIC-observability
 parallel_group: mv3-shell
@@ -23,6 +26,7 @@ write_scope:
   - apps/mv3-shell/test/manifest.spec.ts
 acceptance_ref: docs/reviews/2026-03-29-vnext-architecture-recovery-report.md
 check_cmd: "bunx vitest run packages/contracts/test/contracts.spec.ts packages/kernel/test/kernel-facade.spec.ts apps/mv3-shell/test/manifest.spec.ts"
+completed_at: 2026-04-09T11:10:48.965Z
 ---
 
 ## Goal
@@ -35,7 +39,25 @@ check_cmd: "bunx vitest run packages/contracts/test/contracts.spec.ts packages/k
 
 ## Acceptance
 
-- [ ] `packages/contracts` 定义正式的 diagnostics payload 类型，至少覆盖 session / run / loop / intervention / provider 相关字段
-- [ ] kernel facade 暴露 `captureDiagnostics()` 或等价 API，负责组装 kernel-owned 的核心 runtime snapshot
-- [ ] `runtime.capture_diagnostics` 的 public route 改为消费 kernel snapshot，并仅在 MV3 edge 补充 bridge / page-hook / site 状态
-- [ ] 测试覆盖：contracts 类型合法、kernel snapshot 内容正确、background route 不再手写平行 diagnostics truth
+- [x] `packages/contracts` 定义正式的 diagnostics payload 类型，至少覆盖 session / run / loop / intervention / provider 相关字段
+- [x] kernel facade 暴露 `captureDiagnostics()` 或等价 API，负责组装 kernel-owned 的核心 runtime snapshot
+- [x] `runtime.capture_diagnostics` 的 public route 改为消费 kernel snapshot，并仅在 MV3 edge 补充 bridge / page-hook / site 状态
+- [x] 测试覆盖：contracts 类型合法、kernel snapshot 内容正确、background route 不再手写平行 diagnostics truth
+
+## 工作总结
+
+### 实现了什么
+- 定义 runtime diagnostics canonical contract 与 payload 类型
+- 在 kernel facade 增加 captureDiagnostics 组装 session/run/loop/intervention/provider snapshot
+- 让 background diagnostics 消费 kernel snapshot，仅补 bridge/runner/site/error
+
+### 实际跑了什么检查
+- bunx vitest run packages/contracts/test/contracts.spec.ts packages/kernel/test/kernel-facade.spec.ts apps/mv3-shell/test/manifest.spec.ts
+- ./node_modules/.bin/biome check apps/mv3-shell/src/background.ts apps/mv3-shell/test/manifest.spec.ts packages/contracts/src/index.ts packages/contracts/test/contracts.spec.ts packages/kernel/src/kernel-facade.ts packages/kernel/test/kernel-facade.spec.ts
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `55d502b7dc52` feat(observability): 收敛 diagnostics canonical snapshot
