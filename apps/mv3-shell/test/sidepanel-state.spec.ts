@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { renderMessageRichText, renderToolTrace } from "../src/sidepanel/renderers";
 import {
   applyBootstrapState,
   applyChatEvent,
   createInitialChatState,
-  renderMessageRichText,
-  renderToolTrace,
   toggleToolExpanded,
 } from "../src/sidepanel/state";
 

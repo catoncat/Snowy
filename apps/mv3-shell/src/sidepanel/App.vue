@@ -4,17 +4,12 @@ import {
   applyBootstrapState,
   applyChatEvent,
   createInitialChatState,
-  renderMessageRichText,
-  renderToolTrace,
   toggleToolExpanded,
   type ChatEvent,
   type ChatItem,
-  type ChatMessageItem,
   type ChatState,
-  type ChatToolItem,
-  type RichTextRenderResult,
-  type ToolTraceRenderResult,
 } from "./state";
+import { ChatTranscriptPane } from "./chat-transcript-pane";
 import {
   applyManagementResourceDocument,
   buildManagementBootstrapRequests,
@@ -86,33 +81,6 @@ const skillsSummary = computed(() => managementState.value.skills?.data ?? null)
 const hostsSummary = computed(() => managementState.value.hosts?.data ?? null);
 const hostItems = computed(() => hostsSummary.value?.items ?? []);
 const activeTabId = computed(() => runtimeSummary.value?.activeTab?.tabId ?? null);
-
-type RenderedMessageItem = ChatMessageItem & {
-  rendered: RichTextRenderResult;
-};
-
-type RenderedToolItem = ChatToolItem & {
-  rendered: ToolTraceRenderResult;
-};
-
-type RenderedChatItem = RenderedMessageItem | RenderedToolItem;
-
-const renderedChatItems = computed<RenderedChatItem[]>(() =>
-  chatState.value.items.map((item) =>
-    item.kind === "message"
-      ? {
-          ...item,
-          rendered:
-            item.role === "assistant"
-              ? renderMessageRichText(item.text)
-              : { mode: "plain", html: "" },
-        }
-      : {
-          ...item,
-          rendered: renderToolTrace(item.summary, item.detail),
-        },
-  ),
-);
 
 function readStringField(record: unknown, field: string): string {
   if (!record || typeof record !== "object" || Array.isArray(record)) {
@@ -589,75 +557,11 @@ onUnmounted(() => {
     </main>
 
     <main v-else ref="listRef" class="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-      <div
-        v-if="loading"
-        class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500"
-      >
-        Loading runtime chat…
-      </div>
-
-      <div
-        v-else-if="chatState.items.length === 0"
-        class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500"
-      >
-        Send a message to start the minimal runtime demo.
-      </div>
-
-      <template v-for="item in renderedChatItems" :key="item.id">
-        <article
-          v-if="item.kind === 'message'"
-          class="rounded-2xl px-4 py-3 shadow-sm"
-          :class="
-            item.role === 'user'
-              ? 'ml-8 bg-slate-900 text-white'
-              : 'mr-8 bg-white text-slate-900 ring-1 ring-slate-200'
-          "
-        >
-          <div class="mb-1 flex items-center justify-between text-[11px] uppercase tracking-wide opacity-70">
-            <span>{{ item.role }}</span>
-            <span>{{ item.state }}</span>
-          </div>
-          <div
-            v-if="item.role === 'assistant' && item.rendered.mode === 'rich'"
-            class="sidepanel-rich-text text-sm leading-6"
-            v-html="item.rendered.html"
-          />
-          <p v-else class="whitespace-pre-wrap text-sm leading-6">{{ item.text }}</p>
-        </article>
-
-        <article v-else class="mr-8 overflow-hidden rounded-2xl bg-amber-50 ring-1 ring-amber-200">
-          <button
-            class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-            @click="toggleTool(item.id)"
-          >
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">
-                  {{ item.toolName }}
-                </p>
-                <span
-                  v-for="preview in item.rendered.preview"
-                  :key="`${item.id}-${preview}`"
-                  class="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200"
-                >
-                  {{ preview }}
-                </span>
-              </div>
-              <p class="mt-1 text-sm text-amber-950">{{ item.summary }}</p>
-            </div>
-            <span class="text-xs font-medium text-amber-700">
-              {{ item.expanded ? 'Hide' : 'Show' }}
-            </span>
-          </button>
-          <div
-            v-if="item.expanded"
-            class="border-t border-amber-200 px-4 py-3"
-            :data-structured="item.rendered.structured"
-          >
-            <div class="sidepanel-tool-trace text-xs leading-5 text-amber-950" v-html="item.rendered.html" />
-          </div>
-        </article>
-      </template>
+      <ChatTranscriptPane
+        :items="chatState.items"
+        :loading="loading"
+        @toggle-tool="toggleTool"
+      />
     </main>
 
     <footer class="border-t border-slate-200 bg-white px-4 py-4">
