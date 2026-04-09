@@ -1134,7 +1134,7 @@ export type ResolveLlmRouteResult =
   | { ok: true; route: LlmResolvedRoute }
   | {
       ok: false;
-      reason: "profile_not_found" | "missing_llm_config";
+      reason: "profile_not_found" | "missing_llm_config" | "route_unavailable";
       message: string;
       profile: string;
     };

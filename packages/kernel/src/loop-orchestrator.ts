@@ -19,6 +19,7 @@ import {
   stepResultToToolMessagePayload,
 } from "./llm-message-model.js";
 import { resolveLlmRoute } from "./llm-profile-resolver.js";
+import type { LlmProviderRegistry } from "./llm-provider-registry.js";
 import { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
 import {
   type ActionFailureHint,
@@ -146,6 +147,7 @@ const CONTEXT_OVERFLOW_ERROR_PATTERNS = [
 export interface RequestLlmWithRetryOptions {
   provider: LlmProviderAdapter;
   profileConfig: LlmProfileConfig;
+  providerRegistry?: LlmProviderRegistry;
   route: LlmResolvedRoute;
   payload: Record<string, unknown>;
   signal: AbortSignal;
@@ -253,6 +255,7 @@ function buildLlmFailureSignature(input: {
 
 function resolveEscalatedRoute(
   profileConfig: LlmProfileConfig,
+  providerRegistry: LlmProviderRegistry | undefined,
   currentRoute: LlmResolvedRoute,
 ): LlmResolvedRoute | null {
   if (currentRoute.escalationPolicy !== "upgrade_only") {
@@ -269,7 +272,9 @@ function resolveEscalatedRoute(
     return null;
   }
 
-  const nextRouteResult = resolveLlmRoute(profileConfig, nextProfile, currentRoute.role);
+  const nextRouteResult = resolveLlmRoute(profileConfig, nextProfile, currentRoute.role, {
+    providerRegistry,
+  });
   return nextRouteResult.ok ? nextRouteResult.route : null;
 }
 
@@ -324,7 +329,11 @@ export async function requestLlmWithRetry(
       previousFailureSignature = failureSignature;
 
       if (repeatedFailureCount >= 2) {
-        const escalatedRoute = resolveEscalatedRoute(opts.profileConfig, route);
+        const escalatedRoute = resolveEscalatedRoute(
+          opts.profileConfig,
+          opts.providerRegistry,
+          route,
+        );
         if (escalatedRoute) {
           route = escalatedRoute;
           repeatedFailureCount = 0;
@@ -362,7 +371,11 @@ export async function requestLlmWithRetry(
     previousFailureSignature = failureSignature;
 
     if (repeatedFailureCount >= 2) {
-      const escalatedRoute = resolveEscalatedRoute(opts.profileConfig, route);
+      const escalatedRoute = resolveEscalatedRoute(
+        opts.profileConfig,
+        opts.providerRegistry,
+        route,
+      );
       if (escalatedRoute) {
         route = escalatedRoute;
         repeatedFailureCount = 0;
@@ -402,13 +415,16 @@ export async function runLoop(
   input: RunLoopInput,
 ): Promise<RunLoopResult> {
   const { kernel, registry, provider, profileConfig } = opts;
+  const providerRegistry = kernel.getProviderRegistry() ?? undefined;
   const contextWindow = opts.contextWindow ?? 8192;
   const buildSystemPrompt =
     opts.systemPromptBuilder ??
     ((tools: ToolContract[]) => defaultSystemPrompt(tools, opts.promptOptions));
 
   // Resolve LLM route
-  const routeResult = resolveLlmRoute(profileConfig);
+  const routeResult = resolveLlmRoute(profileConfig, undefined, "worker", {
+    providerRegistry,
+  });
   if (!routeResult.ok) {
     throw new Error(`LLM route resolution failed: ${routeResult.message}`);
   }
@@ -479,6 +495,7 @@ export async function runLoop(
         requestResult = await requestLlmWithRetry({
           provider,
           profileConfig,
+          providerRegistry,
           route,
           payload,
           signal: input.signal ?? new AbortController().signal,

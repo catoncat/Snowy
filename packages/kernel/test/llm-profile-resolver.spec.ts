@@ -301,8 +301,43 @@ describe("resolveLlmRoute", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.reason).toBe("profile_not_found");
+    expect(result.reason).toBe("route_unavailable");
     expect(result.message).toContain("required capabilities");
+  });
+
+  it("returns route_unavailable when every candidate provider is down", () => {
+    const config = makeConfig({
+      profiles: [
+        {
+          id: "default",
+          providerId: "primary_provider",
+          llmBase: "https://primary.example/v1",
+          llmKey: "sk-primary",
+          llmModel: "gpt-4.1-mini",
+        },
+        {
+          id: "fallback",
+          providerId: "fallback_provider",
+          llmBase: "https://fallback.example/v1",
+          llmKey: "sk-fallback",
+          llmModel: "gpt-4.1",
+        },
+      ],
+      fallbackProfile: "fallback",
+    });
+    const registry = makeRegistry([
+      { id: "primary_provider", healthStatus: "down", capabilities: ["chat"] },
+      { id: "fallback_provider", healthStatus: "down", capabilities: ["chat"] },
+    ]);
+
+    const result = resolveLlmRoute(config, undefined, "worker", {
+      providerRegistry: registry,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("route_unavailable");
+    expect(result.message).toContain("No eligible LLM route found");
   });
 
   it("selects the first fallback provider that satisfies required capabilities", () => {

@@ -2,9 +2,9 @@ import type { LlmProviderAdapter } from "@bbl-next/contracts";
 
 const DEFAULT_HEALTH_STATUS = "healthy" as const;
 
-type LlmProviderHealthStatus = "healthy" | "degraded" | "down";
+export type LlmProviderHealthStatus = "healthy" | "degraded" | "down";
 
-interface LlmProviderState {
+export interface LlmProviderState {
   healthStatus: LlmProviderHealthStatus;
   capabilities: string[];
 }
@@ -25,7 +25,9 @@ function normalizeId(id: string): string {
 }
 
 function normalizeCapabilities(capabilities: string[] | undefined): string[] {
-  return Array.from(new Set((capabilities ?? []).map((value) => String(value || "").trim()).filter(Boolean)));
+  return Array.from(
+    new Set((capabilities ?? []).map((value) => String(value || "").trim()).filter(Boolean)),
+  );
 }
 
 function cloneState(state: LlmProviderState): LlmProviderState {

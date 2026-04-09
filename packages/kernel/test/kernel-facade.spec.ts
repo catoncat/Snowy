@@ -515,5 +515,64 @@ describe("KernelFacade (createKernel)", () => {
       expect(updated.route.llmModel).toBe("gpt-4.1");
       expect(updated.route.orderedProfiles).toEqual(["fallback"]);
     });
+
+    it("uses provider registry negotiation when resolving the active profile", () => {
+      const providerRegistry = new LlmProviderRegistry();
+      providerRegistry.register(
+        {
+          id: "primary_provider",
+          resolveRequestUrl: () => "https://primary.example.test/chat/completions",
+          send: async () => new Response("ok"),
+        },
+        { healthStatus: "down" },
+      );
+      providerRegistry.register(
+        {
+          id: "fallback_provider",
+          resolveRequestUrl: () => "https://fallback.example.test/chat/completions",
+          send: async () => new Response("ok"),
+        },
+        { healthStatus: "healthy" },
+      );
+
+      const wiredKernel = createKernelWithFacadeOptions({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        providerRegistry,
+        profileConfig: {
+          defaultProfile: "default",
+          fallbackProfile: "fallback",
+          profiles: [
+            {
+              id: "default",
+              providerId: "primary_provider",
+              llmBase: "https://primary.example.test",
+              llmKey: "sk-primary",
+              llmModel: "gpt-4.1-mini",
+            },
+            {
+              id: "fallback",
+              providerId: "fallback_provider",
+              llmBase: "https://fallback.example.test",
+              llmKey: "sk-fallback",
+              llmModel: "gpt-4.1",
+            },
+          ],
+        },
+      });
+
+      const active = callKernelMethod<[], ResolveLlmRouteResult | null>(
+        wiredKernel,
+        "getActiveProfile",
+      );
+
+      expect(active).not.toBeNull();
+      expect(active?.ok).toBe(true);
+      if (!active || !active.ok) {
+        throw new Error("expected negotiated active profile route");
+      }
+      expect(active.route.profile).toBe("fallback");
+      expect(active.route.provider).toBe("fallback_provider");
+    });
   });
 });

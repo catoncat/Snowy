@@ -45,7 +45,9 @@ export function createKernelLlmFromProvider(
 ): KernelLlmAdapter {
   return {
     async complete({ systemPrompt, messages, maxTokens, signal }) {
-      const routeResult = resolveLlmRoute(profileConfig, profileId);
+      const routeResult = resolveLlmRoute(profileConfig, profileId, "worker", {
+        providerRegistry: registry,
+      });
       if (!routeResult.ok) {
         throw new Error(`LLM route resolution failed: ${routeResult.message}`);
       }

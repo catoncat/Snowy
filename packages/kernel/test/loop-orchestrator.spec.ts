@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { InMemorySessionStorage } from "../src/in-memory-session-storage.js";
 import { createKernel } from "../src/kernel-facade.js";
 import { resolveLlmRoute } from "../src/llm-profile-resolver.js";
+import { LlmProviderRegistry } from "../src/llm-provider-registry.js";
 import {
   calculateLlmRetryDelayMs,
   requestLlmWithRetry,
@@ -190,6 +191,121 @@ describe("runLoop", () => {
 
     expect(result.terminalStatus).toBe("done");
     expect(callCount).toBe(1);
+  });
+
+  it("negotiates the initial route through kernel provider registry state", async () => {
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([TEST_DESCRIPTOR]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "tabs",
+      invoke: async ({ input }) => {
+        return { navigated: true, url: (input as Record<string, unknown>).url };
+      },
+    });
+
+    const providerRegistry = new LlmProviderRegistry();
+    providerRegistry.register(
+      {
+        id: "primary_provider",
+        resolveRequestUrl: () => "https://primary.example.test/chat/completions",
+        send: async () => new Response("unreachable"),
+      },
+      { healthStatus: "down" },
+    );
+    providerRegistry.register(
+      {
+        id: "fallback_provider",
+        resolveRequestUrl: () => "https://fallback.example.test/chat/completions",
+        send: async () => new Response("ok"),
+      },
+      { healthStatus: "healthy" },
+    );
+
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      registry,
+      providers,
+      providerRegistry,
+      profileConfig: {
+        defaultProfile: "default",
+        fallbackProfile: "fallback",
+        profiles: [
+          {
+            id: "default",
+            providerId: "primary_provider",
+            llmBase: "https://primary.example.test",
+            llmKey: "sk-primary",
+            llmModel: "gpt-4.1-mini",
+          },
+          {
+            id: "fallback",
+            providerId: "fallback_provider",
+            llmBase: "https://fallback.example.test",
+            llmKey: "sk-fallback",
+            llmModel: "gpt-4.1",
+          },
+        ],
+      },
+    });
+
+    const seenRoutes: Array<{ profile: string; provider: string; model: string }> = [];
+    const provider: LlmProviderAdapter = {
+      id: "router",
+      resolveRequestUrl: () => "https://router.example.test/chat/completions",
+      send: async (input) => {
+        seenRoutes.push({
+          profile: input.route.profile,
+          provider: input.route.provider,
+          model: String(input.payload.model),
+        });
+        return sseResponse([
+          chatChunk("Fallback route selected."),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      },
+    };
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      {
+        kernel,
+        registry,
+        provider,
+        profileConfig: {
+          defaultProfile: "default",
+          fallbackProfile: "fallback",
+          profiles: [
+            {
+              id: "default",
+              providerId: "primary_provider",
+              llmBase: "https://primary.example.test",
+              llmKey: "sk-primary",
+              llmModel: "gpt-4.1-mini",
+            },
+            {
+              id: "fallback",
+              providerId: "fallback_provider",
+              llmBase: "https://fallback.example.test",
+              llmKey: "sk-fallback",
+              llmModel: "gpt-4.1",
+            },
+          ],
+        },
+      },
+      { sessionId: session.id, prompt: "Say hello" },
+    );
+
+    expect(result.terminalStatus).toBe("done");
+    expect(seenRoutes).toEqual([
+      {
+        profile: "fallback",
+        provider: "fallback_provider",
+        model: "gpt-4.1",
+      },
+    ]);
   });
 
   it("executes a tool call and loops", async () => {

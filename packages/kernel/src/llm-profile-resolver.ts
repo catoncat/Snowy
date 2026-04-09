@@ -16,7 +16,7 @@ const MAX_RETRY = 6;
 
 const DEFAULT_MAX_RETRY_DELAY_MS = 4_000;
 
-interface ResolveLlmRouteOptions {
+export interface ResolveLlmRouteOptions {
   providerRegistry?: LlmProviderRegistry;
   requiredCapabilities?: string[];
 }
@@ -26,7 +26,9 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function normalizeCapabilities(capabilities: string[] | undefined): string[] {
-  return Array.from(new Set((capabilities ?? []).map((value) => String(value || "").trim()).filter(Boolean)));
+  return Array.from(
+    new Set((capabilities ?? []).map((value) => String(value || "").trim()).filter(Boolean)),
+  );
 }
 
 function buildOrderedProfiles(config: LlmProfileConfig, targetProfile: string): string[] {
@@ -129,7 +131,12 @@ export function resolveLlmRoute(
       continue;
     }
 
-    const candidateRoute = createResolvedRoute(profileDef, candidateProfileId, role, orderedProfiles);
+    const candidateRoute = createResolvedRoute(
+      profileDef,
+      candidateProfileId,
+      role,
+      orderedProfiles,
+    );
     if (!candidateRoute.ok) {
       if (candidateProfileId === targetProfile) {
         return candidateRoute;
@@ -157,7 +164,7 @@ export function resolveLlmRoute(
 
   return {
     ok: false,
-    reason: "profile_not_found",
+    reason: "route_unavailable",
     message: `No eligible LLM route found for profile ${targetProfile}${capabilityClause}`,
     profile: targetProfile,
   };

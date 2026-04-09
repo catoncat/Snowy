@@ -95,6 +95,66 @@ describe("createKernelLlmFromProvider", () => {
     expect(body.max_tokens).toBe(100);
   });
 
+  it("negotiates to the fallback route when the default provider is down", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(sseBody([sseTextChunk("Hello from fallback!"), "data: [DONE]"]), {
+        status: 200,
+      }),
+    );
+
+    const registry = new LlmProviderRegistry();
+    registry.register(createOpenAiCompatibleProvider(), {
+      healthStatus: "down",
+    });
+    registry.register(
+      {
+        id: "fallback_provider",
+        resolveRequestUrl: () => "https://fallback.example.test/chat/completions",
+        send: async (input) =>
+          fetch(input.requestUrl ?? "https://fallback.example.test/chat/completions", {
+            method: "POST",
+            body: JSON.stringify(input.payload),
+          }),
+      },
+      {
+        healthStatus: "healthy",
+      },
+    );
+
+    const adapter = createKernelLlmFromProvider(registry, {
+      profiles: [
+        {
+          id: "default",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-default",
+          llmModel: "gpt-4",
+        },
+        {
+          id: "fallback",
+          providerId: "fallback_provider",
+          llmBase: "https://fallback.example.test",
+          llmKey: "sk-fallback",
+          llmModel: "gpt-4.1",
+        },
+      ],
+      defaultProfile: "default",
+      fallbackProfile: "fallback",
+    });
+
+    const result = await adapter.complete({
+      systemPrompt: "You are helpful.",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(result).toBe("Hello from fallback!");
+
+    const [url, opts] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://fallback.example.test/chat/completions");
+    const body = JSON.parse(opts.body);
+    expect(body.model).toBe("gpt-4.1");
+  });
+
   it("still enforces route timeout when caller passes a signal", async () => {
     vi.useFakeTimers();
     try {
@@ -171,7 +231,7 @@ describe("createKernelLlmFromProvider", () => {
     const adapter = createKernelLlmFromProvider(registry, profileConfig);
 
     await expect(adapter.complete({ systemPrompt: "", messages: [] })).rejects.toThrow(
-      "LLM provider not found: openai_compatible",
+      "LLM route resolution failed: No eligible LLM route found",
     );
   });
 

@@ -365,7 +365,12 @@ export function createKernel(opts: KernelOptions): Kernel {
     },
 
     // Provider/profile management
-    getActiveProfile: () => (profileConfig ? resolveLlmRoute(profileConfig) : null),
+    getActiveProfile: () =>
+      profileConfig
+        ? resolveLlmRoute(profileConfig, undefined, "worker", {
+            providerRegistry: providerRegistry ?? undefined,
+          })
+        : null,
     setProfileConfig(config) {
       profileConfig = config;
     },
