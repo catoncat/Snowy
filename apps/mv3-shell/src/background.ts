@@ -6,6 +6,8 @@ import {
   BOOTSTRAP_RESOURCE_KEYS as CONTRACT_BOOTSTRAP_RESOURCE_KEYS,
   HOST_AUDIT_KINDS,
   HOST_AUDIT_STATUSES,
+  LOOP_AUDIT_KINDS,
+  LOOP_AUDIT_STATUSES,
   SKILL_AUDIT_KINDS,
 } from "@bbl-next/contracts";
 import { createBootstrapSummary, readAiSurfaceResource } from "@bbl-next/core";
@@ -113,6 +115,21 @@ function normalizeAuditEntry(value) {
       ...baseEntry,
       skillId: value.skillId,
       ...(typeof value.trusted === "boolean" ? { trusted: value.trusted } : {}),
+    };
+    if (typeof value.error === "string" && value.error.length > 0) {
+      entry.error = value.error;
+    }
+    return entry;
+  }
+
+  if (LOOP_AUDIT_KINDS.includes(value.kind)) {
+    if (!LOOP_AUDIT_STATUSES.includes(value.status) || typeof value.capabilityId !== "string") {
+      return null;
+    }
+    const entry = {
+      ...baseEntry,
+      capabilityId: value.capabilityId,
+      durationMs: typeof value.durationMs === "number" ? value.durationMs : 0,
     };
     if (typeof value.error === "string" && value.error.length > 0) {
       entry.error = value.error;
@@ -356,6 +373,8 @@ export function createBackgroundRunnerBridge({
   currentMode = "active-tab-only",
   listSkills = undefined,
   configSummary = undefined,
+  sessionStorage = undefined,
+  profileConfig = undefined,
   runtimeServices = undefined,
   interventionTimeoutMs = undefined,
   auditStore = undefined,
@@ -370,7 +389,9 @@ export function createBackgroundRunnerBridge({
   let creating = null;
   let requestSequence = 0;
   const AUDIT_MAX_ENTRIES = 64;
+  const TELEMETRY_MAX_ENTRIES = 128;
   const auditEntries = [];
+  const loopTelemetryEntries = [];
   const resolvedAuditStore = auditStore ?? createChromeAuditStore(chromeApi, auditStorageKey);
   const state = {
     defaultHostId: null,
@@ -438,6 +459,38 @@ export function createBackgroundRunnerBridge({
     return entry;
   }
 
+  function appendLoopTelemetry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return;
+    }
+    loopTelemetryEntries.push({ ...entry });
+    if (loopTelemetryEntries.length > TELEMETRY_MAX_ENTRIES) {
+      loopTelemetryEntries.splice(0, loopTelemetryEntries.length - TELEMETRY_MAX_ENTRIES);
+    }
+  }
+
+  function getLoopTelemetry(limit) {
+    const max = typeof limit === "number" && limit > 0 ? limit : TELEMETRY_MAX_ENTRIES;
+    return loopTelemetryEntries.slice(-max);
+  }
+
+  function readLoopTelemetryResource(limit) {
+    const entries = getLoopTelemetry(limit);
+    return {
+      ok: true,
+      data: {
+        id: "loop.telemetry",
+        primitive: "resource",
+        generatedAt: isoNow(),
+        data: {
+          status: entries.length > 0 ? "available" : "empty",
+          totalCount: entries.length,
+          entries: entries.map((entry) => ({ ...entry })),
+        },
+      },
+    };
+  }
+
   function getAuditTail(limit) {
     const max = typeof limit === "number" && limit > 0 ? limit : AUDIT_MAX_ENTRIES;
     return auditEntries.slice(-max);
@@ -494,7 +547,19 @@ export function createBackgroundRunnerBridge({
         invokeRunner: invoke,
         pageHookBridge: effectivePageHookBridge,
         configSummary,
+        sessionStorage,
+        profileConfig,
         interventionTimeoutMs,
+        onLoopTelemetry: async (entry) => {
+          appendLoopTelemetry(entry);
+          await appendAudit({
+            kind: "loop.step",
+            capabilityId: entry.capabilityId,
+            status: entry.ok ? "executed" : "failed",
+            durationMs: entry.durationMs,
+            ...(entry.errorCode ? { error: entry.errorCode } : {}),
+          });
+        },
         pageHookScriptPath: PAGE_HOOK_DEFAULT_FILE,
       });
       composedRuntimeServices = runtimeServices
@@ -1473,6 +1538,9 @@ export function createBackgroundRunnerBridge({
           url: message.url,
         });
       case "resource.read":
+        if (message.resourceId === "loop.telemetry") {
+          return readLoopTelemetryResource(message.limit);
+        }
         return readResource({
           resourceId: message.resourceId,
           world: message.world,

@@ -178,10 +178,17 @@ export type SkillAuditKind = (typeof SKILL_AUDIT_KINDS)[number];
 export const SKILL_AUDIT_STATUSES = ["installed", "enabled", "disabled", "archived"] as const;
 export type SkillAuditStatus = (typeof SKILL_AUDIT_STATUSES)[number];
 
+export const LOOP_AUDIT_KINDS = ["loop.step"] as const;
+export type LoopAuditKind = (typeof LOOP_AUDIT_KINDS)[number];
+
+export const LOOP_AUDIT_STATUSES = ["executed", "failed"] as const;
+export type LoopAuditStatus = (typeof LOOP_AUDIT_STATUSES)[number];
+
 export const CONTROL_PLANE_AUDIT_KINDS = [
   ...HOST_AUDIT_KINDS,
   ...CONFIG_AUDIT_KINDS,
   ...SKILL_AUDIT_KINDS,
+  ...LOOP_AUDIT_KINDS,
 ] as const;
 export type ControlPlaneAuditKind = (typeof CONTROL_PLANE_AUDIT_KINDS)[number];
 
@@ -189,6 +196,7 @@ export const CONTROL_PLANE_AUDIT_STATUSES = [
   ...HOST_AUDIT_STATUSES,
   ...CONFIG_AUDIT_STATUSES,
   ...SKILL_AUDIT_STATUSES,
+  ...LOOP_AUDIT_STATUSES,
 ] as const;
 export type ControlPlaneAuditStatus = (typeof CONTROL_PLANE_AUDIT_STATUSES)[number];
 
@@ -217,7 +225,18 @@ export interface SkillAuditEntry extends ControlPlaneAuditEntryBase {
   trusted?: boolean;
 }
 
-export type ControlPlaneAuditEntry = HostAuditEntry | ConfigAuditEntry | SkillAuditEntry;
+export interface LoopStepAuditEntry extends ControlPlaneAuditEntryBase {
+  kind: LoopAuditKind;
+  capabilityId: string;
+  status: LoopAuditStatus;
+  durationMs: number;
+}
+
+export type ControlPlaneAuditEntry =
+  | HostAuditEntry
+  | ConfigAuditEntry
+  | SkillAuditEntry
+  | LoopStepAuditEntry;
 
 export const INTERVENTION_KINDS = ["confirm", "takeover", "input"] as const;
 export type InterventionKind = (typeof INTERVENTION_KINDS)[number];
@@ -1004,6 +1023,21 @@ export interface LoopTurn {
   noProgressReason?: NoProgressReason;
   startedAt: string;
   endedAt?: string;
+}
+
+// ──────────────────────────────────────────────────────────
+// Loop Telemetry
+// ──────────────────────────────────────────────────────────
+
+export interface LoopTelemetryEntry {
+  stepIndex: number;
+  capabilityId: string;
+  startedAt: string;
+  endedAt: string;
+  durationMs: number;
+  ok: boolean;
+  errorCode?: string;
+  tokenEstimate?: number;
 }
 
 // ──────────────────────────────────────────────────────────

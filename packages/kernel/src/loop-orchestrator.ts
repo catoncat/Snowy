@@ -4,6 +4,7 @@ import type {
   LlmProviderExecutionLane,
   LlmResolvedRoute,
   LlmToolCall,
+  LoopTelemetryEntry,
   LoopTerminalStatus,
   ToolContract,
 } from "@bbl-next/contracts";
@@ -42,12 +43,14 @@ export interface RunLoopInput {
   onDelta?: (chunk: string) => void;
   onToolCall?: (toolName: string, args: unknown) => void;
   onToolResult?: (toolName: string, result: unknown) => void;
+  onStepTelemetry?: (entry: LoopTelemetryEntry) => void | Promise<void>;
   signal?: AbortSignal;
 }
 
 export interface RunLoopResult {
   terminalStatus: LoopTerminalStatus;
   stepCount: number;
+  telemetry: LoopTelemetryEntry[];
 }
 
 function toolNameToCapabilityId(toolName: string): string {
@@ -405,6 +408,7 @@ export async function runLoop(
   let llmStepCount = 0;
   let toolStepCount = 0;
   const actionFailures = new Map<string, ActionFailureHint>();
+  const telemetryEntries: LoopTelemetryEntry[] = [];
 
   try {
     while (!terminalStatus) {
@@ -502,11 +506,32 @@ export async function runLoop(
 
         input.onToolCall?.(toolName, args);
 
-        // Execute via kernel
+        // Execute via kernel with timing
+        const stepStartedAt = new Date();
         const { turn, result } = await kernel.executeStep(input.sessionId, {
           capabilityId,
           input: args,
         });
+        const stepEndedAt = new Date();
+        const durationMs = stepEndedAt.getTime() - stepStartedAt.getTime();
+
+        const telemetryEntry: LoopTelemetryEntry = {
+          stepIndex: toolStepCount,
+          capabilityId,
+          startedAt: stepStartedAt.toISOString(),
+          endedAt: stepEndedAt.toISOString(),
+          durationMs,
+          ok: result.ok,
+          ...(result.ok
+            ? {}
+            : {
+                errorCode: String(
+                  (result as unknown as Record<string, unknown>).error ?? "unknown",
+                ),
+              }),
+        };
+        telemetryEntries.push(telemetryEntry);
+        await input.onStepTelemetry?.(telemetryEntry);
 
         const failureKey = buildFailureHintKey(capabilityId, args);
         const failureTarget = extractFailureTarget(args);
@@ -560,5 +585,6 @@ export async function runLoop(
   return {
     terminalStatus: terminalStatus ?? "done",
     stepCount: kernel.getStepCount(input.sessionId),
+    telemetry: telemetryEntries,
   };
 }

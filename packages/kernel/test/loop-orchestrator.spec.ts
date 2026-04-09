@@ -3,6 +3,7 @@ import type {
   LlmProfileConfig,
   LlmProviderAdapter,
   LlmProviderSendInput,
+  LoopTelemetryEntry,
   SessionStorage,
   ToolContract,
 } from "@bbl-next/contracts";
@@ -682,6 +683,163 @@ describe("runLoop", () => {
     );
 
     expect(deltas).toEqual(["part1", "part2"]);
+  });
+
+  it("collects telemetry entries with timing data for each tool execution", async () => {
+    let callCount = 0;
+    const { kernel, registry, provider } = setup(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_1",
+              function: { name: "tabs_navigate", arguments: '{"url":"https://example.com"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([chatChunk("Done."), chatChunk(undefined, undefined, "stop"), "[DONE]"]);
+    });
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Go to example.com" },
+    );
+
+    expect(result.telemetry).toHaveLength(1);
+    const entry = result.telemetry[0];
+    expect(entry.stepIndex).toBe(0);
+    expect(entry.capabilityId).toBe("tabs.navigate");
+    expect(entry.ok).toBe(true);
+    expect(typeof entry.startedAt).toBe("string");
+    expect(typeof entry.endedAt).toBe("string");
+    expect(typeof entry.durationMs).toBe("number");
+    expect(entry.durationMs).toBeGreaterThanOrEqual(0);
+    expect(entry.errorCode).toBeUndefined();
+  });
+
+  it("emits telemetry via onStepTelemetry callback", async () => {
+    let callCount = 0;
+    const { kernel, registry, provider } = setup(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_1",
+              function: { name: "tabs_navigate", arguments: '{"url":"https://example.com"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([chatChunk("Done."), chatChunk(undefined, undefined, "stop"), "[DONE]"]);
+    });
+
+    const session = await kernel.createSession();
+    const emitted: LoopTelemetryEntry[] = [];
+    await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      {
+        sessionId: session.id,
+        prompt: "Go to example.com",
+        onStepTelemetry: (entry) => {
+          emitted.push(entry);
+        },
+      },
+    );
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].capabilityId).toBe("tabs.navigate");
+    expect(emitted[0].ok).toBe(true);
+  });
+
+  it("records errorCode in telemetry for failed tool executions", async () => {
+    const failingDescriptor = {
+      ...TEST_DESCRIPTOR,
+      id: "page.click",
+      description: "Click an element",
+      inputSchema: { type: "object", properties: { uid: { type: "string" } } },
+      executionBinding: { family: "page", operation: "click" },
+    };
+
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([failingDescriptor]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "page",
+      invoke: async () => {
+        throw new Error("Element not found");
+      },
+    });
+
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      registry,
+      providers,
+    });
+
+    let callCount = 0;
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return sseResponse([
+            chatChunk(undefined, [
+              {
+                index: 0,
+                id: "tc_fail",
+                function: { name: "page_click", arguments: '{"uid":"btn"}' },
+              },
+            ]),
+            chatChunk(undefined, undefined, "tool_calls"),
+            "[DONE]",
+          ]);
+        }
+        return sseResponse([
+          chatChunk("Unable to click the button."),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      },
+    };
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Click the button" },
+    );
+
+    expect(result.telemetry.length).toBeGreaterThanOrEqual(1);
+    const entry = result.telemetry[0];
+    expect(entry.capabilityId).toBe("page.click");
+    expect(entry.ok).toBe(false);
+    expect(entry.errorCode).toBeDefined();
+    expect(callCount).toBe(2);
+  });
+
+  it("returns empty telemetry for text-only responses", async () => {
+    const { kernel, registry, provider } = setup(async () => {
+      return sseResponse([chatChunk("Hello!"), chatChunk(undefined, undefined, "stop"), "[DONE]"]);
+    });
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Say hello" },
+    );
+
+    expect(result.telemetry).toEqual([]);
   });
 
   it("stops on abort signal", async () => {

@@ -30,6 +30,8 @@ import {
   type InterventionRecord,
   type InterventionRequest,
   type KernelLlmAdapter,
+  LOOP_AUDIT_KINDS,
+  LOOP_AUDIT_STATUSES,
   LOOP_TERMINAL_STATUSES,
   LOOP_TURN_STATUSES,
   type LabelPayload,
@@ -359,6 +361,8 @@ describe("contracts", () => {
       "skills.uninstall",
     ]);
     expect(SKILL_AUDIT_STATUSES).toEqual(["installed", "enabled", "disabled", "archived"]);
+    expect(LOOP_AUDIT_KINDS).toEqual(["loop.step"]);
+    expect(LOOP_AUDIT_STATUSES).toEqual(["executed", "failed"]);
     expect(CONTROL_PLANE_AUDIT_KINDS).toEqual([
       "hosts.connect",
       "hosts.disconnect",
@@ -368,6 +372,7 @@ describe("contracts", () => {
       "skills.enable",
       "skills.disable",
       "skills.uninstall",
+      "loop.step",
     ]);
     expect(CONTROL_PLANE_AUDIT_STATUSES).toEqual([
       "connected",
@@ -379,6 +384,8 @@ describe("contracts", () => {
       "enabled",
       "disabled",
       "archived",
+      "executed",
+      "failed",
     ]);
   });
 

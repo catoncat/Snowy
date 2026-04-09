@@ -446,6 +446,7 @@ export function createBackgroundRuntimeServices({
   llmAdapter = undefined,
   profileConfig = undefined,
   configSummary = undefined,
+  onLoopTelemetry = undefined,
   workspaceId = "mv3-shell",
   interventionTimeoutMs = DEFAULT_INTERVENTION_TIMEOUT_MS,
   pageHookScriptPath = "src/page-hook.js",
@@ -877,6 +878,16 @@ export function createBackgroundRuntimeServices({
                 detail:
                   typeof resultData === "string" ? resultData : JSON.stringify(resultData ?? null),
               });
+            },
+            async onStepTelemetry(entry) {
+              if (typeof onLoopTelemetry !== "function") {
+                return;
+              }
+              try {
+                await onLoopTelemetry(entry);
+              } catch {
+                // Telemetry should never break the primary loop.
+              }
             },
           },
         );

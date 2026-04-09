@@ -417,6 +417,143 @@ describe("mv3-shell end-to-end loop integration", () => {
     }
   });
 
+  it("records loop telemetry into loop.telemetry and audit.tail for tool executions", async () => {
+    const sentMessages: unknown[] = [];
+    let fetchCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      fetchCallCount += 1;
+      if (fetchCallCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_1",
+              function: { name: "tabs_navigate", arguments: '{"url":"https://example.com"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([
+        chatChunk("Navigation complete."),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const chromeApi = {
+        runtime: {
+          getURL: (path: string) => path,
+          sendMessage: vi.fn(async (message) => {
+            sentMessages.push(message);
+            return undefined;
+          }),
+        },
+        tabs: {
+          query: vi.fn(async () => [
+            { id: 11, url: "https://fixture.test/start", active: true, title: "Fixture Start" },
+          ]),
+          update: vi.fn(async (tabId: number, updateInfo: { url: string }) => ({
+            id: tabId,
+            url: updateInfo.url,
+            active: true,
+            title: "Fixture Target",
+          })),
+        },
+        offscreen: {},
+      };
+
+      const bridge = createBackgroundRunnerBridge({
+        chromeApi,
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: TEST_PROFILE_CONFIG,
+      });
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "runtime.chat.send",
+          text: "Go to example.com",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          accepted: true,
+        },
+      });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "resource.read",
+          resourceId: "loop.telemetry",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          id: "loop.telemetry",
+          primitive: "resource",
+          data: {
+            status: "available",
+            totalCount: 1,
+            entries: [
+              expect.objectContaining({
+                stepIndex: 0,
+                capabilityId: "tabs.navigate",
+                ok: true,
+                durationMs: expect.any(Number),
+              }),
+            ],
+          },
+        },
+      });
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "resource.read",
+          resourceId: "audit.tail",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          id: "audit.tail",
+          data: {
+            entries: expect.arrayContaining([
+              expect.objectContaining({
+                kind: "loop.step",
+                capabilityId: "tabs.navigate",
+                status: "executed",
+                durationMs: expect.any(Number),
+                sessionId: expect.any(String),
+              }),
+            ]),
+          },
+        },
+      });
+
+      expect(chromeApi.tabs.update).toHaveBeenCalledWith(11, {
+        url: "https://example.com",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("emits fallback message when no LLM config is set", async () => {
     const sentMessages: unknown[] = [];
 
