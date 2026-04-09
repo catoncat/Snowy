@@ -1,11 +1,11 @@
 ---
 id: ISSUE-113
 title: "Review: kernel subagent run semantics are still undefined"
-status: open
+status: done
 priority: p1
 source: "next-batch-planner review 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
+assignee: codex-019d70f6
 tags:
   - review
   - kernel
@@ -26,7 +26,9 @@ write_scope:
   - packages/kernel/test
 acceptance_ref: docs/reviews/2026-03-29-vnext-architecture-recovery-report.md
 check_cmd: "bun run check"
+completed_at: 2026-04-09T11:51:56.217Z
 ---
+
 ## Goal
 
 Review whether browser-side kernel mainline now needs an explicit child-run / subagent contract, or whether that boundary should be recorded as intentionally deferred.
@@ -54,3 +56,20 @@ Review whether browser-side kernel mainline now needs an explicit child-run / su
 - `ISSUE-120` `Follow-up: define kernel child-run contract for subagent orchestration`
   - 原因：把剩余缺口收窄为 contracts/kernel 层的 child-run model、parent ownership、diagnostics seam。
   - 结果：继续由 kernel lane 承接，不把 subagent 语义回退为 app-local glue。
+
+## 工作总结
+
+### 实现了什么
+- 审查当前 kernel/contracts run-state 与旧仓 subagent 面，确认该缺口仍属 kernel mainline。
+- 新增 ISSUE-120 收窄后续工作到 child-run contract、parent ownership 与 diagnostics seam。
+
+### 实际跑了什么检查
+- bun run workflow:queue:build
+- git diff --check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `d03717a61ea6` docs(kernel): 收口子run review并补follow-up
