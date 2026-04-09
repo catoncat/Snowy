@@ -42,3 +42,15 @@ Review the remaining operator-facing observability boundary after level-1 diagno
 - Clarify the minimal operator-facing runtime history / export surface for the current phase, whether as resources, actions, or explicit deferral.
 - If gaps remain, create follow-up slices anchored on shared `contracts/core/background` paths rather than app-local one-offs.
 - Keep the distinction clear between the landed level-1 diagnostics snapshot and broader observability scope.
+
+## Resolution
+
+- Reviewed the current observability read boundary across `packages/contracts`, `packages/core`, `apps/mv3-shell/src/background.ts`, and sidepanel management bootstrap consumers.
+- Conclusion: the narrow remaining mainline gap is not “observability in general”, but the lack of a shared runtime-history contract. `audit.tail` / `audit.intervention` already cover audit resources, and `runtime.capture_diagnostics` already covers the latest snapshot, while recent run/step visibility still leaks through the MV3-private `loop.telemetry` branch.
+- Minimal current-phase direction: promote recent runtime history into a shared resource contract and keep bulk debug export / dump semantics explicitly deferred until they can be locked without app-local glue.
+
+## Sub Issues
+
+- `ISSUE-122` `Follow-up: expose runtime history through a shared observability resource surface`
+  - 原因：把剩余缺口收窄为 shared runtime-history resource contract，避免把 `loop.telemetry` 的 background 私有分支继续当成 operator-facing 真相源。
+  - 结果：后续 slice 聚焦 `contracts/core/background/test`，而 sidepanel consumer projection 继续由已有的 ISSUE-117 单独跟踪。
