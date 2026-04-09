@@ -438,6 +438,34 @@ async function saveLlmProfileConfig(chromeApi, config: LlmProfileConfig): Promis
   await storageArea.set({ [LLM_CONFIG_STORAGE_KEY]: config });
 }
 
+function cloneLlmProfileConfig(config) {
+  if (!config || typeof config !== "object") {
+    return null;
+  }
+  return {
+    ...config,
+    profiles: Array.isArray(config.profiles)
+      ? config.profiles.map((profile) => ({ ...profile }))
+      : [],
+  };
+}
+
+function syncLlmProfileConfig(target, source) {
+  const next = cloneLlmProfileConfig(source);
+  if (!next) {
+    return null;
+  }
+  if (!target || typeof target !== "object") {
+    return next;
+  }
+
+  for (const key of Object.keys(target)) {
+    delete target[key];
+  }
+  Object.assign(target, next);
+  return target;
+}
+
 export function createBackgroundRuntimeServices({
   invokeRunner,
   pageHookBridge,
@@ -564,13 +592,14 @@ export function createBackgroundRuntimeServices({
         const llmProviderRegistry = new LlmProviderRegistry();
         llmProviderRegistry.register(createOpenAiCompatibleProvider());
 
-        const resolvedProfileConfig: LlmProfileConfig | null =
-          profileConfig ?? (await loadLlmProfileConfig(chromeApi));
+        const managedProfileConfig: LlmProfileConfig | null = cloneLlmProfileConfig(
+          profileConfig ?? (await loadLlmProfileConfig(chromeApi)),
+        );
 
         const resolvedLlmAdapter =
           llmAdapter ??
-          (resolvedProfileConfig
-            ? createKernelLlmFromProvider(llmProviderRegistry, resolvedProfileConfig)
+          (managedProfileConfig
+            ? createKernelLlmFromProvider(llmProviderRegistry, managedProfileConfig)
             : { complete: async () => "" });
 
         const kernel = createKernel({
@@ -578,6 +607,8 @@ export function createBackgroundRuntimeServices({
           llm: resolvedLlmAdapter,
           registry,
           providers,
+          providerRegistry: llmProviderRegistry,
+          profileConfig: managedProfileConfig ?? undefined,
           executeRunnerStep,
           executeSiteStep,
         });
@@ -591,7 +622,7 @@ export function createBackgroundRuntimeServices({
           runnerHost,
           kernel,
           llmProviderRegistry,
-          profileConfig: resolvedProfileConfig,
+          profileConfig: managedProfileConfig,
         };
       })();
     }
@@ -642,6 +673,7 @@ export function createBackgroundRuntimeServices({
     return {
       session,
       runState: kernel.getRunState(session.id),
+      activeProfile: kernel.getActiveProfile(),
     };
   }
 
@@ -767,7 +799,9 @@ export function createBackgroundRuntimeServices({
     }
 
     const [services, session] = await Promise.all([ensureServices(), ensureSession()]);
-    const { kernel, registry, llmProviderRegistry, profileConfig: resolvedConfig } = services;
+    const { kernel, registry, profileConfig: managedProfileConfig } = services;
+    const activeProfile = kernel.getActiveProfile();
+    const providerRegistry = kernel.getProviderRegistry();
 
     const runId = `chat-${crypto.randomUUID()}`;
     const assistantMessageId = `assistant-${crypto.randomUUID()}`;
@@ -782,9 +816,11 @@ export function createBackgroundRuntimeServices({
     await emitChatRunState(session.id, "running");
 
     const hasLlmConfig =
-      resolvedConfig &&
-      Array.isArray(resolvedConfig.profiles) &&
-      resolvedConfig.profiles.length > 0;
+      activeProfile?.ok === true &&
+      providerRegistry &&
+      managedProfileConfig &&
+      Array.isArray(managedProfileConfig.profiles) &&
+      managedProfileConfig.profiles.length > 0;
 
     void (async () => {
       let finalAssistantText = "";
@@ -826,9 +862,7 @@ export function createBackgroundRuntimeServices({
         }
 
         // Real LLM loop via runLoop()
-        const provider = llmProviderRegistry.get(
-          resolvedConfig.profiles[0]?.providerId || "openai_compatible",
-        );
+        const provider = providerRegistry.get(activeProfile.route.provider);
         if (!provider) {
           throw new CapabilityError("E_RUNTIME", "LLM provider not available");
         }
@@ -838,7 +872,7 @@ export function createBackgroundRuntimeServices({
             kernel,
             registry,
             provider,
-            profileConfig: resolvedConfig,
+            profileConfig: managedProfileConfig,
           },
           {
             sessionId: session.id,
@@ -1072,10 +1106,13 @@ export function createBackgroundRuntimeServices({
       throw new CapabilityError("E_BAD_INPUT", "llm.config.update requires a config patch");
     }
 
-    const current = (await loadLlmProfileConfig(chromeApi)) ?? {
-      profiles: [],
-      defaultProfile: "default",
-    };
+    const activeServices = servicesPromise ? await servicesPromise : null;
+    const current = cloneLlmProfileConfig(activeServices?.profileConfig) ??
+      cloneLlmProfileConfig(profileConfig) ??
+      (await loadLlmProfileConfig(chromeApi)) ?? {
+        profiles: [],
+        defaultProfile: "default",
+      };
 
     const updated: LlmProfileConfig = { ...current };
 
@@ -1116,9 +1153,12 @@ export function createBackgroundRuntimeServices({
 
     await saveLlmProfileConfig(chromeApi, updated);
 
-    // Reset services so next call picks up new config
-    servicesPromise = null;
-    sessionPromise = null;
+    const nextManagedProfileConfig = syncLlmProfileConfig(activeServices?.profileConfig, updated);
+    profileConfig = nextManagedProfileConfig;
+    if (activeServices) {
+      activeServices.profileConfig = nextManagedProfileConfig;
+      activeServices.kernel.setProfileConfig(nextManagedProfileConfig);
+    }
 
     return { updated: true, profileCount: updated.profiles.length };
   }

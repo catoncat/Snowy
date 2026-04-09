@@ -417,6 +417,55 @@ describe("mv3-shell end-to-end loop integration", () => {
     }
   });
 
+  it("uses kernel-managed provider/profile state on the runtime chat path", async () => {
+    const sentMessages: unknown[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () =>
+      sseResponse([
+        chatChunk("Hello from the kernel-managed route"),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]),
+    ) as typeof fetch;
+
+    try {
+      const services = createBackgroundRuntimeServices({
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: TEST_PROFILE_CONFIG,
+        chromeApi: {
+          runtime: {
+            sendMessage: vi.fn(async (message) => {
+              sentMessages.push(message);
+              return undefined;
+            }),
+          },
+        },
+      });
+      const runtime = await services.ensureServices();
+      const getActiveProfileSpy = vi.spyOn(runtime.kernel, "getActiveProfile");
+      const getProviderRegistrySpy = vi.spyOn(runtime.kernel, "getProviderRegistry");
+
+      const accepted = await services.sendChatPrompt({ text: "Use the kernel route" });
+      expect(accepted).toMatchObject({ accepted: true });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      expect(getActiveProfileSpy).toHaveBeenCalled();
+      expect(getProviderRegistrySpy).toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("records loop telemetry into loop.telemetry and audit.tail for tool executions", async () => {
     const sentMessages: unknown[] = [];
     let fetchCallCount = 0;
@@ -609,10 +658,30 @@ describe("mv3-shell end-to-end loop integration", () => {
     });
   });
 
-  it("updateLlmConfig stores and resets services", async () => {
+  it("updateLlmConfig stores and updates kernel-managed profile state without resetting services", async () => {
     const storedData: Record<string, unknown> = {};
+    const initialProfileConfig: LlmProfileConfig = {
+      profiles: [
+        {
+          id: "default",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-old",
+          llmModel: "gpt-4o-mini",
+        },
+        {
+          id: "fallback",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-fallback",
+          llmModel: "gpt-4.1",
+        },
+      ],
+      defaultProfile: "default",
+    };
     const services = createBackgroundRuntimeServices({
       sessionStorage: new InMemorySessionStorage(),
+      profileConfig: initialProfileConfig,
       chromeApi: {
         runtime: { sendMessage: vi.fn(async () => undefined) },
         storage: {
@@ -631,24 +700,58 @@ describe("mv3-shell end-to-end loop integration", () => {
         },
       },
     });
+    const firstRuntime = await services.ensureServices();
+    const initialKernelState = await services.getKernelRuntimeState();
 
     const result = await services.updateLlmConfig({
-      apiKey: "sk-test-123",
-      baseUrl: "https://api.anthropic.com/v1",
-      model: "claude-3-opus",
+      profiles: [
+        {
+          id: "default",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-old",
+          llmModel: "gpt-4o-mini",
+        },
+        {
+          id: "fallback",
+          providerId: "openai_compatible",
+          llmBase: "https://api.anthropic.com/v1",
+          llmKey: "sk-fallback",
+          llmModel: "claude-3-opus",
+        },
+      ],
+      defaultProfile: "fallback",
     });
 
-    expect(result).toMatchObject({ updated: true, profileCount: 1 });
+    const secondRuntime = await services.ensureServices();
+    const updatedKernelState = await services.getKernelRuntimeState();
+
+    expect(result).toMatchObject({ updated: true, profileCount: 2 });
+    expect(secondRuntime.kernel).toBe(firstRuntime.kernel);
+    expect(updatedKernelState.session.id).toBe(initialKernelState.session.id);
+    expect(updatedKernelState.activeProfile).toMatchObject({
+      ok: true,
+      route: expect.objectContaining({
+        profile: "fallback",
+        llmModel: "claude-3-opus",
+      }),
+    });
     expect(storedData["bbl-next.llm.config.v1"]).toMatchObject({
       profiles: [
         expect.objectContaining({
           id: "default",
-          llmKey: "sk-test-123",
+          llmKey: "sk-old",
+          llmBase: "https://api.openai.com/v1",
+          llmModel: "gpt-4o-mini",
+        }),
+        expect.objectContaining({
+          id: "fallback",
+          llmKey: "sk-fallback",
           llmBase: "https://api.anthropic.com/v1",
           llmModel: "claude-3-opus",
         }),
       ],
-      defaultProfile: "default",
+      defaultProfile: "fallback",
     });
   });
 });
