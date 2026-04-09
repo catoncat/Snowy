@@ -1,8 +1,7 @@
+import type { LlmProfileConfig } from "@bbl-next/contracts";
 import { InMemorySessionStorage } from "@bbl-next/kernel";
 import { describe, expect, it, vi } from "vitest";
-// @ts-ignore JS source module has no declaration file yet
 import { RUNNER_BACKGROUND_TARGET, createBackgroundRunnerBridge } from "../src/background.js";
-// @ts-ignore JS source module has no declaration file yet
 import { createBackgroundRuntimeServices } from "../src/runtime-services.js";
 
 async function waitFor(predicate: () => boolean, timeoutMs = 250) {
@@ -16,7 +15,7 @@ async function waitFor(predicate: () => boolean, timeoutMs = 250) {
 }
 
 describe("mv3-shell runtime chat bridge", () => {
-  it("streams assistant and tool events for a sent prompt", async () => {
+  it("streams assistant fallback when no LLM config is set", async () => {
     const sentMessages: unknown[] = [];
     const services = createBackgroundRuntimeServices({
       sessionStorage: new InMemorySessionStorage(),
@@ -55,18 +54,16 @@ describe("mv3-shell runtime chat bridge", () => {
 
     expect(events).toContain("run.state");
     expect(events).toContain("assistant.delta");
-    expect(events).toContain("tool.result");
     expect(events).toContain("assistant.done");
 
-    const finalState = await services.bootstrapChat();
-    expect(finalState.messages).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ role: "user", text: "Summarize the page" }),
-        expect.objectContaining({ role: "assistant" }),
-        expect.objectContaining({ kind: "tool", toolName: "runtime.bootstrap" }),
-      ]),
-    );
-    expect(finalState.runState.status).toBe("idle");
+    const doneEvent = sentMessages
+      .filter(
+        (msg): msg is { type: string; event: { type: string; text?: string } } =>
+          (msg as { type?: string }).type === "bbl-next.runtime.chat.event" &&
+          (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+      )
+      .map((msg) => msg.event);
+    expect(doneEvent[0]?.text).toContain("No LLM provider is configured");
   });
 
   it("stops an active stream and emits stopped state", async () => {
@@ -140,5 +137,278 @@ describe("mv3-shell runtime chat bridge", () => {
     await expect(
       bridge.route({ target: RUNNER_BACKGROUND_TARGET, kind: "runtime.chat.stop" }),
     ).resolves.toMatchObject({ ok: true, data: { runState: { status: "stopped" } } });
+  });
+
+  it("routes loop.start / loop.stop / loop.status through runtime services", async () => {
+    const runtimeServices = {
+      sendChatPrompt: vi.fn(async ({ text }) => ({
+        sessionId: "s-1",
+        accepted: true,
+        echoedText: text,
+      })),
+      stopChatRun: vi.fn(async () => ({ sessionId: "s-1", runState: { status: "stopped" } })),
+      getLoopStatus: vi.fn(() => ({
+        status: "idle",
+        hasActiveRun: false,
+        activeRunId: null,
+      })),
+      getKernelRuntimeState: vi.fn(async () => ({
+        session: { id: "s-1" },
+        runState: { phase: "idle" },
+      })),
+    };
+
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: {
+        runtime: { getURL: (path: string) => path },
+        offscreen: {},
+      },
+      runtimeServices,
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "loop.start",
+        text: "Navigate to example.com",
+      }),
+    ).resolves.toMatchObject({ ok: true, data: { accepted: true } });
+
+    await expect(
+      bridge.route({ target: RUNNER_BACKGROUND_TARGET, kind: "loop.status" }),
+    ).resolves.toMatchObject({ ok: true, data: { status: "idle" } });
+
+    await expect(
+      bridge.route({ target: RUNNER_BACKGROUND_TARGET, kind: "loop.stop" }),
+    ).resolves.toMatchObject({ ok: true, data: { runState: { status: "stopped" } } });
+  });
+
+  it("routes llm.config.update through runtime services", async () => {
+    const runtimeServices = {
+      updateLlmConfig: vi.fn(async () => ({ updated: true, profileCount: 1 })),
+      getKernelRuntimeState: vi.fn(async () => ({
+        session: { id: "s-1" },
+        runState: { phase: "idle" },
+      })),
+    };
+
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: {
+        runtime: { getURL: (path: string) => path },
+        offscreen: {},
+      },
+      runtimeServices,
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "llm.config.update",
+        patch: { apiKey: "sk-test", baseUrl: "https://api.openai.com/v1", model: "gpt-4o" },
+      }),
+    ).resolves.toMatchObject({ ok: true, data: { updated: true, profileCount: 1 } });
+
+    expect(runtimeServices.updateLlmConfig).toHaveBeenCalledWith({
+      apiKey: "sk-test",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o",
+    });
+  });
+});
+
+function sseResponse(chunks: string[]): Response {
+  const encoder = new TextEncoder();
+  const text = chunks.map((c) => `data: ${c}\n\n`).join("");
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(text));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200 });
+}
+
+function chatChunk(content?: string, toolCalls?: unknown[], finishReason?: string) {
+  return JSON.stringify({
+    choices: [
+      {
+        delta: {
+          ...(content !== undefined ? { content } : {}),
+          ...(toolCalls ? { tool_calls: toolCalls } : {}),
+        },
+        ...(finishReason ? { finish_reason: finishReason } : {}),
+      },
+    ],
+  });
+}
+
+describe("mv3-shell end-to-end loop integration", () => {
+  const TEST_PROFILE_CONFIG: LlmProfileConfig = {
+    profiles: [
+      {
+        id: "default",
+        providerId: "openai_compatible",
+        llmBase: "https://test.api",
+        llmKey: "test-key",
+        llmModel: "test-model",
+      },
+    ],
+    defaultProfile: "default",
+  };
+
+  it("runs end-to-end: prompt → LLM text response → assistant.done", async () => {
+    const sentMessages: unknown[] = [];
+    let fetchCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      fetchCallCount++;
+      return sseResponse([
+        chatChunk("Hello from the LLM!"),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const services = createBackgroundRuntimeServices({
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: TEST_PROFILE_CONFIG,
+        chromeApi: {
+          runtime: {
+            sendMessage: vi.fn(async (message) => {
+              sentMessages.push(message);
+              return undefined;
+            }),
+          },
+        },
+      });
+
+      const accepted = await services.sendChatPrompt({ text: "Say hello" });
+      expect(accepted).toMatchObject({ accepted: true });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      expect(fetchCallCount).toBeGreaterThanOrEqual(1);
+
+      const events = sentMessages
+        .filter(
+          (msg): msg is { type: string; event: { type: string } } =>
+            (msg as { type?: string }).type === "bbl-next.runtime.chat.event",
+        )
+        .map((msg) => msg.event.type);
+
+      expect(events).toContain("run.state");
+      expect(events).toContain("assistant.delta");
+      expect(events).toContain("assistant.done");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("emits fallback message when no LLM config is set", async () => {
+    const sentMessages: unknown[] = [];
+
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      // No profileConfig → no LLM
+      chromeApi: {
+        runtime: {
+          sendMessage: vi.fn(async (message) => {
+            sentMessages.push(message);
+            return undefined;
+          }),
+        },
+      },
+    });
+
+    const accepted = await services.sendChatPrompt({ text: "Hello" });
+    expect(accepted).toMatchObject({ accepted: true });
+
+    await waitFor(() =>
+      sentMessages.some(
+        (msg) =>
+          (msg as { type?: string; event?: { type?: string } }).type ===
+            "bbl-next.runtime.chat.event" &&
+          (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+      ),
+    );
+
+    const doneEvent = sentMessages
+      .filter(
+        (msg): msg is { type: string; event: { type: string; text?: string } } =>
+          (msg as { type?: string }).type === "bbl-next.runtime.chat.event" &&
+          (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+      )
+      .map((msg) => msg.event);
+
+    expect(doneEvent[0]?.text).toContain("No LLM provider is configured");
+  });
+
+  it("getLoopStatus returns idle when no run is active", () => {
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        runtime: { sendMessage: vi.fn(async () => undefined) },
+      },
+    });
+
+    const status = services.getLoopStatus();
+    expect(status).toMatchObject({
+      status: "idle",
+      hasActiveRun: false,
+      activeRunId: null,
+    });
+  });
+
+  it("updateLlmConfig stores and resets services", async () => {
+    const storedData: Record<string, unknown> = {};
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        runtime: { sendMessage: vi.fn(async () => undefined) },
+        storage: {
+          local: {
+            get: vi.fn(async (keys) => {
+              const result: Record<string, unknown> = {};
+              for (const key of Array.isArray(keys) ? keys : [keys]) {
+                if (storedData[key]) result[key] = storedData[key];
+              }
+              return result;
+            }),
+            set: vi.fn(async (items) => {
+              Object.assign(storedData, items);
+            }),
+          },
+        },
+      },
+    });
+
+    const result = await services.updateLlmConfig({
+      apiKey: "sk-test-123",
+      baseUrl: "https://api.anthropic.com/v1",
+      model: "claude-3-opus",
+    });
+
+    expect(result).toMatchObject({ updated: true, profileCount: 1 });
+    expect(storedData["bbl-next.llm.config.v1"]).toMatchObject({
+      profiles: [
+        expect.objectContaining({
+          id: "default",
+          llmKey: "sk-test-123",
+          llmBase: "https://api.anthropic.com/v1",
+          llmModel: "claude-3-opus",
+        }),
+      ],
+      defaultProfile: "default",
+    });
   });
 });
