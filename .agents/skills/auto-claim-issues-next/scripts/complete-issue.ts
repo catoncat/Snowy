@@ -9,7 +9,7 @@ import {
   writeIssueFile,
 } from "./claim-issue";
 import { loadModuleLedger } from "./module-ledger";
-import { loadLeaseState, releaseTicket } from "./ticket-machine";
+import { type TicketLease, loadLeaseState, releaseTicket } from "./ticket-machine";
 
 interface CommitRecord {
   hash: string;
@@ -105,6 +105,33 @@ function sessionIdForAssignee(assignee: string): string {
   return `cli:${assignee}`;
 }
 
+function resolveLeaseForAssignee(
+  leasesBySession: Record<string, TicketLease>,
+  assignee: string,
+  issueId?: string,
+): { sessionId: string; lease: TicketLease } | null {
+  const preferredSessionId = sessionIdForAssignee(assignee);
+  const preferredLease = leasesBySession[preferredSessionId];
+
+  if (preferredLease && (!issueId || preferredLease.issue_id === issueId)) {
+    return {
+      sessionId: preferredSessionId,
+      lease: preferredLease,
+    };
+  }
+
+  const matches = Object.entries(leasesBySession).filter(
+    ([, lease]) => lease.agent_name === assignee && (!issueId || lease.issue_id === issueId),
+  );
+
+  if (matches.length === 1) {
+    const [sessionId, lease] = matches[0];
+    return { sessionId, lease };
+  }
+
+  return null;
+}
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -182,12 +209,17 @@ export async function completeIssue(args: CompleteIssueArgs): Promise<CompleteIs
     throw new Error("workflow:done requires at least one --check");
   }
 
-  const sessionId = sessionIdForAssignee(args.assignee);
   const state = loadLeaseState(
     args.repoRoot,
     args.leaseRootDir ? { leaseRootDir: args.leaseRootDir } : undefined,
   );
-  const lease = state.leases_by_session[sessionId];
+  const resolvedLease = resolveLeaseForAssignee(
+    state.leases_by_session,
+    args.assignee,
+    args.issueId,
+  );
+  const sessionId = resolvedLease?.sessionId ?? null;
+  const lease = resolvedLease?.lease ?? null;
   const targetIssueId = args.issueId ?? lease?.issue_id;
   if (!targetIssueId) {
     throw new Error(

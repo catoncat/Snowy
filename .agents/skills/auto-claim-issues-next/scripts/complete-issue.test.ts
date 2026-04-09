@@ -167,6 +167,84 @@ check_cmd: bun run check
     expect(queue.entries.map((entry) => entry.issue_id)).toEqual(["ISSUE-088"]);
   });
 
+  it("finds and releases a non-cli session lease by agent name", async () => {
+    const repoRoot = makeRepo();
+    writeModuleLedger(repoRoot);
+    writeIssue(
+      repoRoot,
+      "issue-087.md",
+      `---
+id: ISSUE-087
+title: "LLM closure"
+status: open
+priority: p1
+source: test
+created: 2026-04-08
+assignee: unassigned
+tags: [kernel]
+module_id: kernel
+module_stage: mainline
+tracking_kind: follow-up
+kind: slice
+epic: EPIC-kernel
+parallel_group: kernel
+depends_on: []
+write_scope:
+  - packages/kernel/src/llm-message-model.ts
+acceptance_ref: docs/kernel-skeleton-design.md
+check_cmd: bun run check
+---`,
+    );
+    writeIssue(
+      repoRoot,
+      "issue-088.md",
+      `---
+id: ISSUE-088
+title: "Prompt skills injection"
+status: open
+priority: p2
+source: test
+created: 2026-04-08
+assignee: unassigned
+tags: [kernel]
+module_id: kernel
+module_stage: mainline
+tracking_kind: gap
+kind: slice
+epic: EPIC-kernel
+parallel_group: kernel
+depends_on: []
+write_scope:
+  - packages/kernel/src/prompt-builder.ts
+acceptance_ref: docs/kernel-skeleton-design.md
+check_cmd: bun run check
+---`,
+    );
+
+    buildLiveQueue({ repoRoot, dryRun: false, json: false });
+    await takeTicket({
+      repoRoot,
+      leaseRootDir: path.join(repoRoot, ".leases"),
+      sessionId: "019d700a-2fa7-7bc0-9108-6827355ec091",
+      agentName: "codex-019d700a",
+      issueId: "ISSUE-087",
+    });
+
+    const result = await completeIssue({
+      repoRoot,
+      leaseRootDir: path.join(repoRoot, ".leases"),
+      assignee: "codex-019d700a",
+      commits: [{ hash: "abc1234", subject: "feat: finish issue" }],
+      implemented: ["补齐非 cli lease session 的 workflow done closeout"],
+      checks: ["bun run workflow:done -- --issue=ISSUE-087"],
+      risks: ["无"],
+    });
+
+    expect(result.issueId).toBe("ISSUE-087");
+    expect(result.releasedLease).toBe(true);
+    expect(activeLeases(repoRoot, { leaseRootDir: path.join(repoRoot, ".leases") })).toEqual([]);
+  });
+
   it("requires at least one commit ref", () => {
     const repoRoot = makeRepo();
     initGitRepo(repoRoot);
