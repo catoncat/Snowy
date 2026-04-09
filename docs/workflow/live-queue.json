@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T02:35:42.369Z",
+  "generated_at": "2026-04-09T02:38:13.155Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
@@ -17,21 +17,6 @@
         "packages/kernel/src/loop-orchestrator.ts",
         "packages/contracts/src/index.ts",
         "apps/mv3-shell/src/background.ts"
-      ]
-    },
-    {
-      "issue_id": "ISSUE-098",
-      "issue_path": "docs/backlog/2026-04-09-e2e-verify-intervention-cycle.md",
-      "title": "End-to-end test: verify → intervention → resolution cycle",
-      "parallel_group": "site-runtime",
-      "module_id": "intervention-handoff",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run apps/mv3-shell/test/runtime-chat.spec.ts packages/kernel/test/loop-orchestrator.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "apps/mv3-shell/test/runtime-chat.spec.ts",
-        "packages/kernel/test/loop-orchestrator.spec.ts"
       ]
     }
   ]

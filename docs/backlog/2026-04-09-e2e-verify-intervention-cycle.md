@@ -1,11 +1,12 @@
 ---
 id: ISSUE-098
 title: "End-to-end test: verify → intervention → resolution cycle"
-status: open
+status: done
 priority: p1
 source: "next-batch planning 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
+assignee: codex-019d700e
+completed_at: 2026-04-09T02:37:53Z
 tags:
   - intervention
   - verify
@@ -42,3 +43,24 @@ Add integration tests that exercise the full verify → intervention request →
 - Intervention timeout produces a terminal loop status
 - Intervention resolution allows the loop to continue
 - Tests pass in both kernel and mv3-shell test suites
+
+## 工作总结
+
+### 实现了什么
+
+- 在 `packages/kernel/test/loop-orchestrator.spec.ts` 补齐 verify failed → intervention request / resolve → loop continuation 的端到端测试。
+- 在 `apps/mv3-shell/test/runtime-chat.spec.ts` 补齐 intervention.list / resolve、cancel / timeout、以及 runtime service restart 后 rehydrate 的桥接测试。
+- 用稳定的 runtime/chat 测试夹具覆盖 active-tab 解析与 page hook verify 路径，锁住 Soft Gate 3 所需的 intervention handoff 主链。
+
+### 实际跑了什么检查
+
+- `bunx vitest run apps/mv3-shell/test/runtime-chat.spec.ts packages/kernel/test/loop-orchestrator.spec.ts`
+- `./node_modules/.bin/biome check apps/mv3-shell/test/runtime-chat.spec.ts packages/kernel/test/loop-orchestrator.spec.ts`
+
+### 残留风险
+
+- `workflow:done` 仍未兼容当前 lease 的非 `cli:<agent>` session_id，本次已手动完成 issue / queue / lease 收口。
+
+## 相关 commits
+
+- `0eae3200c7fc` `fix(test): fix intervention bridge tests from codex review`
