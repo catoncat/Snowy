@@ -575,20 +575,17 @@ export function createBackgroundRunnerBridge({
     return loopTelemetryEntries.slice(-max);
   }
 
-  function readLoopTelemetryResource(limit) {
+  function readRuntimeHistoryResource(limit) {
     const entries = getLoopTelemetry(limit);
     return {
       ok: true,
-      data: {
-        id: "loop.telemetry",
-        primitive: "resource",
-        generatedAt: isoNow(),
-        data: {
-          status: entries.length > 0 ? "available" : "empty",
-          totalCount: entries.length,
+      data: readAiSurfaceResource({
+        resourceId: "runtime.history",
+        runtimeHistory: {
+          generatedAt: isoNow(),
           entries: entries.map((entry) => ({ ...entry })),
         },
-      },
+      }),
     };
   }
 
@@ -1726,6 +1723,8 @@ export function createBackgroundRunnerBridge({
     }
 
     switch (resourceId) {
+      case "runtime.history":
+        return readRuntimeHistoryResource(limit);
       case "audit.tail":
         return {
           ok: true,
@@ -1867,7 +1866,7 @@ export function createBackgroundRunnerBridge({
         });
       case "resource.read":
         if (message.resourceId === "loop.telemetry") {
-          return readLoopTelemetryResource(message.limit);
+          return readRuntimeHistoryResource(message.limit);
         }
         return readResource({
           resourceId: message.resourceId,

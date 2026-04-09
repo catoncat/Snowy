@@ -149,6 +149,7 @@ describe("contracts", () => {
   it("locks the lightweight AI surface resource ids and audiences", () => {
     expect(AI_SURFACE_RESOURCE_IDS).toEqual([
       "runtime.summary",
+      "runtime.history",
       "config.summary",
       "skills.summary",
       "hosts.summary",

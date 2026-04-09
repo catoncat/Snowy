@@ -7,6 +7,7 @@ export const BOOTSTRAP_RESOURCE_KEYS = ["runtime", "config", "skills", "hosts"] 
 export type BootstrapResourceKey = (typeof BOOTSTRAP_RESOURCE_KEYS)[number];
 export const AI_SURFACE_RESOURCE_IDS = [
   "runtime.summary",
+  "runtime.history",
   "config.summary",
   "skills.summary",
   "hosts.summary",
@@ -43,6 +44,12 @@ export const AI_SURFACE_RESOURCE_METADATA_REGISTRY = [
     audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
     projections: ["resource.read", "runtime.bootstrap"],
     bootstrapKey: "runtime",
+  },
+  {
+    id: "runtime.history",
+    readOwner: "runtime",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read"],
   },
   {
     id: "config.summary",
@@ -377,6 +384,12 @@ export interface AuditTailSummary {
   entries: ControlPlaneAuditEntry[];
 }
 
+export interface RuntimeHistorySummary {
+  status: "available" | "empty";
+  totalCount: number;
+  entries: LoopTelemetryEntry[];
+}
+
 export interface KernelDiagnosticsSessionSnapshot {
   id: string;
   createdAt: string;
@@ -506,6 +519,7 @@ export interface ResourceDocument<ResourceId extends AiSurfaceResourceId, Payloa
 }
 
 export type RuntimeSummaryResource = ResourceDocument<"runtime.summary", RuntimeBootstrapSummary>;
+export type RuntimeHistoryResource = ResourceDocument<"runtime.history", RuntimeHistorySummary>;
 export type ConfigSummaryResource = ResourceDocument<"config.summary", ConfigBootstrapSummary>;
 export type SkillsSummaryResource = ResourceDocument<"skills.summary", SkillsBootstrapSummary>;
 export type HostsSummaryResource = ResourceDocument<"hosts.summary", HostsBootstrapSummary>;
@@ -516,6 +530,7 @@ export type InterventionAuditResource = ResourceDocument<
 >;
 export type AiSurfaceResourceDocument =
   | RuntimeSummaryResource
+  | RuntimeHistoryResource
   | ConfigSummaryResource
   | SkillsSummaryResource
   | HostsSummaryResource

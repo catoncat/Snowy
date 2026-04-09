@@ -35,10 +35,13 @@ import {
   type InterventionRecord,
   type InterventionSummary,
   type JsonSchema,
+  type LoopTelemetryEntry,
   MAX_SKILL_CALL_DEPTH,
   PUBLIC_CAPABILITY_NAMESPACES,
   type ResourceDocument,
   type RuntimeBootstrapSummary,
+  type RuntimeHistoryResource,
+  type RuntimeHistorySummary,
   type RuntimeSummaryResource,
   type SkillControlPlaneAction,
   type SkillsBootstrapSummary,
@@ -241,6 +244,8 @@ export type {
   InterventionSummary,
   InterventionTrigger,
   RuntimeBootstrapSummary,
+  RuntimeHistoryResource,
+  RuntimeHistorySummary,
   RuntimeSummaryResource,
   SkillAuditEntry,
   SkillsBootstrapSummary,
@@ -295,6 +300,12 @@ export interface AuditTailResourceInput {
   limit?: number;
 }
 
+export interface RuntimeHistoryResourceInput {
+  entries: LoopTelemetryEntry[];
+  generatedAt?: string;
+  limit?: number;
+}
+
 export interface InterventionAuditResourceInput {
   entries: InterventionAuditEntry[];
   generatedAt?: string;
@@ -304,6 +315,7 @@ export interface InterventionAuditResourceInput {
 export interface ReadAiSurfaceResourceInput {
   resourceId: AiSurfaceResourceId;
   bootstrap?: BootstrapSummaryInput;
+  runtimeHistory?: RuntimeHistoryResourceInput;
   auditTail?: AuditTailResourceInput;
   interventionAudit?: InterventionAuditResourceInput;
 }
@@ -1549,6 +1561,25 @@ export function createRuntimeSummaryResource(
   return createBootstrapSummaryResources(input).runtime;
 }
 
+export function createRuntimeHistoryResource(
+  input: RuntimeHistoryResourceInput,
+): RuntimeHistoryResource {
+  const limit =
+    typeof input.limit === "number" && Number.isFinite(input.limit) && input.limit >= 0
+      ? Math.floor(input.limit)
+      : undefined;
+  const entries = typeof limit === "number" ? input.entries.slice(-limit) : [...input.entries];
+  const lastEntry = entries[entries.length - 1];
+  const generatedAt = input.generatedAt ?? lastEntry?.timestamp ?? new Date().toISOString();
+  const data: RuntimeHistorySummary = {
+    status: entries.length > 0 ? "available" : "empty",
+    totalCount: entries.length,
+    entries,
+  };
+
+  return createResourceDocument("runtime.history", generatedAt, data);
+}
+
 export function createConfigSummaryResource(
   input: BootstrapSummaryInput = {},
 ): ConfigSummaryResource {
@@ -1612,6 +1643,7 @@ export function readAiSurfaceResource(
   const metadata = getAiSurfaceResourceMetadata(input.resourceId);
   const readers: Record<AiSurfaceResourceId, () => AiSurfaceResourceDocument> = {
     "runtime.summary": () => createRuntimeSummaryResource(input.bootstrap),
+    "runtime.history": () => createRuntimeHistoryResource(input.runtimeHistory ?? { entries: [] }),
     "config.summary": () => createConfigSummaryResource(input.bootstrap),
     "skills.summary": () => createSkillsSummaryResource(input.bootstrap),
     "hosts.summary": () => createHostsSummaryResource(input.bootstrap),

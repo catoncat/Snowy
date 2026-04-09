@@ -466,7 +466,7 @@ describe("mv3-shell end-to-end loop integration", () => {
     }
   });
 
-  it("records loop telemetry into loop.telemetry and audit.tail for tool executions", async () => {
+  it("records loop telemetry into runtime.history and audit.tail for tool executions", async () => {
     const sentMessages: unknown[] = [];
     let fetchCallCount = 0;
     const originalFetch = globalThis.fetch;
@@ -549,12 +549,12 @@ describe("mv3-shell end-to-end loop integration", () => {
         bridge.route({
           target: RUNNER_BACKGROUND_TARGET,
           kind: "resource.read",
-          resourceId: "loop.telemetry",
+          resourceId: "runtime.history",
         }),
       ).resolves.toMatchObject({
         ok: true,
         data: {
-          id: "loop.telemetry",
+          id: "runtime.history",
           primitive: "resource",
           data: {
             status: "available",
