@@ -1,23 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-09T01:58:08.160Z",
+  "generated_at": "2026-04-09T02:01:07.123Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-094",
-      "issue_path": "docs/backlog/2026-04-09-kernel-facade-loop-introspection.md",
-      "title": "Expose loop introspection methods on Kernel facade",
-      "parallel_group": "kernel",
-      "module_id": "kernel",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run packages/kernel/test/kernel-facade.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "packages/kernel/src/kernel-facade.ts",
-        "packages/kernel/test/kernel-facade.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-096",
       "issue_path": "docs/backlog/2026-04-09-session-entry-payload-types.md",
@@ -31,6 +16,21 @@
       "write_scope": [
         "packages/contracts/src/index.ts",
         "packages/contracts/test/contracts.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-097",
+      "issue_path": "docs/backlog/2026-04-09-kernel-provider-profile-facade.md",
+      "title": "Integrate provider/profile management into Kernel facade",
+      "parallel_group": "kernel",
+      "module_id": "provider-profile-routing",
+      "module_stage": "mainline",
+      "tracking_kind": "gap",
+      "check_cmd": "bunx vitest run packages/kernel/test/kernel-facade.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "packages/kernel/src/kernel-facade.ts",
+        "packages/kernel/test/kernel-facade.spec.ts"
       ]
     },
     {
