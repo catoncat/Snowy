@@ -177,7 +177,7 @@ function createChromeAuditStore(
     async load() {
       const keys = [storageKey, ...legacyStorageKeys];
       const loaded = await storageArea.get(keys);
-      let raw;
+      let raw = [];
       if (Array.isArray(loaded?.[storageKey])) {
         raw = loaded[storageKey];
       } else {
@@ -485,7 +485,13 @@ export function createBackgroundRunnerBridge({
   const auditEntries = [];
   const loopTelemetryEntries = [];
   const resolvedAuditStore =
-    auditStore ?? createChromeAuditStore(chromeApi, auditStorageKey, LEGACY_AUDIT_STORAGE_KEYS, resolvedRetention);
+    auditStore ??
+    createChromeAuditStore(
+      chromeApi,
+      auditStorageKey,
+      LEGACY_AUDIT_STORAGE_KEYS,
+      resolvedRetention,
+    );
   const state = {
     defaultHostId: null,
     hostReady: false,
@@ -616,11 +622,10 @@ export function createBackgroundRunnerBridge({
   }
 
   function createDiagnosticsRunSummary(runtimeKernelState) {
-    if (!runtimeKernelState?.session?.id || !runtimeKernelState?.runState) {
+    if (!runtimeKernelState?.runState) {
       return null;
     }
     return {
-      sessionId: runtimeKernelState.session.id,
       phase: runtimeKernelState.runState.phase,
       queuedPrompts: {
         steer: Array.isArray(runtimeKernelState.runState.queue?.steer)
@@ -644,6 +649,64 @@ export function createBackgroundRunnerBridge({
     };
   }
 
+  function buildDiagnosticsProviderRoute(activeProfile) {
+    if (!activeProfile) {
+      return {
+        status: "empty",
+        profile: null,
+        provider: null,
+        llmModel: null,
+        orderedProfiles: [],
+      };
+    }
+
+    if (activeProfile.ok) {
+      return {
+        status: "configured",
+        profile: activeProfile.route.profile,
+        provider: activeProfile.route.provider,
+        llmModel: activeProfile.route.llmModel,
+        orderedProfiles: Array.isArray(activeProfile.route.orderedProfiles)
+          ? [...activeProfile.route.orderedProfiles]
+          : [],
+      };
+    }
+
+    return {
+      status: "unavailable",
+      profile: activeProfile.profile,
+      provider: null,
+      llmModel: null,
+      orderedProfiles: [activeProfile.profile],
+      reason: activeProfile.reason,
+      message: activeProfile.message,
+    };
+  }
+
+  function createLegacyKernelDiagnosticsSnapshot(runtimeKernelState, interventionState) {
+    return {
+      session: runtimeKernelState?.session
+        ? {
+            id: runtimeKernelState.session.id,
+            createdAt: runtimeKernelState.session.createdAt ?? isoNow(),
+            title: runtimeKernelState.session.title ?? null,
+            model: runtimeKernelState.session.model ?? null,
+          }
+        : null,
+      run: createDiagnosticsRunSummary(runtimeKernelState),
+      loop: {
+        stepCount: 0,
+        noProgress: null,
+        maxSteps: 0,
+      },
+      interventions: interventionState ?? emptyInterventionState(),
+      provider: {
+        route: buildDiagnosticsProviderRoute(runtimeKernelState?.activeProfile ?? null),
+        registered: [],
+      },
+    };
+  }
+
   function createDiagnosticsErrorSummary() {
     const lastError = getRuntimeError();
     const recentAudit = createDiagnosticsEntriesSummary(
@@ -664,26 +727,32 @@ export function createBackgroundRunnerBridge({
     };
   }
 
-  function createDiagnosticsLoopSummary(runtimeKernelState) {
-    const run = createDiagnosticsRunSummary(runtimeKernelState);
-    const telemetry = createDiagnosticsEntriesSummary(getLoopTelemetry(10));
-    const recentAudit = createDiagnosticsEntriesSummary(
-      getAuditTail(10).filter((entry) => entry.kind === "loop.step"),
-    );
-    const hasActiveRun =
-      run != null &&
-      (run.phase !== "idle" || run.queuedPrompts.steer > 0 || run.queuedPrompts.followUp > 0);
+  async function captureKernelDiagnosticsSnapshot(runtimeServiceApi) {
+    const canUseExplicitKernelFacade =
+      runtimeServices &&
+      typeof runtimeServices.ensureServices === "function" &&
+      typeof runtimeServices.ensureSession === "function";
+    const canUseBaseKernelFacade =
+      !runtimeServices &&
+      typeof runtimeServiceApi?.ensureServices === "function" &&
+      typeof runtimeServiceApi?.ensureSession === "function";
 
-    return {
-      status: hasActiveRun
-        ? "active"
-        : telemetry.totalCount > 0 || recentAudit.totalCount > 0
-          ? "recent"
-          : "empty",
-      run,
-      telemetry,
-      recentAudit,
-    };
+    if (canUseExplicitKernelFacade || canUseBaseKernelFacade) {
+      const [{ kernel }, session] = await Promise.all([
+        runtimeServiceApi.ensureServices(),
+        runtimeServiceApi.ensureSession(),
+      ]);
+      if (kernel && typeof kernel.captureDiagnostics === "function" && session?.id) {
+        return kernel.captureDiagnostics(session.id);
+      }
+    }
+
+    const runtimeKernelState =
+      typeof runtimeServiceApi?.getKernelRuntimeState === "function"
+        ? await runtimeServiceApi.getKernelRuntimeState()
+        : null;
+    const interventionSnapshot = await readInterventionObservabilitySnapshot(runtimeServiceApi);
+    return createLegacyKernelDiagnosticsSnapshot(runtimeKernelState, interventionSnapshot.summary);
   }
 
   function setRuntimeError(error) {
@@ -1305,8 +1374,7 @@ export function createBackgroundRunnerBridge({
     const capturedAt = isoNow();
     const offscreenPresent = await hasOffscreenDocument();
     const runtimeServiceApi = getRuntimeServices();
-    const interventionSnapshot = await readInterventionObservabilitySnapshot(runtimeServiceApi);
-    const interventionState = interventionSnapshot.summary;
+    const kernelDiagnostics = await captureKernelDiagnosticsSnapshot(runtimeServiceApi);
 
     const runnerResponse = offscreenPresent
       ? await sendToOffscreen("runner.diagnostics")
@@ -1371,27 +1439,21 @@ export function createBackgroundRunnerBridge({
     if (runtimeError) {
       setRuntimeError(runtimeError);
     }
-    await auditReady;
-    const runtimeKernelState =
-      typeof runtimeServiceApi.getKernelRuntimeState === "function"
-        ? await runtimeServiceApi.getKernelRuntimeState()
-        : null;
 
     return {
       ok: true,
       data: {
         capturedAt,
         status: degraded ? "degraded" : "healthy",
+        kernel: kernelDiagnostics,
         bridge: buildBridgeState({
           offscreenPresent,
           offscreenPath,
         }),
-        interventions: interventionState,
         runner,
         site,
         debug: {
           error: createDiagnosticsErrorSummary(),
-          loop: createDiagnosticsLoopSummary(runtimeKernelState),
         },
       },
     };
@@ -1411,7 +1473,8 @@ export function createBackgroundRunnerBridge({
     const runtimeDiagnostics = diagnosticsResult.data;
     const runnerHealth = runtimeDiagnostics.runner?.health;
     const activeTabSummary = activeTab ? toBootstrapActiveTab(activeTab, world) : null;
-    const runtimeLoopRun = runtimeDiagnostics.debug?.loop?.run ?? null;
+    const runtimeLoopRun = runtimeDiagnostics.kernel?.run ?? null;
+    const kernelSession = runtimeDiagnostics.kernel?.session ?? null;
     const runtimeStatus =
       runtimeDiagnostics.status === "degraded"
         ? activeTabSummary || runtimeDiagnostics.bridge.offscreenPresent
@@ -1469,7 +1532,7 @@ export function createBackgroundRunnerBridge({
             note: "Config control plane is not implemented yet.",
             updatedAt: null,
           };
-    const interventionState = runtimeDiagnostics.interventions ?? emptyInterventionState();
+    const interventionState = runtimeDiagnostics.kernel?.interventions ?? emptyInterventionState();
 
     return {
       generatedAt,
@@ -1477,7 +1540,7 @@ export function createBackgroundRunnerBridge({
       runtime: {
         status: runtimeStatus,
         mode: currentMode,
-        sessionId: sessionId ?? runtimeLoopRun?.sessionId ?? null,
+        sessionId: sessionId ?? kernelSession?.id ?? null,
         activeTab: activeTabSummary,
         loopState:
           runtimeLoopRun?.phase ?? runnerHealth?.status ?? (activeTabSummary ? "idle" : null),

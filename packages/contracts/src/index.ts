@@ -377,6 +377,127 @@ export interface AuditTailSummary {
   entries: ControlPlaneAuditEntry[];
 }
 
+export interface KernelDiagnosticsSessionSnapshot {
+  id: string;
+  createdAt: string;
+  title: string | null;
+  model: string | null;
+}
+
+export interface KernelDiagnosticsRunSnapshot {
+  phase: RunPhase;
+  queuedPrompts: {
+    steer: number;
+    followUp: number;
+  };
+  retry: RunState["retry"];
+}
+
+export interface KernelDiagnosticsLoopSnapshot {
+  stepCount: number;
+  noProgress: NoProgressReason | null;
+  maxSteps: number;
+}
+
+export type KernelDiagnosticsProviderHealthStatus = "healthy" | "degraded" | "down";
+
+export type KernelDiagnosticsProviderRoute =
+  | {
+      status: "empty";
+      profile: null;
+      provider: null;
+      llmModel: null;
+      orderedProfiles: [];
+    }
+  | {
+      status: "configured";
+      profile: string;
+      provider: string;
+      llmModel: string;
+      orderedProfiles: string[];
+    }
+  | {
+      status: "unavailable";
+      profile: string;
+      provider: string | null;
+      llmModel: string | null;
+      orderedProfiles: string[];
+      reason: "profile_not_found" | "missing_llm_config" | "route_unavailable";
+      message: string;
+    };
+
+export interface KernelDiagnosticsProviderRegistryEntry {
+  id: string;
+  healthStatus: KernelDiagnosticsProviderHealthStatus;
+  capabilities: string[];
+}
+
+export interface KernelDiagnosticsProviderSnapshot {
+  route: KernelDiagnosticsProviderRoute;
+  registered: KernelDiagnosticsProviderRegistryEntry[];
+}
+
+export interface KernelDiagnosticsSnapshot {
+  session: KernelDiagnosticsSessionSnapshot | null;
+  run: KernelDiagnosticsRunSnapshot | null;
+  loop: KernelDiagnosticsLoopSnapshot;
+  interventions: InterventionSummary;
+  provider: KernelDiagnosticsProviderSnapshot;
+}
+
+export interface RuntimeDiagnosticsEdgeError {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+export interface RuntimeDiagnosticsBridgeState {
+  hostReady: boolean;
+  hostLastSeenAt?: string;
+  hostRecoveredAt?: string;
+  hostRecoveryReason?: string;
+  offscreenPresent: boolean;
+  offscreenPath: string;
+}
+
+export interface RuntimeDiagnosticsRunnerState {
+  reachable: boolean;
+  ready?: boolean;
+  health?: Record<string, unknown> | null;
+  error?: RuntimeDiagnosticsEdgeError;
+}
+
+export interface RuntimeDiagnosticsSiteState {
+  status: "healthy" | "degraded" | "empty" | "unavailable" | "skipped";
+  tabId?: number;
+  world?: "content" | "main";
+  snapshot?: Record<string, unknown> | null;
+  error?: RuntimeDiagnosticsEdgeError;
+}
+
+export interface RuntimeDiagnosticsErrorSummary {
+  status: "active" | "cleared" | "recent" | "empty";
+  lastError: {
+    code: string;
+    message: string;
+    capturedAt: string;
+  } | null;
+  clearedAt: string | null;
+  recentAudit: AuditTailSummary;
+}
+
+export interface RuntimeDiagnosticsPayload {
+  capturedAt: string;
+  status: "healthy" | "degraded";
+  kernel: KernelDiagnosticsSnapshot;
+  bridge: RuntimeDiagnosticsBridgeState;
+  runner: RuntimeDiagnosticsRunnerState;
+  site: RuntimeDiagnosticsSiteState;
+  debug: {
+    error: RuntimeDiagnosticsErrorSummary;
+  };
+}
+
 export interface ResourceDocument<ResourceId extends AiSurfaceResourceId, Payload> {
   id: ResourceId;
   primitive: "resource";

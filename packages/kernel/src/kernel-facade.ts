@@ -3,6 +3,7 @@ import type {
   CompactionDraft,
   CompactionReason,
   InterventionRequest,
+  KernelDiagnosticsSnapshot,
   KernelLlmAdapter,
   LlmProfileConfig,
   LoopTerminalStatus,
@@ -109,6 +110,7 @@ export interface Kernel {
   stop(sessionId: string): RunState;
   getRunState(sessionId: string): RunState;
   getRuntimeSummary(sessionId: string): KernelRuntimeSummary;
+  captureDiagnostics(sessionId: string): Promise<KernelDiagnosticsSnapshot>;
 
   // Queue
   enqueue(sessionId: string, behavior: "steer" | "followUp", text: string): QueuedPrompt;
@@ -309,6 +311,96 @@ export function createKernel(opts: KernelOptions): Kernel {
     };
   };
 
+  const captureDiagnostics = async (sessionId: string): Promise<KernelDiagnosticsSnapshot> => {
+    const session = (await sessions.listSessions()).find((entry) => entry.id === sessionId) ?? null;
+    const runState = runs.getState(sessionId);
+    const interventionRecords = interventions.list({ sessionId });
+    const activeInterventions = interventionRecords.filter(
+      (record) => record.status === "requested",
+    );
+    const recentInterventions = interventionRecords.filter(
+      (record) => record.status !== "requested",
+    );
+    const activeRoute =
+      profileConfig != null
+        ? resolveLlmRoute(profileConfig, undefined, "worker", {
+            providerRegistry: providerRegistry ?? undefined,
+          })
+        : null;
+    const registeredProviders =
+      providerRegistry?.list().map((entry) => ({
+        id: entry.id,
+        healthStatus: entry.healthStatus,
+        capabilities: [...entry.capabilities],
+      })) ?? [];
+
+    return {
+      session: session
+        ? {
+            id: session.id,
+            createdAt: session.createdAt,
+            title: session.title ?? null,
+            model: session.model ?? null,
+          }
+        : null,
+      run: {
+        phase: runState.phase,
+        queuedPrompts: {
+          steer: runState.queue.steer.length,
+          followUp: runState.queue.followUp.length,
+        },
+        retry: { ...runState.retry },
+      },
+      loop: {
+        stepCount: loop.getStepCount(sessionId),
+        noProgress: loop.checkNoProgress(sessionId),
+        maxSteps: loop.getMaxSteps(),
+      },
+      interventions: {
+        status:
+          interventionRecords.length === 0
+            ? "empty"
+            : activeInterventions.length > 0
+              ? "requested"
+              : "settled",
+        totalCount: interventionRecords.length,
+        activeCount: activeInterventions.length,
+        recentCount: recentInterventions.length,
+        active: activeInterventions,
+        recent: recentInterventions,
+      },
+      provider: {
+        route:
+          activeRoute == null
+            ? {
+                status: "empty",
+                profile: null,
+                provider: null,
+                llmModel: null,
+                orderedProfiles: [],
+              }
+            : activeRoute.ok
+              ? {
+                  status: "configured",
+                  profile: activeRoute.route.profile,
+                  provider: activeRoute.route.provider,
+                  llmModel: activeRoute.route.llmModel,
+                  orderedProfiles: [...activeRoute.route.orderedProfiles],
+                }
+              : {
+                  status: "unavailable",
+                  profile: activeRoute.profile,
+                  provider: null,
+                  llmModel: null,
+                  orderedProfiles: [activeRoute.profile],
+                  reason: activeRoute.reason,
+                  message: activeRoute.message,
+                },
+        registered: registeredProviders,
+      },
+    };
+  };
+
   return {
     // Session
     createSession: (o) => sessions.createSession(o),
@@ -327,6 +419,7 @@ export function createKernel(opts: KernelOptions): Kernel {
     stop: (id) => runs.transition(id, "stop"),
     getRunState: (id) => runs.getState(id),
     getRuntimeSummary,
+    captureDiagnostics,
 
     // Queue
     enqueue: (id, behavior, text) => runs.enqueue(id, behavior, text),

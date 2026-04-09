@@ -443,6 +443,128 @@ describe("KernelFacade (createKernel)", () => {
     });
   });
 
+  describe("diagnostics facade", () => {
+    it("captures a kernel-owned diagnostics snapshot for the active session", async () => {
+      const session = await kernel.createSession({
+        title: "mv3-shell runtime session",
+        model: "gpt-4.1-mini",
+      });
+      kernel.startRun(session.id);
+      kernel.enqueue(session.id, "steer", "continue");
+      kernel.requestIntervention(session.id, {
+        id: "ivr-diagnostics",
+        kind: "confirm",
+        trigger: "verify_failed",
+        title: "Need confirmation",
+        message: "Confirm the next action.",
+      });
+      const turn = kernel.createTurn(session.id, { capabilityId: "page.inspect" });
+      kernel.recordTurnResult(turn, { ok: true, data: { ok: true } });
+
+      const diagnostics = await callKernelMethod<[string], Promise<any>>(
+        kernel,
+        "captureDiagnostics",
+        session.id,
+      );
+
+      expect(diagnostics).toMatchObject({
+        session: {
+          id: session.id,
+          createdAt: session.createdAt,
+          title: "mv3-shell runtime session",
+          model: "gpt-4.1-mini",
+        },
+        run: {
+          phase: "running",
+          queuedPrompts: {
+            steer: 1,
+            followUp: 0,
+          },
+          retry: {
+            active: false,
+            attempt: 0,
+            maxAttempts: 2,
+          },
+        },
+        loop: {
+          stepCount: 1,
+          noProgress: null,
+          maxSteps: 50,
+        },
+        interventions: {
+          status: "requested",
+          totalCount: 1,
+          activeCount: 1,
+          recentCount: 0,
+        },
+        provider: {
+          route: {
+            status: "empty",
+            profile: null,
+            provider: null,
+            llmModel: null,
+            orderedProfiles: [],
+          },
+          registered: [],
+        },
+      });
+    });
+
+    it("captures negotiated provider diagnostics through the kernel facade", async () => {
+      const providerRegistry = new LlmProviderRegistry();
+      providerRegistry.register(
+        {
+          id: "primary_provider",
+          resolveRequestUrl: () => "https://primary.example.test/chat/completions",
+          send: async () => new Response("ok"),
+        },
+        { healthStatus: "healthy", capabilities: ["chat.completions"] },
+      );
+
+      const wiredKernel = createKernelWithFacadeOptions({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        providerRegistry,
+        profileConfig: {
+          defaultProfile: "default",
+          profiles: [
+            {
+              id: "default",
+              providerId: "primary_provider",
+              llmBase: "https://primary.example.test",
+              llmKey: "sk-primary",
+              llmModel: "gpt-4.1-mini",
+            },
+          ],
+        },
+      });
+      const session = await wiredKernel.createSession();
+
+      const diagnostics = await callKernelMethod<[string], Promise<any>>(
+        wiredKernel,
+        "captureDiagnostics",
+        session.id,
+      );
+
+      expect(diagnostics.provider).toMatchObject({
+        route: {
+          status: "configured",
+          profile: "default",
+          provider: "primary_provider",
+          llmModel: "gpt-4.1-mini",
+          orderedProfiles: ["default"],
+        },
+        registered: [
+          {
+            id: "primary_provider",
+            healthStatus: "healthy",
+            capabilities: ["chat.completions"],
+          },
+        ],
+      });
+    });
+  });
+
   describe("subsystem access", () => {
     it("exposes all four subsystems", () => {
       expect(kernel.sessions).toBeDefined();

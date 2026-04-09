@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import type { KernelDiagnosticsSnapshot } from "@bbl-next/contracts";
 import { InMemorySessionStorage } from "@bbl-next/kernel";
 import { describe, expect, it, vi } from "vitest";
 import manifest from "../manifest.json";
@@ -157,6 +158,59 @@ function createAuditStoreHarness(initialEntries: unknown[] = []) {
     },
     async save(entries: unknown[]) {
       persistedEntries = cloneValue(entries);
+    },
+  };
+}
+
+function createKernelDiagnosticsSnapshot(
+  overrides: Partial<KernelDiagnosticsSnapshot> = {},
+): KernelDiagnosticsSnapshot {
+  return {
+    session: {
+      id: "kernel-session",
+      createdAt: "2026-04-09T03:20:00.000Z",
+      title: "mv3-shell runtime session",
+      model: null,
+      ...(overrides.session ?? {}),
+    },
+    run: {
+      phase: "idle",
+      queuedPrompts: {
+        steer: 0,
+        followUp: 0,
+      },
+      retry: {
+        active: false,
+        attempt: 0,
+        maxAttempts: 2,
+      },
+      ...(overrides.run ?? {}),
+    },
+    loop: {
+      stepCount: 0,
+      noProgress: null,
+      maxSteps: 50,
+      ...(overrides.loop ?? {}),
+    },
+    interventions: {
+      status: "empty",
+      totalCount: 0,
+      activeCount: 0,
+      recentCount: 0,
+      active: [],
+      recent: [],
+      ...(overrides.interventions ?? {}),
+    },
+    provider: {
+      route: {
+        status: "empty",
+        profile: null,
+        provider: null,
+        llmModel: null,
+        orderedProfiles: [],
+      },
+      registered: [],
+      ...(overrides.provider ?? {}),
     },
   };
 }
@@ -701,6 +755,33 @@ describe("mv3-shell manifest", () => {
       ok: true,
       data: {
         status: "healthy",
+        kernel: {
+          session: {
+            id: expect.any(String),
+            title: "mv3-shell runtime session",
+          },
+          run: {
+            phase: "idle",
+            queuedPrompts: {
+              steer: 0,
+              followUp: 0,
+            },
+          },
+          loop: {
+            stepCount: 0,
+            maxSteps: 50,
+          },
+          interventions: {
+            status: "empty",
+            totalCount: 0,
+            activeCount: 0,
+          },
+          provider: {
+            route: {
+              status: "empty",
+            },
+          },
+        },
         bridge: {
           hostReady: true,
           offscreenPresent: true,
@@ -786,6 +867,16 @@ describe("mv3-shell manifest", () => {
       ok: true,
       data: {
         status: "healthy",
+        kernel: {
+          session: {
+            id: expect.any(String),
+          },
+          provider: {
+            route: {
+              status: "empty",
+            },
+          },
+        },
         bridge: {
           hostReady: true,
           offscreenPresent: true,
@@ -989,26 +1080,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("includes recent loop activity in runtime.capture_diagnostics snapshots", async () => {
-    const auditStore = createAuditStoreHarness([
-      {
-        timestamp: "2026-04-09T03:20:11.000Z",
-        sessionId: "session-loop-1",
-        kind: "loop.step",
-        status: "executed",
-        capabilityId: "page.query",
-        durationMs: 12,
-      },
-      {
-        timestamp: "2026-04-09T03:20:12.000Z",
-        sessionId: "session-loop-1",
-        kind: "loop.step",
-        status: "failed",
-        capabilityId: "page.click",
-        durationMs: 33,
-        error: "E_TIMEOUT",
-      },
-    ]);
+  it("consumes the kernel diagnostics facade for runtime.capture_diagnostics snapshots", async () => {
     const host = {
       dispatch: vi.fn(async (request) => {
         if (request.kind === "health") {
@@ -1039,7 +1111,56 @@ describe("mv3-shell manifest", () => {
         consecutiveFailures: 0,
       })),
     };
+    const captureDiagnostics = vi.fn(async () =>
+      createKernelDiagnosticsSnapshot({
+        session: {
+          id: "session-loop-1",
+        },
+        run: {
+          phase: "running",
+          queuedPrompts: {
+            steer: 1,
+            followUp: 0,
+          },
+          retry: {
+            active: true,
+            attempt: 1,
+            maxAttempts: 2,
+          },
+        },
+        loop: {
+          stepCount: 2,
+          maxSteps: 50,
+        },
+        provider: {
+          route: {
+            status: "configured",
+            profile: "default",
+            provider: "openai_compatible",
+            llmModel: "gpt-4.1-mini",
+            orderedProfiles: ["default"],
+          },
+          registered: [
+            {
+              id: "openai_compatible",
+              healthStatus: "healthy",
+              capabilities: ["chat.completions"],
+            },
+          ],
+        },
+      }),
+    );
     const runtimeServices = {
+      ensureServices: vi.fn(async () => ({
+        kernel: {
+          captureDiagnostics,
+        },
+      })),
+      ensureSession: vi.fn(async () => ({
+        id: "session-loop-1",
+        title: "mv3-shell runtime session",
+        createdAt: "2026-04-09T03:20:00.000Z",
+      })),
       getKernelRuntimeState: vi.fn(async () => ({
         session: {
           id: "session-loop-1",
@@ -1066,21 +1187,18 @@ describe("mv3-shell manifest", () => {
           },
         },
       })),
-      getInterventionState: vi.fn(async () => ({
-        sessionId: "session-loop-1",
-        status: "empty",
-        totalCount: 0,
-        activeCount: 0,
-        recentCount: 0,
-        active: [],
-      })),
+      getInterventionState: vi.fn(async () => {
+        throw new Error("runtime.capture_diagnostics should use kernel.captureDiagnostics");
+      }),
+      listInterventions: vi.fn(async () => {
+        throw new Error("runtime.capture_diagnostics should use kernel.captureDiagnostics");
+      }),
     };
     const harness = createChromeHarness({ host });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
       runtimeServices,
-      auditStore,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -1095,46 +1213,42 @@ describe("mv3-shell manifest", () => {
       ok: true,
       data: {
         status: "healthy",
-        debug: {
-          loop: {
-            status: "active",
-            run: {
-              sessionId: "session-loop-1",
-              phase: "running",
-              queuedPrompts: {
-                steer: 1,
-                followUp: 0,
-              },
-              retry: {
-                active: true,
-                attempt: 1,
-                maxAttempts: 2,
-              },
+        kernel: {
+          session: {
+            id: "session-loop-1",
+          },
+          run: {
+            phase: "running",
+            queuedPrompts: {
+              steer: 1,
+              followUp: 0,
             },
-            recentAudit: {
-              status: "available",
-              totalCount: 2,
-              entries: [
-                expect.objectContaining({
-                  capabilityId: "page.query",
-                  status: "executed",
-                  durationMs: 12,
-                }),
-                expect.objectContaining({
-                  capabilityId: "page.click",
-                  status: "failed",
-                  durationMs: 33,
-                  error: "E_TIMEOUT",
-                }),
-              ],
+            retry: {
+              active: true,
+              attempt: 1,
+              maxAttempts: 2,
+            },
+          },
+          loop: {
+            stepCount: 2,
+            maxSteps: 50,
+          },
+          provider: {
+            route: {
+              status: "configured",
+              profile: "default",
+              provider: "openai_compatible",
             },
           },
         },
       },
     });
 
-    expect(runtimeServices.getKernelRuntimeState).toHaveBeenCalled();
-    expect(runtimeServices.getInterventionState).toHaveBeenCalled();
+    expect(runtimeServices.ensureServices).toHaveBeenCalled();
+    expect(runtimeServices.ensureSession).toHaveBeenCalled();
+    expect(captureDiagnostics).toHaveBeenCalledWith("session-loop-1");
+    expect(runtimeServices.getInterventionState).not.toHaveBeenCalled();
+    expect(runtimeServices.listInterventions).not.toHaveBeenCalled();
 
     dispose();
     harness.cleanup();
@@ -3758,9 +3872,27 @@ describe("mv3-shell manifest", () => {
     const recentTimestamp = new Date(now - 1000).toISOString(); // 1 second ago
 
     const initialEntries = [
-      { timestamp: oldTimestamp, sessionId: "s1", kind: "hosts.connect", hostId: "old", status: "connected" },
-      { timestamp: oldTimestamp, sessionId: "s1", kind: "hosts.disconnect", hostId: "old", status: "disconnected" },
-      { timestamp: recentTimestamp, sessionId: "s2", kind: "hosts.connect", hostId: "recent", status: "connected" },
+      {
+        timestamp: oldTimestamp,
+        sessionId: "s1",
+        kind: "hosts.connect",
+        hostId: "old",
+        status: "connected",
+      },
+      {
+        timestamp: oldTimestamp,
+        sessionId: "s1",
+        kind: "hosts.disconnect",
+        hostId: "old",
+        status: "disconnected",
+      },
+      {
+        timestamp: recentTimestamp,
+        sessionId: "s2",
+        kind: "hosts.connect",
+        hostId: "recent",
+        status: "connected",
+      },
     ];
 
     // Pre-populate storage with old + recent entries
@@ -4197,15 +4329,17 @@ describe("mv3-shell manifest", () => {
     ).resolves.toMatchObject({
       ok: true,
       data: {
-        interventions: {
-          status: "requested",
-          activeCount: 1,
-          active: [
-            expect.objectContaining({
-              id: firstInvoke.data.intervention.id,
-              status: "requested",
-            }),
-          ],
+        kernel: {
+          interventions: {
+            status: "requested",
+            activeCount: 1,
+            active: [
+              expect.objectContaining({
+                id: firstInvoke.data.intervention.id,
+                status: "requested",
+              }),
+            ],
+          },
         },
       },
     });
@@ -4804,14 +4938,16 @@ describe("mv3-shell manifest", () => {
     ).resolves.toMatchObject({
       ok: true,
       data: {
-        interventions: {
-          status: "requested",
-          active: [
-            expect.objectContaining({
-              id: firstInvoke.data.intervention.id,
-              status: "requested",
-            }),
-          ],
+        kernel: {
+          interventions: {
+            status: "requested",
+            active: [
+              expect.objectContaining({
+                id: firstInvoke.data.intervention.id,
+                status: "requested",
+              }),
+            ],
+          },
         },
       },
     });

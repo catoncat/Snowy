@@ -44,6 +44,7 @@ import {
   RUN_PHASES,
   RUN_PHASE_TRANSITIONS,
   type RunState,
+  type RuntimeDiagnosticsPayload,
   type RuntimeSummaryResource,
   SESSION_ENTRY_TYPES,
   SKILL_AUDIT_KINDS,
@@ -336,6 +337,115 @@ describe("contracts", () => {
     expect(auditResource.data.entries[0]?.kind).toBe("hosts.connect");
     expect(auditResource.data.entries[1]?.kind).toBe("config.update");
     expect(resourceDocs[5]?.id).toBe("audit.intervention");
+  });
+
+  it("accepts a typed runtime diagnostics payload with kernel-owned snapshot", () => {
+    const diagnostics = {
+      capturedAt: "2026-04-09T07:45:00.000Z",
+      status: "healthy" as const,
+      kernel: {
+        session: {
+          id: "session-1",
+          createdAt: "2026-04-09T07:00:00.000Z",
+          title: "mv3-shell runtime session",
+          model: "gpt-4.1-mini",
+        },
+        run: {
+          phase: "running" as const,
+          queuedPrompts: {
+            steer: 1,
+            followUp: 0,
+          },
+          retry: {
+            active: true,
+            attempt: 1,
+            maxAttempts: 2,
+          },
+        },
+        loop: {
+          stepCount: 3,
+          noProgress: null,
+          maxSteps: 50,
+        },
+        interventions: {
+          status: "requested" as const,
+          totalCount: 1,
+          activeCount: 1,
+          recentCount: 1,
+          active: [
+            {
+              id: "ivr-1",
+              kind: "takeover" as const,
+              trigger: "verify_failed" as const,
+              status: "requested" as const,
+              title: "Need manual verification",
+              message: "Finish the login flow manually.",
+              sessionId: "session-1",
+              requestedAt: "2026-04-09T07:44:00.000Z",
+              updatedAt: "2026-04-09T07:44:00.000Z",
+              expiresAt: null,
+            },
+          ],
+          recent: [],
+        },
+        provider: {
+          route: {
+            status: "configured" as const,
+            profile: "default",
+            provider: "openai_compatible",
+            llmModel: "gpt-4.1-mini",
+            orderedProfiles: ["default"],
+          },
+          registered: [
+            {
+              id: "openai_compatible",
+              healthStatus: "healthy" as const,
+              capabilities: ["chat.completions"],
+            },
+          ],
+        },
+      },
+      bridge: {
+        hostReady: true,
+        offscreenPresent: true,
+        offscreenPath: "src/offscreen.html",
+      },
+      runner: {
+        reachable: true,
+        ready: true,
+        health: {
+          status: "idle",
+          inflightCount: 0,
+        },
+      },
+      site: {
+        status: "healthy" as const,
+        tabId: 21,
+        world: "main" as const,
+        snapshot: {
+          installs: 1,
+          invocations: 2,
+        },
+      },
+      debug: {
+        error: {
+          status: "empty" as const,
+          lastError: null,
+          clearedAt: null,
+          recentAudit: {
+            status: "empty" as const,
+            totalCount: 0,
+            entries: [],
+          },
+        },
+      },
+    } satisfies RuntimeDiagnosticsPayload;
+
+    expect(diagnostics.kernel.provider.route).toMatchObject({
+      status: "configured",
+      profile: "default",
+      provider: "openai_compatible",
+    });
   });
 
   it("locks the minimal execution host control plane action set", () => {
