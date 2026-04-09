@@ -345,6 +345,104 @@ describe("KernelFacade (createKernel)", () => {
     });
   });
 
+  describe("runtime summary facade", () => {
+    it("returns idle runtime summary for a fresh session", async () => {
+      const session = await kernel.createSession();
+
+      const summary = callKernelMethod<[string], any>(kernel, "getRuntimeSummary", session.id);
+
+      expect(summary).toMatchObject({
+        sessionId: session.id,
+        run: {
+          phase: "idle",
+          queuedPrompts: {
+            steer: 0,
+            followUp: 0,
+          },
+          retry: {
+            active: false,
+            attempt: 0,
+            maxAttempts: 2,
+          },
+        },
+        loop: {
+          stepCount: 0,
+          noProgress: null,
+        },
+        interventions: {
+          status: "empty",
+          totalCount: 0,
+          activeCount: 0,
+          recentCount: 0,
+          active: [],
+        },
+      });
+    });
+
+    it("returns queued prompt counts from the run facade state", async () => {
+      const session = await kernel.createSession();
+      kernel.startRun(session.id);
+      kernel.enqueue(session.id, "steer", "do this first");
+      kernel.enqueue(session.id, "followUp", "then do this");
+
+      const summary = callKernelMethod<[string], any>(kernel, "getRuntimeSummary", session.id);
+
+      expect(summary.run).toMatchObject({
+        phase: "running",
+        queuedPrompts: {
+          steer: 1,
+          followUp: 1,
+        },
+      });
+    });
+
+    it("returns running loop progress in runtime summary", async () => {
+      const session = await kernel.createSession();
+      kernel.startRun(session.id);
+      const turn = kernel.createTurn(session.id, { capabilityId: "test.op" });
+      kernel.recordTurnResult(turn, { ok: true, data: { ok: true } });
+
+      const summary = callKernelMethod<[string], any>(kernel, "getRuntimeSummary", session.id);
+
+      expect(summary).toMatchObject({
+        sessionId: session.id,
+        run: {
+          phase: "running",
+        },
+        loop: {
+          stepCount: 1,
+          noProgress: null,
+        },
+      });
+    });
+
+    it("returns intervention summary through the facade runtime summary", async () => {
+      const session = await kernel.createSession();
+      kernel.requestIntervention(session.id, {
+        id: "ivr-runtime-summary",
+        kind: "confirm",
+        trigger: "verify_failed",
+        title: "Need confirmation",
+        message: "Confirm the next action.",
+      });
+
+      const summary = callKernelMethod<[string], any>(kernel, "getRuntimeSummary", session.id);
+
+      expect(summary.interventions).toMatchObject({
+        status: "requested",
+        totalCount: 1,
+        activeCount: 1,
+        recentCount: 1,
+        active: [
+          expect.objectContaining({
+            id: "ivr-runtime-summary",
+            status: "requested",
+          }),
+        ],
+      });
+    });
+  });
+
   describe("subsystem access", () => {
     it("exposes all four subsystems", () => {
       expect(kernel.sessions).toBeDefined();

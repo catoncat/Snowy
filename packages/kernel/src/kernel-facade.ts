@@ -46,6 +46,23 @@ type KernelDispatchConfig = Pick<
   "confirm" | "invokeSkill" | "listSkills" | "permissions" | "skillId"
 >;
 
+export interface KernelRuntimeSummary {
+  sessionId: string;
+  run: {
+    phase: RunState["phase"];
+    queuedPrompts: {
+      steer: number;
+      followUp: number;
+    };
+    retry: RunState["retry"];
+  };
+  loop: {
+    stepCount: number;
+    noProgress: NoProgressReason | null;
+  };
+  interventions: KernelInterventionSummary;
+}
+
 export interface KernelOptions {
   storage: SessionStorage;
   llm: KernelLlmAdapter;
@@ -91,6 +108,7 @@ export interface Kernel {
   resume(sessionId: string): RunState;
   stop(sessionId: string): RunState;
   getRunState(sessionId: string): RunState;
+  getRuntimeSummary(sessionId: string): KernelRuntimeSummary;
 
   // Queue
   enqueue(sessionId: string, behavior: "steer" | "followUp", text: string): QueuedPrompt;
@@ -271,6 +289,26 @@ export function createKernel(opts: KernelOptions): Kernel {
     }
   };
 
+  const getRuntimeSummary = (sessionId: string): KernelRuntimeSummary => {
+    const runState = runs.getState(sessionId);
+    return {
+      sessionId,
+      run: {
+        phase: runState.phase,
+        queuedPrompts: {
+          steer: runState.queue.steer.length,
+          followUp: runState.queue.followUp.length,
+        },
+        retry: { ...runState.retry },
+      },
+      loop: {
+        stepCount: loop.getStepCount(sessionId),
+        noProgress: loop.checkNoProgress(sessionId),
+      },
+      interventions: interventions.getSummary({ sessionId }),
+    };
+  };
+
   return {
     // Session
     createSession: (o) => sessions.createSession(o),
@@ -288,6 +326,7 @@ export function createKernel(opts: KernelOptions): Kernel {
     resume: (id) => runs.transition(id, "resume"),
     stop: (id) => runs.transition(id, "stop"),
     getRunState: (id) => runs.getState(id),
+    getRuntimeSummary,
 
     // Queue
     enqueue: (id, behavior, text) => runs.enqueue(id, behavior, text),
