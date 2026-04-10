@@ -17,6 +17,7 @@ import {
   SIDEPANEL_MANAGEMENT_RESOURCE_IDS,
   createBackgroundRuntimeServices,
   createRemoteExecAdapter,
+  createRemoteHostProbe,
   isSidepanelManagementActionKind,
   isSidepanelManagementResourceId,
 } from "../src/runtime-services.js";
@@ -3615,6 +3616,32 @@ describe("mv3-shell manifest", () => {
     });
   });
 
+  it("createRemoteHostProbe wraps errors into structured remote probe responses", async () => {
+    const failingProbe = vi.fn(async () => {
+      throw new Error("probe unreachable");
+    });
+    const probeRemoteHost = createRemoteHostProbe(failingProbe);
+
+    await expect(
+      probeRemoteHost({
+        kind: "health",
+        requestId: "probe-1",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_RUNTIME",
+        message: "probe unreachable",
+        details: {
+          kind: "health",
+          hostId: "remote",
+          reason: "remote_probe_failed",
+        },
+      },
+    });
+  });
+
   it("connects, checks health, sets default, and disconnects the local host", async () => {
     const host = {
       dispatch: vi.fn(async (request) => {
@@ -3739,7 +3766,129 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("connects, checks health, sets default, and disconnects the remote host separately from local offscreen", async () => {
+  it("uses injected remote probe results for remote connect and health", async () => {
+    const harness = createChromeHarness({});
+    const sendRemoteExec = vi.fn();
+    const probeHandler = vi.fn(async () => ({
+      status: "healthy",
+    }));
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      sendRemoteExec,
+      sendRemoteProbe: createRemoteHostProbe(probeHandler),
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.connect",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "remote",
+        host: {
+          hostId: "remote",
+          connected: true,
+          state: "connected",
+          isDefault: true,
+          health: {
+            status: "healthy",
+          },
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.health",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "remote",
+        connected: true,
+        state: "connected",
+        health: {
+          status: "healthy",
+        },
+      },
+    });
+
+    expect(probeHandler).toHaveBeenCalledTimes(2);
+    expect(sendRemoteExec).not.toHaveBeenCalled();
+    dispose();
+    harness.cleanup();
+  });
+
+  it("surfaces degraded remote host state when the injected remote probe fails", async () => {
+    const harness = createChromeHarness({});
+    const probeHandler = vi.fn(async () => {
+      const error = new Error("probe unreachable");
+      // @ts-expect-error test-only code field
+      error.code = "E_REMOTE";
+      throw error;
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      sendRemoteExec: vi.fn(),
+      sendRemoteProbe: createRemoteHostProbe(probeHandler),
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.connect",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_REMOTE",
+        message: "probe unreachable",
+        details: {
+          kind: "health",
+          hostId: "remote",
+          reason: "remote_probe_failed",
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.health",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "remote",
+        connected: false,
+        state: "degraded",
+        health: {
+          status: "degraded",
+        },
+        error: {
+          code: "E_REMOTE",
+          message: "probe unreachable",
+        },
+      },
+    });
+
+    expect(probeHandler).toHaveBeenCalledTimes(2);
+    dispose();
+    harness.cleanup();
+  });
+
+  it("falls back to control-plane state when remote probe is not configured", async () => {
     const harness = createChromeHarness({});
     const sendRemoteExec = vi.fn(async (request: { hostId: string; command: string }) => ({
       hostId: request.hostId,
@@ -3837,6 +3986,7 @@ describe("mv3-shell manifest", () => {
 
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
     expect(harness.offscreenApi.closeDocument).not.toHaveBeenCalled();
+    expect(sendRemoteExec).not.toHaveBeenCalled();
     dispose();
     harness.cleanup();
   });

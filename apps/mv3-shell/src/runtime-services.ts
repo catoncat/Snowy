@@ -422,6 +422,61 @@ export function createRemoteExecAdapter(sendExec: any): any {
   };
 }
 
+export function createRemoteHostProbe(sendProbe: any): any {
+  return (request) =>
+    Promise.resolve()
+      .then(() => sendProbe(request))
+      .then((result) => {
+        if (result && typeof result === "object" && result.ok === false) {
+          return result;
+        }
+        const data =
+          result && typeof result === "object" && result.ok === true && "data" in result
+            ? result.data
+            : result;
+        const checkedAt =
+          data && typeof data === "object" && typeof data.checkedAt === "string"
+            ? data.checkedAt
+            : undefined;
+        const status =
+          data && typeof data === "object" && typeof data.status === "string"
+            ? data.status
+            : data && typeof data === "object" && data.health && typeof data.health === "object"
+              ? data.health.status
+              : "healthy";
+
+        return {
+          ok: true,
+          data: {
+            hostId: request.hostId,
+            connected:
+              data && typeof data === "object" && typeof data.connected === "boolean"
+                ? data.connected
+                : true,
+            health: {
+              status,
+              ...(checkedAt ? { checkedAt } : {}),
+            },
+          },
+        };
+      })
+      .catch((error) => ({
+        ok: false,
+        error: {
+          code:
+            error && typeof error === "object" && typeof error.code === "string"
+              ? error.code
+              : "E_RUNTIME",
+          message: error instanceof Error ? error.message : "Remote host probe failed",
+          details: {
+            kind: "health",
+            hostId: request.hostId,
+            reason: "remote_probe_failed",
+          },
+        },
+      }));
+}
+
 const LLM_CONFIG_STORAGE_KEY = "bbl-next.llm.config.v1";
 const CONFIG_CONTROL_PLANE_STORAGE_KEY = "bbl-next.config.control-plane.v1";
 

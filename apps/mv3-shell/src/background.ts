@@ -474,6 +474,7 @@ export function createBackgroundRunnerBridge({
   auditStorageKey = AUDIT_STORAGE_KEY,
   auditRetention = AUDIT_RETENTION_DEFAULTS,
   sendRemoteExec = undefined,
+  sendRemoteProbe = undefined,
 }: any = {}): any {
   const effectivePageHookBridge =
     pageHookBridge ??
@@ -502,6 +503,7 @@ export function createBackgroundRunnerBridge({
     hostRecoveredAt: undefined,
     hostRecoveryReason: undefined,
     remoteHostReady: false,
+    remoteHostHealthStatus: "unknown",
     remoteHostCheckedAt: undefined,
     remoteHostError: null,
     lastRuntimeError: null,
@@ -1127,15 +1129,23 @@ export function createBackgroundRunnerBridge({
 
   function toRemoteHostSnapshot(remoteState) {
     const connected = remoteState.connected === true;
+    const healthStatus =
+      remoteState.healthStatus ??
+      (remoteState.error ? "degraded" : connected ? "healthy" : "unknown");
     const health = {
-      status: remoteState.error ? "degraded" : connected ? "healthy" : "unknown",
+      status: healthStatus,
       ...(remoteState.checkedAt ? { checkedAt: remoteState.checkedAt } : {}),
     };
     const snapshot = {
       hostId: REMOTE_HOST_ID,
       kind: "remote",
       connected,
-      state: remoteState.error ? "degraded" : connected ? "connected" : "disconnected",
+      state:
+        remoteState.error || healthStatus === "degraded"
+          ? "degraded"
+          : connected
+            ? "connected"
+            : "disconnected",
       isDefault: state.defaultHostId === REMOTE_HOST_ID,
       health,
     };
@@ -1152,8 +1162,97 @@ export function createBackgroundRunnerBridge({
     return toRemoteHostSnapshot({
       checkedAt: state.remoteHostCheckedAt,
       connected: state.remoteHostReady,
+      healthStatus: state.remoteHostHealthStatus,
       error: state.remoteHostError,
     });
+  }
+
+  function setRemoteHostSnapshot({
+    connected = false,
+    healthStatus = connected ? "healthy" : "unknown",
+    checkedAt = isoNow(),
+    error = null,
+  } = {}) {
+    state.remoteHostReady = connected;
+    state.remoteHostHealthStatus = healthStatus;
+    state.remoteHostCheckedAt = checkedAt;
+    state.remoteHostError = error;
+  }
+
+  async function probeRemoteHostControlState(action = "hosts.health") {
+    if (typeof sendRemoteProbe !== "function") {
+      return null;
+    }
+    try {
+      const response = await sendRemoteProbe({
+        kind: "health",
+        requestId: nextRequestId(),
+        hostId: REMOTE_HOST_ID,
+        action,
+      });
+      if (response && typeof response === "object" && response.ok === false) {
+        setRemoteHostSnapshot({
+          connected: false,
+          healthStatus: "degraded",
+          error: response.error ?? {
+            code: "E_RUNTIME",
+            message: "Remote host probe failed",
+          },
+        });
+        return {
+          ok: false,
+          error: state.remoteHostError,
+        };
+      }
+      const payload =
+        response && typeof response === "object" && response.ok === true && "data" in response
+          ? response.data
+          : response;
+      const connected =
+        payload && typeof payload === "object" && typeof payload.connected === "boolean"
+          ? payload.connected
+          : true;
+      const healthStatus =
+        payload &&
+        typeof payload === "object" &&
+        payload.health &&
+        typeof payload.health === "object"
+          ? payload.health.status
+          : payload && typeof payload === "object" && typeof payload.status === "string"
+            ? payload.status
+            : connected
+              ? "healthy"
+              : "unknown";
+      const checkedAt =
+        payload &&
+        typeof payload === "object" &&
+        payload.health &&
+        typeof payload.health === "object"
+          ? payload.health.checkedAt
+          : payload && typeof payload === "object" && typeof payload.checkedAt === "string"
+            ? payload.checkedAt
+            : isoNow();
+      setRemoteHostSnapshot({
+        connected,
+        healthStatus,
+        checkedAt,
+        error: null,
+      });
+      return {
+        ok: true,
+        data: await describeRemoteHost(),
+      };
+    } catch (error) {
+      setRemoteHostSnapshot({
+        connected: false,
+        healthStatus: "degraded",
+        error: toBridgeError(error),
+      });
+      return {
+        ok: false,
+        error: state.remoteHostError,
+      };
+    }
   }
 
   async function listExecutionHosts() {
@@ -1198,9 +1297,23 @@ export function createBackgroundRunnerBridge({
       return resolvedHostId;
     }
     if (resolvedHostId === REMOTE_HOST_ID) {
-      state.remoteHostReady = true;
-      state.remoteHostCheckedAt = isoNow();
-      state.remoteHostError = null;
+      const probe = await probeRemoteHostControlState("hosts.connect");
+      if (probe?.ok === false) {
+        await appendAudit({
+          kind: "hosts.connect",
+          hostId: resolvedHostId,
+          status: "failed",
+          error: probe.error?.message,
+        });
+        return probe;
+      }
+      if (!probe) {
+        setRemoteHostSnapshot({
+          connected: true,
+          healthStatus: "healthy",
+          error: null,
+        });
+      }
       if (!state.defaultHostId) {
         state.defaultHostId = resolvedHostId;
       }
@@ -1248,9 +1361,11 @@ export function createBackgroundRunnerBridge({
       return resolvedHostId;
     }
     if (resolvedHostId === REMOTE_HOST_ID) {
-      state.remoteHostReady = false;
-      state.remoteHostCheckedAt = isoNow();
-      state.remoteHostError = null;
+      setRemoteHostSnapshot({
+        connected: false,
+        healthStatus: "unknown",
+        error: null,
+      });
       await appendAudit({
         kind: "hosts.disconnect",
         hostId: resolvedHostId,
@@ -1313,7 +1428,7 @@ export function createBackgroundRunnerBridge({
       return resolvedHostId;
     }
     if (resolvedHostId === REMOTE_HOST_ID) {
-      state.remoteHostCheckedAt = isoNow();
+      await probeRemoteHostControlState("hosts.health");
     }
     const host = await describeHostById(resolvedHostId);
     return {
@@ -1386,28 +1501,35 @@ export function createBackgroundRunnerBridge({
         command: payload.command,
         timeoutMs: payload.timeoutMs,
       });
-      state.remoteHostCheckedAt = isoNow();
       if (response && typeof response === "object" && response.ok === false) {
-        state.remoteHostReady = false;
-        state.remoteHostError = response.error ?? {
-          code: "E_RUNTIME",
-          message: "Remote exec bridge failed",
-        };
+        setRemoteHostSnapshot({
+          connected: false,
+          healthStatus: "degraded",
+          error: response.error ?? {
+            code: "E_RUNTIME",
+            message: "Remote exec bridge failed",
+          },
+        });
         return {
           ok: false,
           error: state.remoteHostError,
         };
       }
-      state.remoteHostReady = true;
-      state.remoteHostError = null;
+      setRemoteHostSnapshot({
+        connected: true,
+        healthStatus: "healthy",
+        error: null,
+      });
       return {
         ok: true,
         data: response,
       };
     } catch (error) {
-      state.remoteHostReady = false;
-      state.remoteHostCheckedAt = isoNow();
-      state.remoteHostError = toBridgeError(error);
+      setRemoteHostSnapshot({
+        connected: false,
+        healthStatus: "degraded",
+        error: toBridgeError(error),
+      });
       return {
         ok: false,
         error: state.remoteHostError,
@@ -1732,6 +1854,14 @@ export function createBackgroundRunnerBridge({
         ? (runtimeDiagnostics.runner?.error ?? null)
         : null,
     });
+    const remoteHost = hasRemoteHost()
+      ? toRemoteHostSnapshot({
+          checkedAt: state.remoteHostCheckedAt,
+          connected: state.remoteHostReady,
+          healthStatus: state.remoteHostHealthStatus,
+          error: state.remoteHostError,
+        })
+      : null;
     const hostItems = [
       {
         hostId: localHost.hostId,
@@ -1740,18 +1870,14 @@ export function createBackgroundRunnerBridge({
         state: localHost.state,
         isDefault: localHost.isDefault,
       },
-      ...(hasRemoteHost()
+      ...(remoteHost
         ? [
             {
-              hostId: REMOTE_HOST_ID,
-              kind: "remote",
-              connected: state.remoteHostReady === true,
-              state: state.remoteHostError
-                ? "degraded"
-                : state.remoteHostReady === true
-                  ? "connected"
-                  : "disconnected",
-              isDefault: state.defaultHostId === REMOTE_HOST_ID,
+              hostId: remoteHost.hostId,
+              kind: remoteHost.kind,
+              connected: remoteHost.connected,
+              state: remoteHost.state,
+              isDefault: remoteHost.isDefault,
             },
           ]
         : []),
