@@ -57,4 +57,4 @@ Review whether intervention lifecycle actions should now be lifted into the shar
 
 ## 相关 commits
 
-TBD
+- `381682b` feat(control-plane): 提升 intervention lifecycle actions 到公共 capability surface
