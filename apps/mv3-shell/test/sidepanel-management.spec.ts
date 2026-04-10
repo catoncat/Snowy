@@ -1,3 +1,5 @@
+import { AI_SURFACE_RESOURCE_METADATA_REGISTRY } from "@bbl-next/contracts";
+import { BUILTIN_CAPABILITIES } from "@bbl-next/core";
 import { describe, expect, it } from "vitest";
 import {
   SIDEPANEL_MANAGEMENT_ACTION_KINDS,
@@ -114,6 +116,23 @@ describe("sidepanel management state", () => {
     });
     expect(state.skills?.data.installedCount).toBe(2);
     expect(state.hosts?.data.defaultHostId).toBe("local");
+  });
+
+  it("management resource IDs match bootstrap resources from shared registry", () => {
+    const bootstrapResourceIds = AI_SURFACE_RESOURCE_METADATA_REGISTRY.filter(
+      (entry) => entry.bootstrapKey !== undefined,
+    ).map((entry) => entry.id);
+    expect([...SIDEPANEL_MANAGEMENT_RESOURCE_IDS].sort()).toEqual([...bootstrapResourceIds].sort());
+  });
+
+  it("management action kinds are all registered in the shared capability catalog", () => {
+    const capabilityIds = new Set(BUILTIN_CAPABILITIES.map((c) => c.id));
+    for (const actionKind of SIDEPANEL_MANAGEMENT_ACTION_KINDS) {
+      expect(
+        capabilityIds.has(actionKind),
+        `${actionKind} must exist in BUILTIN_CAPABILITIES`,
+      ).toBe(true);
+    }
   });
 
   it("builds only approved control-plane action messages", () => {

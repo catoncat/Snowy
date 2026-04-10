@@ -1,24 +1,24 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-10T01:37:44.611Z",
+  "generated_at": "2026-04-10T01:45:48.997Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-117",
-      "issue_path": "docs/backlog/2026-04-09-sidepanel-management-still-hard-codes-an-app-local-ai-surface-subset.md",
-      "title": "Review: sidepanel management still hard-codes an app-local AI surface subset",
-      "parallel_group": "contracts-core",
-      "module_id": "ai-surface-control-plane",
+      "issue_id": "ISSUE-118",
+      "issue_path": "docs/backlog/2026-04-09-background-automation-lane-still-lacks-stabilization-and-failure-tracking-scope.md",
+      "title": "Review: background automation lane still lacks stabilization and failure-tracking scope",
+      "parallel_group": "site-runtime",
+      "module_id": "site-runtime-browser-automation",
       "module_stage": "secondary",
       "tracking_kind": "gap",
       "check_cmd": "bun run check",
       "depends_on": [],
       "write_scope": [
-        "packages/contracts/src/index.ts",
-        "packages/core/src/index.ts",
-        "apps/mv3-shell/src/sidepanel-management-contract.ts",
-        "apps/mv3-shell/src/sidepanel/management.ts",
-        "apps/mv3-shell/test"
+        "packages/site-runtime/src/index.ts",
+        "packages/site-runtime/test/site-runtime.spec.ts",
+        "apps/mv3-shell/src/background.ts",
+        "apps/mv3-shell/src/page-hook.ts",
+        "apps/mv3-shell/test/manifest.spec.ts"
       ]
     }
   ]

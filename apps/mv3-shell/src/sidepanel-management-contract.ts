@@ -1,9 +1,11 @@
+import type { AiSurfaceResourceId } from "@bbl-next/contracts";
+
 export const SIDEPANEL_MANAGEMENT_RESOURCE_IDS = [
   "runtime.summary",
   "config.summary",
   "skills.summary",
   "hosts.summary",
-] as const;
+] as const satisfies readonly AiSurfaceResourceId[];
 
 export const SIDEPANEL_MANAGEMENT_ACTION_KINDS = [
   "runtime.capture_diagnostics",
