@@ -58,4 +58,4 @@ Review how sidepanel management should derive its allowed resources/actions from
 
 ## 相关 commits
 
-TBD
+- `60c4bb8` feat(ai-surface): 约束 sidepanel management 子集到共享 AI surface truth
