@@ -2917,6 +2917,67 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("lists and gets the remote host as a first-class record when remote exec is configured", async () => {
+    const harness = createChromeHarness({});
+    const sendRemoteExec = vi.fn();
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      sendRemoteExec,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: null,
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            hostId: "local",
+            kind: "local",
+            connected: false,
+            state: "disconnected",
+            isDefault: false,
+          }),
+          expect.objectContaining({
+            hostId: "remote",
+            kind: "remote",
+            connected: false,
+            state: "disconnected",
+            isDefault: false,
+          }),
+        ]),
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.get",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "remote",
+        kind: "remote",
+        connected: false,
+        state: "disconnected",
+        isDefault: false,
+      },
+    });
+
+    expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
+    expect(sendRemoteExec).not.toHaveBeenCalled();
+    dispose();
+    harness.cleanup();
+  });
+
   it("routes host substrate read/write/edit/exec through an explicit local host id", async () => {
     const files = new Map<string, string>();
     const host = {
@@ -3256,7 +3317,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("background bridge routes exec through remote adapter when configured", async () => {
+  it("background bridge routes exec through the remote host and keeps local exec unsupported", async () => {
     const harness = createChromeHarness({});
     const sendRemoteExec = vi.fn(
       async (request: { hostId: string; command: string; timeoutMs?: number }) => ({
@@ -3278,12 +3339,12 @@ describe("mv3-shell manifest", () => {
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
         kind: "hosts.set_default",
-        hostId: "local",
+        hostId: "remote",
       }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
-        defaultHostId: "local",
+        defaultHostId: "remote",
       },
     });
 
@@ -3297,7 +3358,7 @@ describe("mv3-shell manifest", () => {
     ).resolves.toMatchObject({
       ok: true,
       data: {
-        hostId: "local",
+        hostId: "remote",
         command: "pwd",
         exitCode: 0,
         stdout: "remote:pwd",
@@ -3308,17 +3369,38 @@ describe("mv3-shell manifest", () => {
     expect(sendRemoteExec).toHaveBeenCalledTimes(1);
     expect(sendRemoteExec).toHaveBeenCalledWith(
       expect.objectContaining({
-        hostId: "local",
+        hostId: "remote",
         command: "pwd",
         timeoutMs: 123,
       }),
     );
+    expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.exec",
+        hostId: "local",
+        command: "pwd",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_CAPABILITY_NOT_FOUND",
+        message: "Execution host adapter does not implement exec",
+        details: {
+          kind: "exec",
+          hostId: "local",
+          reason: "operation_not_supported",
+        },
+      },
+    });
 
     dispose();
     harness.cleanup();
   });
 
-  it("offscreen bridge with remote exec adapter routes exec to remote and read/write/edit to local", async () => {
+  it("offscreen bridge keeps local file ops local and only routes exec for the remote host", async () => {
     const messageBus = createMessageBus();
     const runtimeApi = {
       ...messageBus,
@@ -3373,14 +3455,60 @@ describe("mv3-shell manifest", () => {
       target: "bbl-next.runner.offscreen",
       kind: "host.exec",
       requestId: "x1",
-      hostId: "local",
+      hostId: "remote",
       command: "pwd",
     });
     expect(exec).toMatchObject({
       ok: true,
-      data: { hostId: "local", command: "pwd", exitCode: 0, stdout: "remote:pwd" },
+      data: { hostId: "remote", command: "pwd", exitCode: 0, stdout: "remote:pwd" },
     });
     expect(remoteExecHandler).toHaveBeenCalledTimes(1);
+    expect(remoteExecHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: "remote",
+        command: "pwd",
+      }),
+    );
+
+    const localExec = await bridge.handleMessage({
+      target: "bbl-next.runner.offscreen",
+      kind: "host.exec",
+      requestId: "x-local",
+      hostId: "local",
+      command: "pwd",
+    });
+    expect(localExec).toMatchObject({
+      ok: false,
+      error: {
+        code: "E_CAPABILITY_NOT_FOUND",
+        message: "Execution host adapter does not implement exec",
+        details: {
+          kind: "exec",
+          hostId: "local",
+          reason: "operation_not_supported",
+        },
+      },
+    });
+
+    const remoteRead = await bridge.handleMessage({
+      target: "bbl-next.runner.offscreen",
+      kind: "host.read",
+      requestId: "r-remote",
+      hostId: "remote",
+      path: "/workspace/test.txt",
+    });
+    expect(remoteRead).toMatchObject({
+      ok: false,
+      error: {
+        code: "E_CAPABILITY_NOT_FOUND",
+        message: "Execution host adapter does not implement read",
+        details: {
+          kind: "read",
+          hostId: "remote",
+          reason: "operation_not_supported",
+        },
+      },
+    });
 
     dispose();
   });
@@ -3607,6 +3735,108 @@ describe("mv3-shell manifest", () => {
 
     expect(harness.offscreenApi.createDocument).toHaveBeenCalledTimes(1);
     expect(harness.offscreenApi.closeDocument).toHaveBeenCalledTimes(1);
+    dispose();
+    harness.cleanup();
+  });
+
+  it("connects, checks health, sets default, and disconnects the remote host separately from local offscreen", async () => {
+    const harness = createChromeHarness({});
+    const sendRemoteExec = vi.fn(async (request: { hostId: string; command: string }) => ({
+      hostId: request.hostId,
+      command: request.command,
+      exitCode: 0,
+      stdout: `remote:${request.command}`,
+      stderr: "",
+    }));
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      sendRemoteExec,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.connect",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "remote",
+        host: {
+          hostId: "remote",
+          kind: "remote",
+          connected: true,
+          state: "connected",
+          isDefault: true,
+          health: {
+            status: "healthy",
+          },
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.health",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "remote",
+        connected: true,
+        state: "connected",
+        health: {
+          status: "healthy",
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.set_default",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "remote",
+        host: {
+          hostId: "remote",
+          isDefault: true,
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.disconnect",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "remote",
+        host: {
+          hostId: "remote",
+          connected: false,
+          state: "disconnected",
+          isDefault: true,
+          health: {
+            status: "unknown",
+          },
+        },
+      },
+    });
+
+    expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
+    expect(harness.offscreenApi.closeDocument).not.toHaveBeenCalled();
     dispose();
     harness.cleanup();
   });

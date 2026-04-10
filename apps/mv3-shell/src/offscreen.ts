@@ -1,7 +1,10 @@
 // @ts-nocheck
-import { createCompositeHostAdapter, createRunnerHostCore } from "@bbl-next/js-runner";
+import { createRunnerHostCore } from "@bbl-next/js-runner";
 import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_TARGET } from "./background.js";
 import { createLocalHostAdapter } from "./local-host-adapter.js";
+
+const LOCAL_HOST_ID = "local";
+const REMOTE_HOST_ID = "remote";
 
 function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   if (error && typeof error === "object" && "code" in error && "message" in error) {
@@ -24,14 +27,14 @@ function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   };
 }
 
-function createOperationNotSupportedError(request) {
+function createOperationNotSupportedError(request, kind = "exec") {
   return {
     ok: false,
     error: {
       code: "E_CAPABILITY_NOT_FOUND",
-      message: "Execution host adapter does not implement exec",
+      message: `Execution host adapter does not implement ${kind}`,
       details: {
-        kind: "exec",
+        kind,
         hostId: request.hostId ?? null,
         reason: "operation_not_supported",
       },
@@ -94,7 +97,35 @@ export function createDefaultOffscreenRunnerHost({
 }: any = {}) {
   const local = createLocalHostAdapter();
   const remote = remoteHostAdapter ?? createBackgroundRemoteExecAdapter({ runtimeApi });
-  const hostAdapter = createCompositeHostAdapter({ local, remote });
+  const hostAdapter = {
+    read(request) {
+      if (request.hostId === REMOTE_HOST_ID) {
+        return remote?.read?.(request) ?? createOperationNotSupportedError(request, "read");
+      }
+      return local?.read?.(request) ?? createOperationNotSupportedError(request, "read");
+    },
+    write(request) {
+      if (request.hostId === REMOTE_HOST_ID) {
+        return remote?.write?.(request) ?? createOperationNotSupportedError(request, "write");
+      }
+      return local?.write?.(request) ?? createOperationNotSupportedError(request, "write");
+    },
+    edit(request) {
+      if (request.hostId === REMOTE_HOST_ID) {
+        return remote?.edit?.(request) ?? createOperationNotSupportedError(request, "edit");
+      }
+      return local?.edit?.(request) ?? createOperationNotSupportedError(request, "edit");
+    },
+    exec(request) {
+      if (request.hostId === REMOTE_HOST_ID) {
+        return remote?.exec?.(request) ?? createOperationNotSupportedError(request, "exec");
+      }
+      if (request.hostId === LOCAL_HOST_ID) {
+        return local?.exec?.(request) ?? createOperationNotSupportedError(request, "exec");
+      }
+      return createOperationNotSupportedError(request, "exec");
+    },
+  };
   return createRunnerHostCore({ hostAdapter });
 }
 

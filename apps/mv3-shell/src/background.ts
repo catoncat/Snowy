@@ -29,6 +29,7 @@ export const PAGE_HOOK_GLOBAL_KEY = "__BBL_NEXT_PAGE_HOOK__";
 export const PAGE_HOOK_DEFAULT_FILE = "src/page-hook.js";
 export const BOOTSTRAP_RESOURCE_KEYS = [...CONTRACT_BOOTSTRAP_RESOURCE_KEYS];
 const LOCAL_HOST_ID = "local";
+const REMOTE_HOST_ID = "remote";
 const AUDIT_STORAGE_KEY = "bbl-next.audit.tail.v1";
 const LEGACY_AUDIT_STORAGE_KEYS = ["bbl-next.audit.host.v1"];
 const AUDIT_RETENTION_DEFAULTS = {
@@ -287,14 +288,14 @@ function invalidHostSubstrate(message) {
   };
 }
 
-function unsupportedRemoteExec({ hostId } = {}) {
+function unsupportedHostOperation({ hostId, kind = "exec" } = {}) {
   return {
     ok: false,
     error: {
       code: "E_CAPABILITY_NOT_FOUND",
-      message: "Execution host adapter does not implement exec",
+      message: `Execution host adapter does not implement ${kind}`,
       details: {
-        kind: "exec",
+        kind,
         hostId: hostId ?? null,
         reason: "operation_not_supported",
       },
@@ -500,10 +501,17 @@ export function createBackgroundRunnerBridge({
     hostLastSeenAt: undefined,
     hostRecoveredAt: undefined,
     hostRecoveryReason: undefined,
+    remoteHostReady: false,
+    remoteHostCheckedAt: undefined,
+    remoteHostError: null,
     lastRuntimeError: null,
     lastRuntimeErrorClearedAt: null,
   };
   let composedRuntimeServices = null;
+
+  function hasRemoteHost() {
+    return typeof sendRemoteExec === "function";
+  }
 
   const auditReady = (async () => {
     if (!resolvedAuditStore) {
@@ -1032,6 +1040,12 @@ export function createBackgroundRunnerBridge({
     if (typeof hostId !== "string" || !hostId.trim()) {
       return invalidHostControlPlane(`${action} requires a string hostId`);
     }
+    if (hostId === LOCAL_HOST_ID) {
+      return hostId;
+    }
+    if (hostId === REMOTE_HOST_ID && hasRemoteHost()) {
+      return hostId;
+    }
     if (hostId !== LOCAL_HOST_ID) {
       return invalidHostControlPlane(`Unknown hostId: ${hostId}`);
     }
@@ -1111,12 +1125,58 @@ export function createBackgroundRunnerBridge({
     return toLocalHostSnapshot(await readLocalHostControlState());
   }
 
+  function toRemoteHostSnapshot(remoteState) {
+    const connected = remoteState.connected === true;
+    const health = {
+      status: remoteState.error ? "degraded" : connected ? "healthy" : "unknown",
+      ...(remoteState.checkedAt ? { checkedAt: remoteState.checkedAt } : {}),
+    };
+    const snapshot = {
+      hostId: REMOTE_HOST_ID,
+      kind: "remote",
+      connected,
+      state: remoteState.error ? "degraded" : connected ? "connected" : "disconnected",
+      isDefault: state.defaultHostId === REMOTE_HOST_ID,
+      health,
+    };
+    if (remoteState.error) {
+      return {
+        ...snapshot,
+        error: remoteState.error,
+      };
+    }
+    return snapshot;
+  }
+
+  async function describeRemoteHost() {
+    return toRemoteHostSnapshot({
+      checkedAt: state.remoteHostCheckedAt,
+      connected: state.remoteHostReady,
+      error: state.remoteHostError,
+    });
+  }
+
+  async function listExecutionHosts() {
+    const items = [await describeLocalHost()];
+    if (hasRemoteHost()) {
+      items.push(await describeRemoteHost());
+    }
+    return items;
+  }
+
+  async function describeHostById(hostId) {
+    if (hostId === LOCAL_HOST_ID) {
+      return describeLocalHost();
+    }
+    return describeRemoteHost();
+  }
+
   async function listHosts() {
     return {
       ok: true,
       data: {
         defaultHostId: state.defaultHostId,
-        items: [await describeLocalHost()],
+        items: await listExecutionHosts(),
       },
     };
   }
@@ -1128,7 +1188,7 @@ export function createBackgroundRunnerBridge({
     }
     return {
       ok: true,
-      data: await describeLocalHost(),
+      data: await describeHostById(resolvedHostId),
     };
   }
 
@@ -1136,6 +1196,22 @@ export function createBackgroundRunnerBridge({
     const resolvedHostId = resolveHostId(hostId, "hosts.connect");
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
+    }
+    if (resolvedHostId === REMOTE_HOST_ID) {
+      state.remoteHostReady = true;
+      state.remoteHostCheckedAt = isoNow();
+      state.remoteHostError = null;
+      if (!state.defaultHostId) {
+        state.defaultHostId = resolvedHostId;
+      }
+      await appendAudit({ kind: "hosts.connect", hostId: resolvedHostId, status: "connected" });
+      return {
+        ok: true,
+        data: {
+          defaultHostId: state.defaultHostId,
+          host: await describeRemoteHost(),
+        },
+      };
     }
     const ensured = await ensureHost();
     if (!ensured.ok) {
@@ -1171,6 +1247,23 @@ export function createBackgroundRunnerBridge({
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
+    if (resolvedHostId === REMOTE_HOST_ID) {
+      state.remoteHostReady = false;
+      state.remoteHostCheckedAt = isoNow();
+      state.remoteHostError = null;
+      await appendAudit({
+        kind: "hosts.disconnect",
+        hostId: resolvedHostId,
+        status: "disconnected",
+      });
+      return {
+        ok: true,
+        data: {
+          defaultHostId: state.defaultHostId,
+          host: await describeRemoteHost(),
+        },
+      };
+    }
     if (await hasOffscreenDocument()) {
       if (typeof chromeApi.offscreen?.closeDocument !== "function") {
         return {
@@ -1189,7 +1282,7 @@ export function createBackgroundRunnerBridge({
       ok: true,
       data: {
         defaultHostId: state.defaultHostId,
-        host: await describeLocalHost(),
+        host: await describeHostById(resolvedHostId),
       },
     };
   }
@@ -1209,7 +1302,7 @@ export function createBackgroundRunnerBridge({
       ok: true,
       data: {
         defaultHostId: state.defaultHostId,
-        host: await describeLocalHost(),
+        host: await describeHostById(resolvedHostId),
       },
     };
   }
@@ -1219,7 +1312,10 @@ export function createBackgroundRunnerBridge({
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    const host = await describeLocalHost();
+    if (resolvedHostId === REMOTE_HOST_ID) {
+      state.remoteHostCheckedAt = isoNow();
+    }
+    const host = await describeHostById(resolvedHostId);
     return {
       ok: true,
       data: host,
@@ -1230,6 +1326,12 @@ export function createBackgroundRunnerBridge({
     const resolvedHostId = resolveHostSubstrateHostId(payload.hostId, kind);
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
+    }
+    if (resolvedHostId === REMOTE_HOST_ID) {
+      return unsupportedHostOperation({
+        hostId: resolvedHostId,
+        kind: kind.replace("host.", ""),
+      });
     }
     const ensured = await ensureHost();
     if (!ensured.ok) {
@@ -1248,37 +1350,69 @@ export function createBackgroundRunnerBridge({
     };
   }
 
+  async function routeHostExec(payload = {}) {
+    const resolvedHostId = resolveHostSubstrateHostId(payload.hostId, "host.exec");
+    if (typeof resolvedHostId !== "string") {
+      return resolvedHostId;
+    }
+    if (resolvedHostId === REMOTE_HOST_ID) {
+      return routeRemoteExec({
+        ...payload,
+        hostId: resolvedHostId,
+      });
+    }
+    return routeHostSubstrate("host.exec", {
+      ...payload,
+      hostId: resolvedHostId,
+    });
+  }
+
   async function routeRemoteExec(payload = {}) {
     const resolvedHostId = resolveHostSubstrateHostId(payload.hostId, "runner.remote_exec");
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    if (typeof sendRemoteExec !== "function") {
-      return unsupportedRemoteExec({
+    if (resolvedHostId !== REMOTE_HOST_ID || typeof sendRemoteExec !== "function") {
+      return unsupportedHostOperation({
         hostId: resolvedHostId,
+        kind: "exec",
       });
     }
-
-    const response = await sendRemoteExec({
-      kind: "exec",
-      requestId: payload.requestId ?? nextRequestId(),
-      hostId: resolvedHostId,
-      command: payload.command,
-      timeoutMs: payload.timeoutMs,
-    });
-    if (response && typeof response === "object" && response.ok === false) {
-      return {
-        ok: false,
-        error: response.error ?? {
+    try {
+      const response = await sendRemoteExec({
+        kind: "exec",
+        requestId: payload.requestId ?? nextRequestId(),
+        hostId: resolvedHostId,
+        command: payload.command,
+        timeoutMs: payload.timeoutMs,
+      });
+      state.remoteHostCheckedAt = isoNow();
+      if (response && typeof response === "object" && response.ok === false) {
+        state.remoteHostReady = false;
+        state.remoteHostError = response.error ?? {
           code: "E_RUNTIME",
           message: "Remote exec bridge failed",
-        },
+        };
+        return {
+          ok: false,
+          error: state.remoteHostError,
+        };
+      }
+      state.remoteHostReady = true;
+      state.remoteHostError = null;
+      return {
+        ok: true,
+        data: response,
+      };
+    } catch (error) {
+      state.remoteHostReady = false;
+      state.remoteHostCheckedAt = isoNow();
+      state.remoteHostError = toBridgeError(error);
+      return {
+        ok: false,
+        error: state.remoteHostError,
       };
     }
-    return {
-      ok: true,
-      data: response,
-    };
   }
 
   function normalizeScreenshotRequest({ format, quality } = {}) {
@@ -1606,6 +1740,21 @@ export function createBackgroundRunnerBridge({
         state: localHost.state,
         isDefault: localHost.isDefault,
       },
+      ...(hasRemoteHost()
+        ? [
+            {
+              hostId: REMOTE_HOST_ID,
+              kind: "remote",
+              connected: state.remoteHostReady === true,
+              state: state.remoteHostError
+                ? "degraded"
+                : state.remoteHostReady === true
+                  ? "connected"
+                  : "disconnected",
+              isDefault: state.defaultHostId === REMOTE_HOST_ID,
+            },
+          ]
+        : []),
     ];
 
     const runtimeSkillEntries =
@@ -1785,7 +1934,7 @@ export function createBackgroundRunnerBridge({
           patch: message.patch,
         });
       case "host.exec":
-        return routeHostSubstrate("host.exec", {
+        return routeHostExec({
           hostId: message.hostId,
           command: message.command,
           timeoutMs: message.timeoutMs,
