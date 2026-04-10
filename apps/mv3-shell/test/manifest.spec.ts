@@ -4359,6 +4359,166 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("routes site runtime press_key through an explicit background lane target and tears the tab down", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "invoke") {
+          return {
+            kind: "invoke_result",
+            requestId: request.requestId,
+            ok: true,
+            result: {
+              result: {
+                key: request.invocation.input.key,
+                tabUrl: request.invocation.ctx.tab.url,
+                active: request.invocation.ctx.tab.active,
+              },
+              durationMs: 1,
+            },
+          };
+        }
+        return {
+          kind: "health_result",
+          requestId: request.requestId,
+          ok: true,
+          health: {
+            status: "idle",
+            inflightCount: 0,
+            consecutiveFailures: 0,
+          },
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0,
+      })),
+    };
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/home",
+      },
+      host,
+    });
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: harness.chromeApi,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "site.runtime.invoke",
+        automationTarget: {
+          lane: "background",
+          url: "https://fixture.test/background-press",
+          cleanup: "close-tab",
+        },
+        skillId: "fixture.page",
+        action: "press_key",
+        input: {
+          key: "Enter",
+        },
+        plan: {
+          skillId: "fixture.page",
+          action: "press_key",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "fixture.page.press_key",
+          source: "exports.default = async ({ input }) => ({ key: input.key });",
+        },
+        verifier: "page_press_key",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        verified: true,
+        result: {
+          ok: true,
+          action: "press_key",
+          key: "Enter",
+          dispatchCount: 2,
+          tabUrl: "https://fixture.test/background-press",
+        },
+        trace: [
+          "lane:background",
+          "match:fixture.page",
+          "plan:1_steps",
+          "install:main:bbl-next.page-hook.page",
+          "invoke:press_key",
+          "verify:page_press_key",
+        ],
+      },
+    });
+
+    const createdTab = await harness.tabsApi.create.mock.results[0]?.value;
+    const snapshot = (await pageHookBridge.snapshotState({
+      tabId: createdTab.id,
+      world: "main",
+    })) as {
+      keyEvents?: Array<{ type: string; key: string; tabUrl: string }>;
+      verifications?: Array<{ action: string; verified: boolean }>;
+    } | null;
+
+    expect(host.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "invoke",
+        invocation: expect.objectContaining({
+          input: {
+            key: "Enter",
+          },
+          ctx: expect.objectContaining({
+            tab: expect.objectContaining({
+              url: "https://fixture.test/background-press",
+              active: false,
+            }),
+          }),
+        }),
+      }),
+    );
+    expect(snapshot?.keyEvents).toEqual([
+      expect.objectContaining({
+        type: "keydown",
+        key: "Enter",
+        tabUrl: "https://fixture.test/background-press",
+      }),
+      expect.objectContaining({
+        type: "keyup",
+        key: "Enter",
+        tabUrl: "https://fixture.test/background-press",
+      }),
+    ]);
+    expect(snapshot?.verifications).toEqual([
+      {
+        action: "press_key",
+        verified: true,
+      },
+    ]);
+    expect(harness.tabsApi.query).not.toHaveBeenCalled();
+    expect(harness.tabsApi.create).toHaveBeenCalledWith({
+      url: "https://fixture.test/background-press",
+      active: false,
+    });
+    expect(harness.tabsApi.remove).toHaveBeenCalledWith(createdTab.id);
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("persists intervention lifecycle through runtime services, diagnostics, bootstrap, and audit", async () => {
     const host = {
       dispatch: vi.fn(async (request) => {

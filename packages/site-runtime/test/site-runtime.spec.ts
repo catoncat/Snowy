@@ -1235,6 +1235,233 @@ describe("site-runtime", () => {
     ]);
   });
 
+  it("dispatches query → fill → click through the real page-hook bridge on an explicit background lane", async () => {
+    const scriptingHarness = createScriptingChromeHarness();
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: scriptingHarness.chromeApi,
+    });
+
+    const pageSkill = {
+      skillId: "fixture.page",
+      matches: ["https://fixture.test/*"],
+      actions: [
+        {
+          name: "query",
+          injectionSteps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle",
+            },
+          ],
+          verifier: "page_query",
+          module: {
+            id: "fixture.page.query",
+            source: "exports.default = async ({ input }) => ({ selector: input.selector });",
+          },
+        },
+        {
+          name: "click",
+          injectionSteps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle",
+            },
+          ],
+          verifier: "page_click",
+          module: {
+            id: "fixture.page.click",
+            source: "exports.default = async ({ input }) => ({ uid: input.uid });",
+          },
+        },
+        {
+          name: "fill",
+          injectionSteps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle",
+            },
+          ],
+          verifier: "page_fill",
+          module: {
+            id: "fixture.page.fill",
+            source:
+              "exports.default = async ({ input }) => ({ uid: input.uid, value: input.value });",
+          },
+        },
+      ],
+    };
+
+    const installer = {
+      install: async (
+        step: { world: string; scriptId: string; jsPath?: string; runAt?: string },
+        currentTab: { tabId: number; url: string; active: boolean },
+      ) => pageHookBridge.install(step, currentTab),
+      invoke: async ({
+        installation,
+        action,
+        input,
+        tab: currentTab,
+        ctx,
+      }: Record<string, unknown>) =>
+        pageHookBridge.invoke({
+          installation,
+          action,
+          input,
+          tab: currentTab,
+          ctx,
+        }),
+      verify: async ({ installation, action, result, tab: currentTab }: Record<string, unknown>) =>
+        pageHookBridge.verify({
+          installation,
+          action,
+          result,
+          tab: currentTab,
+        }),
+    };
+
+    const runtime = new SiteSkillRuntime({
+      registry: new SiteSkillRegistry([pageSkill]),
+      runnerHost: new JsRunnerHost(),
+      installer: installer as unknown as import("@bbl-next/site-runtime").SiteScriptInstaller,
+    });
+
+    const testTab = { tabId: 17, url: "https://fixture.test/background", active: false };
+
+    const queryResult = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "query",
+      lane: "background",
+      tab: testTab,
+      input: { selector: "input" },
+    });
+
+    expect(queryResult).toMatchObject({
+      verified: true,
+      result: expect.objectContaining({
+        ok: true,
+        action: "query",
+        count: 1,
+        tabUrl: "https://fixture.test/background",
+        elements: [expect.objectContaining({ tagName: "input" })],
+      }),
+      trace: [
+        "lane:background",
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:query",
+        "verify:page_query",
+      ],
+    });
+
+    const inputUid = (
+      queryResult.result as Record<string, unknown> & { elements: Array<{ uid: string }> }
+    ).elements[0].uid;
+
+    const fillResult = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "fill",
+      lane: "background",
+      tab: testTab,
+      input: { uid: inputUid, value: "background@example.com" },
+    });
+
+    expect(fillResult).toMatchObject({
+      verified: true,
+      result: expect.objectContaining({
+        ok: true,
+        action: "fill",
+        uid: inputUid,
+        value: "background@example.com",
+        tagName: "input",
+        tabUrl: "https://fixture.test/background",
+      }),
+      trace: [
+        "lane:background",
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:fill",
+        "verify:page_fill",
+      ],
+    });
+
+    const buttonQuery = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "query",
+      lane: "background",
+      tab: testTab,
+      input: { selector: "button" },
+    });
+
+    const buttonUid = (
+      buttonQuery.result as Record<string, unknown> & { elements: Array<{ uid: string }> }
+    ).elements[0].uid;
+
+    const clickResult = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "click",
+      lane: "background",
+      tab: testTab,
+      input: { uid: buttonUid },
+    });
+
+    expect(clickResult).toMatchObject({
+      verified: true,
+      result: expect.objectContaining({
+        ok: true,
+        action: "click",
+        uid: buttonUid,
+        tagName: "button",
+        tabUrl: "https://fixture.test/background",
+      }),
+      trace: [
+        "lane:background",
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:click",
+        "verify:page_click",
+      ],
+    });
+
+    const snapshot = (await pageHookBridge.snapshotState({
+      tabId: 17,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+
+    expect(snapshot?.queryResults).toHaveLength(2);
+    expect(snapshot?.queryResults?.map((entry) => entry.tabUrl)).toEqual([
+      "https://fixture.test/background",
+      "https://fixture.test/background",
+    ]);
+    expect(snapshot?.clickEvents).toEqual([
+      expect.objectContaining({
+        action: "click",
+        tabUrl: "https://fixture.test/background",
+      }),
+    ]);
+    expect(snapshot?.fillEvents).toEqual([
+      expect.objectContaining({
+        action: "fill",
+        value: "background@example.com",
+        tabUrl: "https://fixture.test/background",
+      }),
+    ]);
+    expect(snapshot?.verifications).toEqual([
+      { action: "query", verified: true },
+      { action: "fill", verified: true },
+      { action: "query", verified: true },
+      { action: "click", verified: true },
+    ]);
+  });
+
   describe("InjectionPlan", () => {
     const actionWithWorlds: SiteSkillAction = {
       name: "search_posts",
