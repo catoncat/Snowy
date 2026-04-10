@@ -967,6 +967,7 @@ export function createBackgroundRunnerBridge({
           plan: message.plan,
           module: message.module,
           ...(message.verifier ? { verifier: message.verifier } : {}),
+          ...(message.stabilization ? { stabilization: message.stabilization } : {}),
           ...(message.intervention ? { intervention: message.intervention } : {}),
         },
         runnerHost: createRunnerHostProxy(),

@@ -45,8 +45,14 @@ interface PageHookBridgeState {
   };
 }
 
-function createDomSandbox() {
+function createDomSandbox(options?: {
+  delayedSelectors?: Record<
+    string,
+    { readyAfterQueries: number; elements?: Array<Record<string, string>> }
+  >;
+}) {
   const dispatchLog: Array<{ target: string; type: string; key?: string }> = [];
+  const delayedSelectorChecks = new Map<string, number>();
 
   function createTarget(target: string) {
     return {
@@ -141,6 +147,18 @@ function createDomSandbox() {
     documentElement,
     dispatchEvent: createTarget("document").dispatchEvent,
     querySelectorAll(selector: string) {
+      const delayedSelector = options?.delayedSelectors?.[selector];
+      if (delayedSelector) {
+        const checks = (delayedSelectorChecks.get(selector) ?? 0) + 1;
+        delayedSelectorChecks.set(selector, checks);
+        if (checks >= delayedSelector.readyAfterQueries) {
+          const readyElements = delayedSelector.elements?.map((attrs) =>
+            createMockElement("div", attrs, `Delayed ${attrs.id ?? selector}`),
+          ) ?? [createMockElement("div", { id: selector.replace(/^[#.]*/, "") }, "Delayed Ready")];
+          return readyElements;
+        }
+        return [];
+      }
       if (selector === "*") return [...mockElements];
       return mockElements.filter((el) => {
         if ((el.tagName as string).toLowerCase() === selector.toLowerCase()) return true;
@@ -170,7 +188,9 @@ function createDomSandbox() {
   };
 }
 
-function createScriptingChromeHarness() {
+function createScriptingChromeHarness(options?: {
+  domSandboxFactory?: () => Record<string, unknown>;
+}) {
   const testDir = dirname(fileURLToPath(import.meta.url));
   const worlds = new Map<string, Record<string, unknown>>();
 
@@ -182,7 +202,7 @@ function createScriptingChromeHarness() {
     }
     const sandbox: Record<string, unknown> = {
       console,
-      ...createDomSandbox(),
+      ...(options?.domSandboxFactory ? options.domSandboxFactory() : createDomSandbox()),
     };
     sandbox.globalThis = sandbox;
     worlds.set(key, sandbox);
@@ -830,6 +850,196 @@ describe("site-runtime", () => {
         "invoke:execute_fixture",
         "verify:page_hook_ok",
       ],
+    });
+  });
+
+  it("stabilizes real page-hook verification until a delayed selector becomes ready", async () => {
+    const scriptingHarness = createScriptingChromeHarness({
+      domSandboxFactory: () =>
+        createDomSandbox({
+          delayedSelectors: {
+            "#late-ready": {
+              readyAfterQueries: 2,
+            },
+          },
+        }),
+    });
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: scriptingHarness.chromeApi,
+    });
+    const runtime = new SiteSkillRuntime({
+      registry: new SiteSkillRegistry([
+        {
+          skillId: "fixture.page",
+          matches: ["https://fixture.test/*"],
+          actions: [
+            {
+              name: "execute_fixture",
+              injectionSteps: [
+                {
+                  world: "main",
+                  scriptId: "bbl-next.page-hook.fixture",
+                  jsPath: "src/page-hook.js",
+                  runAt: "document_idle",
+                },
+              ],
+              verifier: "page_ready_selector",
+              stabilization: {
+                maxAttempts: 3,
+                intervalMs: 0,
+              },
+              module: {
+                id: "fixture.page.execute",
+                source: `
+                  exports.default = async () => ({
+                    stabilization: {
+                      kind: "selector_present",
+                      selector: "#late-ready",
+                      minCount: 1
+                    }
+                  });
+                `,
+              },
+            },
+          ],
+        },
+      ]),
+      runnerHost: new JsRunnerHost(),
+      installer: {
+        install: async (step, currentTab) => pageHookBridge.install(step, currentTab),
+        invoke: async ({ installation, action, input, tab: currentTab, ctx }) =>
+          pageHookBridge.invoke({
+            installation,
+            action,
+            input,
+            tab: currentTab,
+            ctx,
+          }),
+        verify: async ({ installation, action, result, tab: currentTab, verifier }) =>
+          pageHookBridge.verify({
+            installation,
+            action,
+            verifier,
+            result,
+            tab: currentTab,
+          }),
+      },
+    });
+
+    const result = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "execute_fixture",
+      lane: "background",
+      tab: {
+        tabId: 17,
+        url: "https://fixture.test/background-ready",
+        active: false,
+      },
+    });
+
+    const snapshot = (await pageHookBridge.snapshotState({
+      tabId: 17,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+
+    expect(result).toMatchObject({
+      verified: true,
+      trace: [
+        "lane:background",
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.fixture",
+        "invoke:execute_fixture",
+        "stabilize:not_ready:1",
+        "verify:page_ready_selector",
+      ],
+    });
+    expect(snapshot?.verifications).toEqual([
+      {
+        action: "execute_fixture",
+        verified: false,
+      },
+      {
+        action: "execute_fixture",
+        verified: true,
+      },
+    ]);
+  });
+
+  it("escalates exhausted stabilization budget as runtime_blocked instead of verify_failed", async () => {
+    const runtime = new SiteSkillRuntime({
+      registry: new SiteSkillRegistry([
+        {
+          skillId: "fixture.page",
+          matches: ["https://fixture.test/*"],
+          actions: [
+            {
+              name: "execute_fixture",
+              injectionSteps: [
+                {
+                  world: "main",
+                  scriptId: "bbl-next.page-hook.fixture",
+                },
+              ],
+              verifier: "page_ready_selector",
+              stabilization: {
+                maxAttempts: 2,
+                intervalMs: 0,
+              },
+              intervention: {
+                kind: "confirm",
+                title: "Manual readiness required",
+                message: "DOM never reached a ready state",
+                trigger: "runtime_blocked",
+              },
+              module: {
+                id: "fixture.page.execute",
+                source: "exports.default = async () => ({ ok: true });",
+              },
+            },
+          ],
+        },
+      ]),
+      runnerHost: new JsRunnerHost(),
+      installer: {
+        install: async () => ({
+          installationId: "fixture.page:execute_fixture:main:1",
+        }),
+        verify: vi.fn(async () => ({
+          status: "not_ready",
+          reason: "selector:#never-ready",
+        })),
+      },
+    });
+
+    const result = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "execute_fixture",
+      lane: "background",
+      tab: {
+        tabId: 19,
+        url: "https://fixture.test/background-stuck",
+        active: false,
+      },
+    });
+
+    expect(result).toMatchObject({
+      verified: false,
+      trace: [
+        "lane:background",
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.fixture",
+        "invoke:execute_fixture",
+        "stabilize:not_ready:1",
+        "stabilize:not_ready:2",
+        "stabilize:exhausted",
+        "intervention:confirm:runtime_blocked",
+      ],
+      intervention: {
+        trigger: "runtime_blocked",
+        title: "Manual readiness required",
+      },
     });
   });
 

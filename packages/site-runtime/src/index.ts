@@ -45,6 +45,7 @@ export interface SiteSkillAction {
   worlds?: SiteWorld[];
   injectionSteps?: InjectionStep[];
   verifier?: string;
+  stabilization?: SiteActionStabilizationPolicy;
   intervention?: SiteActionInterventionPolicy;
 }
 
@@ -57,7 +58,7 @@ export interface SiteSkillDefinition {
 export interface SiteScriptInstaller {
   install(step: InjectionStep, tab: ActiveTabMetadata): Promise<unknown>;
   invoke?(request: SiteScriptInvocationRequest): Promise<unknown>;
-  verify?(request: SiteScriptVerificationRequest): Promise<boolean>;
+  verify?(request: SiteScriptVerificationRequest): Promise<SiteVerificationResult>;
 }
 
 export interface SiteScriptInvocationRequest {
@@ -83,8 +84,37 @@ export interface SiteActionVerifier {
     tab: ActiveTabMetadata;
     result: unknown;
     site: SiteInvokeContext;
-  }): Promise<boolean>;
+  }): Promise<SiteVerificationResult>;
 }
+
+export interface SiteActionStabilizationPolicy {
+  budgetMs?: number;
+  intervalMs?: number;
+  maxAttempts?: number;
+}
+
+export interface SiteVerificationSuccess {
+  status: "verified";
+}
+
+export interface SiteVerificationPending {
+  status: "not_ready";
+  reason?: string;
+  retryAfterMs?: number;
+  payload?: Record<string, unknown>;
+}
+
+export interface SiteVerificationFailure {
+  status: "failed";
+  reason?: string;
+  payload?: Record<string, unknown>;
+}
+
+export type SiteVerificationResult =
+  | boolean
+  | SiteVerificationSuccess
+  | SiteVerificationPending
+  | SiteVerificationFailure;
 
 export interface SiteActionInterventionPolicy {
   kind: InterventionKind;
@@ -134,9 +164,23 @@ export interface SingleActionSiteSkillRequest {
   plan: InjectionPlan;
   module: RunnerModule;
   verifier?: string;
+  stabilization?: SiteActionStabilizationPolicy;
   intervention?: SiteActionInterventionPolicy;
   executeRunner?: SiteActionRunnerExecutor;
 }
+
+type NormalizedSiteVerificationResult = {
+  status: "verified" | "not_ready" | "failed";
+  reason?: string;
+  retryAfterMs?: number;
+  payload?: Record<string, unknown>;
+};
+
+const DEFAULT_SITE_STABILIZATION_POLICY: Required<SiteActionStabilizationPolicy> = {
+  budgetMs: 1_000,
+  intervalMs: 100,
+  maxAttempts: 5,
+};
 
 export function buildInjectionPlan(skillId: string, action: SiteSkillAction): InjectionPlan {
   if (action.injectionSteps && action.injectionSteps.length > 0) {
@@ -210,7 +254,7 @@ function asInterventionPayload(value: unknown): Record<string, unknown> | undefi
 export function createSingleActionSiteSkillDefinition(
   request: Pick<
     SingleActionSiteSkillRequest,
-    "skillId" | "tab" | "action" | "plan" | "module" | "verifier" | "intervention"
+    "skillId" | "tab" | "action" | "plan" | "module" | "verifier" | "stabilization" | "intervention"
   >,
 ): SiteSkillDefinition {
   return {
@@ -222,6 +266,7 @@ export function createSingleActionSiteSkillDefinition(
         module: request.module,
         injectionSteps: request.plan.steps,
         ...(request.verifier ? { verifier: request.verifier } : {}),
+        ...(request.stabilization ? { stabilization: request.stabilization } : {}),
         ...(request.intervention ? { intervention: request.intervention } : {}),
       },
     ],
@@ -250,6 +295,70 @@ export async function invokeSingleActionSiteSkill(options: {
     ctx: options.request.ctx,
     executeRunner: options.request.executeRunner,
   });
+}
+
+function normalizeStabilizationPolicy(
+  policy?: SiteActionStabilizationPolicy,
+): Required<SiteActionStabilizationPolicy> {
+  return {
+    budgetMs:
+      typeof policy?.budgetMs === "number" && policy.budgetMs >= 0
+        ? policy.budgetMs
+        : DEFAULT_SITE_STABILIZATION_POLICY.budgetMs,
+    intervalMs:
+      typeof policy?.intervalMs === "number" && policy.intervalMs >= 0
+        ? policy.intervalMs
+        : DEFAULT_SITE_STABILIZATION_POLICY.intervalMs,
+    maxAttempts:
+      typeof policy?.maxAttempts === "number" && policy.maxAttempts >= 1
+        ? Math.floor(policy.maxAttempts)
+        : DEFAULT_SITE_STABILIZATION_POLICY.maxAttempts,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function normalizeVerificationResult(
+  value: SiteVerificationResult,
+): NormalizedSiteVerificationResult {
+  if (value === true) {
+    return { status: "verified" };
+  }
+  if (value === false) {
+    return { status: "failed" };
+  }
+  const record = asRecord(value);
+  if (!record || typeof record.status !== "string") {
+    return { status: "failed" };
+  }
+  if (record.status === "verified") {
+    return { status: "verified" };
+  }
+  if (record.status === "not_ready") {
+    return {
+      status: "not_ready",
+      ...(typeof record.reason === "string" ? { reason: record.reason } : {}),
+      ...(typeof record.retryAfterMs === "number" ? { retryAfterMs: record.retryAfterMs } : {}),
+      ...(asRecord(record.payload) ? { payload: record.payload as Record<string, unknown> } : {}),
+    };
+  }
+  return {
+    status: "failed",
+    ...(typeof record.reason === "string" ? { reason: record.reason } : {}),
+    ...(asRecord(record.payload) ? { payload: record.payload as Record<string, unknown> } : {}),
+  };
+}
+
+async function waitForStabilizationDelay(ms: number): Promise<void> {
+  if (ms <= 0) {
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export class SiteSkillRegistry {
@@ -425,30 +534,92 @@ export class SiteSkillRuntime {
       // Phase 4: Verify
       let verified = true;
       if (action.verifier && (this.#verifier || (targetInstallation && this.#installer?.verify))) {
-        if (targetInstallation && this.#installer?.verify) {
-          verified = await this.#installer.verify({
-            installation: targetInstallation,
-            action: request.action,
-            verifier: action.verifier,
-            result,
-            tab: request.tab,
-          });
-        } else if (this.#verifier) {
-          verified = await this.#verifier.verify({
-            skillId: request.skillId,
-            action: request.action,
-            tab: request.tab,
-            result,
-            site,
-          });
-        }
-        trace.push(`verify:${action.verifier}`);
-        if (!verified) {
+        const stabilizationPolicy = normalizeStabilizationPolicy(action.stabilization);
+        const startedAt = Date.now();
+        let attempt = 0;
+
+        while (true) {
+          attempt += 1;
+          const verificationResult =
+            targetInstallation && this.#installer?.verify
+              ? await this.#installer.verify({
+                  installation: targetInstallation,
+                  action: request.action,
+                  verifier: action.verifier,
+                  result,
+                  tab: request.tab,
+                })
+              : this.#verifier
+                ? await this.#verifier.verify({
+                    skillId: request.skillId,
+                    action: request.action,
+                    tab: request.tab,
+                    result,
+                    site,
+                  })
+                : true;
+          const normalizedVerification = normalizeVerificationResult(verificationResult);
+          if (normalizedVerification.status === "verified") {
+            trace.push(`verify:${action.verifier}`);
+            verified = true;
+            break;
+          }
+
+          if (normalizedVerification.status === "not_ready") {
+            trace.push(`stabilize:not_ready:${attempt}`);
+            const delayMs = Math.max(
+              0,
+              normalizedVerification.retryAfterMs ?? stabilizationPolicy.intervalMs,
+            );
+            const elapsedMs = Date.now() - startedAt;
+            const exhausted =
+              attempt >= stabilizationPolicy.maxAttempts ||
+              elapsedMs + delayMs > stabilizationPolicy.budgetMs;
+            if (exhausted) {
+              trace.push("stabilize:exhausted");
+              const stabilizationPayload: Record<string, unknown> = {
+                verifier: action.verifier,
+                attempts: attempt,
+                elapsedMs,
+                budgetMs: stabilizationPolicy.budgetMs,
+                maxAttempts: stabilizationPolicy.maxAttempts,
+                intervalMs: stabilizationPolicy.intervalMs,
+                ...(normalizedVerification.reason ? { reason: normalizedVerification.reason } : {}),
+                ...(normalizedVerification.payload
+                  ? { payload: normalizedVerification.payload }
+                  : {}),
+              };
+              const intervention = toInterventionResult(
+                "runtime_blocked",
+                {
+                  result,
+                  stabilization: stabilizationPayload,
+                },
+                result,
+              );
+              if (intervention) {
+                return intervention;
+              }
+              throw new CapabilityError(
+                "E_RUNTIME",
+                `Stabilization budget exhausted for ${request.skillId}.${request.action}`,
+                stabilizationPayload,
+              );
+            }
+            await waitForStabilizationDelay(delayMs);
+            continue;
+          }
+
+          trace.push(`verify:${action.verifier}`);
           const intervention = toInterventionResult(
             "verify_failed",
             {
               result,
               ...(action.verifier ? { verifier: action.verifier } : {}),
+              ...(normalizedVerification.reason ? { reason: normalizedVerification.reason } : {}),
+              ...(normalizedVerification.payload
+                ? { payload: normalizedVerification.payload }
+                : {}),
             },
             result,
           );

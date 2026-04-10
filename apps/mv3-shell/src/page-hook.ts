@@ -234,7 +234,59 @@
     return result;
   }
 
-  function verify(installationId, action, result) {
+  function asRecord(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    return value;
+  }
+
+  function readStabilizationHint(result) {
+    const resultRecord = asRecord(result);
+    if (!resultRecord) {
+      return null;
+    }
+    return (
+      asRecord(resultRecord.stabilization) ?? asRecord(asRecord(resultRecord.input)?.stabilization)
+    );
+  }
+
+  function evaluateStabilization(result) {
+    const hint = readStabilizationHint(result);
+    if (!hint) {
+      return null;
+    }
+    if (hint.kind === "selector_present" && typeof hint.selector === "string" && hint.selector) {
+      const doc = globalScope.document;
+      if (!doc || typeof doc.querySelectorAll !== "function") {
+        return {
+          status: "failed",
+          reason: "document.querySelectorAll is not available",
+        };
+      }
+      const minCount =
+        typeof hint.minCount === "number" && hint.minCount >= 1 ? Math.floor(hint.minCount) : 1;
+      const nodes = doc.querySelectorAll(hint.selector);
+      const count = typeof nodes?.length === "number" ? nodes.length : 0;
+      if (count < minCount) {
+        return {
+          status: "not_ready",
+          reason: `selector:${hint.selector}`,
+          payload: {
+            selector: hint.selector,
+            matchedCount: count,
+            minCount,
+          },
+        };
+      }
+      return {
+        status: "verified",
+      };
+    }
+    return null;
+  }
+
+  function verify(installationId, action, _verifier, result) {
     const installed = getInstallation(installationId);
     if (!installed) {
       return false;
@@ -269,10 +321,17 @@
           (entry) => entry.installationId === installationId && entry.uid === result.uid,
         );
     }
+    const stabilizationResult = verified ? evaluateStabilization(result) : null;
+    if (stabilizationResult?.status === "not_ready" || stabilizationResult?.status === "failed") {
+      verified = false;
+    }
     state.verifications.push({
       action,
       verified,
     });
+    if (stabilizationResult) {
+      return stabilizationResult.status === "verified" ? true : stabilizationResult;
+    }
     return verified;
   }
 

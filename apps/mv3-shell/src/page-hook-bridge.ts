@@ -3,6 +3,7 @@ import type {
   InjectionStep,
   SiteInstallation,
   SiteScriptInvocationRequest,
+  SiteVerificationResult,
   SiteWorld,
 } from "@bbl-next/site-runtime";
 
@@ -43,13 +44,19 @@ type PageHookApi = {
     input: unknown,
     ctx: Record<string, unknown>,
   ): unknown;
-  verify(installationId: string, action: string, result: unknown): unknown;
+  verify(
+    installationId: string,
+    action: string,
+    verifier: string | undefined,
+    result: unknown,
+  ): SiteVerificationResult;
   state?: unknown;
 };
 
 type PageHookVerifyRequest = {
   installation: SiteInstallation;
   action: string;
+  verifier?: string;
   result: unknown;
   tab: ActiveTabMetadata;
 };
@@ -57,7 +64,7 @@ type PageHookVerifyRequest = {
 export interface PageHookBridge {
   install(step: InjectionStep, tab: ActiveTabMetadata): Promise<unknown>;
   invoke(request: SiteScriptInvocationRequest): Promise<unknown>;
-  verify(request: PageHookVerifyRequest): Promise<boolean>;
+  verify(request: PageHookVerifyRequest): Promise<SiteVerificationResult>;
   snapshotState(request: { tabId: number; world?: SiteWorld }): Promise<unknown>;
 }
 
@@ -166,21 +173,23 @@ export function createPageHookBridge({
   async function verify({
     installation,
     action,
+    verifier,
     result,
     tab,
-  }: PageHookVerifyRequest): Promise<boolean> {
+  }: PageHookVerifyRequest): Promise<SiteVerificationResult> {
     const installationId = getInstallationId(installation);
     if (typeof installationId !== "string") {
       throw new Error("Page hook installation is missing installationId");
     }
-    return Boolean(
-      await executeInTab({
+    return (
+      (await executeInTab<SiteVerificationResult>({
         tabId: tab.tabId,
         world: installation.step.world,
         func: (
           installedHookKey: string,
           installedId: string,
           installedAction: string,
+          installedVerifier: string | undefined,
           installedResult: unknown,
         ) => {
           const api = (globalThis as Record<string, unknown>)[installedHookKey] as
@@ -189,10 +198,10 @@ export function createPageHookBridge({
           if (!api || typeof api.verify !== "function") {
             throw new Error(`Page hook ${installedHookKey} does not expose verify()`);
           }
-          return api.verify(installedId, installedAction, installedResult);
+          return api.verify(installedId, installedAction, installedVerifier, installedResult);
         },
-        args: [hookKey, installationId, action, result],
-      }),
+        args: [hookKey, installationId, action, verifier, result],
+      })) ?? false
     );
   }
 

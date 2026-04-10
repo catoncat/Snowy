@@ -4519,6 +4519,140 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("forwards stabilization policy through the background lane before treating DOM as blocked", async () => {
+    const host = {
+      dispatch: vi.fn(async (request) => {
+        if (request.kind === "invoke") {
+          return {
+            kind: "invoke_result",
+            requestId: request.requestId,
+            ok: true,
+            result: {
+              result: {
+                ok: true,
+                echoedInput: request.invocation.input,
+              },
+              durationMs: 1,
+            },
+          };
+        }
+        return {
+          kind: "health_result",
+          requestId: request.requestId,
+          ok: true,
+          health: {
+            status: "idle",
+            inflightCount: 0,
+            consecutiveFailures: 0,
+          },
+        };
+      }),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0,
+      })),
+    };
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 11,
+        url: "https://fixture.test/home",
+      },
+      host,
+    });
+    let verifyCalls = 0;
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      pageHookBridge: {
+        install: vi.fn(async (step) => ({
+          installationId: `${step.scriptId}:1`,
+        })),
+        invoke: vi.fn(async ({ action, input, tab }) => ({
+          ok: true,
+          action,
+          input,
+          installationId: "bbl-next.page-hook.fixture:1",
+          installedScriptId: "bbl-next.page-hook.fixture",
+          tabUrl: tab.url,
+          installCount: 1,
+        })),
+        verify: vi.fn(async () => {
+          verifyCalls += 1;
+          if (verifyCalls === 1) {
+            return {
+              status: "not_ready",
+              reason: "selector:#late-ready",
+            };
+          }
+          return true;
+        }),
+        snapshotState: vi.fn(async () => null),
+      },
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "site.runtime.invoke",
+        automationTarget: {
+          lane: "background",
+          url: "https://fixture.test/background-stabilize",
+          cleanup: "close-tab",
+        },
+        skillId: "fixture.page",
+        action: "execute_fixture",
+        input: {
+          query: "background stabilize",
+        },
+        plan: {
+          skillId: "fixture.page",
+          action: "execute_fixture",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.fixture",
+              jsPath: "src/page-hook.js",
+            },
+          ],
+        },
+        module: {
+          id: "fixture.page.execute",
+          source: "exports.default = async ({ input }) => ({ query: input.query });",
+        },
+        verifier: "page_ready_selector",
+        stabilization: {
+          maxAttempts: 3,
+          intervalMs: 0,
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        verified: true,
+        trace: [
+          "lane:background",
+          "match:fixture.page",
+          "plan:1_steps",
+          "install:main:bbl-next.page-hook.fixture",
+          "invoke:execute_fixture",
+          "stabilize:not_ready:1",
+          "verify:page_ready_selector",
+        ],
+      },
+    });
+
+    expect(verifyCalls).toBe(2);
+    expect(harness.tabsApi.create).toHaveBeenCalledWith({
+      url: "https://fixture.test/background-stabilize",
+      active: false,
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("persists intervention lifecycle through runtime services, diagnostics, bootstrap, and audit", async () => {
     const host = {
       dispatch: vi.fn(async (request) => {
