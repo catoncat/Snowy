@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-10T02:21:00.585Z",
+  "generated_at": "2026-04-10T03:06:53.752Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-123",
-      "issue_path": "docs/backlog/2026-04-10-follow-up-background-lane-non-active-tab-page-action-coverage.md",
-      "title": "Follow-up: background lane lacks non-active-tab page action coverage",
+      "issue_id": "ISSUE-124",
+      "issue_path": "docs/backlog/2026-04-10-follow-up-background-lane-dom-stabilization-contract.md",
+      "title": "Follow-up: background lane still lacks DOM stabilization contract",
       "parallel_group": "site-runtime",
       "module_id": "site-runtime-browser-automation",
       "module_stage": "secondary",
