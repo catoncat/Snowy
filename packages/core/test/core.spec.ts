@@ -973,6 +973,52 @@ describe("core", () => {
       const fromCatalog = Object.values(BUILTIN_CATALOG).flat();
       expect(BUILTIN_CAPABILITIES).toEqual(fromCatalog);
     });
+
+    it("exposes intervention control-plane actions in BUILTIN_CAPABILITIES", () => {
+      const ids = BUILTIN_CAPABILITIES.map((d) => d.id);
+      expect(ids).toContain("intervention.list");
+      expect(ids).toContain("intervention.resolve");
+      expect(ids).toContain("intervention.cancel");
+    });
+
+    it("intervention namespace is present in BUILTIN_CATALOG with 3 entries", () => {
+      expect(BUILTIN_CATALOG.intervention).toBeDefined();
+      expect(BUILTIN_CATALOG.intervention.length).toBe(3);
+      expect(BUILTIN_CATALOG.intervention.map((d) => d.id)).toEqual([
+        "intervention.list",
+        "intervention.resolve",
+        "intervention.cancel",
+      ]);
+    });
+
+    it("intervention descriptors project to valid tool contracts", () => {
+      const registry = new CapabilityRegistry(BUILTIN_CATALOG.intervention);
+      const tools = registry.projectTools();
+      expect(tools.map((t) => t.name)).toEqual([
+        "intervention_list",
+        "intervention_resolve",
+        "intervention_cancel",
+      ]);
+      for (const tool of tools) {
+        expect(tool.capabilityId).toMatch(/^intervention\./);
+      }
+    });
+
+    it("intervention.list is exportable (reads sideEffect)", () => {
+      const listEntry = BUILTIN_CATALOG.intervention.find((d) => d.id === "intervention.list");
+      expect(listEntry).toBeDefined();
+      expect(listEntry?.sideEffects).toBe("reads");
+      expect(listEntry?.exportable).toBe(true);
+    });
+
+    it("intervention.resolve and intervention.cancel are not exportable (writes sideEffect)", () => {
+      const resolve = BUILTIN_CATALOG.intervention.find((d) => d.id === "intervention.resolve");
+      const cancel = BUILTIN_CATALOG.intervention.find((d) => d.id === "intervention.cancel");
+      expect(resolve?.sideEffects).toBe("writes");
+      expect(resolve?.exportable).toBe(false);
+      expect(cancel?.sideEffects).toBe("writes");
+      expect(cancel?.exportable).toBe(false);
+    });
   });
 
   describe("SkillInvocationService", () => {

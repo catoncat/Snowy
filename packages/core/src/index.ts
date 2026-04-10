@@ -1312,6 +1312,57 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       },
     }),
   ],
+  intervention: [
+    catalogEntry({
+      id: "intervention.list",
+      family: "intervention",
+      operation: "list",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["intervention.list"],
+      description: "List intervention requests, optionally filtered by status",
+      inputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["requested", "resolved", "cancelled", "timed_out"] },
+        },
+      },
+    }),
+    catalogEntry({
+      id: "intervention.resolve",
+      family: "intervention",
+      operation: "resolve",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["intervention.resolve"],
+      description: "Resolve a pending intervention request",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          resolution: { type: "object" },
+        },
+        required: ["id"],
+      },
+    }),
+    catalogEntry({
+      id: "intervention.cancel",
+      family: "intervention",
+      operation: "cancel",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["intervention.cancel"],
+      description: "Cancel a pending intervention request",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          reason: { type: "string" },
+        },
+        required: ["id"],
+      },
+    }),
+  ],
 };
 
 export const BUILTIN_CAPABILITIES: CapabilityDescriptor[] = Object.values(BUILTIN_CATALOG).flat();
