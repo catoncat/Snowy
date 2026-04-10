@@ -1,11 +1,11 @@
 ---
 id: ISSUE-118
 title: "Review: background automation lane still lacks stabilization and failure-tracking scope"
-status: open
+status: done
 priority: p1
 source: "next-batch-planner review 2026-04-09"
 created: 2026-04-09
-assignee: unassigned
+assignee: codex-019d750c
 tags:
   - review
   - site-runtime
@@ -26,7 +26,9 @@ write_scope:
   - apps/mv3-shell/test/manifest.spec.ts
 acceptance_ref: docs/reviews/2026-03-29-vnext-architecture-recovery-report.md
 check_cmd: "bun run check"
+completed_at: 2026-04-10T02:21:00.578Z
 ---
+
 ## Goal
 
 Review the next post-plumbing slice for background automation so the lane advances from transport wiring to stable, operator-trustworthy behavior.
@@ -60,3 +62,21 @@ Review the next post-plumbing slice for background automation so the lane advanc
 - `ISSUE-124` `Follow-up: background lane still lacks DOM stabilization contract`
   - 原因：当前仍缺 runtime-owned stabilization seam，无法区分“页面尚未 ready”和“真正需要 intervention/failure recovery”。
   - 结果：把 recovery report 中剩余的 stabilization gap 收窄成可执行 slice，而不是继续停留在抽象 review 结论。
+
+## 工作总结
+
+### 实现了什么
+- 复核 background lane 当前主链，确认 failure-tracking 已由 intervention/diagnostics/audit/rehydrate 覆盖
+- 新增 ISSUE-123 与 ISSUE-124，把剩余 gap 收窄为 non-active-tab page action coverage 与 DOM stabilization contract
+
+### 实际跑了什么检查
+- bun run workflow:queue:build
+- git diff --check
+- bunx vitest run packages/site-runtime/test/site-runtime.spec.ts apps/mv3-shell/test/manifest.spec.ts
+
+### 残留风险
+- ISSUE-123/124 未落地前，background lane 仍缺 non-active-tab page action 覆盖与 DOM stabilization 正式 contract
+
+## 相关 commits
+
+- `6e75826b80c2` docs(workflow): 收口ISSUE-118并补background follow-up
