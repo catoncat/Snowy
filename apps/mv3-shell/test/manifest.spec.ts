@@ -18,6 +18,7 @@ import {
   createBackgroundRuntimeServices,
   createRemoteExecAdapter,
   createRemoteHostProbe,
+  createRemoteHostTransport,
   isSidepanelManagementActionKind,
   isSidepanelManagementResourceId,
 } from "../src/runtime-services.js";
@@ -2918,13 +2919,16 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("lists and gets the remote host as a first-class record when remote exec is configured", async () => {
+  it("lists and gets the remote host as a first-class record when remote transport is configured", async () => {
     const harness = createChromeHarness({});
     const sendRemoteExec = vi.fn();
+    const remoteTransport = createRemoteHostTransport({
+      sendExec: sendRemoteExec,
+    });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
-      sendRemoteExec,
+      remoteTransport,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -2975,6 +2979,136 @@ describe("mv3-shell manifest", () => {
 
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
     expect(sendRemoteExec).not.toHaveBeenCalled();
+    dispose();
+    harness.cleanup();
+  });
+
+  it("surfaces a degraded remote host when the configured remote transport is unavailable", async () => {
+    const harness = createChromeHarness({});
+    const sendRemoteExec = vi.fn();
+    const probeHandler = vi.fn(async () => ({
+      status: "healthy",
+    }));
+    const availability = vi.fn(async ({ action }: { action: string }) => ({
+      available: false,
+      error: {
+        code: "E_REMOTE_UNAVAILABLE",
+        message: "transport offline",
+        details: {
+          action,
+        },
+      },
+    }));
+    const remoteTransport = createRemoteHostTransport({
+      sendExec: sendRemoteExec,
+      sendProbe: probeHandler,
+      availability,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      remoteTransport,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            hostId: "remote",
+            kind: "remote",
+            connected: false,
+            state: "degraded",
+            error: {
+              code: "E_REMOTE_UNAVAILABLE",
+              message: "transport offline",
+              details: {
+                action: "hosts.list",
+                kind: "transport",
+                hostId: "remote",
+                reason: "transport_unavailable",
+              },
+            },
+          }),
+        ]),
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.get",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "remote",
+        connected: false,
+        state: "degraded",
+        error: {
+          code: "E_REMOTE_UNAVAILABLE",
+          message: "transport offline",
+          details: {
+            action: "hosts.get",
+            kind: "transport",
+            hostId: "remote",
+            reason: "transport_unavailable",
+          },
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.connect",
+        hostId: "remote",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_REMOTE_UNAVAILABLE",
+        message: "transport offline",
+        details: {
+          action: "hosts.connect",
+          kind: "transport",
+          hostId: "remote",
+          reason: "transport_unavailable",
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.exec",
+        hostId: "remote",
+        command: "pwd",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_REMOTE_UNAVAILABLE",
+        message: "transport offline",
+        details: {
+          action: "host.exec",
+          kind: "transport",
+          hostId: "remote",
+          reason: "transport_unavailable",
+        },
+      },
+    });
+
+    expect(availability).toHaveBeenCalledTimes(4);
+    expect(sendRemoteExec).not.toHaveBeenCalled();
+    expect(probeHandler).not.toHaveBeenCalled();
     dispose();
     harness.cleanup();
   });
@@ -3318,7 +3452,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("background bridge routes exec through the remote host and keeps local exec unsupported", async () => {
+  it("background bridge routes exec through the remote host transport and keeps local exec unsupported", async () => {
     const harness = createChromeHarness({});
     const sendRemoteExec = vi.fn(
       async (request: { hostId: string; command: string; timeoutMs?: number }) => ({
@@ -3329,10 +3463,13 @@ describe("mv3-shell manifest", () => {
         stderr: "",
       }),
     );
+    const remoteTransport = createRemoteHostTransport({
+      sendExec: sendRemoteExec,
+    });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
-      sendRemoteExec,
+      remoteTransport,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -3766,17 +3903,20 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("uses injected remote probe results for remote connect and health", async () => {
+  it("uses remote transport probe results for remote connect and health", async () => {
     const harness = createChromeHarness({});
     const sendRemoteExec = vi.fn();
     const probeHandler = vi.fn(async () => ({
       status: "healthy",
     }));
+    const remoteTransport = createRemoteHostTransport({
+      sendExec: sendRemoteExec,
+      sendProbe: probeHandler,
+    });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
-      sendRemoteExec,
-      sendRemoteProbe: createRemoteHostProbe(probeHandler),
+      remoteTransport,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -3826,7 +3966,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("surfaces degraded remote host state when the injected remote probe fails", async () => {
+  it("surfaces degraded remote host state when the remote transport probe fails", async () => {
     const harness = createChromeHarness({});
     const probeHandler = vi.fn(async () => {
       const error = new Error("probe unreachable");
@@ -3834,11 +3974,14 @@ describe("mv3-shell manifest", () => {
       error.code = "E_REMOTE";
       throw error;
     });
+    const remoteTransport = createRemoteHostTransport({
+      sendExec: vi.fn(),
+      sendProbe: probeHandler,
+    });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
-      sendRemoteExec: vi.fn(),
-      sendRemoteProbe: createRemoteHostProbe(probeHandler),
+      remoteTransport,
     });
     const dispose = bridge.registerRuntimeListener();
 
@@ -3888,7 +4031,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("falls back to control-plane state when remote probe is not configured", async () => {
+  it("falls back to control-plane state when remote transport probe is not configured", async () => {
     const harness = createChromeHarness({});
     const sendRemoteExec = vi.fn(async (request: { hostId: string; command: string }) => ({
       hostId: request.hostId,
@@ -3897,10 +4040,13 @@ describe("mv3-shell manifest", () => {
       stdout: `remote:${request.command}`,
       stderr: "",
     }));
+    const remoteTransport = createRemoteHostTransport({
+      sendExec: sendRemoteExec,
+    });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
-      sendRemoteExec,
+      remoteTransport,
     });
     const dispose = bridge.registerRuntimeListener();
 

@@ -477,6 +477,53 @@ export function createRemoteHostProbe(sendProbe: any): any {
       }));
 }
 
+export function createRemoteHostTransport({
+  sendExec,
+  sendProbe,
+  availability,
+  isAvailable,
+  describeAvailability,
+}: any = {}): any {
+  if (typeof sendExec !== "function") {
+    return null;
+  }
+
+  const execAdapter = createRemoteExecAdapter(sendExec);
+  const probeAdapter =
+    typeof sendProbe === "function" ? createRemoteHostProbe(sendProbe) : undefined;
+
+  async function resolveAvailability(request) {
+    if (typeof availability === "function") {
+      return (await availability(request)) ?? null;
+    }
+    if (typeof describeAvailability === "function") {
+      return (await describeAvailability(request)) ?? null;
+    }
+    if (typeof isAvailable === "function") {
+      const available = await isAvailable(request);
+      return { available: Boolean(available) };
+    }
+    return { available: true };
+  }
+
+  return {
+    async describeAvailability(request) {
+      return resolveAvailability(request);
+    },
+    async isAvailable(request) {
+      const result = await resolveAvailability(request);
+      if (result && typeof result === "object" && "available" in result) {
+        return result.available !== false;
+      }
+      return Boolean(result);
+    },
+    exec(request) {
+      return execAdapter.exec(request);
+    },
+    ...(probeAdapter ? { probe: probeAdapter } : {}),
+  };
+}
+
 const LLM_CONFIG_STORAGE_KEY = "bbl-next.llm.config.v1";
 const CONFIG_CONTROL_PLANE_STORAGE_KEY = "bbl-next.config.control-plane.v1";
 

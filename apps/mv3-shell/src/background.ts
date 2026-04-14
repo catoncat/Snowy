@@ -473,8 +473,7 @@ export function createBackgroundRunnerBridge({
   auditStore = undefined,
   auditStorageKey = AUDIT_STORAGE_KEY,
   auditRetention = AUDIT_RETENTION_DEFAULTS,
-  sendRemoteExec = undefined,
-  sendRemoteProbe = undefined,
+  remoteTransport = undefined,
 }: any = {}): any {
   const effectivePageHookBridge =
     pageHookBridge ??
@@ -512,7 +511,112 @@ export function createBackgroundRunnerBridge({
   let composedRuntimeServices = null;
 
   function hasRemoteHost() {
-    return typeof sendRemoteExec === "function";
+    return Boolean(remoteTransport);
+  }
+
+  function createRemoteTransportError(error, action) {
+    const normalized = toBridgeError(error, "E_RUNTIME");
+    const details = {
+      ...(normalized.details && typeof normalized.details === "object" ? normalized.details : {}),
+      kind: "transport",
+      hostId: REMOTE_HOST_ID,
+      reason: "transport_unavailable",
+      action,
+    };
+    return {
+      ...normalized,
+      details,
+    };
+  }
+
+  async function describeRemoteTransportAvailability(action) {
+    if (!remoteTransport || typeof remoteTransport.describeAvailability !== "function") {
+      return null;
+    }
+    try {
+      return (
+        (await remoteTransport.describeAvailability({
+          hostId: REMOTE_HOST_ID,
+          action,
+        })) ?? null
+      );
+    } catch (error) {
+      return {
+        available: false,
+        error: createRemoteTransportError(error, action),
+      };
+    }
+  }
+
+  async function getRemoteTransportAvailability(action) {
+    if (!remoteTransport) {
+      return {
+        available: false,
+        error: createRemoteTransportError(
+          {
+            code: "E_RUNTIME",
+            message: "Remote transport is unavailable",
+          },
+          action,
+        ),
+      };
+    }
+
+    const describedAvailability = await describeRemoteTransportAvailability(action);
+    if (describedAvailability && typeof describedAvailability === "object") {
+      if (describedAvailability.available === false) {
+        return {
+          available: false,
+          error: createRemoteTransportError(
+            describedAvailability.error ?? {
+              code: "E_RUNTIME",
+              message: "Remote transport is unavailable",
+            },
+            action,
+          ),
+        };
+      }
+      if (describedAvailability.available === true) {
+        return {
+          available: true,
+          error: null,
+        };
+      }
+    }
+
+    if (typeof remoteTransport.isAvailable === "function") {
+      try {
+        const available = await remoteTransport.isAvailable({
+          hostId: REMOTE_HOST_ID,
+          action,
+        });
+        return available
+          ? {
+              available: true,
+              error: null,
+            }
+          : {
+              available: false,
+              error: createRemoteTransportError(
+                {
+                  code: "E_RUNTIME",
+                  message: "Remote transport is unavailable",
+                },
+                action,
+              ),
+            };
+      } catch (error) {
+        return {
+          available: false,
+          error: createRemoteTransportError(error, action),
+        };
+      }
+    }
+
+    return {
+      available: true,
+      error: null,
+    };
   }
 
   const auditReady = (async () => {
@@ -1158,7 +1262,15 @@ export function createBackgroundRunnerBridge({
     return snapshot;
   }
 
-  async function describeRemoteHost() {
+  async function describeRemoteHost(action = "hosts.get") {
+    const availability = await getRemoteTransportAvailability(action);
+    if (!availability.available && availability.error) {
+      setRemoteHostSnapshot({
+        connected: false,
+        healthStatus: "degraded",
+        error: availability.error,
+      });
+    }
     return toRemoteHostSnapshot({
       checkedAt: state.remoteHostCheckedAt,
       connected: state.remoteHostReady,
@@ -1180,11 +1292,23 @@ export function createBackgroundRunnerBridge({
   }
 
   async function probeRemoteHostControlState(action = "hosts.health") {
-    if (typeof sendRemoteProbe !== "function") {
+    const availability = await getRemoteTransportAvailability(action);
+    if (!availability.available) {
+      setRemoteHostSnapshot({
+        connected: false,
+        healthStatus: "degraded",
+        error: availability.error,
+      });
+      return {
+        ok: false,
+        error: state.remoteHostError,
+      };
+    }
+    if (typeof remoteTransport?.probe !== "function") {
       return null;
     }
     try {
-      const response = await sendRemoteProbe({
+      const response = await remoteTransport.probe({
         kind: "health",
         requestId: nextRequestId(),
         hostId: REMOTE_HOST_ID,
@@ -1240,7 +1364,7 @@ export function createBackgroundRunnerBridge({
       });
       return {
         ok: true,
-        data: await describeRemoteHost(),
+        data: await describeRemoteHost(action),
       };
     } catch (error) {
       setRemoteHostSnapshot({
@@ -1258,16 +1382,16 @@ export function createBackgroundRunnerBridge({
   async function listExecutionHosts() {
     const items = [await describeLocalHost()];
     if (hasRemoteHost()) {
-      items.push(await describeRemoteHost());
+      items.push(await describeRemoteHost("hosts.list"));
     }
     return items;
   }
 
-  async function describeHostById(hostId) {
+  async function describeHostById(hostId, action = "hosts.get") {
     if (hostId === LOCAL_HOST_ID) {
       return describeLocalHost();
     }
-    return describeRemoteHost();
+    return describeRemoteHost(action);
   }
 
   async function listHosts() {
@@ -1287,7 +1411,7 @@ export function createBackgroundRunnerBridge({
     }
     return {
       ok: true,
-      data: await describeHostById(resolvedHostId),
+      data: await describeHostById(resolvedHostId, "hosts.get"),
     };
   }
 
@@ -1322,7 +1446,7 @@ export function createBackgroundRunnerBridge({
         ok: true,
         data: {
           defaultHostId: state.defaultHostId,
-          host: await describeRemoteHost(),
+          host: await describeRemoteHost("hosts.connect"),
         },
       };
     }
@@ -1375,7 +1499,7 @@ export function createBackgroundRunnerBridge({
         ok: true,
         data: {
           defaultHostId: state.defaultHostId,
-          host: await describeRemoteHost(),
+          host: await describeRemoteHost("hosts.disconnect"),
         },
       };
     }
@@ -1397,7 +1521,7 @@ export function createBackgroundRunnerBridge({
       ok: true,
       data: {
         defaultHostId: state.defaultHostId,
-        host: await describeHostById(resolvedHostId),
+        host: await describeHostById(resolvedHostId, "hosts.disconnect"),
       },
     };
   }
@@ -1417,7 +1541,7 @@ export function createBackgroundRunnerBridge({
       ok: true,
       data: {
         defaultHostId: state.defaultHostId,
-        host: await describeHostById(resolvedHostId),
+        host: await describeHostById(resolvedHostId, "hosts.set_default"),
       },
     };
   }
@@ -1430,7 +1554,7 @@ export function createBackgroundRunnerBridge({
     if (resolvedHostId === REMOTE_HOST_ID) {
       await probeRemoteHostControlState("hosts.health");
     }
-    const host = await describeHostById(resolvedHostId);
+    const host = await describeHostById(resolvedHostId, "hosts.health");
     return {
       ok: true,
       data: host,
@@ -1487,14 +1611,26 @@ export function createBackgroundRunnerBridge({
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    if (resolvedHostId !== REMOTE_HOST_ID || typeof sendRemoteExec !== "function") {
+    if (resolvedHostId !== REMOTE_HOST_ID || typeof remoteTransport?.exec !== "function") {
       return unsupportedHostOperation({
         hostId: resolvedHostId,
         kind: "exec",
       });
     }
+    const availability = await getRemoteTransportAvailability("host.exec");
+    if (!availability.available) {
+      setRemoteHostSnapshot({
+        connected: false,
+        healthStatus: "degraded",
+        error: availability.error,
+      });
+      return {
+        ok: false,
+        error: state.remoteHostError,
+      };
+    }
     try {
-      const response = await sendRemoteExec({
+      const response = await remoteTransport.exec({
         kind: "exec",
         requestId: payload.requestId ?? nextRequestId(),
         hostId: resolvedHostId,
@@ -1854,14 +1990,7 @@ export function createBackgroundRunnerBridge({
         ? (runtimeDiagnostics.runner?.error ?? null)
         : null,
     });
-    const remoteHost = hasRemoteHost()
-      ? toRemoteHostSnapshot({
-          checkedAt: state.remoteHostCheckedAt,
-          connected: state.remoteHostReady,
-          healthStatus: state.remoteHostHealthStatus,
-          error: state.remoteHostError,
-        })
-      : null;
+    const remoteHost = hasRemoteHost() ? await describeRemoteHost("runtime.summary") : null;
     const hostItems = [
       {
         hostId: localHost.hostId,
