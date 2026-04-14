@@ -375,6 +375,7 @@ describe("KernelFacade (createKernel)", () => {
           activeCount: 0,
           recentCount: 0,
           active: [],
+          recent: [],
         },
       });
     });
@@ -422,6 +423,7 @@ describe("KernelFacade (createKernel)", () => {
         id: "ivr-runtime-summary",
         kind: "confirm",
         trigger: "verify_failed",
+        status: "requested",
         title: "Need confirmation",
         message: "Confirm the next action.",
       });
@@ -439,6 +441,7 @@ describe("KernelFacade (createKernel)", () => {
             status: "requested",
           }),
         ],
+        recent: [],
       });
     });
 
@@ -502,6 +505,7 @@ describe("KernelFacade (createKernel)", () => {
         id: "ivr-diagnostics",
         kind: "confirm",
         trigger: "verify_failed",
+        status: "requested",
         title: "Need confirmation",
         message: "Confirm the next action.",
       });
@@ -543,6 +547,7 @@ describe("KernelFacade (createKernel)", () => {
           totalCount: 1,
           activeCount: 1,
           recentCount: 0,
+          recent: [],
         },
         provider: {
           route: {

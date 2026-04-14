@@ -227,6 +227,7 @@ export class InterventionController {
       now: opts?.now,
     });
     const active = all.filter((record) => record.status === "requested");
+    const recent = all.filter((record) => record.status !== "requested");
     const recentCount = this.readAudit({
       sessionId: opts?.sessionId,
       limit: opts?.auditLimit,
@@ -238,6 +239,7 @@ export class InterventionController {
       activeCount: active.length,
       recentCount,
       active,
+      recent,
     };
   }
 

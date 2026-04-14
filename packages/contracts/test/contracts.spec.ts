@@ -219,6 +219,7 @@ describe("contracts", () => {
           activeCount: 0,
           recentCount: 0,
           active: [],
+          recent: [],
         },
         actionCapabilities: {
           total: 4,
