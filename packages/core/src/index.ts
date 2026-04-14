@@ -1621,7 +1621,7 @@ export function createRuntimeHistoryResource(
       : undefined;
   const entries = typeof limit === "number" ? input.entries.slice(-limit) : [...input.entries];
   const lastEntry = entries[entries.length - 1];
-  const generatedAt = input.generatedAt ?? lastEntry?.timestamp ?? new Date().toISOString();
+  const generatedAt = input.generatedAt ?? lastEntry?.startedAt ?? new Date().toISOString();
   const data: RuntimeHistorySummary = {
     status: entries.length > 0 ? "available" : "empty",
     totalCount: entries.length,

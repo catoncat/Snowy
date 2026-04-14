@@ -164,8 +164,16 @@ function createAuditStoreHarness(initialEntries: unknown[] = []) {
   };
 }
 
+type KernelDiagnosticsSnapshotOverrides = {
+  session?: Partial<KernelDiagnosticsSnapshot["session"]>;
+  run?: Partial<KernelDiagnosticsSnapshot["run"]>;
+  loop?: Partial<KernelDiagnosticsSnapshot["loop"]>;
+  interventions?: Partial<KernelDiagnosticsSnapshot["interventions"]>;
+  provider?: Partial<KernelDiagnosticsSnapshot["provider"]>;
+};
+
 function createKernelDiagnosticsSnapshot(
-  overrides: Partial<KernelDiagnosticsSnapshot> = {},
+  overrides: KernelDiagnosticsSnapshotOverrides = {},
 ): KernelDiagnosticsSnapshot {
   return {
     session: {
