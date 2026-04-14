@@ -107,6 +107,13 @@ export function listAiSurfaceResourcesForAudience(
     entry.audiences.includes(audience),
   );
 }
+export function listBootstrapResourceMetadata(): Array<
+  AiSurfaceResourceMetadata & { bootstrapKey: BootstrapResourceKey }
+> {
+  return AI_SURFACE_RESOURCE_METADATA_REGISTRY.filter((entry) => "bootstrapKey" in entry) as Array<
+    AiSurfaceResourceMetadata & { bootstrapKey: BootstrapResourceKey }
+  >;
+}
 export const CONFIG_RESOURCE_FIELDS = [
   "model",
   "automation",

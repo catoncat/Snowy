@@ -3,6 +3,7 @@ import {
   CONFIG_CONTROL_PLANE_ACTIONS,
   type CapabilityDescriptor,
   CapabilityError,
+  type ConfigBootstrapSummary,
   HOST_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
   PUBLIC_CAPABILITY_NAMESPACES,
@@ -355,7 +356,7 @@ describe("core", () => {
   });
 
   it("rehydrates config control plane state from persisted summary and persists updates", async () => {
-    let persistedSummary = {
+    let persistedSummary: ConfigBootstrapSummary = {
       status: "ready" as const,
       fields: ["model", "automation", "permissions", "preferences"],
       values: {

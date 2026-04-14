@@ -1,4 +1,4 @@
-import { AI_SURFACE_RESOURCE_METADATA_REGISTRY } from "@bbl-next/contracts";
+import { listBootstrapResourceMetadata } from "@bbl-next/contracts";
 import { BUILTIN_CAPABILITIES } from "@bbl-next/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -52,6 +52,7 @@ describe("sidepanel management state", () => {
           activeCount: 0,
           recentCount: 0,
           active: [],
+          recent: [],
         },
         actionCapabilities: {
           total: 4,
@@ -119,9 +120,7 @@ describe("sidepanel management state", () => {
   });
 
   it("management resource IDs match bootstrap resources from shared registry", () => {
-    const bootstrapResourceIds = AI_SURFACE_RESOURCE_METADATA_REGISTRY.filter(
-      (entry) => entry.bootstrapKey !== undefined,
-    ).map((entry) => entry.id);
+    const bootstrapResourceIds = listBootstrapResourceMetadata().map((entry) => entry.id);
     expect([...SIDEPANEL_MANAGEMENT_RESOURCE_IDS].sort()).toEqual([...bootstrapResourceIds].sort());
   });
 
