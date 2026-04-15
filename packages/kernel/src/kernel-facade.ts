@@ -162,6 +162,7 @@ export interface Kernel {
   // Provider/profile management
   getActiveProfile(lane?: LlmProviderExecutionLane): ResolveLlmRouteResult | null;
   setProfileConfig(config: LlmProfileConfig): void;
+  updateLaneProfiles(lane: LlmProviderExecutionLane, profiles: string[]): void;
   getProviderRegistry(): LlmProviderRegistry | null;
 
   // Intervention lifecycle
@@ -496,6 +497,19 @@ export function createKernel(opts: KernelOptions): Kernel {
         : null,
     setProfileConfig(config) {
       profileConfig = config;
+    },
+    updateLaneProfiles(lane, profiles) {
+      if (!profileConfig) {
+        throw new Error("Cannot update lane profiles: no profile config set");
+      }
+      const normalizedProfiles = profiles.map((p) => String(p || "").trim()).filter(Boolean);
+      profileConfig = {
+        ...profileConfig,
+        laneProfiles: {
+          ...profileConfig.laneProfiles,
+          [lane]: normalizedProfiles,
+        },
+      };
     },
     getProviderRegistry: () => providerRegistry,
 

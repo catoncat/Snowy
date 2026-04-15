@@ -44,7 +44,13 @@ export {
 export { createKernelLlmFromProvider } from "./llm-kernel-adapter.js";
 export {
   runLoop,
+  requestLlmWithRetry,
+  calculateLlmRetryDelayMs,
+  type EscalationSignal,
+  type EscalationSignalReason,
   type LoopOrchestratorOptions,
+  type RequestLlmWithRetryOptions,
+  type RequestLlmWithRetryResult,
   type RunLoopInput,
   type RunLoopResult,
 } from "./loop-orchestrator.js";

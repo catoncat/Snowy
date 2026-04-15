@@ -1655,4 +1655,263 @@ describe("requestLlmWithRetry", () => {
     expect(result.route.profile).toBe("fallback");
     expect(result.response.status).toBe(200);
   });
+
+  it("marks the degraded provider as down in the registry on escalation", async () => {
+    const providerRegistry = new LlmProviderRegistry();
+    const defaultProvider: LlmProviderAdapter = {
+      id: "default_prov",
+      resolveRequestUrl: () => "https://default.test/v1/chat/completions",
+      send: async () => new Response("ok"),
+    };
+    const fallbackProvider: LlmProviderAdapter = {
+      id: "fallback_prov",
+      resolveRequestUrl: () => "https://fallback.test/v1/chat/completions",
+      send: async () => new Response("ok"),
+    };
+    providerRegistry.register(defaultProvider, {
+      healthStatus: "healthy",
+      capabilities: ["chat.completions", "tool_calls"],
+    });
+    providerRegistry.register(fallbackProvider, {
+      healthStatus: "healthy",
+      capabilities: ["chat.completions", "tool_calls"],
+    });
+
+    const config = makeRetryProfileConfig({
+      profiles: [
+        {
+          id: "default",
+          providerId: "default_prov",
+          llmBase: "https://default.test",
+          llmKey: "k",
+          llmModel: "m-default",
+          llmRetryMaxAttempts: 3,
+          llmMaxRetryDelayMs: 0,
+        },
+        {
+          id: "fallback",
+          providerId: "fallback_prov",
+          llmBase: "https://fallback.test",
+          llmKey: "k",
+          llmModel: "m-fallback",
+          llmRetryMaxAttempts: 3,
+          llmMaxRetryDelayMs: 0,
+        },
+      ],
+      fallbackProfile: "fallback",
+    });
+
+    const routeResult = resolveLlmRoute(config);
+    expect(routeResult.ok).toBe(true);
+    if (!routeResult.ok) return;
+
+    const sendProvider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async (input) => {
+        if (input.route.profile === "default") {
+          return new Response("error", { status: 503 });
+        }
+        return new Response("ok", { status: 200 });
+      },
+    };
+
+    expect(providerRegistry.getState("default_prov")?.healthStatus).toBe("healthy");
+
+    await requestLlmWithRetry({
+      provider: sendProvider,
+      profileConfig: config,
+      providerRegistry,
+      route: routeResult.route,
+      payload: { model: routeResult.route.llmModel, messages: [] },
+      signal: new AbortController().signal,
+    });
+
+    expect(providerRegistry.getState("default_prov")?.healthStatus).toBe("down");
+    expect(providerRegistry.getState("fallback_prov")?.healthStatus).toBe("healthy");
+  });
+
+  it("escalates immediately on policy-driven escalation signal", async () => {
+    const providerRegistry = new LlmProviderRegistry();
+    const defaultProvider: LlmProviderAdapter = {
+      id: "default_prov",
+      resolveRequestUrl: () => "https://default.test/v1/chat/completions",
+      send: async () => new Response("ok"),
+    };
+    const fallbackProvider: LlmProviderAdapter = {
+      id: "fallback_prov",
+      resolveRequestUrl: () => "https://fallback.test/v1/chat/completions",
+      send: async () => new Response("ok"),
+    };
+    providerRegistry.register(defaultProvider, {
+      healthStatus: "healthy",
+      capabilities: ["chat.completions", "tool_calls"],
+    });
+    providerRegistry.register(fallbackProvider, {
+      healthStatus: "healthy",
+      capabilities: ["chat.completions", "tool_calls"],
+    });
+
+    const config = makeRetryProfileConfig({
+      profiles: [
+        {
+          id: "default",
+          providerId: "default_prov",
+          llmBase: "https://default.test",
+          llmKey: "k",
+          llmModel: "m-default",
+          llmRetryMaxAttempts: 3,
+          llmMaxRetryDelayMs: 0,
+        },
+        {
+          id: "fallback",
+          providerId: "fallback_prov",
+          llmBase: "https://fallback.test",
+          llmKey: "k",
+          llmModel: "m-fallback",
+          llmRetryMaxAttempts: 3,
+          llmMaxRetryDelayMs: 0,
+        },
+      ],
+      fallbackProfile: "fallback",
+    });
+
+    const routeResult = resolveLlmRoute(config);
+    expect(routeResult.ok).toBe(true);
+    if (!routeResult.ok) return;
+
+    const seenProfiles: string[] = [];
+    const sendProvider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async (input) => {
+        seenProfiles.push(input.route.profile);
+        return new Response("ok", { status: 200 });
+      },
+    };
+
+    const result = await requestLlmWithRetry({
+      provider: sendProvider,
+      profileConfig: config,
+      providerRegistry,
+      route: routeResult.route,
+      payload: { model: routeResult.route.llmModel, messages: [] },
+      signal: new AbortController().signal,
+      escalationSignal: { reason: "capability_mismatch", message: "Missing vision capability" },
+    });
+
+    // Should have escalated before the first request
+    expect(seenProfiles).toEqual(["fallback"]);
+    expect(result.route.profile).toBe("fallback");
+    expect(providerRegistry.getState("default_prov")?.healthStatus).toBe("down");
+  });
+});
+
+describe("Kernel.updateLaneProfiles", () => {
+  it("updates lane profiles during an active run without restart", async () => {
+    const storage = new InMemorySessionStorage();
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      profileConfig: {
+        profiles: [
+          {
+            id: "fast",
+            providerId: "p1",
+            llmBase: "https://fast.test",
+            llmKey: "k",
+            llmModel: "fast-m",
+          },
+          {
+            id: "slow",
+            providerId: "p2",
+            llmBase: "https://slow.test",
+            llmKey: "k",
+            llmModel: "slow-m",
+          },
+        ],
+        defaultProfile: "fast",
+        fallbackProfile: "slow",
+      },
+    });
+
+    const session = await kernel.createSession();
+    kernel.startRun(session.id);
+
+    // Default primary route resolves to "fast"
+    const before = kernel.getActiveProfile("primary");
+    expect(before?.ok).toBe(true);
+    if (before?.ok) {
+      expect(before.route.profile).toBe("fast");
+    }
+
+    // Update primary lane to use "slow" first
+    kernel.updateLaneProfiles("primary", ["slow", "fast"]);
+
+    const after = kernel.getActiveProfile("primary");
+    expect(after?.ok).toBe(true);
+    if (after?.ok) {
+      expect(after.route.profile).toBe("slow");
+    }
+
+    // Run is still active
+    expect(kernel.getRunState(session.id).phase).toBe("running");
+  });
+
+  it("throws when no profile config is set", () => {
+    const storage = new InMemorySessionStorage();
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+    });
+
+    expect(() => kernel.updateLaneProfiles("primary", ["x"])).toThrow(
+      "Cannot update lane profiles: no profile config set",
+    );
+  });
+
+  it("falls back to default when lane profiles are cleared", async () => {
+    const storage = new InMemorySessionStorage();
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      profileConfig: {
+        profiles: [
+          {
+            id: "fast",
+            providerId: "p1",
+            llmBase: "https://fast.test",
+            llmKey: "k",
+            llmModel: "fast-m",
+          },
+          {
+            id: "slow",
+            providerId: "p2",
+            llmBase: "https://slow.test",
+            llmKey: "k",
+            llmModel: "slow-m",
+          },
+        ],
+        defaultProfile: "fast",
+        fallbackProfile: "slow",
+        laneProfiles: { primary: ["slow"] },
+      },
+    });
+
+    // Initially resolves to explicit lane profile "slow"
+    const before = kernel.getActiveProfile("primary");
+    expect(before?.ok).toBe(true);
+    if (before?.ok) {
+      expect(before.route.profile).toBe("slow");
+    }
+
+    // Clear lane profiles → fall back to default chain
+    kernel.updateLaneProfiles("primary", []);
+
+    const after = kernel.getActiveProfile("primary");
+    expect(after?.ok).toBe(true);
+    if (after?.ok) {
+      expect(after.route.profile).toBe("fast");
+    }
+  });
 });

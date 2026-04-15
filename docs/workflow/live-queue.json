@@ -1,23 +1,56 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-15T14:06:30.749Z",
+  "generated_at": "2026-04-15T14:32:26.714Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-134",
-      "issue_path": "docs/backlog/2026-04-15-execution-host-still-lacks-a-production-remote-transport-configuration-path.md",
-      "title": "Review: execution host still lacks a production remote transport configuration path",
-      "parallel_group": "js-runner",
-      "module_id": "execution-host-bridge",
-      "module_stage": "secondary",
-      "tracking_kind": "follow-up",
+      "issue_id": "ISSUE-135",
+      "issue_path": "docs/backlog/2026-04-15-provider-health-state-is-never-updated-on-escalation-failures.md",
+      "title": "Provider routing runtime robustness: health state, lane override, and policy-driven escalation",
+      "parallel_group": "contracts-core",
+      "module_id": "provider-profile-routing",
+      "module_stage": "mainline",
+      "tracking_kind": "gap",
       "check_cmd": "bun run check",
       "depends_on": [],
       "write_scope": [
+        "packages/kernel/src/llm-profile-resolver.ts",
+        "packages/kernel/src/loop-orchestrator.ts",
+        "packages/kernel/src/kernel-facade.ts",
+        "packages/contracts/src/index.ts",
+        "packages/kernel/test"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-147",
+      "issue_path": "docs/backlog/2026-04-15-screenshot-action-capability-is-typed-but-has-no-runtime-binding.md",
+      "title": "Screenshot action capability is typed but has no runtime binding",
+      "parallel_group": "site-runtime",
+      "module_id": "site-runtime-browser-automation",
+      "module_stage": "secondary",
+      "tracking_kind": "gap",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "packages/site-runtime/src/index.ts",
         "apps/mv3-shell/src/background.ts",
-        "apps/mv3-shell/src/runtime-services.ts",
-        "apps/mv3-shell/test/manifest.spec.ts",
-        "docs/legacy-to-vnext-migration-matrix.md"
+        "packages/site-runtime/test"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-148",
+      "issue_path": "docs/backlog/2026-04-15-memfs-capability-family-is-typed-but-has-no-execution-provider.md",
+      "title": "memfs capability family is typed but has no execution provider",
+      "parallel_group": "site-runtime",
+      "module_id": "site-runtime-browser-automation",
+      "module_stage": "secondary",
+      "tracking_kind": "gap",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "packages/core/src/index.ts",
+        "packages/browser-vfs/src/index.ts",
+        "packages/core/test"
       ]
     }
   ]

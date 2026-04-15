@@ -336,6 +336,31 @@ const CONTEXT_OVERFLOW_ERROR_PATTERNS = [
   "token limit exceeded",
 ] as const;
 
+function isRetryableLlmStatus(status: number): boolean {
+  return RETRYABLE_LLM_STATUS_CODES.has(status);
+}
+
+function markProviderDown(
+  providerRegistry: LlmProviderRegistry | undefined,
+  providerId: string,
+): void {
+  if (!providerRegistry) {
+    return;
+  }
+  try {
+    providerRegistry.setHealthStatus(providerId, "down");
+  } catch {
+    // Provider may not be in registry (e.g. implicit openai_compatible)
+  }
+}
+
+export type EscalationSignalReason = "capability_mismatch" | "quality_degradation" | "policy";
+
+export interface EscalationSignal {
+  reason: EscalationSignalReason;
+  message?: string;
+}
+
 export interface RequestLlmWithRetryOptions {
   provider: LlmProviderAdapter;
   profileConfig: LlmProfileConfig;
@@ -346,6 +371,7 @@ export interface RequestLlmWithRetryOptions {
   lane?: LlmProviderExecutionLane;
   sessionId?: string;
   step?: number;
+  escalationSignal?: EscalationSignal;
 }
 
 export interface RequestLlmWithRetryResult {
@@ -473,10 +499,6 @@ function resolveEscalatedRoute(
   return nextRouteResult.ok ? nextRouteResult.route : null;
 }
 
-function isRetryableLlmStatus(status: number): boolean {
-  return RETRYABLE_LLM_STATUS_CODES.has(status);
-}
-
 export async function requestLlmWithRetry(
   opts: RequestLlmWithRetryOptions,
 ): Promise<RequestLlmWithRetryResult> {
@@ -484,6 +506,22 @@ export async function requestLlmWithRetry(
   let retryCount = 0;
   let previousFailureSignature: string | null = null;
   let repeatedFailureCount = 0;
+
+  // Policy-driven pre-flight escalation: if caller provides an escalation signal,
+  // attempt to escalate before the first request.
+  if (opts.escalationSignal) {
+    const previousProvider = route.provider;
+    const escalatedRoute = resolveEscalatedRoute(
+      opts.profileConfig,
+      opts.providerRegistry,
+      route,
+      opts.lane ?? "primary",
+    );
+    if (escalatedRoute) {
+      markProviderDown(opts.providerRegistry, previousProvider);
+      route = escalatedRoute;
+    }
+  }
 
   while (true) {
     if (opts.signal.aborted) {
@@ -524,6 +562,7 @@ export async function requestLlmWithRetry(
       previousFailureSignature = failureSignature;
 
       if (repeatedFailureCount >= 2) {
+        const previousProvider = route.provider;
         const escalatedRoute = resolveEscalatedRoute(
           opts.profileConfig,
           opts.providerRegistry,
@@ -531,6 +570,7 @@ export async function requestLlmWithRetry(
           opts.lane ?? "primary",
         );
         if (escalatedRoute) {
+          markProviderDown(opts.providerRegistry, previousProvider);
           route = escalatedRoute;
           repeatedFailureCount = 0;
           previousFailureSignature = null;
@@ -567,6 +607,7 @@ export async function requestLlmWithRetry(
     previousFailureSignature = failureSignature;
 
     if (repeatedFailureCount >= 2) {
+      const previousProvider = route.provider;
       const escalatedRoute = resolveEscalatedRoute(
         opts.profileConfig,
         opts.providerRegistry,
@@ -574,6 +615,7 @@ export async function requestLlmWithRetry(
         opts.lane ?? "primary",
       );
       if (escalatedRoute) {
+        markProviderDown(opts.providerRegistry, previousProvider);
         route = escalatedRoute;
         repeatedFailureCount = 0;
         previousFailureSignature = null;
