@@ -218,8 +218,8 @@ export async function completeIssue(args: CompleteIssueArgs): Promise<CompleteIs
     args.assignee,
     args.issueId,
   );
-  const sessionId = resolvedLease?.sessionId ?? null;
-  const lease = resolvedLease?.lease ?? null;
+  const sessionId = resolvedLease?.sessionId;
+  const lease = resolvedLease?.lease;
   const targetIssueId = args.issueId ?? lease?.issue_id;
   if (!targetIssueId) {
     throw new Error(
@@ -231,7 +231,7 @@ export async function completeIssue(args: CompleteIssueArgs): Promise<CompleteIs
       `workflow:done issue mismatch: current lease owns ${lease.issue_id}, not ${targetIssueId}`,
     );
   }
-  if (!lease) {
+  if (!lease || !sessionId) {
     throw new Error(`workflow:done found no active lease for ${args.assignee}`);
   }
 

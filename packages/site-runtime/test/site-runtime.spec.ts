@@ -7,9 +7,13 @@ import {
   type ActiveTabMetadata,
   type InjectionStep,
   type SiteScriptInstaller,
+  type SiteScriptInvocationRequest,
+  type SiteScriptVerificationRequest,
   type SiteSkillAction,
+  type SiteSkillDefinition,
   SiteSkillRegistry,
   SiteSkillRuntime,
+  type SiteVerificationResult,
   buildInjectionPlan,
   createSingleActionSiteSkillDefinition,
   invokeSingleActionSiteSkill,
@@ -1005,10 +1009,12 @@ describe("site-runtime", () => {
         install: async () => ({
           installationId: "fixture.page:execute_fixture:main:1",
         }),
-        verify: vi.fn(async () => ({
-          status: "not_ready",
-          reason: "selector:#never-ready",
-        })),
+        verify: vi.fn(
+          async (): Promise<SiteVerificationResult> => ({
+            status: "not_ready",
+            reason: "selector:#never-ready",
+          }),
+        ),
       },
     });
 
@@ -1266,7 +1272,7 @@ describe("site-runtime", () => {
       chromeApi: scriptingHarness.chromeApi,
     });
 
-    const pageSkill = {
+    const pageSkill: SiteSkillDefinition = {
       skillId: "fixture.page",
       matches: ["https://fixture.test/*"],
       actions: [
@@ -1322,18 +1328,15 @@ describe("site-runtime", () => {
       ],
     };
 
-    const installer = {
-      install: async (
-        step: { world: string; scriptId: string; jsPath?: string; runAt?: string },
-        currentTab: { tabId: number; url: string; active: boolean },
-      ) => pageHookBridge.install(step, currentTab),
+    const installer: SiteScriptInstaller = {
+      install: async (step, currentTab) => pageHookBridge.install(step, currentTab),
       invoke: async ({
         installation,
         action,
         input,
         tab: currentTab,
         ctx,
-      }: Record<string, unknown>) =>
+      }: SiteScriptInvocationRequest) =>
         pageHookBridge.invoke({
           installation,
           action,
@@ -1341,7 +1344,12 @@ describe("site-runtime", () => {
           tab: currentTab,
           ctx,
         }),
-      verify: async ({ installation, action, result, tab: currentTab }: Record<string, unknown>) =>
+      verify: async ({
+        installation,
+        action,
+        result,
+        tab: currentTab,
+      }: SiteScriptVerificationRequest) =>
         pageHookBridge.verify({
           installation,
           action,
@@ -1353,7 +1361,7 @@ describe("site-runtime", () => {
     const runtime = new SiteSkillRuntime({
       registry: new SiteSkillRegistry([pageSkill]),
       runnerHost: new JsRunnerHost(),
-      installer: installer as unknown as import("@bbl-next/site-runtime").SiteScriptInstaller,
+      installer,
     });
 
     const testTab = { tabId: 16, url: "https://fixture.test/demo", active: true };
@@ -1451,7 +1459,7 @@ describe("site-runtime", () => {
       chromeApi: scriptingHarness.chromeApi,
     });
 
-    const pageSkill = {
+    const pageSkill: SiteSkillDefinition = {
       skillId: "fixture.page",
       matches: ["https://fixture.test/*"],
       actions: [
@@ -1507,18 +1515,15 @@ describe("site-runtime", () => {
       ],
     };
 
-    const installer = {
-      install: async (
-        step: { world: string; scriptId: string; jsPath?: string; runAt?: string },
-        currentTab: { tabId: number; url: string; active: boolean },
-      ) => pageHookBridge.install(step, currentTab),
+    const installer: SiteScriptInstaller = {
+      install: async (step, currentTab) => pageHookBridge.install(step, currentTab),
       invoke: async ({
         installation,
         action,
         input,
         tab: currentTab,
         ctx,
-      }: Record<string, unknown>) =>
+      }: SiteScriptInvocationRequest) =>
         pageHookBridge.invoke({
           installation,
           action,
@@ -1526,7 +1531,12 @@ describe("site-runtime", () => {
           tab: currentTab,
           ctx,
         }),
-      verify: async ({ installation, action, result, tab: currentTab }: Record<string, unknown>) =>
+      verify: async ({
+        installation,
+        action,
+        result,
+        tab: currentTab,
+      }: SiteScriptVerificationRequest) =>
         pageHookBridge.verify({
           installation,
           action,
@@ -1538,7 +1548,7 @@ describe("site-runtime", () => {
     const runtime = new SiteSkillRuntime({
       registry: new SiteSkillRegistry([pageSkill]),
       runnerHost: new JsRunnerHost(),
-      installer: installer as unknown as import("@bbl-next/site-runtime").SiteScriptInstaller,
+      installer,
     });
 
     const testTab = { tabId: 17, url: "https://fixture.test/background", active: false };
