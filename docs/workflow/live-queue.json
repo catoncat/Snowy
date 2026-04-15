@@ -1,25 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-15T11:18:06.053Z",
+  "generated_at": "2026-04-15T11:24:40.629Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-132",
-      "issue_path": "docs/backlog/2026-04-15-provider-policy-hardening-still-lacks-runtime-call-site-ownership.md",
-      "title": "Review: provider policy hardening still lacks runtime call-site ownership",
-      "parallel_group": "contracts-core",
-      "module_id": "provider-profile-routing",
-      "module_stage": "mainline",
-      "tracking_kind": "follow-up",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/kernel/src/llm-profile-resolver.ts",
-        "packages/kernel/src/llm-kernel-adapter.ts",
-        "packages/kernel/src/loop-orchestrator.ts",
-        "packages/kernel/test"
-      ]
-    },
     {
       "issue_id": "ISSUE-133",
       "issue_path": "docs/backlog/2026-04-15-operator-debug-export-remains-undefined-beyond-shared-runtime-history.md",

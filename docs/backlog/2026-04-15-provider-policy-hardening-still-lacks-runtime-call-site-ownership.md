@@ -1,11 +1,11 @@
 ---
 id: ISSUE-132
 title: "Review: provider policy hardening still lacks runtime call-site ownership"
-status: open
+status: done
 priority: p1
 source: "next-batch-planner review 2026-04-15"
 created: 2026-04-15
-assignee: unassigned
+assignee: codex-019d90cc
 tags:
   - review
   - provider
@@ -25,6 +25,7 @@ write_scope:
   - packages/kernel/test
 acceptance_ref: docs/kernel-skeleton-design.md
 check_cmd: "bun run check"
+completed_at: 2026-04-15T11:24:40.618Z
 ---
 
 ## Goal
@@ -42,3 +43,21 @@ check_cmd: "bun run check"
 - 明确 primary / compaction / title 等 kernel LLM lane 还需要声明哪些 runtime-owned 路由约束，以及哪些 provider policy 继续 deferred。
 - 若仍有可执行缺口，拆出更窄的 follow-up slice，锚定 kernel/provider 代码路径而不是 app-local glue。
 - 文档与测试清晰区分已落地的 lane-aware routing 和仍待收口的 provider policy hardening 边界。
+
+## 工作总结
+
+### 实现了什么
+- 为 primary/compaction/title 声明 runtime-owned provider capability requirements
+- 让 runLoop 与 KernelLlmAdapter 显式消费 lane 路由约束并保留兼容回退
+- 补充 provider routing 文档与定向回归测试
+
+### 实际跑了什么检查
+- bun run test -- packages/kernel/test/llm-profile-resolver.spec.ts packages/kernel/test/llm-kernel-adapter.spec.ts packages/kernel/test/loop-orchestrator.spec.ts packages/kernel/test/kernel-facade.spec.ts
+- ./node_modules/.bin/biome check packages/kernel/src/llm-profile-resolver.ts packages/kernel/src/llm-kernel-adapter.ts packages/kernel/src/loop-orchestrator.ts packages/kernel/test/llm-profile-resolver.spec.ts packages/kernel/test/llm-kernel-adapter.spec.ts packages/kernel/test/loop-orchestrator.spec.ts docs/kernel-skeleton-design.md docs/migration-parity-dashboard.md docs/legacy-to-vnext-migration-matrix.md
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `3ad7ccaa4110` fix(kernel): 锁定 provider 路由约束
