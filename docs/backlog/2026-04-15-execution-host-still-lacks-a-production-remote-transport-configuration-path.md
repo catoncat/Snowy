@@ -1,11 +1,11 @@
 ---
 id: ISSUE-134
 title: "Review: execution host still lacks a production remote transport configuration path"
-status: open
+status: done
 priority: p1
 source: "next-batch-planner review 2026-04-15"
 created: 2026-04-15
-assignee: unassigned
+assignee: codex-11d698eb
 tags:
   - review
   - execution-host
@@ -25,6 +25,7 @@ write_scope:
   - docs/legacy-to-vnext-migration-matrix.md
 acceptance_ref: docs/legacy-to-vnext-migration-matrix.md
 check_cmd: "bun run check"
+completed_at: 2026-04-15T14:17:52Z
 ---
 
 ## Goal
@@ -42,3 +43,24 @@ check_cmd: "bun run check"
 - 明确 production remote transport configuration 与 multi-host discovery 中，哪一块是下一条 executable slice，哪一块继续 deferred。
 - 若继续实现，follow-up 必须锚定 hosts.* control plane 与 remote transport contract 的边界，而不是把语义重新塞回 app-local glue。
 - planning docs 与 migration docs 同步记录 ISSUE-127 之后的真实剩余 gap，避免 execution-host 状态继续停留在笼统 partial。
+
+## 工作总结
+
+### 实现了什么
+- 将 remote transport 配置接入共享 `config.update/config.summary` 控制面，并把 secret 分流到独立 storage key
+- 让 background bridge 可以从共享配置热加载 fetch-backed remote transport，并在重启后恢复 remote host
+- 更新 migration matrix，明确 production remote transport configuration 已落地，剩余 gap 收敛为多 remote host discovery/parity
+
+### 实际跑了什么检查
+- `bun run test -- apps/mv3-shell/test/manifest.spec.ts`
+- `./node_modules/.bin/biome check apps/mv3-shell/src/background.ts apps/mv3-shell/src/runtime-services.ts apps/mv3-shell/test/manifest.spec.ts docs/legacy-to-vnext-migration-matrix.md`
+- `git diff --check`
+- `bun run check`（失败：受 `.agents/skills/auto-claim-issues-next/scripts/complete-issue.ts` 与 `packages/site-runtime/test/site-runtime.spec.ts` 等 write scope 外既有类型错误阻塞）
+
+### 残留风险
+- 多 remote host discovery/parity 仍未实现，本轮只收口 single remote host 的 production transport configuration
+- 当前 shared workspace 的 live lease / queue 已被并行 session 推进，未复用 `workflow:done` 自动收口；仅手工回写当前 issue，避免把他人的 backlog/queue 改动混入本次提交
+
+## 相关 commits
+
+- `193e66402368` feat(mv3-shell): 接通远端传输配置路径
