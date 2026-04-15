@@ -1,11 +1,11 @@
 ---
 id: ISSUE-143
 title: "Observability export surface: timeline, structured summary, and rawEventTail"
-status: open
+status: done
 priority: p1
 source: review
 created: 2026-04-15
-assignee: unassigned
+assignee: codex
 tags:
   - review
   - observability
@@ -25,7 +25,9 @@ write_scope:
   - packages/core/test
 acceptance_ref: docs/reviews/2026-03-29-vnext-architecture-recovery-report.md
 check_cmd: "bun run check"
-merges: [ISSUE-144]
+merges:
+  - ISSUE-144
+completed_at: 2026-04-15T16:19:37.580Z
 ---
 
 ## Goal
@@ -45,3 +47,20 @@ merges: [ISSUE-144]
 - Contracts define a structured run summary export schema and rawEventTail resource type
 - Core provides a builder that accumulates run-cycle data into exportable summary format
 - Test coverage for event aggregation, summary building, and resource read path
+
+## 工作总结
+
+### 实现了什么
+- 定义 timeline/summary/rawEventTail observability export contract 与 resource schema
+- 在 core/site-runtime 接入事件聚合 builder、export read path 与结构化事件输出
+
+### 实际跑了什么检查
+- bun run check
+- bun test packages/core/test/core.spec.ts
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `2d1a2ecaed7f` feat(observability): 补齐导出观测面事件与汇总

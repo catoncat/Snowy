@@ -1,25 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-15T16:43:00.698Z",
+  "generated_at": "2026-04-15T16:44:22.170Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-143",
-      "issue_path": "docs/backlog/2026-04-15-timeline-export-requires-richer-event-sources-from-site-runtime-and-skill-runtim.md",
-      "title": "Observability export surface: timeline, structured summary, and rawEventTail",
-      "parallel_group": "mv3-shell",
-      "module_id": "observability-audit",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/contracts/src/index.ts",
-        "packages/core/src/index.ts",
-        "packages/site-runtime/src/index.ts",
-        "packages/core/test"
-      ]
-    },
     {
       "issue_id": "ISSUE-136",
       "issue_path": "docs/backlog/2026-04-15-intervention-timeout-escalation-lacks-structured-alerting.md",
