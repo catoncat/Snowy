@@ -21,14 +21,14 @@
 | MV3 shell substrate | `green` | offscreen bridge 与显式 page-hook bridge 已测 |
 | local execution host adapter | `yellow` | 默认 offscreen local adapter 已实现 read/write/edit（ISSUE-038）；exec 需 remote host；remote host path 仍未实现 |
 | site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
-| kernel session/run/compaction baseline | `yellow` | `SessionStore` / `RunController` / `LoopEngine` / `CompactionManager` / `createKernel()` / `runLoop()` / `buildSystemPromptBase()` 已落地并有测试；剩余 gap 是 prompt/context injection、retry escalation、failure tracking 与 MV3 end-to-end 收口 |
+| kernel session/run/compaction baseline | `green` | `SessionStore` / `RunController` / `LoopEngine` / `CompactionManager` / `createKernel()` / `runLoop()` / child-run seam 与 prompt context message wiring 已落地并有测试；剩余问题已转入 provider policy / observability 等相邻模块 |
 | AI-native product control plane | `yellow` | 最小 `runtime/config/skills/hosts` bootstrap summary、轻量 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail` resource contract、`readAiSurfaceResource()` / MV3 `resource.read` 统一 lookup、`runtime.capture_diagnostics` / `runtime.clear_error`、本地 `hosts.*` / `config.update` / `skills.install/enable/disable/uninstall` 与统一 `audit.tail` read path 已落地并有测试；`ISSUE-085` 已补 sidepanel chat shell，但 management UI 仍缺，且已由 `ISSUE-093` 锁定必须复用 shared control-plane read/write path |
 | old browser automation parity | `yellow` | Tier 1/2/3 cutover boundary 已锁定；`tabs.navigate`、`page.press_key`、`page.screenshot` 已落地；background mode / background-specific failure tracking 已明确后置（见 `docs/background-automation-mode-boundary.md`）；intervention 也已定性为 cutover 前必需的 runtime handoff contract，durable restart round-trip 与 shared summary/audit read surface 已补齐；剩余 gap 主要是 `page.query/click/fill` production path |
 | old visual/download/intervention parity | `yellow` | screenshot/download/intervention 边界已锁定：`page.screenshot` 已由 `ISSUE-057` 落地，download 延后到 product/workflow 层；intervention 的 request/resolve/cancel/timeout/audit、restart durability 与 `runtime.summary.interventions` / `audit.intervention` 已落地，剩余 gap 主要是 product/studio 层接管 UI |
 | skill SDK / authoring | `yellow` | typed facade 与文档已起步，完整 authoring/studio 不足 |
 | plugin -> executable skill migration | `yellow` | 方向明确，但还不是可替代旧 plugin 生态的状态 |
 | Skill Studio / lifecycle product surface | `red` | 生命周期模型有，产品 UI 没有；Soft Gate 1 已裁决为 cutover 后补，sidepanel management consumer follow-up 见 `ISSUE-093` |
-| provider / profile routing | `yellow` | `packages/kernel` 已有 `LlmProviderRegistry`、`resolveLlmRoute()`、OpenAI-compatible provider、kernel LLM adapter 与对应测试；剩余 gap 是 escalation、prompt enrichment 与 provider policy hardening |
+| provider / profile routing | `yellow` | `packages/kernel` 已有 provider health negotiation、lane-aware routing、ordered profile chain 与 retry escalation；剩余 gap 是 runtime call-site ownership、explicit capability requirements 与更广 provider policy hardening |
 | diagnostics / debug / audit | `red` | 轻量 `audit.tail` / summary resource contract 与覆盖 `hosts.*` / `config.update` / `skills.*` lifecycle 的统一 `audit.tail` app read path 已落地，但新仓仍没有旧仓同等级 debug/diagnostics 主面 |
 | bridge-side MCP export | `yellow` | descriptor-derived handoff contract 已落地并有测试；真正 bridge-side MCP server/transport 仍未实现 |
 
@@ -46,7 +46,7 @@
 ### 仍不能宣称“已完成迁移”的关键层
 
 - AI-native product control plane
-- kernel orchestration / prompt policy hardening
+- provider / profile policy hardening
 - 完整 browser automation 能力
 - diagnostics / observability
 - Skill Studio / lifecycle 产品面

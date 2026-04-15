@@ -28,6 +28,7 @@ import {
   type ActionFailureHint,
   type PromptBuilderOptions,
   buildSystemPromptBase,
+  buildSystemPromptMessages,
   buildTaskProgressMessage,
 } from "./prompt-builder.js";
 
@@ -92,6 +93,13 @@ function toolNameToCapabilityId(toolName: string): string {
 
 function defaultSystemPrompt(tools: ToolContract[], promptOptions?: PromptBuilderOptions): string {
   return buildSystemPromptBase(tools, promptOptions);
+}
+
+function defaultSystemPromptMessages(
+  tools: ToolContract[],
+  promptOptions?: PromptBuilderOptions,
+): string[] {
+  return buildSystemPromptMessages(tools, promptOptions);
 }
 
 function toolContractsToOpenAiTools(tools: ToolContract[]): Array<Record<string, unknown>> {
@@ -621,7 +629,9 @@ export async function runLoop(
   // Project tools
   const tools = registry.projectTools();
   const openAiTools = toolContractsToOpenAiTools(tools);
-  const systemPrompt = buildSystemPrompt(tools);
+  const systemPromptMessages = opts.systemPromptBuilder
+    ? [buildSystemPrompt(tools)]
+    : defaultSystemPromptMessages(tools, opts.promptOptions);
   const interventionPolicy = opts.interventionPolicy ?? DEFAULT_INTERVENTION_POLICY;
 
   // Start run
@@ -676,7 +686,7 @@ export async function runLoop(
 
       // Prepend system message
       const fullMessages = [
-        { role: "system", content: systemPrompt },
+        ...systemPromptMessages.map((content) => ({ role: "system" as const, content })),
         { role: "system", content: progressPrompt },
         ...apiMessages,
       ];

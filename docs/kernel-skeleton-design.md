@@ -13,21 +13,19 @@ Recovery Report 确认：新仓已完成底座重构（contracts / core / browse
 
 本文档锁定 `packages/kernel` 的骨架设计，使其成为新仓的 "browser-side brain"——负责 session lifecycle、run state machine、loop turn orchestration、memory compaction、以及未来的 diagnostics / intervention / provider routing。
 
-### 0.1 当前落地快照（2026-04-09）
+### 0.1 当前落地快照（2026-04-15）
 
-截至 2026-04-09，下面这些能力已经有代码与测试落地，但仍不应被描述成“整体 shipped / 旧仓 parity 完成”：
+截至 2026-04-15，下面这些 kernel 主路径能力已经有代码与测试落地：
 
-- `packages/kernel` 已具备 session store、run controller、loop engine、compaction manager 与 facade 主路径。
-- kernel mainline follow-up 已补到 diagnostics snapshot / runtime summary、provider health + lane-aware profile routing、loop 内 policy-driven intervention。
-- secondary follow-up 已补到 generic config persistence、background automation lane、offscreen runner host integration regression。
+- `packages/kernel` 已具备 session store、run controller、loop engine、compaction manager、facade、loop orchestrator，以及 VFS-backed session storage 主路径。
+- kernel mainline follow-up 已补到 diagnostics snapshot / runtime history 读面、provider health + lane-aware profile routing、loop 内 policy-driven intervention、以及 child-run summary / lifecycle seam。
+- 默认 `runLoop()` 现在会保留完整的 prompt context message set，`availableSkills` / `sharedTabs` / task progress 会共同进入真实 LLM payload，不再只压成单条基础 system prompt。
 
-当前仍应保留为“partial / secondary follow-up 继续推进”的部分：
+当前仍应保留为 partial 的，是那些已经从 kernel baseline 移交到相邻模块的残留边界：
 
-- 更完整的 browser automation stabilization / DOM lane 扩展。
-- 更广的 execution-host / remote-host cutover 语义。
-- provider/profile routing 的更广 provider policy hardening 仍在 follow-up；当前 resolver / kernel adapter 已具备 execution-lane-aware profile 选择与 ordered profile chain contract。
-- minimal child-run / subagent contract 仍未进入当前 kernel run model；现状仍只有 session-local run queue。
-- browser-vfs、skill-sdk / studio、repo workflow DX 等 deferred 模块。
+- prompt policy 的剩余工作主要是更丰富的 custom builder composition 与 runtime data sourcing，不再作为 kernel baseline 缺口单独跟踪。
+- provider/profile routing 的更广 provider policy hardening 仍在 follow-up；当前已落地的是 lane-aware route resolution 与 ordered profile chain，不等于所有 runtime-owned policy 都已锁定。
+- 更完整的 debug export、production remote transport configuration，以及 post-cutover automation expansion 继续由 observability / execution-host / site-runtime 模块各自承接，而不再笼统计入 kernel 主体。
 
 ---
 

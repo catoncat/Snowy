@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-04-09",
+  "updated_at": "2026-04-15",
   "modules": [
     {
       "module_id": "kernel",
@@ -8,7 +8,7 @@
       "summary": "Session, run queue, loop, compaction, and the future browser-side brain mainline.",
       "tracking_order": 10,
       "stage": "mainline",
-      "status": "partial",
+      "status": "shipped",
       "depends_on_modules": [],
       "code_roots": ["packages/kernel/", "packages/contracts/src/index.ts"],
       "source_docs": [

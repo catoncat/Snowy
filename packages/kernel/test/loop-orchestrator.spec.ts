@@ -924,6 +924,58 @@ describe("runLoop", () => {
     expect(String(secondMessages[1]?.content)).toContain("tool_steps_done: 1");
   });
 
+  it("preserves the full prompt context message set in the llm payload", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const { kernel, registry, provider } = setup(async (input) => {
+      payloads.push(input.payload);
+      return sseResponse([chatChunk("Done."), chatChunk(undefined, undefined, "stop"), "[DONE]"]);
+    });
+
+    const session = await kernel.createSession();
+    await runLoop(
+      {
+        kernel,
+        registry,
+        provider,
+        profileConfig: TEST_PROFILE_CONFIG,
+        promptOptions: {
+          availableSkills: [
+            {
+              name: "agent-workflow-next",
+              description: "Route the current browser-brain-loop-next task.",
+              path: ".agents/skills/agent-workflow-next/SKILL.md",
+              triggers: ["issue", "workflow"],
+            },
+          ],
+          sharedTabs: [
+            {
+              tabId: 9,
+              title: "Inbox",
+              url: "https://mail.example.test/inbox",
+            },
+          ],
+        },
+      },
+      { sessionId: session.id, prompt: "Summarize the current context" },
+    );
+
+    const firstMessages = payloads[0]?.messages as Array<Record<string, unknown>>;
+    expect(firstMessages[0]).toEqual({
+      role: "system",
+      content: expect.stringContaining("## Available Skills"),
+    });
+    expect(String(firstMessages[0]?.content)).toContain("agent-workflow-next");
+    expect(firstMessages[1]).toEqual({
+      role: "system",
+      content: expect.stringContaining("Shared Tabs Context"),
+    });
+    expect(String(firstMessages[1]?.content)).toContain("tab 9");
+    expect(firstMessages[2]).toEqual({
+      role: "system",
+      content: expect.stringContaining("loop_step: 1/50"),
+    });
+  });
+
   it("injects strategy hints after the same action target fails twice", async () => {
     const failingDescriptor = {
       ...TEST_DESCRIPTOR,
