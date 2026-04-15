@@ -3334,6 +3334,49 @@ describe("mv3-shell manifest", () => {
     }
   });
 
+  it("does not persist remote transport config when config.update fails full patch validation", async () => {
+    const storageArea = createStorageAreaHarness();
+    const harness = createChromeHarness({
+      storageArea,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    try {
+      await expect(
+        harness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "config.update",
+          patch: {
+            automation: {
+              remoteTransport: {
+                baseUrl: "https://remote.example.test",
+                authToken: "secret-token",
+              },
+            },
+            unknown: {
+              enabled: true,
+            },
+          },
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: {
+          code: "E_BAD_INPUT",
+          message: "config.update does not support field: unknown",
+        },
+      });
+
+      expect(storageArea.dump()["bbl-next.remote-transport.config.v1"]).toBeUndefined();
+    } finally {
+      dispose();
+      harness.cleanup();
+    }
+  });
+
   it("rehydrates the configured remote transport after bridge restart", async () => {
     const storageArea = createStorageAreaHarness();
     const firstHarness = createChromeHarness({

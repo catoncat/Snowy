@@ -909,6 +909,29 @@ function cloneConfigSummary(summary) {
   };
 }
 
+function normalizeSupportedConfigPatch(patch) {
+  if (!isPlainObject(patch)) {
+    throw new CapabilityError("E_BAD_INPUT", "config.update requires a patch object");
+  }
+
+  const normalized = {};
+  for (const [field, value] of Object.entries(patch)) {
+    if (!CONFIG_RESOURCE_FIELDS.includes(field)) {
+      throw new CapabilityError("E_BAD_INPUT", `config.update does not support field: ${field}`);
+    }
+    if (!isPlainObject(value)) {
+      throw new CapabilityError("E_BAD_INPUT", `config.update field ${field} must be an object`);
+    }
+    normalized[field] = { ...value };
+  }
+
+  if (Object.keys(normalized).length === 0) {
+    throw new CapabilityError("E_BAD_INPUT", "config.update requires at least one config field");
+  }
+
+  return normalized;
+}
+
 async function loadConfigControlPlaneSummary(chromeApi): Promise<ConfigBootstrapSummary | null> {
   const storageArea = chromeApi?.storage?.local;
   if (typeof storageArea?.get !== "function") {
@@ -1329,8 +1352,12 @@ export function createBackgroundRuntimeServices({
       if (!isPlainObject(input)) {
         throw new CapabilityError("E_BAD_INPUT", "Capability input must be an object");
       }
-      const sanitizedPatch = await syncRemoteTransportConfigFromConfigPatch(chromeApi, input.patch);
-      await syncProfileConfigFromConfigPatch(input.patch, services);
+      const validatedPatch = normalizeSupportedConfigPatch(input.patch);
+      const sanitizedPatch = await syncRemoteTransportConfigFromConfigPatch(
+        chromeApi,
+        validatedPatch,
+      );
+      await syncProfileConfigFromConfigPatch(validatedPatch, services);
       return services.configControlPlane.update(sanitizedPatch);
     }
 
