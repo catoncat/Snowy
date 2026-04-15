@@ -551,9 +551,24 @@ function normalizeRemoteTransportBaseUrl(baseUrl) {
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       return null;
     }
+    if (url.username || url.password) {
+      return null;
+    }
     return url.toString().replace(/\/$/, "");
   } catch {
     return null;
+  }
+}
+
+function remoteTransportBaseUrlHasUserInfo(baseUrl) {
+  if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+    return false;
+  }
+  try {
+    const url = new URL(baseUrl.trim());
+    return Boolean(url.username || url.password);
+  } catch {
+    return false;
   }
 }
 
@@ -642,6 +657,16 @@ function validateRemoteTransportPatch(patch) {
     throw new CapabilityError(
       "E_BAD_INPUT",
       "config.update automation.remoteTransport.baseUrl must be a string",
+    );
+  }
+  if (
+    hasOwnKey(patch, "baseUrl") &&
+    typeof patch.baseUrl === "string" &&
+    remoteTransportBaseUrlHasUserInfo(patch.baseUrl)
+  ) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransport.baseUrl must not include username or password",
     );
   }
   if (
