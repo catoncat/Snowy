@@ -2317,6 +2317,8 @@ export function createBackgroundRunnerBridge({
           format: message.format,
           quality: message.quality,
         });
+      case "tabs.list":
+        return routeRuntimeCapability("tabs.list");
       case "tabs.get_active":
         return routeRuntimeCapability("tabs.get_active");
       case "tabs.navigate":

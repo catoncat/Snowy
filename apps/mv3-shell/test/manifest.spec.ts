@@ -1737,19 +1737,28 @@ describe("mv3-shell manifest", () => {
           capabilityId: string;
           input: { url?: string };
         }) =>
-          capabilityId === "tabs.get_active"
-            ? {
-                tabId: 21,
-                url: "https://fixture.test/home",
-                active: true,
-                title: "Fixture Home",
-              }
-            : {
-                tabId: 21,
-                url: input.url,
-                active: true,
-                title: "Fixture Home",
-              },
+          capabilityId === "tabs.list"
+            ? [
+                {
+                  tabId: 21,
+                  url: "https://fixture.test/home",
+                  active: true,
+                  title: "Fixture Home",
+                },
+              ]
+            : capabilityId === "tabs.get_active"
+              ? {
+                  tabId: 21,
+                  url: "https://fixture.test/home",
+                  active: true,
+                  title: "Fixture Home",
+                }
+              : {
+                  tabId: 21,
+                  url: input.url,
+                  active: true,
+                  title: "Fixture Home",
+                },
       ),
       invokeSiteSkill: vi.fn(),
     };
@@ -1762,6 +1771,22 @@ describe("mv3-shell manifest", () => {
       runtimeServices,
     });
     const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "tabs.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: [
+        {
+          tabId: 21,
+          url: "https://fixture.test/home",
+          active: true,
+        },
+      ],
+    });
 
     await expect(
       harness.runtimeApi.sendMessage({
@@ -1795,12 +1820,19 @@ describe("mv3-shell manifest", () => {
     expect(runtimeServices.dispatchCapability).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        capabilityId: "tabs.get_active",
+        capabilityId: "tabs.list",
         input: {},
       }),
     );
     expect(runtimeServices.dispatchCapability).toHaveBeenNthCalledWith(
       2,
+      expect.objectContaining({
+        capabilityId: "tabs.get_active",
+        input: {},
+      }),
+    );
+    expect(runtimeServices.dispatchCapability).toHaveBeenNthCalledWith(
+      3,
       expect.objectContaining({
         capabilityId: "tabs.navigate",
         input: {
@@ -1828,6 +1860,23 @@ describe("mv3-shell manifest", () => {
       timeoutMs: 50,
     });
     const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "tabs.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: [
+        {
+          tabId: 21,
+          url: "https://fixture.test/home",
+          active: true,
+          title: "Fixture Home",
+        },
+      ],
+    });
 
     await expect(
       harness.runtimeApi.sendMessage({
@@ -1863,6 +1912,7 @@ describe("mv3-shell manifest", () => {
     expect(harness.tabsApi.update).toHaveBeenCalledWith(21, {
       url: "https://fixture.test/settings",
     });
+    expect(harness.tabsApi.query).toHaveBeenCalledWith({});
 
     dispose();
     harness.cleanup();
