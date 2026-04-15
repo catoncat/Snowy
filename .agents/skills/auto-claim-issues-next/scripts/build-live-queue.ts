@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,9 +13,7 @@ import {
   issueModuleStage,
   issuePriority,
   loadAllIssues,
-  readArray,
   readString,
-  scopesConflict,
   toIssueSummary,
 } from "./claim-issue";
 import {
@@ -102,14 +100,26 @@ function queueEntryFromIssue(repoRoot: string, issue: IssueFile): QueueEntry {
   };
 }
 
-function conflictsWithSelected(issue: IssueFile, selected: QueueEntry[]): boolean {
-  const currentScopes = readArray(issue, "write_scope");
-  if (currentScopes.length === 0) {
-    return false;
-  }
-  return selected.some((entry) =>
-    currentScopes.some((left) => entry.write_scope.some((right) => scopesConflict(left, right))),
-  );
+function resolveCanonicalRepoRoot(repoRoot: string): string {
+  const gitPath = path.join(repoRoot, ".git");
+  try {
+    const stats = statSync(gitPath);
+    if (stats.isDirectory()) {
+      return repoRoot;
+    }
+    if (stats.isFile()) {
+      const match = readFileSync(gitPath, "utf8").match(/^gitdir:\s*(.+)\s*$/i);
+      if (!match?.[1]) {
+        return repoRoot;
+      }
+      const gitDir = path.resolve(repoRoot, match[1].trim());
+      const parentDir = path.dirname(gitDir);
+      if (path.basename(parentDir) === "worktrees") {
+        return path.dirname(path.dirname(parentDir));
+      }
+    }
+  } catch {}
+  return repoRoot;
 }
 
 function formatQueueJson(outputPath: string, queue: LiveQueue, repoRoot: string): string {
@@ -138,18 +148,12 @@ export function buildLiveQueue(args: BuildLiveQueueArgs): BuildLiveQueueResult {
     .filter((issue) => dependenciesSatisfied(issue, issues))
     .sort((left, right) => compareQueueOrder(left, right, moduleLedger));
 
-  const entries: QueueEntry[] = [];
-  for (const issue of readyIssues) {
-    if (conflictsWithSelected(issue, entries)) {
-      continue;
-    }
-    entries.push(queueEntryFromIssue(args.repoRoot, issue));
-  }
+  const entries = readyIssues.map((issue) => queueEntryFromIssue(args.repoRoot, issue));
 
   const queue: LiveQueue = {
     schema_version: 1,
     generated_at: new Date().toISOString(),
-    repo_root: args.repoRoot,
+    repo_root: resolveCanonicalRepoRoot(args.repoRoot),
     entries,
   };
 

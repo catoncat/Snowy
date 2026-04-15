@@ -95,7 +95,7 @@ afterEach(() => {
 });
 
 describe("build-live-queue", () => {
-  it("keeps only ready issues and removes conflicting entries from the live queue", () => {
+  it("keeps all ready issues in the live queue even when write scopes overlap", () => {
     const repoRoot = makeRepo();
     writeModuleLedger(repoRoot);
     writeIssue(
@@ -182,8 +182,8 @@ check_cmd: bun run check
     });
 
     expect(result.kind).toBe("preview");
-    expect(result.entryCount).toBe(1);
-    expect(result.queue.entries.map((entry) => entry.issue_id)).toEqual(["ISSUE-042"]);
+    expect(result.entryCount).toBe(2);
+    expect(result.queue.entries.map((entry) => entry.issue_id)).toEqual(["ISSUE-042", "ISSUE-036"]);
   });
 
   it("writes the queue file when not in dry-run mode", () => {
@@ -255,5 +255,48 @@ check_cmd: bun run check
     });
     expect(written).toContain('"depends_on": ["ISSUE-010"],');
     expect(written).toBe(formatLikeBiome(repoRoot, "docs/workflow/live-queue.json", written));
+  });
+
+  it("uses the canonical repo root in queue metadata when running from a worktree path", () => {
+    const repoRoot = makeRepo();
+    const canonicalRepoRoot = path.join(path.dirname(repoRoot), "browser-brain-loop-next");
+    const worktreeGitDir = path.join(canonicalRepoRoot, ".git", "worktrees", "sable");
+
+    mkdirSync(worktreeGitDir, { recursive: true });
+    writeFileSync(path.join(repoRoot, ".git"), `gitdir: ${worktreeGitDir}\n`, "utf8");
+    writeModuleLedger(repoRoot);
+    writeIssue(
+      repoRoot,
+      "issue-036.md",
+      `---
+id: ISSUE-036
+title: "Automation cutover"
+status: open
+priority: p1
+source: planning
+created: 2026-03-30
+assignee: unassigned
+tags: [review]
+module_id: site-runtime-browser-automation
+module_stage: secondary
+tracking_kind: gap
+kind: slice
+epic: EPIC-site-runtime
+parallel_group: site-runtime
+depends_on: []
+write_scope:
+  - packages/site-runtime/src/index.ts
+acceptance_ref: docs/cutover-readiness-criteria.md
+check_cmd: bun run check
+---`,
+    );
+
+    const result = buildLiveQueue({
+      repoRoot,
+      dryRun: true,
+      json: false,
+    });
+
+    expect(result.queue.repo_root).toBe(canonicalRepoRoot);
   });
 });

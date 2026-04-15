@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   type LiveQueue,
   activeLeases,
+  leaseStatePath,
   loadLeaseState,
   releaseTicket,
   takeTicket,
@@ -47,6 +48,20 @@ afterEach(() => {
 });
 
 describe("ticket-machine", () => {
+  it("uses the canonical repo id when running from a worktree path", () => {
+    const repoRoot = makeRepo();
+    const leaseRootDir = path.join(repoRoot, ".leases");
+    const canonicalRepoRoot = path.join(path.dirname(repoRoot), "browser-brain-loop-next");
+    const worktreeGitDir = path.join(canonicalRepoRoot, ".git", "worktrees", "sable");
+
+    mkdirSync(worktreeGitDir, { recursive: true });
+    writeFileSync(path.join(repoRoot, ".git"), `gitdir: ${worktreeGitDir}\n`, "utf8");
+
+    expect(leaseStatePath(repoRoot, { leaseRootDir })).toBe(
+      path.join(leaseRootDir, "browser-brain-loop-next.json"),
+    );
+  });
+
   it("returns queue_empty when the live queue file is missing", async () => {
     const repoRoot = makeRepo();
     const leaseRootDir = path.join(repoRoot, ".leases");

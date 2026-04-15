@@ -497,8 +497,6 @@ export function chooseIssue(
   args: ParsedArgs,
   opts?: { moduleLedger?: ModuleLedger },
 ): ClaimResult {
-  const active = issues.filter((issue) => issueStatus(issue) === "in-progress");
-
   if (args.issueId) {
     const exact = findById(issues, args.issueId);
     if (!exact) {
@@ -522,14 +520,6 @@ export function chooseIssue(
         blockedByConflicts: [],
       };
     }
-    if (!args.allowConflicts && hasScopeConflict(exact, active)) {
-      return {
-        kind: "blocked",
-        reason: "指定 issue 与当前 in-progress write_scope 冲突",
-        blockedByDependencies: [],
-        blockedByConflicts: [toIssueSummary(exact)],
-      };
-    }
     return {
       kind: args.dryRun ? "preview" : "claimed",
       issue: toIssueSummary(exact),
@@ -543,14 +533,13 @@ export function chooseIssue(
 
   const claimable = candidates
     .filter((issue) => dependenciesSatisfied(issue, issues))
-    .filter((issue) => args.allowConflicts || !hasScopeConflict(issue, active))
     .sort((a, b) => compareClaimPriority(a, b, opts?.moduleLedger));
 
   if (claimable[0]) {
     return {
       kind: args.dryRun ? "preview" : "claimed",
       issue: toIssueSummary(claimable[0]),
-      reason: "按优先级、依赖和 write_scope 冲突规则自动认领",
+      reason: "按优先级和 depends_on 规则自动认领",
     };
   }
 
@@ -561,11 +550,7 @@ export function chooseIssue(
       .filter((issue) => !dependenciesSatisfied(issue, issues))
       .map(toIssueSummary)
       .slice(0, 5),
-    blockedByConflicts: candidates
-      .filter((issue) => dependenciesSatisfied(issue, issues))
-      .filter((issue) => hasScopeConflict(issue, active))
-      .map(toIssueSummary)
-      .slice(0, 5),
+    blockedByConflicts: [],
   };
 }
 

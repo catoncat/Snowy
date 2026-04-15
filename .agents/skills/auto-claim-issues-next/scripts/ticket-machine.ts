@@ -77,7 +77,34 @@ export function liveQueuePath(repoRoot: string): string {
   return path.join(repoRoot, "docs", "workflow", "live-queue.json");
 }
 
+function resolveCanonicalGitDir(repoRoot: string): string | null {
+  const gitPath = path.join(repoRoot, ".git");
+  try {
+    const stats = statSync(gitPath);
+    if (stats.isDirectory()) {
+      return gitPath;
+    }
+    if (stats.isFile()) {
+      const match = readFileSync(gitPath, "utf8").match(/^gitdir:\s*(.+)\s*$/i);
+      if (!match?.[1]) {
+        return null;
+      }
+      const gitDir = path.resolve(repoRoot, match[1].trim());
+      const parentDir = path.dirname(gitDir);
+      if (path.basename(parentDir) === "worktrees") {
+        return path.dirname(parentDir);
+      }
+      return gitDir;
+    }
+  } catch {}
+  return null;
+}
+
 function repoId(repoRoot: string): string {
+  const canonicalGitDir = resolveCanonicalGitDir(repoRoot);
+  if (canonicalGitDir && path.basename(canonicalGitDir) === ".git") {
+    return path.basename(path.dirname(canonicalGitDir));
+  }
   return path.basename(repoRoot);
 }
 

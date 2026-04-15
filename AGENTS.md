@@ -66,7 +66,7 @@
 - 不要重新引入 `bash.exec`/`find` 这类 shell 依赖去完成 VFS/skill discovery。
 - 变更优先从 `packages/contracts` 开始推导，再改 `core` 和 substrate。
 - 默认假设有别的 Agent 在并行开发；看到陌生 diff 先判断是否为并行改动，不要直接回滚。
-- 尽量不要和别的 Agent 改同一片代码；若必须进入共享区域，只做最小改动并显式意识到可能存在并行编辑。
+- 共享文件不是自动禁区；若不存在真实前后依赖，可以在独立 worktree 中并行推进，但要保持改动最小、提交小步，并显式意识到可能存在并行编辑。
 - 验证默认先做自己 `write_scope` 内的聚焦 lint / test；repo 级 `bun run check` 若被其他活跃 slice 阻塞，要记录 blocker，不顺手修 unrelated 文件。
 - 提交默认小步、单一目的，减少并行冲突与共享文件重写。
 
@@ -354,12 +354,13 @@
 - role prompt 只作为可选 stance overlay，不是系统前提
 - queue build 由 backlog + module ledger 生成；claim path 本身不再扫描 backlog
 - live ticket 只通过 lease 文件加锁；`in-progress` 不再是 dispatch lock
+- `write_scope` 是协调提示，不是 dispatch 锁；除非 issue 之间存在真实前后依赖，否则不要只因为会改同一文件就阻止 claim
 - batch 文档只是历史 planning snapshot；当前 dispatch 只看 live queue + lease
 - backlog 变化后必须重建 live queue，至少包括：新增 issue、改 `done`、改 `depends_on`、改 `write_scope`
 - 若 live queue 返回空，先判断是否需要重建 queue；确认无票后再进入下一批规划
 - worker 默认只对自己当前 slice / `write_scope` 的聚焦验证负责；repo 级 gate 是补充，不是并行情况下的唯一完成依据
 - 若 repo 级 lint / check 被别的 Agent 的活跃改动挡住，必须在 issue `## 工作总结` 里写明 blocker 和自己已通过的聚焦检查
-- 共享接线文件优先交给 integrator 或对应 lane owner；coordinator 拆 slice 时应优先避免共享写域重叠
+- 共享接线文件优先交给 integrator 或对应 lane owner；但共享写域重叠只是一种协调信号，不应替代真实 `depends_on`
 - 不要因为共享文件出现陌生改动就直接 revert；先看 lease / queue / issue owner，再决定是否需要协调
 
 ## 10. Commands

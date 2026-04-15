@@ -93,7 +93,7 @@ write_scope: []
     expect(dependenciesSatisfied(issue, [issue])).toBe(false);
   });
 
-  it("blocks claim when another issue owns the same write scope", () => {
+  it("does not block claim when another issue only overlaps on write scope", () => {
     const active = issueFromFrontmatter(`---
 id: ISSUE-001
 title: Active
@@ -131,9 +131,9 @@ write_scope:
       { moduleLedger },
     );
 
-    expect(result.kind).toBe("blocked");
-    if (result.kind === "blocked") {
-      expect(result.blockedByConflicts.map((item) => item.id)).toEqual(["ISSUE-002"]);
+    expect(result.kind).toBe("preview");
+    if (result.kind === "preview") {
+      expect(result.issue.id).toBe("ISSUE-002");
     }
   });
 

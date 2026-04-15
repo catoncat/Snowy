@@ -76,15 +76,16 @@ check_cmd: bun run test -- <target> | bun run check
 
 ## 并行约束
 
-1. `write_scope` 重叠的 issue 不能同时进入 live queue。
+1. `write_scope` 是协调提示，不是 dispatch 锁；只要 `depends_on` 已满足，`write_scope` 重叠的 issue 也可以同时进入 live queue。
 2. 以下为单写者超级节点：
    - `packages/contracts/src/index.ts`
    - `packages/core/src/index.ts`
    - `apps/mv3-shell/manifest.json`
    - `package.json`
    - `vitest.config.ts`
-3. 拆任务优先按包边界，不按“同一功能不同段落”拆。
-4. 需要接线的大文件改动，优先留给 integrator 或对应 lane owner。
+3. 命中单写者超级节点时，优先用 `git worktree`、小步提交和 owner 协调降低冲突；只有真实前后依赖才应通过 `depends_on` 串行化。
+4. 拆任务优先按包边界，不按“同一功能不同段落”拆。
+5. 需要接线的大文件改动，优先留给 integrator 或对应 lane owner，但这属于协作建议，不是 queue builder 的自动排除条件。
 
 ## 模块追踪规则
 
@@ -108,7 +109,7 @@ queue build 规则：
 2. 只纳入 `depends_on` 已满足的 issue。
 3. issue 必须带合法 `module_id / module_stage / tracking_kind`。
 4. queue 内按 module stage → module order → priority → created → issue id 排序。
-5. queue builder 会贪心排除 `write_scope` 冲突项，只保留当前可并行 dispatch 的集合。
+5. queue builder 不再因为 `write_scope` 重叠而自动排除 issue；只要 issue 仍是 `open` 且 `depends_on` 已满足，就保留在 live queue 中。
 
 以下场景必须重建 queue：
 
@@ -144,6 +145,8 @@ bun run workflow:queue:json
 5. 若需要把 owner 同步回 issue frontmatter，使用同一个稳定名字。
 6. hook 只在显式触发 `$agent-workflow-next` 或 `$auto-claim-issues-next` 时预先取号。
 7. 若 queue 为空，先判断是否需要重建 queue；确认为空后再进入 next-batch planning。
+8. `write_scope` 重叠本身不是 claim blocker；除非存在真实前后依赖，否则用 `depends_on` 表达顺序约束，并通过 worktree / 小步提交处理并行编辑。
+9. worktree 必须复用 canonical repo 的同一份 lease 文件；不要把每个 worktree 视为独立 dispatch 空间。
 
 命令：
 
