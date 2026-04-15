@@ -16,6 +16,8 @@ const MIN_RETRY = 0;
 const MAX_RETRY = 6;
 
 const DEFAULT_MAX_RETRY_DELAY_MS = 4_000;
+const PRIMARY_LANE_REQUIRED_CAPABILITIES = ["chat.completions", "tool_calls"] as const;
+const AUXILIARY_LANE_REQUIRED_CAPABILITIES = ["chat.completions"] as const;
 
 export interface ResolveLlmRouteOptions {
   lane?: LlmProviderExecutionLane;
@@ -35,6 +37,16 @@ function normalizeCapabilities(capabilities: string[] | undefined): string[] {
 
 function normalizeProfileChain(values: Array<string | undefined>): string[] {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+export function getRequiredCapabilitiesForLane(lane: LlmProviderExecutionLane): string[] {
+  switch (lane) {
+    case "primary":
+      return [...PRIMARY_LANE_REQUIRED_CAPABILITIES];
+    case "compaction":
+    case "title":
+      return [...AUXILIARY_LANE_REQUIRED_CAPABILITIES];
+  }
 }
 
 function buildLaneBaseProfiles(config: LlmProfileConfig, lane: LlmProviderExecutionLane): string[] {
@@ -126,12 +138,16 @@ function isEligibleProviderRoute(
   requiredCapabilities: string[],
 ): boolean {
   if (!providerRegistry) {
-    return requiredCapabilities.length === 0;
+    return true;
   }
 
   const state = providerRegistry.getState(providerId);
   if (!state || state.healthStatus === "down") {
     return false;
+  }
+
+  if (state.capabilities.length === 0) {
+    return true;
   }
 
   return requiredCapabilities.every((capability) => state.capabilities.includes(capability));

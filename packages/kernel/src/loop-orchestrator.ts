@@ -21,7 +21,7 @@ import {
   normalizeToolCallId,
   stepResultToToolMessagePayload,
 } from "./llm-message-model.js";
-import { resolveLlmRoute } from "./llm-profile-resolver.js";
+import { getRequiredCapabilitiesForLane, resolveLlmRoute } from "./llm-profile-resolver.js";
 import type { LlmProviderRegistry } from "./llm-provider-registry.js";
 import { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
 import {
@@ -468,6 +468,7 @@ function resolveEscalatedRoute(
   const nextRouteResult = resolveLlmRoute(profileConfig, nextProfile, currentRoute.role, {
     lane,
     providerRegistry,
+    requiredCapabilities: getRequiredCapabilitiesForLane(lane),
   });
   return nextRouteResult.ok ? nextRouteResult.route : null;
 }
@@ -570,6 +571,7 @@ export async function requestLlmWithRetry(
         opts.profileConfig,
         opts.providerRegistry,
         route,
+        opts.lane ?? "primary",
       );
       if (escalatedRoute) {
         route = escalatedRoute;
@@ -620,6 +622,7 @@ export async function runLoop(
   const routeResult = resolveLlmRoute(profileConfig, undefined, "worker", {
     lane: "primary",
     providerRegistry,
+    requiredCapabilities: getRequiredCapabilitiesForLane("primary"),
   });
   if (!routeResult.ok) {
     throw new Error(`LLM route resolution failed: ${routeResult.message}`);

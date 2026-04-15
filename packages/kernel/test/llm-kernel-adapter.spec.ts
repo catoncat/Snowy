@@ -148,6 +148,87 @@ describe("createKernelLlmFromProvider", () => {
     expect(body.model).toBe("gpt-4.1-mini");
   });
 
+  it("requires chat completion capability when resolving compaction routes", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(sseBody([sseTextChunk("Fallback summary"), "data: [DONE]"]), {
+        status: 200,
+      }),
+    );
+
+    const registry = new LlmProviderRegistry();
+    registry.register(
+      {
+        id: "summary_provider",
+        resolveRequestUrl: () => "https://summary.example.test/chat/completions",
+        send: async (input) =>
+          fetch(input.requestUrl ?? "https://summary.example.test/chat/completions", {
+            method: "POST",
+            body: JSON.stringify(input.payload),
+          }),
+      },
+      {
+        healthStatus: "healthy",
+        capabilities: ["tool_calls"],
+      },
+    );
+    registry.register(
+      {
+        id: "fallback_provider",
+        resolveRequestUrl: () => "https://fallback.example.test/chat/completions",
+        send: async (input) =>
+          fetch(input.requestUrl ?? "https://fallback.example.test/chat/completions", {
+            method: "POST",
+            body: JSON.stringify(input.payload),
+          }),
+      },
+      {
+        healthStatus: "healthy",
+        capabilities: ["chat.completions"],
+      },
+    );
+
+    const adapter = createKernelLlmFromProvider(registry, {
+      profiles: [
+        {
+          id: "default",
+          providerId: "summary_provider",
+          llmBase: "https://summary.example.test",
+          llmKey: "sk-default",
+          llmModel: "gpt-4",
+        },
+        {
+          id: "summary",
+          providerId: "summary_provider",
+          llmBase: "https://summary.example.test",
+          llmKey: "sk-summary",
+          llmModel: "gpt-4.1-mini",
+        },
+        {
+          id: "fallback",
+          providerId: "fallback_provider",
+          llmBase: "https://fallback.example.test",
+          llmKey: "sk-fallback",
+          llmModel: "gpt-4.1",
+        },
+      ],
+      defaultProfile: "default",
+      auxProfile: "summary",
+      fallbackProfile: "fallback",
+    });
+
+    const result = await adapter.complete({
+      systemPrompt: "Summarize this session.",
+      messages: [{ role: "user", content: "Context" }],
+    });
+
+    expect(result).toBe("Fallback summary");
+
+    const [url, opts] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://fallback.example.test/chat/completions");
+    const body = JSON.parse(opts.body);
+    expect(body.model).toBe("gpt-4.1");
+  });
+
   it("negotiates to the fallback route when the default provider is down", async () => {
     fetchSpy.mockResolvedValue(
       new Response(sseBody([sseTextChunk("Hello from fallback!"), "data: [DONE]"]), {

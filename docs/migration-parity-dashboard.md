@@ -28,7 +28,7 @@
 | skill SDK / authoring | `yellow` | typed facade 与文档已起步，完整 authoring/studio 不足 |
 | plugin -> executable skill migration | `yellow` | 方向明确，但还不是可替代旧 plugin 生态的状态 |
 | Skill Studio / lifecycle product surface | `red` | 生命周期模型有，产品 UI 没有；Soft Gate 1 已裁决为 cutover 后补，sidepanel management consumer follow-up 见 `ISSUE-093` |
-| provider / profile routing | `yellow` | `packages/kernel` 已有 provider health negotiation、lane-aware routing、ordered profile chain 与 retry escalation；剩余 gap 是 runtime call-site ownership、explicit capability requirements 与更广 provider policy hardening |
+| provider / profile routing | `yellow` | `packages/kernel` 已有 provider health negotiation、lane-aware routing、ordered profile chain、retry escalation，以及 `primary / compaction / title` 的 runtime-owned baseline capability requirements；剩余 gap 是更细的 capability taxonomy、非 kernel 调用点 rollout 与更广 provider policy hardening |
 | diagnostics / debug / audit | `red` | 轻量 `audit.tail` / summary resource contract 与覆盖 `hosts.*` / `config.update` / `skills.*` lifecycle 的统一 `audit.tail` app read path 已落地，但新仓仍没有旧仓同等级 debug/diagnostics 主面 |
 | bridge-side MCP export | `yellow` | descriptor-derived handoff contract 已落地并有测试；真正 bridge-side MCP server/transport 仍未实现 |
 

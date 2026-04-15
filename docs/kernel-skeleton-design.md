@@ -24,7 +24,7 @@ Recovery Report 确认：新仓已完成底座重构（contracts / core / browse
 当前仍应保留为 partial 的，是那些已经从 kernel baseline 移交到相邻模块的残留边界：
 
 - prompt policy 的剩余工作主要是更丰富的 custom builder composition 与 runtime data sourcing，不再作为 kernel baseline 缺口单独跟踪。
-- provider/profile routing 的更广 provider policy hardening 仍在 follow-up；当前已落地的是 lane-aware route resolution 与 ordered profile chain，不等于所有 runtime-owned policy 都已锁定。
+- provider/profile routing 的更广 provider policy hardening 仍在 follow-up；当前已落地的是 lane-aware route resolution、ordered profile chain，以及 kernel-owned `primary / compaction / title` 调用点的基线 capability requirements（`primary` = `chat.completions` + `tool_calls`，`compaction/title` = `chat.completions`），但更细的 capability taxonomy、非 kernel 调用点 rollout 与更丰富 policy 输入仍未锁定。
 - 更完整的 debug export、production remote transport configuration，以及 post-cutover automation expansion 继续由 observability / execution-host / site-runtime 模块各自承接，而不再笼统计入 kernel 主体。
 
 ---

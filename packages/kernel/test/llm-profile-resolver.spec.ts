@@ -1,6 +1,7 @@
 import type { LlmProfileConfig, LlmProviderAdapter } from "@bbl-next/contracts";
 import { LlmProviderRegistry, resolveLlmRoute } from "@bbl-next/kernel";
 import { describe, expect, it } from "vitest";
+import { getRequiredCapabilitiesForLane } from "../src/llm-profile-resolver.js";
 
 function makeConfig(overrides: Partial<LlmProfileConfig> = {}): LlmProfileConfig {
   return {
@@ -253,6 +254,12 @@ describe("resolveLlmRoute", () => {
     expect(result.route.role).toBe("worker");
   });
 
+  it("declares runtime-owned provider capability requirements per lane", () => {
+    expect(getRequiredCapabilitiesForLane("primary")).toEqual(["chat.completions", "tool_calls"]);
+    expect(getRequiredCapabilitiesForLane("compaction")).toEqual(["chat.completions"]);
+    expect(getRequiredCapabilitiesForLane("title")).toEqual(["chat.completions"]);
+  });
+
   it("uses auxProfile as the default root for compaction and title lanes", () => {
     const config = makeConfig({
       profiles: [
@@ -394,6 +401,19 @@ describe("resolveLlmRoute", () => {
     if (result.ok) return;
     expect(result.reason).toBe("route_unavailable");
     expect(result.message).toContain("required capabilities");
+  });
+
+  it("keeps providers with undeclared capabilities eligible during capability rollout", () => {
+    const registry = makeRegistry([{ id: "openai_compatible", healthStatus: "healthy" }]);
+
+    const result = resolveLlmRoute(makeConfig(), undefined, "worker", {
+      providerRegistry: registry,
+      requiredCapabilities: ["chat.completions"],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.route.profile).toBe("default");
   });
 
   it("returns route_unavailable when every candidate provider is down", () => {

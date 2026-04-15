@@ -3,7 +3,7 @@ import type {
   LlmProfileConfig,
   LlmProviderExecutionLane,
 } from "@bbl-next/contracts";
-import { resolveLlmRoute } from "./llm-profile-resolver.js";
+import { getRequiredCapabilitiesForLane, resolveLlmRoute } from "./llm-profile-resolver.js";
 import type { LlmProviderRegistry } from "./llm-provider-registry.js";
 import { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
 
@@ -55,12 +55,14 @@ export function createKernelLlmFromProvider(
 ): KernelLlmAdapter {
   const lane = options.lane ?? "compaction";
   const role = options.role ?? "worker";
+  const requiredCapabilities = getRequiredCapabilitiesForLane(lane);
 
   return {
     async complete({ systemPrompt, messages, maxTokens, signal }) {
       const routeResult = resolveLlmRoute(profileConfig, profileId, role, {
         providerRegistry: registry,
         lane,
+        requiredCapabilities,
       });
       if (!routeResult.ok) {
         throw new Error(`LLM route resolution failed: ${routeResult.message}`);
