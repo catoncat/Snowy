@@ -58,4 +58,4 @@ merges: [ISSUE-139, ISSUE-140]
 
 ## 相关 commits
 
-- (pending commit)
+- 0dd54d4 docs(ISSUE-138): 收口 tabs 管理缺口 (includes ISSUE-135 kernel changes)
