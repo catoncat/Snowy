@@ -49,6 +49,8 @@ completed_at: 2026-04-15T14:17:52Z
 ### 实现了什么
 - 将 remote transport 配置接入共享 `config.update/config.summary` 控制面，并把 secret 分流到独立 storage key
 - 让 background bridge 可以从共享配置热加载 fetch-backed remote transport，并在重启后恢复 remote host
+- 补上 review 修复：`config.update` 全量校验失败时不再残留 remote transport 持久化副作用
+- 补上 review 修复：拒绝 `baseUrl` 携带 userinfo，避免凭证通过公开 `config.summary` 泄漏
 - 更新 migration matrix，明确 production remote transport configuration 已落地，剩余 gap 收敛为多 remote host discovery/parity
 
 ### 实际跑了什么检查
@@ -64,3 +66,5 @@ completed_at: 2026-04-15T14:17:52Z
 ## 相关 commits
 
 - `193e66402368` feat(mv3-shell): 接通远端传输配置路径
+- `9b0a0887b377` fix(mv3-shell): 避免校验失败残留传输配置
+- `d13c235f46a7` fix(mv3-shell): 禁止传输地址携带凭证
