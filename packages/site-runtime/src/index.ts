@@ -3,6 +3,8 @@ import {
   type InterventionKind,
   type InterventionRequest,
   type InterventionTrigger,
+  type ObservabilityTimelineEvent,
+  type RawEventTailEntry,
 } from "@bbl-next/contracts";
 import type { JsRunnerHost, RunnerModule } from "@bbl-next/js-runner";
 
@@ -142,6 +144,8 @@ export interface SiteInvocationSuccess {
   result: unknown;
   verified: boolean;
   trace: string[];
+  timelineEvents: ObservabilityTimelineEvent[];
+  rawEvents: RawEventTailEntry[];
   intervention?: undefined;
 }
 
@@ -149,6 +153,8 @@ export interface SiteInvocationIntervention {
   result: unknown;
   verified: false;
   trace: string[];
+  timelineEvents: ObservabilityTimelineEvent[];
+  rawEvents: RawEventTailEntry[];
   intervention: InterventionRequest;
 }
 
@@ -323,6 +329,78 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
+function cloneValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => cloneValue(entry));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        cloneValue(entry),
+      ]),
+    );
+  }
+  return value;
+}
+
+function createSiteRuntimeEventRecorder(input: {
+  skillId: string;
+  action: string;
+  tab: ActiveTabMetadata;
+  lane: SiteExecutionLane;
+}) {
+  const timelineEvents: ObservabilityTimelineEvent[] = [];
+  const rawEvents: RawEventTailEntry[] = [];
+  let index = 0;
+
+  const record = (event: {
+    eventType: string;
+    status: ObservabilityTimelineEvent["status"];
+    summary: string;
+    details?: Record<string, unknown>;
+  }): void => {
+    index += 1;
+    const timestamp = new Date().toISOString();
+    const details = event.details
+      ? (cloneValue(event.details) as Record<string, unknown>)
+      : undefined;
+    timelineEvents.push({
+      id: `site:${input.skillId}:${input.action}:${String(index)}`,
+      source: "site-runtime",
+      eventType: event.eventType,
+      status: event.status,
+      timestamp,
+      summary: event.summary,
+      skillId: input.skillId,
+      action: input.action,
+      tabId: input.tab.tabId,
+      details,
+    });
+    rawEvents.push({
+      index,
+      timestamp,
+      source: "site-runtime",
+      type: event.eventType,
+      payload: {
+        skillId: input.skillId,
+        action: input.action,
+        lane: input.lane,
+        tabId: input.tab.tabId,
+        status: event.status,
+        summary: event.summary,
+        ...(details ? { details } : {}),
+      },
+    });
+  };
+
+  return {
+    timelineEvents,
+    rawEvents,
+    record,
+  };
+}
+
 function normalizeVerificationResult(
   value: SiteVerificationResult,
 ): NormalizedSiteVerificationResult {
@@ -445,6 +523,21 @@ export class SiteSkillRuntime {
       lane === "background"
         ? [`lane:${lane}`, `match:${request.skillId}`]
         : [`match:${request.skillId}`];
+    const eventRecorder = createSiteRuntimeEventRecorder({
+      skillId: request.skillId,
+      action: request.action,
+      tab: request.tab,
+      lane,
+    });
+    eventRecorder.record({
+      eventType: "site.match",
+      status: "succeeded",
+      summary: `Matched ${lane} tab for ${request.skillId}.${request.action}`,
+      details: {
+        lane,
+        url: request.tab.url,
+      },
+    });
 
     // Phase 2: Plan & Install
     const plan = buildInjectionPlan(request.skillId, action);
@@ -454,6 +547,14 @@ export class SiteSkillRuntime {
     };
     if (plan.steps.length > 0) {
       trace.push(`plan:${plan.steps.length}_steps`);
+      eventRecorder.record({
+        eventType: "site.plan",
+        status: "info",
+        summary: `Prepared ${String(plan.steps.length)} injection step(s)`,
+        details: {
+          stepCount: plan.steps.length,
+        },
+      });
       for (const step of plan.steps) {
         const installation = this.#installer
           ? await this.#installer.install(step, request.tab)
@@ -464,6 +565,16 @@ export class SiteSkillRuntime {
         });
         if (this.#installer) {
           trace.push(`install:${step.world}:${step.scriptId}`);
+          eventRecorder.record({
+            eventType: "site.install",
+            status: "succeeded",
+            summary: `Installed ${step.scriptId} in ${step.world} world`,
+            details: {
+              world: step.world,
+              scriptId: step.scriptId,
+              ...(step.jsPath ? { jsPath: step.jsPath } : {}),
+            },
+          });
         }
       }
     }
@@ -493,10 +604,22 @@ export class SiteSkillRuntime {
         payload,
       });
       trace.push(`intervention:${policy.kind}:${trigger}`);
+      eventRecorder.record({
+        eventType: "site.intervention",
+        status: "attention",
+        summary: `Requested ${policy.kind} intervention for ${trigger}`,
+        details: {
+          kind: policy.kind,
+          trigger,
+          ...(payload ? { payload } : {}),
+        },
+      });
       return {
         result,
         verified: false,
         trace,
+        timelineEvents: eventRecorder.timelineEvents,
+        rawEvents: eventRecorder.rawEvents,
         intervention,
       };
     };
@@ -530,6 +653,16 @@ export class SiteSkillRuntime {
         });
       }
       trace.push(`invoke:${request.action}`);
+      eventRecorder.record({
+        eventType: "site.invoke",
+        status: "succeeded",
+        summary: `Invoked ${request.skillId}.${request.action}`,
+        details: {
+          lane,
+          ...(targetInstallation ? { installationWorld: targetInstallation.step.world } : {}),
+          result: cloneValue(result),
+        },
+      });
 
       // Phase 4: Verify
       let verified = true;
@@ -562,11 +695,33 @@ export class SiteSkillRuntime {
           if (normalizedVerification.status === "verified") {
             trace.push(`verify:${action.verifier}`);
             verified = true;
+            eventRecorder.record({
+              eventType: "site.verify",
+              status: "succeeded",
+              summary: `Verifier ${action.verifier} passed`,
+              details: {
+                verifier: action.verifier,
+                attempts: attempt,
+              },
+            });
             break;
           }
 
           if (normalizedVerification.status === "not_ready") {
             trace.push(`stabilize:not_ready:${attempt}`);
+            eventRecorder.record({
+              eventType: "site.stabilize",
+              status: "info",
+              summary: `Verifier ${action.verifier} not ready on attempt ${String(attempt)}`,
+              details: {
+                verifier: action.verifier,
+                attempts: attempt,
+                ...(normalizedVerification.reason ? { reason: normalizedVerification.reason } : {}),
+                ...(normalizedVerification.payload
+                  ? { payload: normalizedVerification.payload }
+                  : {}),
+              },
+            });
             const delayMs = Math.max(
               0,
               normalizedVerification.retryAfterMs ?? stabilizationPolicy.intervalMs,
@@ -589,6 +744,12 @@ export class SiteSkillRuntime {
                   ? { payload: normalizedVerification.payload }
                   : {}),
               };
+              eventRecorder.record({
+                eventType: "site.stabilize",
+                status: "failed",
+                summary: `Stabilization exhausted for ${action.verifier}`,
+                details: stabilizationPayload,
+              });
               const intervention = toInterventionResult(
                 "runtime_blocked",
                 {
@@ -611,6 +772,18 @@ export class SiteSkillRuntime {
           }
 
           trace.push(`verify:${action.verifier}`);
+          eventRecorder.record({
+            eventType: "site.verify",
+            status: "failed",
+            summary: `Verifier ${action.verifier} failed`,
+            details: {
+              verifier: action.verifier,
+              ...(normalizedVerification.reason ? { reason: normalizedVerification.reason } : {}),
+              ...(normalizedVerification.payload
+                ? { payload: normalizedVerification.payload }
+                : {}),
+            },
+          });
           const intervention = toInterventionResult(
             "verify_failed",
             {
@@ -637,9 +810,11 @@ export class SiteSkillRuntime {
         result,
         verified,
         trace,
+        timelineEvents: eventRecorder.timelineEvents,
+        rawEvents: eventRecorder.rawEvents,
       };
     } catch (error) {
-      const intervention = toInterventionResult("runtime_blocked", {
+      const runtimeBlockedPayload = {
         error:
           error instanceof Error
             ? {
@@ -650,7 +825,14 @@ export class SiteSkillRuntime {
         ...(asInterventionPayload(request.input)
           ? { input: request.input as Record<string, unknown> }
           : {}),
+      };
+      eventRecorder.record({
+        eventType: "site.runtime_blocked",
+        status: "failed",
+        summary: `Runtime blocked while invoking ${request.skillId}.${request.action}`,
+        details: runtimeBlockedPayload,
       });
+      const intervention = toInterventionResult("runtime_blocked", runtimeBlockedPayload);
       if (intervention) {
         return intervention;
       }

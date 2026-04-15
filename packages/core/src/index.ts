@@ -37,7 +37,15 @@ import {
   type JsonSchema,
   type LoopTelemetryEntry,
   MAX_SKILL_CALL_DEPTH,
+  type ObservabilityExportResource,
+  type ObservabilityExportResourceType,
+  type ObservabilityExportSurface,
+  type ObservabilityTimelineEvent,
+  type ObservabilityTimelineSummary,
   PUBLIC_CAPABILITY_NAMESPACES,
+  type RawEventTailEntry,
+  type RawEventTailResource,
+  type RawEventTailSummary,
   type ResourceDocument,
   type RuntimeBootstrapSummary,
   type RuntimeHistoryResource,
@@ -46,6 +54,10 @@ import {
   type SkillControlPlaneAction,
   type SkillsBootstrapSummary,
   type SkillsSummaryResource,
+  type StructuredRunSummaryEventPointer,
+  type StructuredRunSummaryExport,
+  type StructuredRunSummaryResource,
+  type TimelineExportResource,
   type ToolContract,
   assertCapabilityDescriptor,
   capabilityNamespace,
@@ -243,6 +255,16 @@ export type {
   InterventionRequest,
   InterventionSummary,
   InterventionTrigger,
+  ObservabilityEventSource,
+  ObservabilityEventStatus,
+  ObservabilityExportResource,
+  ObservabilityExportResourceType,
+  ObservabilityExportSurface,
+  ObservabilityTimelineEvent,
+  ObservabilityTimelineSummary,
+  RawEventTailEntry,
+  RawEventTailResource,
+  RawEventTailSummary,
   RuntimeBootstrapSummary,
   RuntimeHistoryResource,
   RuntimeHistorySummary,
@@ -250,6 +272,10 @@ export type {
   SkillAuditEntry,
   SkillsBootstrapSummary,
   SkillsSummaryResource,
+  StructuredRunSummaryEventPointer,
+  StructuredRunSummaryExport,
+  StructuredRunSummaryResource,
+  TimelineExportResource,
 } from "@bbl-next/contracts";
 
 export interface BootstrapSummaryInput {
@@ -308,6 +334,39 @@ export interface RuntimeHistoryResourceInput {
 
 export interface InterventionAuditResourceInput {
   entries: InterventionAuditEntry[];
+  generatedAt?: string;
+  limit?: number;
+}
+
+export interface TimelineExportResourceInput {
+  events: ObservabilityTimelineEvent[];
+  generatedAt?: string;
+  limit?: number;
+}
+
+export interface RawEventTailExportResourceInput {
+  entries: RawEventTailEntry[];
+  generatedAt?: string;
+  limit?: number;
+}
+
+export interface StructuredRunSummaryResourceInput {
+  timelineEvents?: ObservabilityTimelineEvent[];
+  rawEvents?: RawEventTailEntry[];
+  generatedAt?: string;
+}
+
+export interface CapabilityTraceObservabilityInput {
+  trace: CapabilityTraceEntry[];
+  sessionId?: string;
+  skillId?: string;
+  action?: string;
+}
+
+export interface ReadObservabilityExportResourceInput {
+  resourceType: ObservabilityExportResourceType;
+  timelineEvents?: ObservabilityTimelineEvent[];
+  rawEvents?: RawEventTailEntry[];
   generatedAt?: string;
   limit?: number;
 }
@@ -521,6 +580,39 @@ function cloneInterventionAuditEntry(entry: InterventionAuditEntry): Interventio
   return {
     ...entry,
     ...(entry.details ? { details: { ...entry.details } } : {}),
+  };
+}
+
+function clonePlainValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => clonePlainValue(entry));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        clonePlainValue(entry),
+      ]),
+    );
+  }
+  return value;
+}
+
+function cloneObservabilityTimelineEvent(
+  event: ObservabilityTimelineEvent,
+): ObservabilityTimelineEvent {
+  return {
+    ...event,
+    ...(event.details
+      ? { details: clonePlainValue(event.details) as Record<string, unknown> }
+      : {}),
+  };
+}
+
+function cloneRawEventTailEntry(entry: RawEventTailEntry): RawEventTailEntry {
+  return {
+    ...entry,
+    payload: clonePlainValue(entry.payload),
   };
 }
 
@@ -1593,6 +1685,330 @@ function createResourceDocument<ResourceId extends AiSurfaceResourceId, Payload>
   };
 }
 
+function createObservabilityExportDocument<
+  ResourceType extends ObservabilityExportResourceType,
+  Payload,
+>(
+  type: ResourceType,
+  generatedAt: string,
+  data: Payload,
+): {
+  type: ResourceType;
+  generatedAt: string;
+  data: Payload;
+} {
+  return {
+    type,
+    generatedAt,
+    data,
+  };
+}
+
+function normalizeLimit(limit?: number): number | undefined {
+  return typeof limit === "number" && Number.isFinite(limit) && limit >= 0
+    ? Math.floor(limit)
+    : undefined;
+}
+
+function compareIsoTimestamp(a: string, b: string): number {
+  const left = Date.parse(a);
+  const right = Date.parse(b);
+  if (!Number.isNaN(left) && !Number.isNaN(right) && left !== right) {
+    return left - right;
+  }
+  return a.localeCompare(b);
+}
+
+function sortTimelineEvents(events: ObservabilityTimelineEvent[]): ObservabilityTimelineEvent[] {
+  return [...events].sort((left, right) => compareIsoTimestamp(left.timestamp, right.timestamp));
+}
+
+function toStructuredRunSummaryPointer(
+  event: ObservabilityTimelineEvent | undefined,
+): StructuredRunSummaryEventPointer | null {
+  if (!event) {
+    return null;
+  }
+  return {
+    source: event.source,
+    eventType: event.eventType,
+    status: event.status,
+    timestamp: event.timestamp,
+    summary: event.summary,
+  };
+}
+
+function buildActionId(event: ObservabilityTimelineEvent): string | null {
+  if (!event.skillId || !event.action) {
+    return null;
+  }
+  return `${event.skillId}.${event.action}`;
+}
+
+function computeDurationMs(startedAt: string | null, endedAt: string | null): number | null {
+  if (!startedAt || !endedAt) {
+    return null;
+  }
+  const started = Date.parse(startedAt);
+  const ended = Date.parse(endedAt);
+  if (Number.isNaN(started) || Number.isNaN(ended)) {
+    return null;
+  }
+  return Math.max(0, ended - started);
+}
+
+function resolveObservabilityGeneratedAt(input: {
+  generatedAt?: string;
+  timelineEvents?: ObservabilityTimelineEvent[];
+  rawEvents?: RawEventTailEntry[];
+}): string {
+  if (input.generatedAt) {
+    return input.generatedAt;
+  }
+  const lastTimelineEvent = input.timelineEvents?.[input.timelineEvents.length - 1];
+  if (lastTimelineEvent) {
+    return lastTimelineEvent.timestamp;
+  }
+  const lastRawEvent = input.rawEvents?.[input.rawEvents.length - 1];
+  if (lastRawEvent) {
+    return lastRawEvent.timestamp;
+  }
+  return new Date().toISOString();
+}
+
+function mapCapabilityTraceStatusToObservabilityStatus(
+  status: CapabilityTraceEntry["status"],
+): ObservabilityTimelineEvent["status"] {
+  switch (status) {
+    case "failed":
+      return "failed";
+    case "succeeded":
+      return "succeeded";
+    default:
+      return "started";
+  }
+}
+
+function capabilityTraceEntryToTimelineEvent(
+  entry: CapabilityTraceEntry,
+  input: CapabilityTraceObservabilityInput,
+  index: number,
+): ObservabilityTimelineEvent {
+  return {
+    id:
+      entry.traceId ??
+      `skill-runtime:${input.skillId ?? "unknown"}:${entry.capabilityId}:${String(index + 1)}`,
+    source: "skill-runtime",
+    eventType: "skill.capability",
+    status: mapCapabilityTraceStatusToObservabilityStatus(entry.status),
+    timestamp: entry.endedAt ?? entry.startedAt,
+    summary: `${entry.capabilityId} ${entry.status}`,
+    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.skillId ? { skillId: input.skillId } : {}),
+    ...(input.action ? { action: input.action } : {}),
+    capabilityId: entry.capabilityId,
+    ...(entry.traceId ? { traceId: entry.traceId } : {}),
+    ...(entry.parentTraceId ? { parentTraceId: entry.parentTraceId } : {}),
+    ...(entry.startedAt && entry.endedAt
+      ? { durationMs: computeDurationMs(entry.startedAt, entry.endedAt) ?? undefined }
+      : {}),
+    details: {
+      input: clonePlainValue(entry.input),
+      ...(entry.output !== undefined ? { output: clonePlainValue(entry.output) } : {}),
+      ...(entry.errorCode ? { errorCode: entry.errorCode } : {}),
+    },
+  };
+}
+
+function capabilityTraceEntryToRawEvent(
+  entry: CapabilityTraceEntry,
+  input: CapabilityTraceObservabilityInput,
+  index: number,
+): RawEventTailEntry {
+  return {
+    index: index + 1,
+    timestamp: entry.endedAt ?? entry.startedAt,
+    source: "skill-runtime",
+    type: "skill.capability",
+    payload: {
+      ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+      ...(input.skillId ? { skillId: input.skillId } : {}),
+      ...(input.action ? { action: input.action } : {}),
+      trace: clonePlainValue(entry),
+    },
+  };
+}
+
+export function createTimelineExportResource(
+  input: TimelineExportResourceInput,
+): TimelineExportResource {
+  const limit = normalizeLimit(input.limit);
+  const events = sortTimelineEvents(input.events).map(cloneObservabilityTimelineEvent);
+  const sliced = typeof limit === "number" ? events.slice(-limit) : events;
+  const generatedAt = resolveObservabilityGeneratedAt({
+    generatedAt: input.generatedAt,
+    timelineEvents: sliced,
+  });
+  const data: ObservabilityTimelineSummary = {
+    status: sliced.length > 0 ? "available" : "empty",
+    totalCount: sliced.length,
+    events: sliced,
+  };
+
+  return createObservabilityExportDocument("timeline", generatedAt, data);
+}
+
+export function createRawEventTailExportResource(
+  input: RawEventTailExportResourceInput,
+): RawEventTailResource {
+  const limit = normalizeLimit(input.limit);
+  const entries = input.entries.map(cloneRawEventTailEntry);
+  const sliced = typeof limit === "number" ? entries.slice(-limit) : entries;
+  const generatedAt = resolveObservabilityGeneratedAt({
+    generatedAt: input.generatedAt,
+    rawEvents: sliced,
+  });
+  const data: RawEventTailSummary = {
+    status: sliced.length > 0 ? "available" : "empty",
+    totalCount: sliced.length,
+    entries: sliced,
+  };
+
+  return createObservabilityExportDocument("rawEventTail", generatedAt, data);
+}
+
+export function createStructuredRunSummaryResource(
+  input: StructuredRunSummaryResourceInput,
+): StructuredRunSummaryResource {
+  const timelineEvents = sortTimelineEvents(input.timelineEvents ?? []);
+  const rawEvents = (input.rawEvents ?? []).map(cloneRawEventTailEntry);
+  const countsBySource: StructuredRunSummaryExport["countsBySource"] = {};
+  const countsByStatus: StructuredRunSummaryExport["countsByStatus"] = {};
+  const countsByEventType: Record<string, number> = {};
+  const capabilityIds = new Set<string>();
+  const skillIds = new Set<string>();
+  const actionIds = new Set<string>();
+  let lastEvent: ObservabilityTimelineEvent | undefined;
+  let lastError: ObservabilityTimelineEvent | undefined;
+
+  for (const event of timelineEvents) {
+    countsBySource[event.source] = (countsBySource[event.source] ?? 0) + 1;
+    countsByStatus[event.status] = (countsByStatus[event.status] ?? 0) + 1;
+    countsByEventType[event.eventType] = (countsByEventType[event.eventType] ?? 0) + 1;
+    if (event.capabilityId) {
+      capabilityIds.add(event.capabilityId);
+    }
+    if (event.skillId) {
+      skillIds.add(event.skillId);
+    }
+    const actionId = buildActionId(event);
+    if (actionId) {
+      actionIds.add(actionId);
+    }
+    lastEvent = event;
+    if (event.status === "failed") {
+      lastError = event;
+    }
+  }
+
+  const startedAt = timelineEvents[0]?.timestamp ?? rawEvents[0]?.timestamp ?? null;
+  const endedAt =
+    timelineEvents[timelineEvents.length - 1]?.timestamp ??
+    rawEvents[rawEvents.length - 1]?.timestamp ??
+    null;
+  const data: StructuredRunSummaryExport = {
+    status: timelineEvents.length > 0 || rawEvents.length > 0 ? "available" : "empty",
+    startedAt,
+    endedAt,
+    durationMs: computeDurationMs(startedAt, endedAt),
+    totalTimelineEvents: timelineEvents.length,
+    totalRawEvents: rawEvents.length,
+    countsBySource,
+    countsByStatus,
+    countsByEventType,
+    capabilityIds: [...capabilityIds],
+    skillIds: [...skillIds].sort(),
+    actionIds: [...actionIds].sort(),
+    lastEvent: toStructuredRunSummaryPointer(lastEvent),
+    lastError: toStructuredRunSummaryPointer(lastError),
+  };
+  const generatedAt = resolveObservabilityGeneratedAt({
+    generatedAt: input.generatedAt,
+    timelineEvents,
+    rawEvents,
+  });
+
+  return createObservabilityExportDocument("summary", generatedAt, data);
+}
+
+export class ObservabilityExportBuilder {
+  readonly #timelineEvents: ObservabilityTimelineEvent[] = [];
+  readonly #rawEvents: RawEventTailEntry[] = [];
+
+  addTimelineEvent(event: ObservabilityTimelineEvent): this {
+    this.#timelineEvents.push(cloneObservabilityTimelineEvent(event));
+    return this;
+  }
+
+  addTimelineEvents(events: ObservabilityTimelineEvent[]): this {
+    for (const event of events) {
+      this.addTimelineEvent(event);
+    }
+    return this;
+  }
+
+  addRawEvent(entry: RawEventTailEntry): this {
+    this.#rawEvents.push(cloneRawEventTailEntry(entry));
+    return this;
+  }
+
+  addRawEvents(entries: RawEventTailEntry[]): this {
+    for (const entry of entries) {
+      this.addRawEvent(entry);
+    }
+    return this;
+  }
+
+  addCapabilityTrace(input: CapabilityTraceObservabilityInput): this {
+    const rawIndexOffset = this.#rawEvents.length;
+    for (const [index, entry] of input.trace.entries()) {
+      this.addTimelineEvent(capabilityTraceEntryToTimelineEvent(entry, input, index));
+      this.addRawEvent(capabilityTraceEntryToRawEvent(entry, input, rawIndexOffset + index));
+    }
+    return this;
+  }
+
+  build(
+    options: {
+      generatedAt?: string;
+      timelineLimit?: number;
+      rawEventLimit?: number;
+    } = {},
+  ): ObservabilityExportSurface {
+    return {
+      timeline: createTimelineExportResource({
+        events: this.#timelineEvents,
+        generatedAt: options.generatedAt,
+        limit: options.timelineLimit,
+      }),
+      summary: createStructuredRunSummaryResource({
+        timelineEvents: this.#timelineEvents,
+        rawEvents: this.#rawEvents,
+        generatedAt: options.generatedAt,
+      }),
+      rawEventTail: createRawEventTailExportResource({
+        entries: this.#rawEvents,
+        generatedAt: options.generatedAt,
+        limit: options.rawEventLimit,
+      }),
+    };
+  }
+}
+
+export function createObservabilityExportBuilder(): ObservabilityExportBuilder {
+  return new ObservabilityExportBuilder();
+}
+
 export function createBootstrapSummaryResources(
   input: BootstrapSummaryInput = {},
 ): BootstrapSummaryResources {
@@ -1704,6 +2120,33 @@ export function readAiSurfaceResource(
   };
 
   return readers[metadata.id]();
+}
+
+export function readObservabilityExportResource(
+  input: ReadObservabilityExportResourceInput,
+): ObservabilityExportResource {
+  const readers: Record<ObservabilityExportResourceType, () => ObservabilityExportResource> = {
+    timeline: () =>
+      createTimelineExportResource({
+        events: input.timelineEvents ?? [],
+        generatedAt: input.generatedAt,
+        limit: input.limit,
+      }),
+    summary: () =>
+      createStructuredRunSummaryResource({
+        timelineEvents: input.timelineEvents ?? [],
+        rawEvents: input.rawEvents ?? [],
+        generatedAt: input.generatedAt,
+      }),
+    rawEventTail: () =>
+      createRawEventTailExportResource({
+        entries: input.rawEvents ?? [],
+        generatedAt: input.generatedAt,
+        limit: input.limit,
+      }),
+  };
+
+  return readers[input.resourceType]();
 }
 
 export function createConfigControlPlane(

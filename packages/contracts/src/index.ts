@@ -544,6 +544,117 @@ export type AiSurfaceResourceDocument =
   | AuditTailResource
   | InterventionAuditResource;
 
+export const OBSERVABILITY_EXPORT_RESOURCE_TYPES = ["timeline", "summary", "rawEventTail"] as const;
+export type ObservabilityExportResourceType = (typeof OBSERVABILITY_EXPORT_RESOURCE_TYPES)[number];
+
+export const OBSERVABILITY_EVENT_SOURCES = ["skill-runtime", "site-runtime", "runtime"] as const;
+export type ObservabilityEventSource = (typeof OBSERVABILITY_EVENT_SOURCES)[number];
+
+export const OBSERVABILITY_EVENT_STATUSES = [
+  "info",
+  "started",
+  "succeeded",
+  "failed",
+  "attention",
+] as const;
+export type ObservabilityEventStatus = (typeof OBSERVABILITY_EVENT_STATUSES)[number];
+
+export interface ObservabilityTimelineEvent {
+  id: string;
+  source: ObservabilityEventSource;
+  eventType: string;
+  status: ObservabilityEventStatus;
+  timestamp: string;
+  summary: string;
+  sessionId?: string;
+  skillId?: string;
+  action?: string;
+  capabilityId?: string;
+  traceId?: string;
+  parentTraceId?: string;
+  tabId?: number;
+  durationMs?: number;
+  details?: Record<string, unknown>;
+}
+
+export interface ObservabilityTimelineSummary {
+  status: "empty" | "available";
+  totalCount: number;
+  events: ObservabilityTimelineEvent[];
+}
+
+export interface RawEventTailEntry {
+  index: number;
+  timestamp: string;
+  source: ObservabilityEventSource;
+  type: string;
+  payload: unknown;
+}
+
+export interface RawEventTailSummary {
+  status: "empty" | "available";
+  totalCount: number;
+  entries: RawEventTailEntry[];
+}
+
+export interface StructuredRunSummaryEventPointer {
+  source: ObservabilityEventSource;
+  eventType: string;
+  status: ObservabilityEventStatus;
+  timestamp: string;
+  summary: string;
+}
+
+export interface StructuredRunSummaryExport {
+  status: "empty" | "available";
+  startedAt: string | null;
+  endedAt: string | null;
+  durationMs: number | null;
+  totalTimelineEvents: number;
+  totalRawEvents: number;
+  countsBySource: Partial<Record<ObservabilityEventSource, number>>;
+  countsByStatus: Partial<Record<ObservabilityEventStatus, number>>;
+  countsByEventType: Record<string, number>;
+  capabilityIds: string[];
+  skillIds: string[];
+  actionIds: string[];
+  lastEvent: StructuredRunSummaryEventPointer | null;
+  lastError: StructuredRunSummaryEventPointer | null;
+}
+
+export interface ObservabilityExportResourceDocument<
+  ResourceType extends ObservabilityExportResourceType,
+  Payload,
+> {
+  type: ResourceType;
+  generatedAt: string;
+  data: Payload;
+}
+
+export type TimelineExportResource = ObservabilityExportResourceDocument<
+  "timeline",
+  ObservabilityTimelineSummary
+>;
+export type StructuredRunSummaryResource = ObservabilityExportResourceDocument<
+  "summary",
+  StructuredRunSummaryExport
+>;
+export type RawEventTailResource = ObservabilityExportResourceDocument<
+  "rawEventTail",
+  RawEventTailSummary
+>;
+
+export interface ObservabilityExportSurface {
+  timeline: TimelineExportResource;
+  summary: StructuredRunSummaryResource;
+  rawEventTail: RawEventTailResource;
+}
+
+export type ObservabilityExportResource =
+  | TimelineExportResource
+  | StructuredRunSummaryResource
+  | RawEventTailResource;
+
 export interface BootstrapResourceBundle {
   runtime?: RuntimeBootstrapSummary;
   config?: ConfigBootstrapSummary;

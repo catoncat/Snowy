@@ -26,17 +26,21 @@ import {
   createBootstrapSummary,
   createConfigControlPlane,
   createHostControlPlaneSnapshot,
+  createObservabilityExportBuilder,
   createSkillRuntimeContext,
   disconnectExecutionHost,
   dispatchCapabilityCall,
   getBuiltinsByNamespace,
   hasPublicNamespaceCoverage,
   readAiSurfaceResource,
+  readObservabilityExportResource,
   resolveHostSubstrateTarget,
   setDefaultExecutionHost,
   typedCapabilities,
   typedCapabilitiesForPermissions,
 } from "@bbl-next/core";
+import { JsRunnerHost } from "@bbl-next/js-runner";
+import { invokeSingleActionSiteSkill } from "@bbl-next/site-runtime";
 import { describe, expect, it } from "vitest";
 
 function descriptor(overrides: Partial<CapabilityDescriptor> = {}): CapabilityDescriptor {
@@ -209,6 +213,201 @@ describe("core", () => {
 
     expect(results.map((entry) => entry.id)).toEqual(AI_SURFACE_RESOURCE_IDS);
     expect(results.every((entry) => entry.primitive === "resource")).toBe(true);
+  });
+
+  it("aggregates skill-runtime traces and site-runtime events into an observability export surface", async () => {
+    const registry = new CapabilityRegistry([descriptor()]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "page",
+      invoke: ({ input }) => ({ ok: true, input }),
+    });
+
+    const ctx = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "session-observability",
+      skillId: "skill.runtime",
+      permissions: ["page.*"],
+    });
+    await ctx.call("page.click", { uid: "login-button" });
+
+    const siteResult = await invokeSingleActionSiteSkill({
+      request: {
+        skillId: "site.twitter",
+        action: "compose",
+        tab: {
+          tabId: 7,
+          url: "https://x.com/home",
+          active: true,
+          title: "Home",
+        },
+        plan: {
+          skillId: "site.twitter",
+          action: "compose",
+          steps: [
+            {
+              world: "content",
+              scriptId: "site.twitter:compose:content",
+            },
+          ],
+        },
+        module: {
+          id: "site.twitter.compose",
+          source: "export default async function run() { return { ok: true }; }",
+        },
+        executeRunner: async () => ({ ok: true }),
+      },
+      runnerHost: new JsRunnerHost(),
+      installer: {
+        install: async () => ({ installed: true }),
+      },
+    });
+
+    expect(siteResult.timelineEvents).toEqual([
+      expect.objectContaining({
+        source: "site-runtime",
+        eventType: "site.match",
+        status: "succeeded",
+      }),
+      expect.objectContaining({
+        source: "site-runtime",
+        eventType: "site.plan",
+        status: "info",
+      }),
+      expect.objectContaining({
+        source: "site-runtime",
+        eventType: "site.install",
+        status: "succeeded",
+      }),
+      expect.objectContaining({
+        source: "site-runtime",
+        eventType: "site.invoke",
+        status: "succeeded",
+      }),
+    ]);
+
+    const builder = createObservabilityExportBuilder();
+    builder.addCapabilityTrace({
+      trace: ctx.trace,
+      sessionId: ctx.sessionId,
+      skillId: ctx.skillId,
+      action: "run",
+    });
+    builder.addTimelineEvents(siteResult.timelineEvents);
+    builder.addRawEvents(siteResult.rawEvents);
+
+    const surface = builder.build({
+      generatedAt: "2026-04-16T00:00:00.000Z",
+      rawEventLimit: 3,
+    });
+
+    expect(surface.timeline).toMatchObject({
+      type: "timeline",
+      generatedAt: "2026-04-16T00:00:00.000Z",
+      data: {
+        status: "available",
+        totalCount: 5,
+      },
+    });
+    expect(surface.timeline.data.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "skill-runtime",
+          eventType: "skill.capability",
+          capabilityId: "page.click",
+          skillId: "skill.runtime",
+          status: "succeeded",
+        }),
+        expect.objectContaining({
+          source: "site-runtime",
+          eventType: "site.invoke",
+          skillId: "site.twitter",
+          action: "compose",
+          status: "succeeded",
+        }),
+      ]),
+    );
+    expect(surface.summary).toMatchObject({
+      type: "summary",
+      data: {
+        status: "available",
+        totalTimelineEvents: 5,
+        totalRawEvents: 5,
+        countsBySource: {
+          "skill-runtime": 1,
+          "site-runtime": 4,
+        },
+        countsByStatus: {
+          succeeded: 4,
+          info: 1,
+        },
+        capabilityIds: ["page.click"],
+        skillIds: ["site.twitter", "skill.runtime"],
+        lastError: null,
+      },
+    });
+    expect(surface.rawEventTail).toMatchObject({
+      type: "rawEventTail",
+      data: {
+        status: "available",
+        totalCount: 3,
+      },
+    });
+    expect(surface.rawEventTail.data.entries.at(-1)).toMatchObject({
+      source: "site-runtime",
+      type: "site.invoke",
+    });
+  });
+
+  it("reads rawEventTail through the observability export resource path", () => {
+    const resource = readObservabilityExportResource({
+      resourceType: "rawEventTail",
+      rawEvents: [
+        {
+          index: 1,
+          timestamp: "2026-04-16T00:00:00.000Z",
+          source: "skill-runtime",
+          type: "skill.capability",
+          payload: {
+            capabilityId: "page.click",
+          },
+        },
+        {
+          index: 2,
+          timestamp: "2026-04-16T00:00:01.000Z",
+          source: "site-runtime",
+          type: "site.invoke",
+          payload: {
+            skillId: "site.twitter",
+            action: "compose",
+          },
+        },
+      ],
+      generatedAt: "2026-04-16T00:00:02.000Z",
+      limit: 1,
+    });
+
+    expect(resource).toEqual({
+      type: "rawEventTail",
+      generatedAt: "2026-04-16T00:00:02.000Z",
+      data: {
+        status: "available",
+        totalCount: 1,
+        entries: [
+          {
+            index: 2,
+            timestamp: "2026-04-16T00:00:01.000Z",
+            source: "site-runtime",
+            type: "site.invoke",
+            payload: {
+              skillId: "site.twitter",
+              action: "compose",
+            },
+          },
+        ],
+      },
+    });
   });
 
   it("builds a healthy bootstrap summary bundle", () => {
