@@ -524,8 +524,303 @@ export function createRemoteHostTransport({
   };
 }
 
+const REMOTE_TRANSPORT_CONFIG_STORAGE_KEY = "bbl-next.remote-transport.config.v1";
+const REMOTE_TRANSPORT_DEFAULT_EXEC_PATH = "/exec";
+const REMOTE_TRANSPORT_DEFAULT_PROBE_PATH = "/health";
 const LLM_CONFIG_STORAGE_KEY = "bbl-next.llm.config.v1";
 const CONFIG_CONTROL_PLANE_STORAGE_KEY = "bbl-next.config.control-plane.v1";
+
+function hasOwnKey(target, key) {
+  return Object.prototype.hasOwnProperty.call(target, key);
+}
+
+function normalizeRemoteTransportPath(path, fallback) {
+  if (typeof path !== "string" || !path.trim()) {
+    return fallback;
+  }
+  const normalized = path.trim();
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
+}
+
+function normalizeRemoteTransportBaseUrl(baseUrl) {
+  if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+    return null;
+  }
+  try {
+    const url = new URL(baseUrl.trim());
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function cloneRemoteTransportConfig(config) {
+  if (!isPlainObject(config)) {
+    return null;
+  }
+
+  const baseUrl = normalizeRemoteTransportBaseUrl(config.baseUrl);
+  if (!baseUrl) {
+    return null;
+  }
+
+  const next = {
+    baseUrl,
+    execPath: normalizeRemoteTransportPath(config.execPath, REMOTE_TRANSPORT_DEFAULT_EXEC_PATH),
+    probePath: normalizeRemoteTransportPath(config.probePath, REMOTE_TRANSPORT_DEFAULT_PROBE_PATH),
+  };
+  if (typeof config.authToken === "string" && config.authToken.trim()) {
+    next.authToken = config.authToken.trim();
+  }
+  return next;
+}
+
+function buildRemoteTransportSummary(config) {
+  const normalized = cloneRemoteTransportConfig(config);
+  if (!normalized) {
+    return null;
+  }
+  return {
+    baseUrl: normalized.baseUrl,
+    execPath: normalized.execPath,
+    probePath: normalized.probePath,
+    ...(normalized.authToken ? { authScheme: "bearer" } : {}),
+  };
+}
+
+async function loadRemoteTransportConfig(chromeApi) {
+  const storageArea = chromeApi?.storage?.local;
+  if (typeof storageArea?.get !== "function") {
+    return null;
+  }
+  const result = await storageArea.get(REMOTE_TRANSPORT_CONFIG_STORAGE_KEY);
+  return cloneRemoteTransportConfig(result?.[REMOTE_TRANSPORT_CONFIG_STORAGE_KEY]);
+}
+
+async function saveRemoteTransportConfig(chromeApi, config) {
+  const normalized = cloneRemoteTransportConfig(config);
+  if (!normalized) {
+    return null;
+  }
+
+  const storageArea = chromeApi?.storage?.local;
+  if (typeof storageArea?.set === "function") {
+    await storageArea.set({
+      [REMOTE_TRANSPORT_CONFIG_STORAGE_KEY]: normalized,
+    });
+  }
+  return normalized;
+}
+
+async function clearRemoteTransportConfig(chromeApi) {
+  const storageArea = chromeApi?.storage?.local;
+  if (typeof storageArea?.remove === "function") {
+    await storageArea.remove(REMOTE_TRANSPORT_CONFIG_STORAGE_KEY);
+    return;
+  }
+  if (typeof storageArea?.set === "function") {
+    await storageArea.set({
+      [REMOTE_TRANSPORT_CONFIG_STORAGE_KEY]: null,
+    });
+  }
+}
+
+function validateRemoteTransportPatch(patch) {
+  if (patch === null) {
+    return;
+  }
+  if (!isPlainObject(patch)) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransport must be an object or null",
+    );
+  }
+  if (hasOwnKey(patch, "baseUrl") && patch.baseUrl != null && typeof patch.baseUrl !== "string") {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransport.baseUrl must be a string",
+    );
+  }
+  if (
+    hasOwnKey(patch, "execPath") &&
+    patch.execPath != null &&
+    typeof patch.execPath !== "string"
+  ) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransport.execPath must be a string",
+    );
+  }
+  if (
+    hasOwnKey(patch, "probePath") &&
+    patch.probePath != null &&
+    typeof patch.probePath !== "string"
+  ) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransport.probePath must be a string",
+    );
+  }
+  if (
+    hasOwnKey(patch, "authToken") &&
+    patch.authToken != null &&
+    typeof patch.authToken !== "string"
+  ) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransport.authToken must be a string or null",
+    );
+  }
+}
+
+async function syncRemoteTransportConfigFromConfigPatch(chromeApi, patch) {
+  if (!isPlainObject(patch) || !isPlainObject(patch.automation)) {
+    return patch;
+  }
+  if (!hasOwnKey(patch.automation, "remoteTransport")) {
+    return patch;
+  }
+
+  validateRemoteTransportPatch(patch.automation.remoteTransport);
+  const nextPatch = {
+    ...patch,
+    automation: {
+      ...patch.automation,
+    },
+  };
+
+  if (patch.automation.remoteTransport === null) {
+    await clearRemoteTransportConfig(chromeApi);
+    nextPatch.automation.remoteTransport = null;
+    return nextPatch;
+  }
+
+  const currentConfig = await loadRemoteTransportConfig(chromeApi);
+  const remoteTransportPatch = patch.automation.remoteTransport;
+  const normalized = cloneRemoteTransportConfig({
+    baseUrl: hasOwnKey(remoteTransportPatch, "baseUrl")
+      ? remoteTransportPatch.baseUrl
+      : currentConfig?.baseUrl,
+    execPath: hasOwnKey(remoteTransportPatch, "execPath")
+      ? remoteTransportPatch.execPath
+      : currentConfig?.execPath,
+    probePath: hasOwnKey(remoteTransportPatch, "probePath")
+      ? remoteTransportPatch.probePath
+      : currentConfig?.probePath,
+    authToken: hasOwnKey(remoteTransportPatch, "authToken")
+      ? remoteTransportPatch.authToken
+      : currentConfig?.authToken,
+  });
+
+  if (!normalized) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransport requires a valid http(s) baseUrl",
+    );
+  }
+
+  await saveRemoteTransportConfig(chromeApi, normalized);
+  nextPatch.automation.remoteTransport = buildRemoteTransportSummary(normalized);
+  return nextPatch;
+}
+
+function createRemoteTransportRequestError(message, code = "E_REMOTE_HTTP") {
+  const error = new Error(message);
+  // @ts-expect-error test/runtime code field
+  error.code = code;
+  return error;
+}
+
+async function sendRemoteTransportRequest({
+  fetchImpl = globalThis.fetch,
+  url,
+  authToken,
+  request,
+}) {
+  if (typeof fetchImpl !== "function") {
+    throw createRemoteTransportRequestError(
+      "fetch is unavailable for remote transport",
+      "E_RUNTIME",
+    );
+  }
+
+  const response = await fetchImpl(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify(request),
+  });
+
+  const text = await response.text();
+  const payload = text.length > 0 ? JSON.parse(text) : null;
+  if (!response.ok) {
+    if (
+      payload &&
+      typeof payload === "object" &&
+      payload.error &&
+      typeof payload.error === "object"
+    ) {
+      throw createRemoteTransportRequestError(
+        payload.error.message ?? `Remote transport request failed with status ${response.status}`,
+        payload.error.code ?? "E_REMOTE_HTTP",
+      );
+    }
+    throw createRemoteTransportRequestError(
+      `Remote transport request failed with status ${response.status}`,
+    );
+  }
+  return payload;
+}
+
+export function createConfiguredRemoteHostTransport({ config, fetchImpl = globalThis.fetch } = {}) {
+  const normalized = cloneRemoteTransportConfig(config);
+  if (!normalized) {
+    return null;
+  }
+
+  const baseUrl = normalized.baseUrl;
+  return createRemoteHostTransport({
+    sendExec: (request) =>
+      sendRemoteTransportRequest({
+        fetchImpl,
+        url: `${baseUrl}${normalized.execPath}`,
+        authToken: normalized.authToken,
+        request,
+      }),
+    sendProbe: (request) =>
+      sendRemoteTransportRequest({
+        fetchImpl,
+        url: `${baseUrl}${normalized.probePath}`,
+        authToken: normalized.authToken,
+        request,
+      }),
+    describeAvailability: async () =>
+      typeof fetchImpl === "function"
+        ? { available: true }
+        : {
+            available: false,
+            error: {
+              code: "E_RUNTIME",
+              message: "fetch is unavailable for remote transport",
+            },
+          },
+  });
+}
+
+export async function loadConfiguredRemoteHostTransport({
+  chromeApi = globalThis.chrome,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  return createConfiguredRemoteHostTransport({
+    config: await loadRemoteTransportConfig(chromeApi),
+    fetchImpl,
+  });
+}
 
 async function loadLlmProfileConfig(chromeApi): Promise<LlmProfileConfig | null> {
   const storageArea = chromeApi?.storage?.local;
@@ -1034,8 +1329,9 @@ export function createBackgroundRuntimeServices({
       if (!isPlainObject(input)) {
         throw new CapabilityError("E_BAD_INPUT", "Capability input must be an object");
       }
+      const sanitizedPatch = await syncRemoteTransportConfigFromConfigPatch(chromeApi, input.patch);
       await syncProfileConfigFromConfigPatch(input.patch, services);
-      return services.configControlPlane.update(input.patch);
+      return services.configControlPlane.update(sanitizedPatch);
     }
 
     const { registry, providers } = services;

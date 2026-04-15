@@ -14,7 +14,10 @@ import {
 import { createBootstrapSummary, readAiSurfaceResource } from "@bbl-next/core";
 import { invokeSingleActionSiteSkill } from "@bbl-next/site-runtime";
 import { createPageHookBridge } from "./page-hook-bridge.js";
-import { createBackgroundRuntimeServices } from "./runtime-services.js";
+import {
+  createBackgroundRuntimeServices,
+  loadConfiguredRemoteHostTransport,
+} from "./runtime-services.js";
 
 export { createPageHookBridge } from "./page-hook-bridge.js";
 
@@ -508,10 +511,40 @@ export function createBackgroundRunnerBridge({
     lastRuntimeError: null,
     lastRuntimeErrorClearedAt: null,
   };
+  let activeRemoteTransport = remoteTransport;
+  let configuredRemoteTransportLoaded = remoteTransport !== undefined;
   let composedRuntimeServices = null;
 
   function hasRemoteHost() {
-    return Boolean(remoteTransport);
+    return Boolean(activeRemoteTransport);
+  }
+
+  async function syncConfiguredRemoteTransport(force = false) {
+    if (remoteTransport) {
+      activeRemoteTransport = remoteTransport;
+      configuredRemoteTransportLoaded = true;
+      return activeRemoteTransport;
+    }
+    if (configuredRemoteTransportLoaded && !force) {
+      return activeRemoteTransport;
+    }
+
+    activeRemoteTransport = await loadConfiguredRemoteHostTransport({
+      chromeApi,
+    });
+    configuredRemoteTransportLoaded = true;
+    if (!activeRemoteTransport) {
+      if (state.defaultHostId === REMOTE_HOST_ID) {
+        state.defaultHostId = null;
+      }
+      setRemoteHostSnapshot({
+        connected: false,
+        healthStatus: "unknown",
+        checkedAt: undefined,
+        error: null,
+      });
+    }
+    return activeRemoteTransport;
   }
 
   function createRemoteTransportError(error, action) {
@@ -530,12 +563,16 @@ export function createBackgroundRunnerBridge({
   }
 
   async function describeRemoteTransportAvailability(action) {
-    if (!remoteTransport || typeof remoteTransport.describeAvailability !== "function") {
+    const resolvedRemoteTransport = await syncConfiguredRemoteTransport();
+    if (
+      !resolvedRemoteTransport ||
+      typeof resolvedRemoteTransport.describeAvailability !== "function"
+    ) {
       return null;
     }
     try {
       return (
-        (await remoteTransport.describeAvailability({
+        (await resolvedRemoteTransport.describeAvailability({
           hostId: REMOTE_HOST_ID,
           action,
         })) ?? null
@@ -549,7 +586,8 @@ export function createBackgroundRunnerBridge({
   }
 
   async function getRemoteTransportAvailability(action) {
-    if (!remoteTransport) {
+    const resolvedRemoteTransport = await syncConfiguredRemoteTransport();
+    if (!resolvedRemoteTransport) {
       return {
         available: false,
         error: createRemoteTransportError(
@@ -584,9 +622,9 @@ export function createBackgroundRunnerBridge({
       }
     }
 
-    if (typeof remoteTransport.isAvailable === "function") {
+    if (typeof resolvedRemoteTransport.isAvailable === "function") {
       try {
-        const available = await remoteTransport.isAvailable({
+        const available = await resolvedRemoteTransport.isAvailable({
           hostId: REMOTE_HOST_ID,
           action,
         });
@@ -1292,6 +1330,7 @@ export function createBackgroundRunnerBridge({
   }
 
   async function probeRemoteHostControlState(action = "hosts.health") {
+    const resolvedRemoteTransport = await syncConfiguredRemoteTransport();
     const availability = await getRemoteTransportAvailability(action);
     if (!availability.available) {
       setRemoteHostSnapshot({
@@ -1304,11 +1343,11 @@ export function createBackgroundRunnerBridge({
         error: state.remoteHostError,
       };
     }
-    if (typeof remoteTransport?.probe !== "function") {
+    if (typeof resolvedRemoteTransport?.probe !== "function") {
       return null;
     }
     try {
-      const response = await remoteTransport.probe({
+      const response = await resolvedRemoteTransport.probe({
         kind: "health",
         requestId: nextRequestId(),
         hostId: REMOTE_HOST_ID,
@@ -1380,6 +1419,7 @@ export function createBackgroundRunnerBridge({
   }
 
   async function listExecutionHosts() {
+    await syncConfiguredRemoteTransport();
     const items = [await describeLocalHost()];
     if (hasRemoteHost()) {
       items.push(await describeRemoteHost("hosts.list"));
@@ -1405,6 +1445,7 @@ export function createBackgroundRunnerBridge({
   }
 
   async function getHost({ hostId } = {}) {
+    await syncConfiguredRemoteTransport();
     const resolvedHostId = resolveHostId(hostId, "hosts.get");
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
@@ -1416,6 +1457,7 @@ export function createBackgroundRunnerBridge({
   }
 
   async function connectHost({ hostId } = {}) {
+    await syncConfiguredRemoteTransport();
     const resolvedHostId = resolveHostId(hostId, "hosts.connect");
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
@@ -1480,6 +1522,7 @@ export function createBackgroundRunnerBridge({
   }
 
   async function disconnectHost({ hostId } = {}) {
+    await syncConfiguredRemoteTransport();
     const resolvedHostId = resolveHostId(hostId, "hosts.disconnect");
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
@@ -1527,6 +1570,7 @@ export function createBackgroundRunnerBridge({
   }
 
   async function setDefaultHost({ hostId } = {}) {
+    await syncConfiguredRemoteTransport();
     const resolvedHostId = resolveHostId(hostId, "hosts.set_default");
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
@@ -1547,6 +1591,7 @@ export function createBackgroundRunnerBridge({
   }
 
   async function hostHealth({ hostId } = {}) {
+    await syncConfiguredRemoteTransport();
     const resolvedHostId = resolveHostId(hostId, "hosts.health");
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
@@ -1590,6 +1635,7 @@ export function createBackgroundRunnerBridge({
   }
 
   async function routeHostExec(payload = {}) {
+    await syncConfiguredRemoteTransport();
     const resolvedHostId = resolveHostSubstrateHostId(payload.hostId, "host.exec");
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
@@ -1607,11 +1653,12 @@ export function createBackgroundRunnerBridge({
   }
 
   async function routeRemoteExec(payload = {}) {
+    const resolvedRemoteTransport = await syncConfiguredRemoteTransport();
     const resolvedHostId = resolveHostSubstrateHostId(payload.hostId, "runner.remote_exec");
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    if (resolvedHostId !== REMOTE_HOST_ID || typeof remoteTransport?.exec !== "function") {
+    if (resolvedHostId !== REMOTE_HOST_ID || typeof resolvedRemoteTransport?.exec !== "function") {
       return unsupportedHostOperation({
         hostId: resolvedHostId,
         kind: "exec",
@@ -1630,7 +1677,7 @@ export function createBackgroundRunnerBridge({
       };
     }
     try {
-      const response = await remoteTransport.exec({
+      const response = await resolvedRemoteTransport.exec({
         kind: "exec",
         requestId: payload.requestId ?? nextRequestId(),
         hostId: resolvedHostId,
@@ -1990,6 +2037,7 @@ export function createBackgroundRunnerBridge({
         ? (runtimeDiagnostics.runner?.error ?? null)
         : null,
     });
+    await syncConfiguredRemoteTransport();
     const remoteHost = hasRemoteHost() ? await describeRemoteHost("runtime.summary") : null;
     const hostItems = [
       {
@@ -2217,19 +2265,25 @@ export function createBackgroundRunnerBridge({
           hostId: message.hostId,
         });
       case "config.update":
-        return routeAuditedRuntimeCapability({
-          capabilityId: "config.update",
-          input: {
-            patch: message.patch,
-          },
-          buildAuditEntry: () => ({
-            kind: "config.update",
-            status: "updated",
-            changedFields: Object.keys(message.patch ?? {}).filter((field) =>
-              CONFIG_RESOURCE_FIELDS.includes(field),
-            ),
-          }),
-        });
+        return (async () => {
+          const response = await routeAuditedRuntimeCapability({
+            capabilityId: "config.update",
+            input: {
+              patch: message.patch,
+            },
+            buildAuditEntry: () => ({
+              kind: "config.update",
+              status: "updated",
+              changedFields: Object.keys(message.patch ?? {}).filter((field) =>
+                CONFIG_RESOURCE_FIELDS.includes(field),
+              ),
+            }),
+          });
+          if (response.ok) {
+            await syncConfiguredRemoteTransport(true);
+          }
+          return response;
+        })();
       case "skills.list":
         return routeRuntimeCapability("skills.list");
       case "skills.install":

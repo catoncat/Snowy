@@ -164,6 +164,34 @@ function createAuditStoreHarness(initialEntries: unknown[] = []) {
   };
 }
 
+function createStorageAreaHarness(initialEntries: Record<string, unknown> = {}) {
+  const persistedEntries = cloneValue(initialEntries);
+  return {
+    async get(keys: string | string[]) {
+      const result: Record<string, unknown> = {};
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (key in persistedEntries) {
+          result[key] = cloneValue(persistedEntries[key]);
+        }
+      }
+      return result;
+    },
+    async set(entries: Record<string, unknown>) {
+      for (const [key, value] of Object.entries(entries)) {
+        persistedEntries[key] = cloneValue(value);
+      }
+    },
+    async remove(keys: string | string[]) {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        delete persistedEntries[key];
+      }
+    },
+    dump() {
+      return cloneValue(persistedEntries);
+    },
+  };
+}
+
 type KernelDiagnosticsSnapshotOverrides = {
   session?: Partial<KernelDiagnosticsSnapshot["session"]>;
   run?: Partial<KernelDiagnosticsSnapshot["run"]>;
@@ -231,6 +259,7 @@ function createChromeHarness({
   autoRegisterOffscreen = true,
   hangOffscreen = false,
   activeTab,
+  storageArea,
 }: {
   host?: {
     dispatch: (request: unknown) => Promise<unknown>;
@@ -248,6 +277,11 @@ function createChromeHarness({
     active?: boolean;
     title?: string;
   } | null;
+  storageArea?: {
+    get: (keys: string | string[]) => Promise<Record<string, unknown>>;
+    set: (entries: Record<string, unknown>) => Promise<void>;
+    remove?: (keys: string | string[]) => Promise<void>;
+  };
 }) {
   const messageBus = createMessageBus();
   let hasOffscreen = false;
@@ -362,6 +396,13 @@ function createChromeHarness({
       runtime: runtimeApi,
       offscreen: offscreenApi,
       tabs: tabsApi,
+      ...(storageArea
+        ? {
+            storage: {
+              local: storageArea,
+            },
+          }
+        : {}),
     },
     runtimeApi,
     offscreenApi,
@@ -3119,6 +3160,291 @@ describe("mv3-shell manifest", () => {
     expect(probeHandler).not.toHaveBeenCalled();
     dispose();
     harness.cleanup();
+  });
+
+  it("config.update configures a fetch-backed remote transport and keeps config.summary sanitized", async () => {
+    const storageArea = createStorageAreaHarness();
+    const harness = createChromeHarness({
+      storageArea,
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input, _init) => {
+      const url = String(input);
+      if (url === "https://remote.example.test/health") {
+        return new Response(
+          JSON.stringify({
+            status: "healthy",
+            checkedAt: "2026-04-15T14:10:00.000Z",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+      if (url === "https://remote.example.test/exec") {
+        return new Response(
+          JSON.stringify({
+            hostId: "remote",
+            exitCode: 0,
+            stdout: "remote:pwd",
+            stderr: "",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+      throw new Error(`Unexpected fetch url: ${url}`);
+    });
+
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    try {
+      await expect(
+        harness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "config.update",
+          patch: {
+            automation: {
+              remoteTransport: {
+                baseUrl: "https://remote.example.test",
+                execPath: "/exec",
+                probePath: "/health",
+                authToken: "secret-token",
+              },
+            },
+          },
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          config: {
+            status: "ready",
+            values: {
+              automation: {
+                remoteTransport: {
+                  baseUrl: "https://remote.example.test",
+                  execPath: "/exec",
+                  probePath: "/health",
+                  authScheme: "bearer",
+                },
+              },
+            },
+          },
+        },
+      });
+
+      await expect(
+        harness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "hosts.connect",
+          hostId: "remote",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          defaultHostId: "remote",
+          host: {
+            hostId: "remote",
+            connected: true,
+            state: "connected",
+            health: {
+              status: "healthy",
+            },
+          },
+        },
+      });
+
+      await expect(
+        harness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "host.exec",
+          command: "pwd",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          hostId: "remote",
+          exitCode: 0,
+          stdout: "remote:pwd",
+        },
+      });
+
+      await expect(
+        harness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "resource.read",
+          resourceId: "config.summary",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          data: {
+            values: {
+              automation: {
+                remoteTransport: {
+                  baseUrl: "https://remote.example.test",
+                  execPath: "/exec",
+                  probePath: "/health",
+                  authScheme: "bearer",
+                },
+              },
+            },
+          },
+        },
+      });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "https://remote.example.test/health",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer secret-token",
+          }),
+        }),
+      );
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "https://remote.example.test/exec",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer secret-token",
+          }),
+        }),
+      );
+      expect(
+        JSON.stringify(storageArea.dump()["bbl-next.config.control-plane.v1"] ?? {}),
+      ).not.toContain("secret-token");
+      expect(storageArea.dump()["bbl-next.remote-transport.config.v1"]).toMatchObject({
+        baseUrl: "https://remote.example.test",
+        execPath: "/exec",
+        probePath: "/health",
+        authToken: "secret-token",
+      });
+    } finally {
+      dispose();
+      harness.cleanup();
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("rehydrates the configured remote transport after bridge restart", async () => {
+    const storageArea = createStorageAreaHarness();
+    const firstHarness = createChromeHarness({
+      storageArea,
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input) => {
+      const url = String(input);
+      if (url === "https://remote.example.test/health") {
+        return new Response(
+          JSON.stringify({
+            status: "healthy",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+      if (url === "https://remote.example.test/exec") {
+        return new Response(
+          JSON.stringify({
+            hostId: "remote",
+            exitCode: 0,
+            stdout: "remote:echo ready",
+            stderr: "",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+      throw new Error(`Unexpected fetch url: ${url}`);
+    });
+
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeFirst = firstBridge.registerRuntimeListener();
+
+    try {
+      await firstHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "config.update",
+        patch: {
+          automation: {
+            remoteTransport: {
+              baseUrl: "https://remote.example.test",
+              authToken: "persisted-secret",
+            },
+          },
+        },
+      });
+    } finally {
+      disposeFirst();
+      firstHarness.cleanup();
+    }
+
+    const secondHarness = createChromeHarness({
+      storageArea,
+    });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeSecond = secondBridge.registerRuntimeListener();
+
+    try {
+      await expect(
+        secondHarness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "hosts.list",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              hostId: "remote",
+              kind: "remote",
+            }),
+          ]),
+        },
+      });
+
+      await secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.connect",
+        hostId: "remote",
+      });
+
+      await expect(
+        secondHarness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "host.exec",
+          command: "echo ready",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          hostId: "remote",
+          stdout: "remote:echo ready",
+        },
+      });
+    } finally {
+      disposeSecond();
+      secondHarness.cleanup();
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("routes host substrate read/write/edit/exec through an explicit local host id", async () => {
