@@ -371,6 +371,25 @@ export interface TabsCapabilityTransport {
   navigate(url: string): Promise<TabsCapabilityRecord>;
 }
 
+export interface MemfsCapabilityTransport {
+  read(uri: string): Promise<string> | string;
+  write(uri: string, content: string): Promise<void> | void;
+  edit(uri: string, editor: (current: string) => string): Promise<void> | void;
+  stat(uri: string): Promise<unknown> | unknown;
+  list(uri: string): Promise<unknown> | unknown;
+  mkdir(uri: string): Promise<void> | void;
+  rm(uri: string): Promise<void> | void;
+  mv(fromUri: string, toUri: string): Promise<void> | void;
+  copy(fromUri: string, toUri: string): Promise<void> | void;
+  stage(entries: Array<{ uri: string; content: string }>): Promise<void> | void;
+  snapshot(
+    sourceUri: string,
+    targetUri: string,
+    options?: { retention?: number; trusted?: boolean },
+  ): Promise<void> | void;
+  rehydrate(snapshotUri: string, targetUri: string): Promise<void> | void;
+}
+
 interface CatalogEntryInput {
   id: string;
   family: string;
@@ -1792,6 +1811,111 @@ export function createConfigCapabilityProvider(
           throw new CapabilityError(
             "E_RUNTIME",
             `Unsupported config operation: ${binding.operation}`,
+          );
+      }
+    },
+  };
+}
+
+function requireNonEmptyStringField(input: unknown, capabilityId: string, field: string): string {
+  if (!isPlainObject(input) || typeof input[field] !== "string" || !input[field].trim()) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      `${capabilityId} requires a non-empty ${field} string`,
+    );
+  }
+  return input[field].trim();
+}
+
+export function createMemfsCapabilityProvider(
+  transport: MemfsCapabilityTransport,
+): CapabilityFamilyProvider {
+  return {
+    family: "memfs",
+    async invoke({ binding, input }) {
+      switch (binding.operation) {
+        case "read":
+          return transport.read(requireNonEmptyStringField(input, "memfs.read", "uri"));
+        case "write": {
+          const uri = requireNonEmptyStringField(input, "memfs.write", "uri");
+          if (!isPlainObject(input) || typeof input.content !== "string") {
+            throw new CapabilityError(
+              "E_BAD_INPUT",
+              "memfs.write requires uri and content strings",
+            );
+          }
+          return transport.write(uri, input.content);
+        }
+        case "edit": {
+          const uri = requireNonEmptyStringField(input, "memfs.edit", "uri");
+          if (!isPlainObject(input) || typeof input.patch !== "string") {
+            throw new CapabilityError("E_BAD_INPUT", "memfs.edit requires uri and patch strings");
+          }
+          const patch = input.patch;
+          return transport.edit(uri, () => patch);
+        }
+        case "stat":
+          return transport.stat(requireNonEmptyStringField(input, "memfs.stat", "uri"));
+        case "list":
+          return transport.list(requireNonEmptyStringField(input, "memfs.list", "uri"));
+        case "mkdir":
+          return transport.mkdir(requireNonEmptyStringField(input, "memfs.mkdir", "uri"));
+        case "rm":
+          return transport.rm(requireNonEmptyStringField(input, "memfs.rm", "uri"));
+        case "mv": {
+          const from = requireNonEmptyStringField(input, "memfs.mv", "from");
+          const to = requireNonEmptyStringField(input, "memfs.mv", "to");
+          return transport.mv(from, to);
+        }
+        case "copy": {
+          const from = requireNonEmptyStringField(input, "memfs.copy", "from");
+          const to = requireNonEmptyStringField(input, "memfs.copy", "to");
+          return transport.copy(from, to);
+        }
+        case "stage": {
+          if (
+            !isPlainObject(input) ||
+            !Array.isArray(input.entries) ||
+            input.entries.length === 0
+          ) {
+            throw new CapabilityError(
+              "E_BAD_INPUT",
+              "memfs.stage requires a non-empty entries array",
+            );
+          }
+          const entries = input.entries.map((entry) => {
+            if (
+              !isPlainObject(entry) ||
+              typeof entry.uri !== "string" ||
+              !entry.uri.trim() ||
+              typeof entry.content !== "string"
+            ) {
+              throw new CapabilityError(
+                "E_BAD_INPUT",
+                "memfs.stage entries require uri and content strings",
+              );
+            }
+            return {
+              uri: entry.uri.trim(),
+              content: entry.content,
+            };
+          });
+          return transport.stage(entries);
+        }
+        case "snapshot": {
+          const source = requireNonEmptyStringField(input, "memfs.snapshot", "source");
+          const target = requireNonEmptyStringField(input, "memfs.snapshot", "target");
+          return transport.snapshot(source, target);
+        }
+        case "rehydrate": {
+          const snapshot = requireNonEmptyStringField(input, "memfs.rehydrate", "snapshot");
+          const target = requireNonEmptyStringField(input, "memfs.rehydrate", "target");
+          return transport.rehydrate(snapshot, target);
+        }
+        default:
+          throw new CapabilityError(
+            "E_RUNTIME",
+            `Unsupported memfs operation: ${binding.operation}`,
           );
       }
     },
