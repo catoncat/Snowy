@@ -1,23 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-16T03:08:27.510Z",
+  "generated_at": "2026-04-16T03:29:14.555Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-149",
-      "issue_path": "docs/backlog/2026-04-15-site-fetch-with-session-action-is-typed-but-fetch-with-auth-bridge-is-missing.md",
-      "title": "site.fetch_with_session action is typed but fetch-with-auth bridge is missing",
-      "parallel_group": "site-runtime",
-      "module_id": "site-runtime-browser-automation",
-      "module_stage": "secondary",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/site-runtime/src/index.ts",
-        "apps/mv3-shell/src/background.ts",
-        "packages/site-runtime/test"
-      ]
-    }
-  ]
+  "entries": []
 }
