@@ -2263,6 +2263,60 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("captures a screenshot through composed runtime services", async () => {
+    const runtimeServices = {
+      getKernelRuntimeState: vi.fn(async () => ({
+        session: { id: "kernel-session" },
+        runState: { phase: "idle" },
+      })),
+      invokePageAction: vi.fn(async () => ({
+        result: {
+          format: "png",
+          dataUrl: "data:image/png;base64,fixture",
+        },
+        verified: true,
+        trace: ["invoke:screenshot"],
+      })),
+      invokeSiteSkill: vi.fn(),
+    };
+    const harness = createChromeHarness({
+      activeTab: null,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      runtimeServices,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "page.screenshot",
+        format: "png",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        format: "png",
+        dataUrl: "data:image/png;base64,fixture",
+      },
+    });
+
+    expect(runtimeServices.invokePageAction).toHaveBeenCalledWith({
+      action: "screenshot",
+      input: {
+        format: "png",
+        quality: undefined,
+      },
+    });
+    expect(harness.tabsApi.query).not.toHaveBeenCalled();
+    expect(harness.tabsApi.captureVisibleTab).not.toHaveBeenCalled();
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("rejects page.press_key when active tab metadata is unavailable", async () => {
     const harness = createIntegratedChromeHarness({
       activeTab: null,
@@ -2288,6 +2342,43 @@ describe("mv3-shell manifest", () => {
     });
 
     dispose();
+    harness.cleanup();
+  });
+
+  it("captures a screenshot of the active tab through runtime services", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 21,
+        url: "https://fixture.test/home",
+        title: "Fixture Home",
+      },
+    });
+    const services = createBackgroundRuntimeServices({
+      chromeApi: harness.chromeApi,
+    });
+
+    await expect(
+      services.invokePageAction({
+        action: "screenshot",
+        input: {
+          format: "jpeg",
+          quality: 80,
+        },
+      }),
+    ).resolves.toMatchObject({
+      verified: true,
+      result: {
+        format: "jpeg",
+        dataUrl: expect.stringMatching(/^data:image\/jpeg;base64,/),
+      },
+      trace: ["invoke:screenshot"],
+    });
+
+    expect(harness.tabsApi.captureVisibleTab).toHaveBeenCalledWith(undefined, {
+      format: "jpeg",
+      quality: 80,
+    });
+
     harness.cleanup();
   });
 
@@ -2326,6 +2417,57 @@ describe("mv3-shell manifest", () => {
     });
 
     dispose();
+    harness.cleanup();
+  });
+
+  it("rejects page.screenshot when active tab metadata is unavailable", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: null,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "page.screenshot",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_BAD_INPUT",
+        message: "page.screenshot requires an active tab with url metadata",
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("rejects page.screenshot when captureVisibleTab is unavailable", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 21,
+        url: "https://fixture.test/home",
+      },
+    });
+    (harness.chromeApi.tabs as { captureVisibleTab?: unknown }).captureVisibleTab = undefined;
+    const services = createBackgroundRuntimeServices({
+      chromeApi: harness.chromeApi,
+    });
+
+    await expect(
+      services.invokePageAction({
+        action: "screenshot",
+      }),
+    ).rejects.toMatchObject({
+      code: "E_RUNTIME",
+      message: "chrome.tabs.captureVisibleTab is required for page.screenshot",
+    });
+
     harness.cleanup();
   });
 

@@ -206,16 +206,6 @@ function createChromeAuditStore(
   };
 }
 
-function invalidPageAutomation(message) {
-  return {
-    ok: false,
-    error: {
-      code: "E_BAD_INPUT",
-      message,
-    },
-  };
-}
-
 function emptyInterventionState() {
   return {
     status: "empty",
@@ -1770,59 +1760,6 @@ export function createBackgroundRunnerBridge({
     }
   }
 
-  function normalizeScreenshotRequest({ format, quality } = {}) {
-    const normalizedFormat = format == null ? "png" : format;
-    if (normalizedFormat !== "png" && normalizedFormat !== "jpeg") {
-      return invalidPageAutomation("page.screenshot format must be png or jpeg");
-    }
-    if (quality != null) {
-      if (
-        typeof quality !== "number" ||
-        !Number.isFinite(quality) ||
-        quality < 0 ||
-        quality > 100
-      ) {
-        return invalidPageAutomation("page.screenshot quality must be between 0 and 100");
-      }
-    }
-    return {
-      format: normalizedFormat,
-      ...(normalizedFormat === "jpeg" && quality != null ? { quality } : {}),
-    };
-  }
-
-  async function captureActiveTabScreenshot({ format, quality } = {}) {
-    if (!chromeApi?.tabs?.captureVisibleTab) {
-      return {
-        ok: false,
-        error: {
-          code: "E_RUNTIME",
-          message: "chrome.tabs.captureVisibleTab is required for page.screenshot",
-        },
-      };
-    }
-
-    const activeTab = await queryActiveTab();
-    if (!activeTab) {
-      return invalidPageAutomation("page.screenshot requires an active tab with url metadata");
-    }
-
-    const screenshotOptions = normalizeScreenshotRequest({ format, quality });
-    if (screenshotOptions.ok === false) {
-      return screenshotOptions;
-    }
-
-    const dataUrl = await chromeApi.tabs.captureVisibleTab(activeTab.windowId, screenshotOptions);
-
-    return {
-      ok: true,
-      data: {
-        dataUrl,
-        format: screenshotOptions.format,
-      },
-    };
-  }
-
   function shouldRecoverHost(response) {
     if (!response?.ok) {
       return "ensure_failed";
@@ -2363,9 +2300,15 @@ export function createBackgroundRunnerBridge({
           return result.result;
         });
       case "page.screenshot":
-        return captureActiveTabScreenshot({
-          format: message.format,
-          quality: message.quality,
+        return routeRuntimeService(async () => {
+          const result = await getRuntimeServices().invokePageAction({
+            action: "screenshot",
+            input: {
+              format: message.format,
+              quality: message.quality,
+            },
+          });
+          return result.result;
         });
       case "tabs.list":
         return routeRuntimeCapability("tabs.list");

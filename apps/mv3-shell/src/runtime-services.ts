@@ -342,6 +342,33 @@ function buildPageActionRequest({ action, input, tab, scriptPath }) {
   }
 }
 
+function normalizeScreenshotRequest(input: unknown) {
+  if (input != null && !isPlainObject(input)) {
+    throw new CapabilityError("E_BAD_INPUT", "page.screenshot requires an object input");
+  }
+
+  const format = input?.format == null ? "png" : input.format;
+  if (format !== "png" && format !== "jpeg") {
+    throw new CapabilityError("E_BAD_INPUT", "page.screenshot format must be png or jpeg");
+  }
+
+  if (input?.quality != null) {
+    if (
+      typeof input.quality !== "number" ||
+      !Number.isFinite(input.quality) ||
+      input.quality < 0 ||
+      input.quality > 100
+    ) {
+      throw new CapabilityError("E_BAD_INPUT", "page.screenshot quality must be between 0 and 100");
+    }
+  }
+
+  return {
+    format,
+    ...(format === "jpeg" && input?.quality != null ? { quality: input.quality } : {}),
+  };
+}
+
 function normalizeChatRunStatus(status) {
   return status === "running" || status === "stopped" ? status : "idle";
 }
@@ -1832,6 +1859,30 @@ export function createBackgroundRuntimeServices({
   }
 
   async function invokePageAction({ action, input = {}, ctx = {} } = {}) {
+    if (action === "screenshot") {
+      if (!chromeApi?.tabs?.captureVisibleTab) {
+        throw new CapabilityError(
+          "E_RUNTIME",
+          "chrome.tabs.captureVisibleTab is required for page.screenshot",
+        );
+      }
+
+      const activeTab = await requireActiveTab(chromeApi, "page.screenshot");
+      const screenshotOptions = normalizeScreenshotRequest(input);
+      const dataUrl = await chromeApi.tabs.captureVisibleTab(activeTab.windowId, screenshotOptions);
+
+      return {
+        result: {
+          dataUrl,
+          format: screenshotOptions.format,
+        },
+        verified: true,
+        trace: ["invoke:screenshot"],
+        timelineEvents: [],
+        rawEvents: [],
+      };
+    }
+
     if (!pageHookBridge) {
       throw new CapabilityError("E_RUNTIME", "Page hook bridge is not configured");
     }
