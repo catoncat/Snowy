@@ -1,4 +1,18 @@
-import type { AiSurfaceResourceId } from "@bbl-next/contracts";
+import type {
+  AiSurfaceResourceId,
+  ConfigControlPlaneAction,
+  HostControlPlaneAction,
+  InterventionControlPlaneAction,
+  RuntimeControlPlaneAction,
+  SkillControlPlaneAction,
+} from "@bbl-next/contracts";
+
+type SidepanelManagementControlPlaneAction =
+  | ConfigControlPlaneAction
+  | HostControlPlaneAction
+  | Extract<InterventionControlPlaneAction, "intervention.resolve" | "intervention.cancel">
+  | RuntimeControlPlaneAction
+  | SkillControlPlaneAction;
 
 export const SIDEPANEL_MANAGEMENT_RESOURCE_IDS = [
   "runtime.summary",
@@ -11,6 +25,8 @@ export const SIDEPANEL_MANAGEMENT_ACTION_KINDS = [
   "runtime.capture_diagnostics",
   "runtime.clear_error",
   "config.update",
+  "intervention.resolve",
+  "intervention.cancel",
   "skills.install",
   "skills.enable",
   "skills.disable",
@@ -18,7 +34,7 @@ export const SIDEPANEL_MANAGEMENT_ACTION_KINDS = [
   "hosts.connect",
   "hosts.disconnect",
   "hosts.set_default",
-] as const;
+] as const satisfies readonly SidepanelManagementControlPlaneAction[];
 
 export type SidepanelManagementResourceId = (typeof SIDEPANEL_MANAGEMENT_RESOURCE_IDS)[number];
 export type SidepanelManagementActionKind = (typeof SIDEPANEL_MANAGEMENT_ACTION_KINDS)[number];

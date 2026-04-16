@@ -3003,6 +3003,8 @@ describe("mv3-shell manifest", () => {
       "runtime.capture_diagnostics",
       "runtime.clear_error",
       "config.update",
+      "intervention.resolve",
+      "intervention.cancel",
       "skills.install",
       "skills.enable",
       "skills.disable",

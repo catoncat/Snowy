@@ -1,6 +1,7 @@
 import type {
   ConfigSummaryResource,
   HostsSummaryResource,
+  InterventionRecord,
   RuntimeSummaryResource,
   SkillsSummaryResource,
 } from "@bbl-next/contracts";
@@ -22,6 +23,8 @@ type ManagementResourceDocument =
   | SkillsSummaryResource
   | HostsSummaryResource;
 
+type RuntimeSummary = RuntimeSummaryResource["data"];
+
 type RuntimeDiagnosticsAction = {
   kind: "runtime.capture_diagnostics";
   world?: "main" | "content";
@@ -35,6 +38,18 @@ type RuntimeClearErrorAction = {
 type ConfigUpdateAction = {
   kind: "config.update";
   patch: Record<string, unknown>;
+};
+
+type InterventionResolveAction = {
+  kind: "intervention.resolve";
+  interventionId: string;
+  resolution?: Record<string, unknown>;
+};
+
+type InterventionCancelAction = {
+  kind: "intervention.cancel";
+  interventionId: string;
+  reason?: string;
 };
 
 type SkillAction = {
@@ -51,6 +66,8 @@ export type ManagementActionMessage =
   | RuntimeDiagnosticsAction
   | RuntimeClearErrorAction
   | ConfigUpdateAction
+  | InterventionResolveAction
+  | InterventionCancelAction
   | SkillAction
   | HostAction;
 
@@ -79,6 +96,14 @@ export function createInitialManagementState(): ManagementState {
     skills: null,
     hosts: null,
   };
+}
+
+export function listPendingInterventions(
+  runtimeSummary: RuntimeSummary | null | undefined,
+): InterventionRecord[] {
+  return (runtimeSummary?.interventions.active ?? []).filter(
+    (entry) => entry.status === "requested",
+  );
 }
 
 export function buildManagementBootstrapRequests(world: "main" | "content" = "main") {
@@ -133,6 +158,26 @@ export function createManagementActionMessage(
         patch,
       };
     }
+    case "intervention.resolve":
+      return {
+        kind,
+        interventionId: requireNonEmptyString(
+          payload.interventionId ?? payload.id,
+          `${kind} requires interventionId`,
+        ),
+        ...(isPlainObject(payload.resolution) ? { resolution: payload.resolution } : {}),
+      };
+    case "intervention.cancel":
+      return {
+        kind,
+        interventionId: requireNonEmptyString(
+          payload.interventionId ?? payload.id,
+          `${kind} requires interventionId`,
+        ),
+        ...(typeof payload.reason === "string" && payload.reason.trim()
+          ? { reason: payload.reason.trim() }
+          : {}),
+      };
     case "skills.install":
     case "skills.enable":
     case "skills.disable":

@@ -15,6 +15,7 @@ import {
   buildManagementBootstrapRequests,
   createInitialManagementState,
   createManagementActionMessage,
+  listPendingInterventions,
   type ManagementState,
 } from "./management";
 
@@ -80,6 +81,7 @@ const configSummary = computed(() => managementState.value.config?.data ?? null)
 const skillsSummary = computed(() => managementState.value.skills?.data ?? null);
 const hostsSummary = computed(() => managementState.value.hosts?.data ?? null);
 const hostItems = computed(() => hostsSummary.value?.items ?? []);
+const pendingInterventions = computed(() => listPendingInterventions(runtimeSummary.value));
 const activeTabId = computed(() => runtimeSummary.value?.activeTab?.tabId ?? null);
 
 function readStringField(record: unknown, field: string): string {
@@ -322,6 +324,23 @@ function submitHostAction(kind: HostActionKind, hostId: string) {
   void runManagementAction(kind, { hostId });
 }
 
+function approveIntervention(interventionId: string) {
+  void runManagementAction("intervention.resolve", {
+    interventionId,
+    resolution: {
+      resolution: "resume",
+      source: "sidepanel",
+    },
+  });
+}
+
+function rejectIntervention(interventionId: string) {
+  void runManagementAction("intervention.cancel", {
+    interventionId,
+    reason: "Rejected from sidepanel",
+  });
+}
+
 function toggleTool(id: string) {
   chatState.value = toggleToolExpanded(chatState.value, id);
 }
@@ -455,6 +474,83 @@ onUnmounted(() => {
                 {{ runtimeSummary?.interventions.totalCount ?? 0 }}
               </p>
             </div>
+          </div>
+        </section>
+
+        <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Pending interventions
+              </p>
+              <p class="mt-1 text-sm font-medium text-slate-900">
+                {{ pendingInterventions.length }} waiting for sidepanel handoff
+              </p>
+              <p class="mt-1 text-xs text-slate-500">
+                Approve resumes the run. Reject cancels the request through the shared control
+                plane.
+              </p>
+            </div>
+            <span
+              class="rounded-full px-2 py-1 text-[11px] font-medium"
+              :class="
+                pendingInterventions.length > 0
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'bg-emerald-100 text-emerald-700'
+              "
+            >
+              {{ pendingInterventions.length > 0 ? 'attention required' : 'idle' }}
+            </span>
+          </div>
+
+          <div
+            v-if="pendingInterventions.length === 0"
+            class="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500"
+          >
+            No pending intervention requests.
+          </div>
+
+          <div v-else class="mt-3 space-y-3">
+            <article
+              v-for="intervention in pendingInterventions"
+              :key="intervention.id"
+              class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-sm font-medium text-slate-900">{{ intervention.title }}</p>
+                  <p class="mt-1 text-xs text-slate-500">
+                    {{ intervention.kind }} · {{ intervention.trigger }} · requested
+                    {{ intervention.requestedAt }}
+                  </p>
+                </div>
+                <span
+                  class="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200"
+                >
+                  {{ intervention.status }}
+                </span>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-slate-700">{{ intervention.message }}</p>
+              <p v-if="intervention.sessionId" class="mt-2 text-xs text-slate-500">
+                session {{ intervention.sessionId }}
+              </p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+                  :disabled="managementBusy"
+                  @click="approveIntervention(intervention.id)"
+                >
+                  Approve
+                </button>
+                <button
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50"
+                  :disabled="managementBusy"
+                  @click="rejectIntervention(intervention.id)"
+                >
+                  Reject
+                </button>
+              </div>
+            </article>
           </div>
         </section>
 

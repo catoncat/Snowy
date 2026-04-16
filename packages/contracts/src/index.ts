@@ -37,6 +37,7 @@ export interface AiSurfaceResourceMetadata<
   bootstrapKey?: BootstrapResourceKey;
 }
 const ALL_AI_SURFACE_RESOURCE_AUDIENCES = [...AI_SURFACE_RESOURCE_AUDIENCES] as const;
+const SYSTEM_AI_SURFACE_RESOURCE_AUDIENCES = ["system"] as const;
 export const AI_SURFACE_RESOURCE_METADATA_REGISTRY = [
   {
     id: "runtime.summary",
@@ -48,7 +49,7 @@ export const AI_SURFACE_RESOURCE_METADATA_REGISTRY = [
   {
     id: "runtime.history",
     readOwner: "runtime",
-    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    audiences: SYSTEM_AI_SURFACE_RESOURCE_AUDIENCES,
     projections: ["resource.read"],
   },
   {
@@ -94,17 +95,14 @@ const AI_SURFACE_RESOURCE_METADATA_BY_ID = AI_SURFACE_RESOURCE_METADATA_REGISTRY
 );
 export function getAiSurfaceResourceMetadata<ResourceId extends AiSurfaceResourceId>(
   resourceId: ResourceId,
-): Extract<(typeof AI_SURFACE_RESOURCE_METADATA_REGISTRY)[number], { id: ResourceId }> {
-  return AI_SURFACE_RESOURCE_METADATA_BY_ID[resourceId] as Extract<
-    (typeof AI_SURFACE_RESOURCE_METADATA_REGISTRY)[number],
-    { id: ResourceId }
-  >;
+): AiSurfaceResourceMetadata<ResourceId> {
+  return AI_SURFACE_RESOURCE_METADATA_BY_ID[resourceId] as AiSurfaceResourceMetadata<ResourceId>;
 }
 export function listAiSurfaceResourcesForAudience(
   audience: AiSurfaceResourceAudience,
 ): AiSurfaceResourceMetadata[] {
   return AI_SURFACE_RESOURCE_METADATA_REGISTRY.filter((entry) =>
-    entry.audiences.includes(audience),
+    (entry.audiences as readonly AiSurfaceResourceAudience[]).includes(audience),
   );
 }
 export function listBootstrapResourceMetadata(): Array<
@@ -153,6 +151,12 @@ export const RUNTIME_CONTROL_PLANE_ACTIONS = [
   "runtime.clear_error",
 ] as const;
 export type RuntimeControlPlaneAction = (typeof RUNTIME_CONTROL_PLANE_ACTIONS)[number];
+export const INTERVENTION_CONTROL_PLANE_ACTIONS = [
+  "intervention.list",
+  "intervention.resolve",
+  "intervention.cancel",
+] as const;
+export type InterventionControlPlaneAction = (typeof INTERVENTION_CONTROL_PLANE_ACTIONS)[number];
 export type ExecutionHostKind = "local" | "remote";
 export type ExecutionHostState = "connected" | "disconnected" | "degraded";
 export type ExecutionHostHealthStatus = "healthy" | "degraded" | "unknown";

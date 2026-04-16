@@ -174,4 +174,15 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain(':items="chatState.items"');
     expect(source).toContain('@toggle-tool="toggleTool"');
   });
+
+  it("surfaces pending interventions through shared management actions", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("Pending interventions");
+    expect(source).toContain("Approve");
+    expect(source).toContain("Reject");
+    expect(source).toContain('runManagementAction("intervention.resolve"');
+    expect(source).toContain('runManagementAction("intervention.cancel"');
+    expect(source).toContain("listPendingInterventions");
+  });
 });

@@ -8,6 +8,7 @@ import {
   buildManagementBootstrapRequests,
   createInitialManagementState,
   createManagementActionMessage,
+  listPendingInterventions,
 } from "../src/sidepanel/management";
 
 describe("sidepanel management state", () => {
@@ -139,6 +140,8 @@ describe("sidepanel management state", () => {
       "runtime.capture_diagnostics",
       "runtime.clear_error",
       "config.update",
+      "intervention.resolve",
+      "intervention.cancel",
       "skills.install",
       "skills.enable",
       "skills.disable",
@@ -170,6 +173,30 @@ describe("sidepanel management state", () => {
         },
       },
     });
+    expect(
+      createManagementActionMessage("intervention.resolve", {
+        interventionId: "ivr-1",
+        resolution: {
+          resolution: "resume",
+        },
+      }),
+    ).toEqual({
+      kind: "intervention.resolve",
+      interventionId: "ivr-1",
+      resolution: {
+        resolution: "resume",
+      },
+    });
+    expect(
+      createManagementActionMessage("intervention.cancel", {
+        interventionId: "ivr-1",
+        reason: "Rejected from sidepanel",
+      }),
+    ).toEqual({
+      kind: "intervention.cancel",
+      interventionId: "ivr-1",
+      reason: "Rejected from sidepanel",
+    });
     expect(createManagementActionMessage("skills.install", { skillId: "skill.demo" })).toEqual({
       kind: "skills.install",
       skillId: "skill.demo",
@@ -178,5 +205,62 @@ describe("sidepanel management state", () => {
       kind: "hosts.connect",
       hostId: "local",
     });
+  });
+
+  it("lists only pending interventions for the sidepanel handoff queue", () => {
+    const pending = listPendingInterventions({
+      status: "healthy",
+      mode: "active-tab-only",
+      sessionId: "session-1",
+      activeTab: null,
+      loopState: "paused",
+      lastError: null,
+      interventions: {
+        status: "requested",
+        totalCount: 3,
+        activeCount: 2,
+        recentCount: 3,
+        active: [
+          {
+            id: "ivr-requested",
+            sessionId: "session-1",
+            kind: "takeover",
+            trigger: "verify_failed",
+            title: "Manual review",
+            message: "Finish the login flow in the browser.",
+            status: "requested",
+            requestedAt: "2026-04-15T00:00:00.000Z",
+            updatedAt: "2026-04-15T00:00:00.000Z",
+            expiresAt: null,
+            escalation: null,
+          },
+          {
+            id: "ivr-timeout",
+            sessionId: "session-1",
+            kind: "confirm",
+            trigger: "runtime_blocked",
+            title: "Timed out",
+            message: "The request expired before approval.",
+            status: "timed_out",
+            requestedAt: "2026-04-15T00:00:00.000Z",
+            updatedAt: "2026-04-15T00:05:00.000Z",
+            expiresAt: "2026-04-15T00:05:00.000Z",
+            escalation: null,
+          },
+        ],
+        recent: [],
+      },
+      actionCapabilities: {
+        total: 2,
+        namespaces: ["runtime", "intervention"],
+      },
+    });
+
+    expect(pending).toEqual([
+      expect.objectContaining({
+        id: "ivr-requested",
+        status: "requested",
+      }),
+    ]);
   });
 });
