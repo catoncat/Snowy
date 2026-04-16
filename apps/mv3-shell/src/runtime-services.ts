@@ -719,6 +719,7 @@ export function createRemoteHostProbe(sendProbe: any): any {
 }
 
 export function createRemoteHostTransport({
+  hostId = "remote",
   sendExec,
   sendProbe,
   availability,
@@ -748,6 +749,7 @@ export function createRemoteHostTransport({
   }
 
   return {
+    hostId: typeof hostId === "string" && hostId.trim().length > 0 ? hostId.trim() : "remote",
     async describeAvailability(request) {
       return resolveAvailability(request);
     },
@@ -1043,7 +1045,11 @@ async function sendRemoteTransportRequest({
   return payload;
 }
 
-export function createConfiguredRemoteHostTransport({ config, fetchImpl = globalThis.fetch } = {}) {
+export function createConfiguredRemoteHostTransport({
+  config,
+  fetchImpl = globalThis.fetch,
+  hostId = "remote",
+} = {}) {
   const normalized = cloneRemoteTransportConfig(config);
   if (!normalized) {
     return null;
@@ -1051,6 +1057,7 @@ export function createConfiguredRemoteHostTransport({ config, fetchImpl = global
 
   const baseUrl = normalized.baseUrl;
   return createRemoteHostTransport({
+    hostId,
     sendExec: (request) =>
       sendRemoteTransportRequest({
         fetchImpl,
@@ -1081,10 +1088,12 @@ export function createConfiguredRemoteHostTransport({ config, fetchImpl = global
 export async function loadConfiguredRemoteHostTransport({
   chromeApi = globalThis.chrome,
   fetchImpl = globalThis.fetch,
+  hostId = "remote",
 } = {}) {
   return createConfiguredRemoteHostTransport({
     config: await loadRemoteTransportConfig(chromeApi),
     fetchImpl,
+    hostId,
   });
 }
 

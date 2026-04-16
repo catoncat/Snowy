@@ -468,6 +468,7 @@ export function createBackgroundRunnerBridge({
   auditStorageKey = AUDIT_STORAGE_KEY,
   auditRetention = AUDIT_RETENTION_DEFAULTS,
   remoteTransport = undefined,
+  remoteTransports = undefined,
 }: any = {}): any {
   const effectivePageHookBridge =
     pageHookBridge ??
@@ -495,55 +496,128 @@ export function createBackgroundRunnerBridge({
     hostLastSeenAt: undefined,
     hostRecoveredAt: undefined,
     hostRecoveryReason: undefined,
-    remoteHostReady: false,
-    remoteHostHealthStatus: "unknown",
-    remoteHostCheckedAt: undefined,
-    remoteHostError: null,
+    remoteHosts: {},
     lastRuntimeError: null,
     lastRuntimeErrorClearedAt: null,
   };
-  let activeRemoteTransport = remoteTransport;
-  let configuredRemoteTransportLoaded = remoteTransport !== undefined;
+  const hasExplicitRemoteTransportConfig =
+    remoteTransport !== undefined || remoteTransports !== undefined;
+  let activeRemoteTransports = new Map();
+  let configuredRemoteTransportLoaded = hasExplicitRemoteTransportConfig;
   let composedRuntimeServices = null;
 
-  function hasRemoteHost() {
-    return Boolean(activeRemoteTransport);
+  function normalizeRemoteTransportEntries(...inputs) {
+    const entries = [];
+    let fallbackIndex = 0;
+
+    for (const input of inputs) {
+      if (input == null) {
+        continue;
+      }
+      const values = Array.isArray(input) ? input : [input];
+      for (const value of values) {
+        const hasTransportWrapper =
+          value && typeof value === "object" && "transport" in value && value.transport;
+        const transport = hasTransportWrapper ? value.transport : value;
+        if (!transport || typeof transport !== "object") {
+          continue;
+        }
+        const hostIdCandidate = hasTransportWrapper ? value.hostId : transport.hostId;
+        const fallbackHostId = fallbackIndex === 0 ? REMOTE_HOST_ID : `remote-${fallbackIndex + 1}`;
+        const hostId =
+          typeof hostIdCandidate === "string" && hostIdCandidate.trim().length > 0
+            ? hostIdCandidate.trim()
+            : fallbackHostId;
+        entries.push({
+          hostId,
+          transport,
+        });
+        fallbackIndex += 1;
+      }
+    }
+
+    return entries;
+  }
+
+  function createEmptyRemoteHostState() {
+    return {
+      connected: false,
+      healthStatus: "unknown",
+      checkedAt: undefined,
+      error: null,
+    };
+  }
+
+  function getRemoteHostState(hostId) {
+    if (!state.remoteHosts[hostId]) {
+      state.remoteHosts[hostId] = createEmptyRemoteHostState();
+    }
+    return state.remoteHosts[hostId];
+  }
+
+  function setActiveRemoteTransports(entries) {
+    const nextRemoteTransports = new Map();
+    for (const entry of entries) {
+      nextRemoteTransports.set(entry.hostId, entry.transport);
+      getRemoteHostState(entry.hostId);
+    }
+    for (const hostId of Object.keys(state.remoteHosts)) {
+      if (!nextRemoteTransports.has(hostId)) {
+        delete state.remoteHosts[hostId];
+      }
+    }
+    if (state.defaultHostId !== LOCAL_HOST_ID && !nextRemoteTransports.has(state.defaultHostId)) {
+      state.defaultHostId = null;
+    }
+    activeRemoteTransports = nextRemoteTransports;
+    return activeRemoteTransports;
+  }
+
+  if (hasExplicitRemoteTransportConfig) {
+    setActiveRemoteTransports(normalizeRemoteTransportEntries(remoteTransport, remoteTransports));
+  }
+
+  function hasRemoteHost(hostId) {
+    if (typeof hostId === "string" && hostId.trim().length > 0) {
+      return activeRemoteTransports.has(hostId);
+    }
+    return activeRemoteTransports.size > 0;
+  }
+
+  function isRemoteHostId(hostId) {
+    return typeof hostId === "string" && hostId !== LOCAL_HOST_ID && hasRemoteHost(hostId);
+  }
+
+  function getRemoteHostIds() {
+    return [...activeRemoteTransports.keys()];
+  }
+
+  function getRemoteTransport(hostId) {
+    return activeRemoteTransports.get(hostId) ?? null;
   }
 
   async function syncConfiguredRemoteTransport(force = false) {
-    if (remoteTransport) {
-      activeRemoteTransport = remoteTransport;
+    if (hasExplicitRemoteTransportConfig) {
       configuredRemoteTransportLoaded = true;
-      return activeRemoteTransport;
+      return activeRemoteTransports;
     }
     if (configuredRemoteTransportLoaded && !force) {
-      return activeRemoteTransport;
+      return activeRemoteTransports;
     }
 
-    activeRemoteTransport = await loadConfiguredRemoteHostTransport({
+    const configuredRemoteTransport = await loadConfiguredRemoteHostTransport({
       chromeApi,
     });
     configuredRemoteTransportLoaded = true;
-    if (!activeRemoteTransport) {
-      if (state.defaultHostId === REMOTE_HOST_ID) {
-        state.defaultHostId = null;
-      }
-      setRemoteHostSnapshot({
-        connected: false,
-        healthStatus: "unknown",
-        checkedAt: undefined,
-        error: null,
-      });
-    }
-    return activeRemoteTransport;
+    return setActiveRemoteTransports(normalizeRemoteTransportEntries(configuredRemoteTransport));
   }
 
-  function createRemoteTransportError(error, action) {
+  function createRemoteTransportError(error, action, hostId) {
     const normalized = toBridgeError(error, "E_RUNTIME");
     const details = {
       ...(normalized.details && typeof normalized.details === "object" ? normalized.details : {}),
       kind: "transport",
-      hostId: REMOTE_HOST_ID,
+      hostId,
       reason: "transport_unavailable",
       action,
     };
@@ -553,8 +627,9 @@ export function createBackgroundRunnerBridge({
     };
   }
 
-  async function describeRemoteTransportAvailability(action) {
-    const resolvedRemoteTransport = await syncConfiguredRemoteTransport();
+  async function describeRemoteTransportAvailability(hostId, action) {
+    await syncConfiguredRemoteTransport();
+    const resolvedRemoteTransport = getRemoteTransport(hostId);
     if (
       !resolvedRemoteTransport ||
       typeof resolvedRemoteTransport.describeAvailability !== "function"
@@ -564,20 +639,21 @@ export function createBackgroundRunnerBridge({
     try {
       return (
         (await resolvedRemoteTransport.describeAvailability({
-          hostId: REMOTE_HOST_ID,
+          hostId,
           action,
         })) ?? null
       );
     } catch (error) {
       return {
         available: false,
-        error: createRemoteTransportError(error, action),
+        error: createRemoteTransportError(error, action, hostId),
       };
     }
   }
 
-  async function getRemoteTransportAvailability(action) {
-    const resolvedRemoteTransport = await syncConfiguredRemoteTransport();
+  async function getRemoteTransportAvailability(hostId, action) {
+    await syncConfiguredRemoteTransport();
+    const resolvedRemoteTransport = getRemoteTransport(hostId);
     if (!resolvedRemoteTransport) {
       return {
         available: false,
@@ -587,11 +663,12 @@ export function createBackgroundRunnerBridge({
             message: "Remote transport is unavailable",
           },
           action,
+          hostId,
         ),
       };
     }
 
-    const describedAvailability = await describeRemoteTransportAvailability(action);
+    const describedAvailability = await describeRemoteTransportAvailability(hostId, action);
     if (describedAvailability && typeof describedAvailability === "object") {
       if (describedAvailability.available === false) {
         return {
@@ -602,6 +679,7 @@ export function createBackgroundRunnerBridge({
               message: "Remote transport is unavailable",
             },
             action,
+            hostId,
           ),
         };
       }
@@ -616,7 +694,7 @@ export function createBackgroundRunnerBridge({
     if (typeof resolvedRemoteTransport.isAvailable === "function") {
       try {
         const available = await resolvedRemoteTransport.isAvailable({
-          hostId: REMOTE_HOST_ID,
+          hostId,
           action,
         });
         return available
@@ -632,12 +710,13 @@ export function createBackgroundRunnerBridge({
                   message: "Remote transport is unavailable",
                 },
                 action,
+                hostId,
               ),
             };
       } catch (error) {
         return {
           available: false,
-          error: createRemoteTransportError(error, action),
+          error: createRemoteTransportError(error, action, hostId),
         };
       }
     }
@@ -1227,7 +1306,7 @@ export function createBackgroundRunnerBridge({
     if (hostId === LOCAL_HOST_ID) {
       return hostId;
     }
-    if (hostId === REMOTE_HOST_ID && hasRemoteHost()) {
+    if (isRemoteHostId(hostId)) {
       return hostId;
     }
     if (hostId !== LOCAL_HOST_ID) {
@@ -1309,7 +1388,7 @@ export function createBackgroundRunnerBridge({
     return toLocalHostSnapshot(await readLocalHostControlState());
   }
 
-  function toRemoteHostSnapshot(remoteState) {
+  function toRemoteHostSnapshot(hostId, remoteState) {
     const connected = remoteState.connected === true;
     const healthStatus =
       remoteState.healthStatus ??
@@ -1319,7 +1398,7 @@ export function createBackgroundRunnerBridge({
       ...(remoteState.checkedAt ? { checkedAt: remoteState.checkedAt } : {}),
     };
     const snapshot = {
-      hostId: REMOTE_HOST_ID,
+      hostId,
       kind: "remote",
       connected,
       state:
@@ -1328,7 +1407,7 @@ export function createBackgroundRunnerBridge({
           : connected
             ? "connected"
             : "disconnected",
-      isDefault: state.defaultHostId === REMOTE_HOST_ID,
+      isDefault: state.defaultHostId === hostId,
       health,
     };
     if (remoteState.error) {
@@ -1340,47 +1419,47 @@ export function createBackgroundRunnerBridge({
     return snapshot;
   }
 
-  async function describeRemoteHost(action = "hosts.get") {
-    const availability = await getRemoteTransportAvailability(action);
+  async function describeRemoteHost(hostId, action = "hosts.get") {
+    const availability = await getRemoteTransportAvailability(hostId, action);
     if (!availability.available && availability.error) {
-      setRemoteHostSnapshot({
+      setRemoteHostSnapshot(hostId, {
         connected: false,
         healthStatus: "degraded",
         error: availability.error,
       });
     }
-    return toRemoteHostSnapshot({
-      checkedAt: state.remoteHostCheckedAt,
-      connected: state.remoteHostReady,
-      healthStatus: state.remoteHostHealthStatus,
-      error: state.remoteHostError,
-    });
+    return toRemoteHostSnapshot(hostId, getRemoteHostState(hostId));
   }
 
-  function setRemoteHostSnapshot({
-    connected = false,
-    healthStatus = connected ? "healthy" : "unknown",
-    checkedAt = isoNow(),
-    error = null,
-  } = {}) {
-    state.remoteHostReady = connected;
-    state.remoteHostHealthStatus = healthStatus;
-    state.remoteHostCheckedAt = checkedAt;
-    state.remoteHostError = error;
+  function setRemoteHostSnapshot(
+    hostId,
+    {
+      connected = false,
+      healthStatus = connected ? "healthy" : "unknown",
+      checkedAt = isoNow(),
+      error = null,
+    } = {},
+  ) {
+    const remoteHostState = getRemoteHostState(hostId);
+    remoteHostState.connected = connected;
+    remoteHostState.healthStatus = healthStatus;
+    remoteHostState.checkedAt = checkedAt;
+    remoteHostState.error = error;
   }
 
-  async function probeRemoteHostControlState(action = "hosts.health") {
-    const resolvedRemoteTransport = await syncConfiguredRemoteTransport();
-    const availability = await getRemoteTransportAvailability(action);
+  async function probeRemoteHostControlState(hostId, action = "hosts.health") {
+    await syncConfiguredRemoteTransport();
+    const resolvedRemoteTransport = getRemoteTransport(hostId);
+    const availability = await getRemoteTransportAvailability(hostId, action);
     if (!availability.available) {
-      setRemoteHostSnapshot({
+      setRemoteHostSnapshot(hostId, {
         connected: false,
         healthStatus: "degraded",
         error: availability.error,
       });
       return {
         ok: false,
-        error: state.remoteHostError,
+        error: getRemoteHostState(hostId).error,
       };
     }
     if (typeof resolvedRemoteTransport?.probe !== "function") {
@@ -1390,11 +1469,11 @@ export function createBackgroundRunnerBridge({
       const response = await resolvedRemoteTransport.probe({
         kind: "health",
         requestId: nextRequestId(),
-        hostId: REMOTE_HOST_ID,
+        hostId,
         action,
       });
       if (response && typeof response === "object" && response.ok === false) {
-        setRemoteHostSnapshot({
+        setRemoteHostSnapshot(hostId, {
           connected: false,
           healthStatus: "degraded",
           error: response.error ?? {
@@ -1404,7 +1483,7 @@ export function createBackgroundRunnerBridge({
         });
         return {
           ok: false,
-          error: state.remoteHostError,
+          error: getRemoteHostState(hostId).error,
         };
       }
       const payload =
@@ -1435,7 +1514,7 @@ export function createBackgroundRunnerBridge({
           : payload && typeof payload === "object" && typeof payload.checkedAt === "string"
             ? payload.checkedAt
             : isoNow();
-      setRemoteHostSnapshot({
+      setRemoteHostSnapshot(hostId, {
         connected,
         healthStatus,
         checkedAt,
@@ -1443,17 +1522,17 @@ export function createBackgroundRunnerBridge({
       });
       return {
         ok: true,
-        data: await describeRemoteHost(action),
+        data: await describeRemoteHost(hostId, action),
       };
     } catch (error) {
-      setRemoteHostSnapshot({
+      setRemoteHostSnapshot(hostId, {
         connected: false,
         healthStatus: "degraded",
         error: toBridgeError(error),
       });
       return {
         ok: false,
-        error: state.remoteHostError,
+        error: getRemoteHostState(hostId).error,
       };
     }
   }
@@ -1461,9 +1540,10 @@ export function createBackgroundRunnerBridge({
   async function listExecutionHosts() {
     await syncConfiguredRemoteTransport();
     const items = [await describeLocalHost()];
-    if (hasRemoteHost()) {
-      items.push(await describeRemoteHost("hosts.list"));
-    }
+    const remoteHosts = await Promise.all(
+      getRemoteHostIds().map((hostId) => describeRemoteHost(hostId, "hosts.list")),
+    );
+    items.push(...remoteHosts);
     return items;
   }
 
@@ -1471,7 +1551,7 @@ export function createBackgroundRunnerBridge({
     if (hostId === LOCAL_HOST_ID) {
       return describeLocalHost();
     }
-    return describeRemoteHost(action);
+    return describeRemoteHost(hostId, action);
   }
 
   async function listHosts() {
@@ -1502,8 +1582,8 @@ export function createBackgroundRunnerBridge({
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    if (resolvedHostId === REMOTE_HOST_ID) {
-      const probe = await probeRemoteHostControlState("hosts.connect");
+    if (resolvedHostId !== LOCAL_HOST_ID) {
+      const probe = await probeRemoteHostControlState(resolvedHostId, "hosts.connect");
       if (probe?.ok === false) {
         await appendAudit({
           kind: "hosts.connect",
@@ -1514,7 +1594,7 @@ export function createBackgroundRunnerBridge({
         return probe;
       }
       if (!probe) {
-        setRemoteHostSnapshot({
+        setRemoteHostSnapshot(resolvedHostId, {
           connected: true,
           healthStatus: "healthy",
           error: null,
@@ -1528,7 +1608,7 @@ export function createBackgroundRunnerBridge({
         ok: true,
         data: {
           defaultHostId: state.defaultHostId,
-          host: await describeRemoteHost("hosts.connect"),
+          host: await describeRemoteHost(resolvedHostId, "hosts.connect"),
         },
       };
     }
@@ -1567,8 +1647,8 @@ export function createBackgroundRunnerBridge({
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    if (resolvedHostId === REMOTE_HOST_ID) {
-      setRemoteHostSnapshot({
+    if (resolvedHostId !== LOCAL_HOST_ID) {
+      setRemoteHostSnapshot(resolvedHostId, {
         connected: false,
         healthStatus: "unknown",
         error: null,
@@ -1582,7 +1662,7 @@ export function createBackgroundRunnerBridge({
         ok: true,
         data: {
           defaultHostId: state.defaultHostId,
-          host: await describeRemoteHost("hosts.disconnect"),
+          host: await describeRemoteHost(resolvedHostId, "hosts.disconnect"),
         },
       };
     }
@@ -1636,8 +1716,8 @@ export function createBackgroundRunnerBridge({
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    if (resolvedHostId === REMOTE_HOST_ID) {
-      await probeRemoteHostControlState("hosts.health");
+    if (resolvedHostId !== LOCAL_HOST_ID) {
+      await probeRemoteHostControlState(resolvedHostId, "hosts.health");
     }
     const host = await describeHostById(resolvedHostId, "hosts.health");
     return {
@@ -1651,7 +1731,7 @@ export function createBackgroundRunnerBridge({
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    if (resolvedHostId === REMOTE_HOST_ID) {
+    if (isRemoteHostId(resolvedHostId)) {
       return unsupportedHostOperation({
         hostId: resolvedHostId,
         kind: kind.replace("host.", ""),
@@ -1680,7 +1760,7 @@ export function createBackgroundRunnerBridge({
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    if (resolvedHostId === REMOTE_HOST_ID) {
+    if (isRemoteHostId(resolvedHostId)) {
       return routeRemoteExec({
         ...payload,
         hostId: resolvedHostId,
@@ -1693,27 +1773,28 @@ export function createBackgroundRunnerBridge({
   }
 
   async function routeRemoteExec(payload = {}) {
-    const resolvedRemoteTransport = await syncConfiguredRemoteTransport();
+    await syncConfiguredRemoteTransport();
     const resolvedHostId = resolveHostSubstrateHostId(payload.hostId, "runner.remote_exec");
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
-    if (resolvedHostId !== REMOTE_HOST_ID || typeof resolvedRemoteTransport?.exec !== "function") {
+    const resolvedRemoteTransport = getRemoteTransport(resolvedHostId);
+    if (!isRemoteHostId(resolvedHostId) || typeof resolvedRemoteTransport?.exec !== "function") {
       return unsupportedHostOperation({
         hostId: resolvedHostId,
         kind: "exec",
       });
     }
-    const availability = await getRemoteTransportAvailability("host.exec");
+    const availability = await getRemoteTransportAvailability(resolvedHostId, "host.exec");
     if (!availability.available) {
-      setRemoteHostSnapshot({
+      setRemoteHostSnapshot(resolvedHostId, {
         connected: false,
         healthStatus: "degraded",
         error: availability.error,
       });
       return {
         ok: false,
-        error: state.remoteHostError,
+        error: getRemoteHostState(resolvedHostId).error,
       };
     }
     try {
@@ -1725,7 +1806,7 @@ export function createBackgroundRunnerBridge({
         timeoutMs: payload.timeoutMs,
       });
       if (response && typeof response === "object" && response.ok === false) {
-        setRemoteHostSnapshot({
+        setRemoteHostSnapshot(resolvedHostId, {
           connected: false,
           healthStatus: "degraded",
           error: response.error ?? {
@@ -1735,10 +1816,10 @@ export function createBackgroundRunnerBridge({
         });
         return {
           ok: false,
-          error: state.remoteHostError,
+          error: getRemoteHostState(resolvedHostId).error,
         };
       }
-      setRemoteHostSnapshot({
+      setRemoteHostSnapshot(resolvedHostId, {
         connected: true,
         healthStatus: "healthy",
         error: null,
@@ -1748,14 +1829,14 @@ export function createBackgroundRunnerBridge({
         data: response,
       };
     } catch (error) {
-      setRemoteHostSnapshot({
+      setRemoteHostSnapshot(resolvedHostId, {
         connected: false,
         healthStatus: "degraded",
         error: toBridgeError(error),
       });
       return {
         ok: false,
-        error: state.remoteHostError,
+        error: getRemoteHostState(resolvedHostId).error,
       };
     }
   }
@@ -2025,7 +2106,11 @@ export function createBackgroundRunnerBridge({
         : null,
     });
     await syncConfiguredRemoteTransport();
-    const remoteHost = hasRemoteHost() ? await describeRemoteHost("runtime.summary") : null;
+    const remoteHosts = hasRemoteHost()
+      ? await Promise.all(
+          getRemoteHostIds().map((hostId) => describeRemoteHost(hostId, "runtime.summary")),
+        )
+      : [];
     const hostItems = [
       {
         hostId: localHost.hostId,
@@ -2034,17 +2119,13 @@ export function createBackgroundRunnerBridge({
         state: localHost.state,
         isDefault: localHost.isDefault,
       },
-      ...(remoteHost
-        ? [
-            {
-              hostId: remoteHost.hostId,
-              kind: remoteHost.kind,
-              connected: remoteHost.connected,
-              state: remoteHost.state,
-              isDefault: remoteHost.isDefault,
-            },
-          ]
-        : []),
+      ...remoteHosts.map((remoteHost) => ({
+        hostId: remoteHost.hostId,
+        kind: remoteHost.kind,
+        connected: remoteHost.connected,
+        state: remoteHost.state,
+        isDefault: remoteHost.isDefault,
+      })),
     ];
 
     const runtimeSkillEntries =

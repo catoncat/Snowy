@@ -2565,7 +2565,7 @@ describe("mv3-shell manifest", () => {
       kind: "page.query",
       selector: "input",
     });
-    const inputUid = getFirstElementUid(queryInputResult.data);
+    const inputUid = getFirstElementUid((queryInputResult as { data: unknown }).data);
     const fillResult = await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
       kind: "page.fill",
@@ -2577,7 +2577,7 @@ describe("mv3-shell manifest", () => {
       kind: "page.query",
       selector: "button",
     });
-    const buttonUid = getFirstElementUid(queryButtonResult.data);
+    const buttonUid = getFirstElementUid((queryButtonResult as { data: unknown }).data);
     const clickResult = await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
       kind: "page.click",
@@ -3585,15 +3585,28 @@ describe("mv3-shell manifest", () => {
         },
       },
     });
-    expect(
-      replayResult.data.data.entries.map((entry) => `${entry.subsystem}:${entry.eventType}`),
-    ).toEqual([
+    const replayEntries = (
+      replayResult as {
+        data: {
+          data: {
+            entries: Array<{
+              subsystem: string;
+              eventType: string;
+              continuity?: unknown;
+              hostId?: string;
+              interventionId?: string;
+            }>;
+          };
+        };
+      }
+    ).data.data.entries;
+    expect(replayEntries.map((entry) => `${entry.subsystem}:${entry.eventType}`)).toEqual([
       "session:session.compaction",
       "host:hosts.connect",
       "config:config.update",
       "intervention:intervention.requested",
     ]);
-    expect(replayResult.data.data.entries[0]).toMatchObject({
+    expect(replayEntries[0]).toMatchObject({
       subsystem: "session",
       eventType: "session.compaction",
       continuity: {
@@ -3602,16 +3615,16 @@ describe("mv3-shell manifest", () => {
         firstKeptEntryId: "entry-9",
       },
     });
-    expect(replayResult.data.data.entries[1]).toMatchObject({
+    expect(replayEntries[1]).toMatchObject({
       subsystem: "host",
       eventType: "hosts.connect",
       hostId: "local",
     });
-    expect(replayResult.data.data.entries[2]).toMatchObject({
+    expect(replayEntries[2]).toMatchObject({
       subsystem: "config",
       eventType: "config.update",
     });
-    expect(replayResult.data.data.entries[3]).toMatchObject({
+    expect(replayEntries[3]).toMatchObject({
       subsystem: "intervention",
       eventType: "intervention.requested",
       interventionId: "ivr-1",
@@ -3988,6 +4001,188 @@ describe("mv3-shell manifest", () => {
     expect(availability).toHaveBeenCalledTimes(4);
     expect(sendRemoteExec).not.toHaveBeenCalled();
     expect(probeHandler).not.toHaveBeenCalled();
+    dispose();
+    harness.cleanup();
+  });
+
+  it("tracks multiple remote hosts independently for listing selection and degraded state", async () => {
+    const harness = createChromeHarness({});
+    const primaryExec = vi.fn(
+      async (request: { hostId: string; command: string; timeoutMs?: number }) => ({
+        hostId: request.hostId,
+        command: request.command,
+        exitCode: 0,
+        stdout: `primary:${request.command}`,
+        stderr: "",
+      }),
+    );
+    const secondaryExec = vi.fn();
+    const secondaryAvailability = vi.fn(
+      async ({ action, hostId }: { action: string; hostId: string }) => ({
+        available: false,
+        error: {
+          code: "E_REMOTE_UNAVAILABLE",
+          message: "secondary offline",
+          details: {
+            action,
+            hostId,
+          },
+        },
+      }),
+    );
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      remoteTransports: [
+        createRemoteHostTransport({
+          hostId: "remote-primary",
+          sendExec: primaryExec,
+        }),
+        createRemoteHostTransport({
+          hostId: "remote-secondary",
+          sendExec: secondaryExec,
+          availability: secondaryAvailability,
+        }),
+      ],
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: null,
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            hostId: "remote-primary",
+            kind: "remote",
+            connected: false,
+            state: "disconnected",
+            isDefault: false,
+          }),
+          expect.objectContaining({
+            hostId: "remote-secondary",
+            kind: "remote",
+            connected: false,
+            state: "degraded",
+            isDefault: false,
+            error: {
+              code: "E_REMOTE_UNAVAILABLE",
+              message: "secondary offline",
+              details: {
+                action: "hosts.list",
+                kind: "transport",
+                hostId: "remote-secondary",
+                reason: "transport_unavailable",
+              },
+            },
+          }),
+        ]),
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.set_default",
+        hostId: "remote-primary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        defaultHostId: "remote-primary",
+        host: {
+          hostId: "remote-primary",
+          isDefault: true,
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.exec",
+        command: "pwd",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "remote-primary",
+        command: "pwd",
+        exitCode: 0,
+        stdout: "primary:pwd",
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "host.exec",
+        hostId: "remote-secondary",
+        command: "pwd",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_REMOTE_UNAVAILABLE",
+        message: "secondary offline",
+        details: {
+          action: "host.exec",
+          kind: "transport",
+          hostId: "remote-secondary",
+          reason: "transport_unavailable",
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.get",
+        hostId: "remote-primary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "remote-primary",
+        connected: true,
+        state: "connected",
+        isDefault: true,
+        health: {
+          status: "healthy",
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "hosts.health",
+        hostId: "remote-secondary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        hostId: "remote-secondary",
+        connected: false,
+        state: "degraded",
+        isDefault: false,
+        health: {
+          status: "degraded",
+        },
+        error: {
+          code: "E_REMOTE_UNAVAILABLE",
+          message: "secondary offline",
+        },
+      },
+    });
+
+    expect(primaryExec).toHaveBeenCalledTimes(1);
+    expect(secondaryExec).not.toHaveBeenCalled();
     dispose();
     harness.cleanup();
   });
@@ -4785,7 +4980,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("offscreen bridge keeps local file ops local and only routes exec for the remote host", async () => {
+  it("offscreen bridge keeps local file ops local and routes exec for any remote host id", async () => {
     const messageBus = createMessageBus();
     const runtimeApi = {
       ...messageBus,
@@ -4840,18 +5035,42 @@ describe("mv3-shell manifest", () => {
       target: "bbl-next.runner.offscreen",
       kind: "host.exec",
       requestId: "x1",
-      hostId: "remote",
+      hostId: "remote-primary",
       command: "pwd",
     });
     expect(exec).toMatchObject({
       ok: true,
-      data: { hostId: "remote", command: "pwd", exitCode: 0, stdout: "remote:pwd" },
+      data: { hostId: "remote-primary", command: "pwd", exitCode: 0, stdout: "remote:pwd" },
     });
     expect(remoteExecHandler).toHaveBeenCalledTimes(1);
     expect(remoteExecHandler).toHaveBeenCalledWith(
       expect.objectContaining({
-        hostId: "remote",
+        hostId: "remote-primary",
         command: "pwd",
+      }),
+    );
+
+    const secondRemoteExec = await bridge.handleMessage({
+      target: "bbl-next.runner.offscreen",
+      kind: "host.exec",
+      requestId: "x2",
+      hostId: "remote-secondary",
+      command: "whoami",
+    });
+    expect(secondRemoteExec).toMatchObject({
+      ok: true,
+      data: {
+        hostId: "remote-secondary",
+        command: "whoami",
+        exitCode: 0,
+        stdout: "remote:whoami",
+      },
+    });
+    expect(remoteExecHandler).toHaveBeenCalledTimes(2);
+    expect(remoteExecHandler).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        hostId: "remote-secondary",
+        command: "whoami",
       }),
     );
 
@@ -4879,7 +5098,7 @@ describe("mv3-shell manifest", () => {
       target: "bbl-next.runner.offscreen",
       kind: "host.read",
       requestId: "r-remote",
-      hostId: "remote",
+      hostId: "remote-secondary",
       path: "/workspace/test.txt",
     });
     expect(remoteRead).toMatchObject({
@@ -4889,7 +5108,7 @@ describe("mv3-shell manifest", () => {
         message: "Execution host adapter does not implement read",
         details: {
           kind: "read",
-          hostId: "remote",
+          hostId: "remote-secondary",
           reason: "operation_not_supported",
         },
       },

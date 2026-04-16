@@ -4,7 +4,10 @@ import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_TARGET } from "./background.
 import { createLocalHostAdapter } from "./local-host-adapter.js";
 
 const LOCAL_HOST_ID = "local";
-const REMOTE_HOST_ID = "remote";
+
+function isRemoteHostId(hostId) {
+  return typeof hostId === "string" && hostId.trim().length > 0 && hostId !== LOCAL_HOST_ID;
+}
 
 function toBridgeError(error, fallbackCode = "E_RUNTIME") {
   if (error && typeof error === "object" && "code" in error && "message" in error) {
@@ -99,25 +102,25 @@ export function createDefaultOffscreenRunnerHost({
   const remote = remoteHostAdapter ?? createBackgroundRemoteExecAdapter({ runtimeApi });
   const hostAdapter = {
     read(request) {
-      if (request.hostId === REMOTE_HOST_ID) {
+      if (isRemoteHostId(request.hostId)) {
         return remote?.read?.(request) ?? createOperationNotSupportedError(request, "read");
       }
       return local?.read?.(request) ?? createOperationNotSupportedError(request, "read");
     },
     write(request) {
-      if (request.hostId === REMOTE_HOST_ID) {
+      if (isRemoteHostId(request.hostId)) {
         return remote?.write?.(request) ?? createOperationNotSupportedError(request, "write");
       }
       return local?.write?.(request) ?? createOperationNotSupportedError(request, "write");
     },
     edit(request) {
-      if (request.hostId === REMOTE_HOST_ID) {
+      if (isRemoteHostId(request.hostId)) {
         return remote?.edit?.(request) ?? createOperationNotSupportedError(request, "edit");
       }
       return local?.edit?.(request) ?? createOperationNotSupportedError(request, "edit");
     },
     exec(request) {
-      if (request.hostId === REMOTE_HOST_ID) {
+      if (isRemoteHostId(request.hostId)) {
         return remote?.exec?.(request) ?? createOperationNotSupportedError(request, "exec");
       }
       if (request.hostId === LOCAL_HOST_ID) {
