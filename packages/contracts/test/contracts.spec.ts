@@ -176,6 +176,14 @@ describe("contracts", () => {
       audiences: ["chat", "skill", "system", "mcp"],
     });
     expect(
+      (registry as Array<Record<string, unknown>>).find((entry) => entry.id === "runtime.history"),
+    ).toMatchObject({
+      id: "runtime.history",
+      readOwner: "runtime",
+      projections: ["resource.read"],
+      audiences: ["system"],
+    });
+    expect(
       (registry as Array<Record<string, unknown>>).find(
         (entry) => entry.id === "audit.intervention",
       ),
@@ -193,6 +201,11 @@ describe("contracts", () => {
     expect(typeof projectForAudience).toBe("function");
     expect(
       (projectForAudience as (audience: string) => Array<{ id: string }>)("chat").map(
+        (entry) => entry.id,
+      ),
+    ).toEqual(AI_SURFACE_RESOURCE_IDS.filter((resourceId) => resourceId !== "runtime.history"));
+    expect(
+      (projectForAudience as (audience: string) => Array<{ id: string }>)("system").map(
         (entry) => entry.id,
       ),
     ).toEqual(AI_SURFACE_RESOURCE_IDS);

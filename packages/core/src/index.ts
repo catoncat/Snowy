@@ -1,7 +1,10 @@
 import {
   type AiSurfaceBoundary,
+  type AiSurfaceResourceAudience,
   type AiSurfaceResourceDocument,
   type AiSurfaceResourceId,
+  type AiSurfaceResourceMetadata,
+  type AiSurfaceResourceReadOwner,
   type AuditTailResource,
   type AuditTailSummary,
   BOOTSTRAP_RESOURCE_KEYS,
@@ -147,6 +150,26 @@ export interface CapabilityDispatchOptions {
   manageSkill?: SkillRuntimeContextOptions["manageSkill"];
 }
 
+export interface McpCapabilityProjectionInvokeOptions {
+  exportName: string;
+  input: unknown;
+  sessionId: string;
+  skillId?: string;
+  permissions?: string[];
+  traceId?: string;
+  parentTraceId?: string;
+  trace?: CapabilityTraceEntry[];
+  confirm?: SkillRuntimeContextOptions["confirm"];
+  invokeSkill?: SkillRuntimeContextOptions["invokeSkill"];
+  listSkills?: SkillRuntimeContextOptions["listSkills"];
+  manageSkill?: SkillRuntimeContextOptions["manageSkill"];
+}
+
+export interface McpCapabilityProjection {
+  listExports(): CapabilityExportHandoff[];
+  invoke(options: McpCapabilityProjectionInvokeOptions): Promise<unknown>;
+}
+
 export async function dispatchCapabilityCall(options: CapabilityDispatchOptions): Promise<unknown> {
   const ctx = createSkillRuntimeContext({
     registry: options.registry,
@@ -164,6 +187,53 @@ export async function dispatchCapabilityCall(options: CapabilityDispatchOptions)
   });
 
   return ctx.call(options.capabilityId, options.input);
+}
+
+export function createMcpCapabilityProjection(options: {
+  registry: CapabilityRegistry;
+  providers: FamilyProviderRegistry;
+}): McpCapabilityProjection {
+  const handoffs = options.registry.projectMcpExportHandoffs();
+  const handoffsByExportName = new Map<string, CapabilityExportHandoff>();
+
+  for (const handoff of handoffs) {
+    if (handoffsByExportName.has(handoff.exportName)) {
+      throw new CapabilityError("E_BAD_INPUT", `Duplicate MCP export name: ${handoff.exportName}`);
+    }
+    handoffsByExportName.set(handoff.exportName, handoff);
+  }
+
+  return {
+    listExports(): CapabilityExportHandoff[] {
+      return [...handoffs];
+    },
+    async invoke(request: McpCapabilityProjectionInvokeOptions): Promise<unknown> {
+      const handoff = handoffsByExportName.get(request.exportName);
+      if (!handoff) {
+        throw new CapabilityError(
+          "E_CAPABILITY_NOT_FOUND",
+          `Unknown MCP export: ${request.exportName}`,
+        );
+      }
+
+      return dispatchCapabilityCall({
+        registry: options.registry,
+        providers: options.providers,
+        sessionId: request.sessionId,
+        capabilityId: handoff.capabilityId,
+        input: request.input,
+        skillId: request.skillId ?? "runtime.mcp",
+        permissions: request.permissions ?? handoff.permissions,
+        traceId: request.traceId,
+        parentTraceId: request.parentTraceId,
+        trace: request.trace,
+        confirm: request.confirm,
+        invokeSkill: request.invokeSkill,
+        listSkills: request.listSkills,
+        manageSkill: request.manageSkill,
+      });
+    },
+  };
 }
 
 export class FamilyProviderRegistry {
@@ -373,10 +443,64 @@ export interface ReadObservabilityExportResourceInput {
 
 export interface ReadAiSurfaceResourceInput {
   resourceId: AiSurfaceResourceId;
+  audience?: AiSurfaceResourceAudience;
   bootstrap?: BootstrapSummaryInput;
   runtimeHistory?: RuntimeHistoryResourceInput;
   auditTail?: AuditTailResourceInput;
   interventionAudit?: InterventionAuditResourceInput;
+  providers?: AiSurfaceResourceProviderRegistry;
+}
+
+export interface AiSurfaceResourceReadProviderRequest {
+  metadata: AiSurfaceResourceMetadata;
+  audience: AiSurfaceResourceAudience;
+  input: ReadAiSurfaceResourceInput;
+}
+
+export interface AiSurfaceResourceReadProvider {
+  owner: AiSurfaceResourceReadOwner;
+  read(request: AiSurfaceResourceReadProviderRequest): AiSurfaceResourceDocument;
+}
+
+export class AiSurfaceResourceProviderRegistry {
+  readonly #providers = new Map<AiSurfaceResourceReadOwner, AiSurfaceResourceReadProvider>();
+
+  register(provider: AiSurfaceResourceReadProvider): void {
+    this.#providers.set(provider.owner, provider);
+  }
+
+  read(input: ReadAiSurfaceResourceInput): AiSurfaceResourceDocument {
+    const metadata = getAiSurfaceResourceMetadata(input.resourceId);
+    const audience = input.audience ?? "system";
+
+    if (!metadata.audiences.includes(audience)) {
+      throw new CapabilityError(
+        "E_PERMISSION_DENIED",
+        `Resource not permitted for ${audience}: ${metadata.id}`,
+      );
+    }
+
+    const provider = this.#providers.get(metadata.readOwner);
+    if (!provider) {
+      throw new CapabilityError(
+        "E_RUNTIME",
+        `No AI surface resource provider registered for owner ${metadata.readOwner}`,
+      );
+    }
+
+    const document = provider.read({
+      metadata,
+      audience,
+      input,
+    });
+    if (document.id !== metadata.id) {
+      throw new CapabilityError(
+        "E_RUNTIME",
+        `AI surface resource provider ${metadata.readOwner} returned ${document.id} for ${metadata.id}`,
+      );
+    }
+    return document;
+  }
 }
 
 export interface HostControlPlaneRecordInput {
@@ -2135,22 +2259,88 @@ export function createInterventionAuditResource(
   return createResourceDocument("audit.intervention", generatedAt, data);
 }
 
+function createBuiltinAiSurfaceResourceProviderRegistry(): AiSurfaceResourceProviderRegistry {
+  const providers = new AiSurfaceResourceProviderRegistry();
+
+  providers.register({
+    owner: "runtime",
+    read: ({ metadata, input }) => {
+      switch (metadata.id) {
+        case "runtime.summary":
+          return createRuntimeSummaryResource(input.bootstrap);
+        case "runtime.history":
+          return createRuntimeHistoryResource(input.runtimeHistory ?? { entries: [] });
+        default:
+          throw new CapabilityError(
+            "E_RUNTIME",
+            `Runtime resource provider cannot read ${metadata.id}`,
+          );
+      }
+    },
+  });
+  providers.register({
+    owner: "config",
+    read: ({ metadata, input }) => {
+      if (metadata.id !== "config.summary") {
+        throw new CapabilityError(
+          "E_RUNTIME",
+          `Config resource provider cannot read ${metadata.id}`,
+        );
+      }
+      return createConfigSummaryResource(input.bootstrap);
+    },
+  });
+  providers.register({
+    owner: "skills",
+    read: ({ metadata, input }) => {
+      if (metadata.id !== "skills.summary") {
+        throw new CapabilityError(
+          "E_RUNTIME",
+          `Skills resource provider cannot read ${metadata.id}`,
+        );
+      }
+      return createSkillsSummaryResource(input.bootstrap);
+    },
+  });
+  providers.register({
+    owner: "hosts",
+    read: ({ metadata, input }) => {
+      if (metadata.id !== "hosts.summary") {
+        throw new CapabilityError(
+          "E_RUNTIME",
+          `Hosts resource provider cannot read ${metadata.id}`,
+        );
+      }
+      return createHostsSummaryResource(input.bootstrap);
+    },
+  });
+  providers.register({
+    owner: "audit",
+    read: ({ metadata, input }) => {
+      switch (metadata.id) {
+        case "audit.tail":
+          return createAuditTailResource(input.auditTail ?? { entries: [] });
+        case "audit.intervention":
+          return createInterventionAuditResource(input.interventionAudit ?? { entries: [] });
+        default:
+          throw new CapabilityError(
+            "E_RUNTIME",
+            `Audit resource provider cannot read ${metadata.id}`,
+          );
+      }
+    },
+  });
+
+  return providers;
+}
+
+export const BUILTIN_AI_SURFACE_RESOURCE_PROVIDERS =
+  createBuiltinAiSurfaceResourceProviderRegistry();
+
 export function readAiSurfaceResource(
   input: ReadAiSurfaceResourceInput,
 ): AiSurfaceResourceDocument {
-  const metadata = getAiSurfaceResourceMetadata(input.resourceId);
-  const readers: Record<AiSurfaceResourceId, () => AiSurfaceResourceDocument> = {
-    "runtime.summary": () => createRuntimeSummaryResource(input.bootstrap),
-    "runtime.history": () => createRuntimeHistoryResource(input.runtimeHistory ?? { entries: [] }),
-    "config.summary": () => createConfigSummaryResource(input.bootstrap),
-    "skills.summary": () => createSkillsSummaryResource(input.bootstrap),
-    "hosts.summary": () => createHostsSummaryResource(input.bootstrap),
-    "audit.tail": () => createAuditTailResource(input.auditTail ?? { entries: [] }),
-    "audit.intervention": () =>
-      createInterventionAuditResource(input.interventionAudit ?? { entries: [] }),
-  };
-
-  return readers[metadata.id]();
+  return (input.providers ?? BUILTIN_AI_SURFACE_RESOURCE_PROVIDERS).read(input);
 }
 
 export function readObservabilityExportResource(

@@ -14,6 +14,7 @@ import {
 import * as contractsModule from "@bbl-next/contracts";
 import {
   AI_SURFACE_BOUNDARY,
+  AiSurfaceResourceProviderRegistry,
   BUILTIN_BOOTSTRAP_RESOURCE_KEYS,
   BUILTIN_CAPABILITIES,
   BUILTIN_CATALOG,
@@ -26,6 +27,7 @@ import {
   createBootstrapSummary,
   createConfigControlPlane,
   createHostControlPlaneSnapshot,
+  createMcpCapabilityProjection,
   createObservabilityExportBuilder,
   createSkillRuntimeContext,
   disconnectExecutionHost,
@@ -213,6 +215,92 @@ describe("core", () => {
 
     expect(results.map((entry) => entry.id)).toEqual(AI_SURFACE_RESOURCE_IDS);
     expect(results.every((entry) => entry.primitive === "resource")).toBe(true);
+  });
+
+  it("dispatches AI surface resource reads through the owner provider registry", () => {
+    const providers = new AiSurfaceResourceProviderRegistry();
+    const seen: Array<{ owner: string; resourceId: string; audience: string }> = [];
+    providers.register({
+      owner: "runtime",
+      read: ({ metadata, audience }) => {
+        seen.push({
+          owner: metadata.readOwner,
+          resourceId: metadata.id,
+          audience,
+        });
+        return {
+          id: "runtime.summary",
+          primitive: "resource",
+          generatedAt: "2026-04-16T00:00:00.000Z",
+          data: {
+            status: "healthy",
+            mode: "active-tab-only",
+            sessionId: "session-provider",
+            activeTab: null,
+            loopState: "idle",
+            lastError: null,
+            interventions: {
+              status: "empty",
+              totalCount: 0,
+              activeCount: 0,
+              recentCount: 0,
+              active: [],
+              recent: [],
+            },
+            actionCapabilities: {
+              total: 0,
+              namespaces: [],
+            },
+          },
+        };
+      },
+    });
+
+    expect(
+      readAiSurfaceResource({
+        resourceId: "runtime.summary",
+        audience: "chat",
+        providers,
+      }),
+    ).toMatchObject({
+      id: "runtime.summary",
+      data: {
+        sessionId: "session-provider",
+      },
+    });
+    expect(seen).toEqual([
+      {
+        owner: "runtime",
+        resourceId: "runtime.summary",
+        audience: "chat",
+      },
+    ]);
+  });
+
+  it("rejects resource reads when the caller audience is not allowed", () => {
+    expect(
+      readAiSurfaceResource({
+        resourceId: "runtime.history",
+        audience: "system",
+        runtimeHistory: { entries: [] },
+      }),
+    ).toMatchObject({
+      id: "runtime.history",
+      primitive: "resource",
+    });
+
+    try {
+      readAiSurfaceResource({
+        resourceId: "runtime.history",
+        audience: "skill",
+        runtimeHistory: { entries: [] },
+      });
+      throw new Error("Expected resource audience enforcement to reject the read");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "E_PERMISSION_DENIED",
+      });
+    }
   });
 
   it("aggregates skill-runtime traces and site-runtime events into an observability export surface", async () => {
@@ -871,6 +959,57 @@ describe("core", () => {
         },
       },
     ]);
+  });
+
+  it("routes MCP export invocations by exportName through the concrete projection path", async () => {
+    const registry = new CapabilityRegistry([
+      descriptor({
+        id: "page.query",
+        description: "Query page",
+        sideEffects: "reads",
+        permissions: ["page.query"],
+        exportable: true,
+        exportName: "page_query",
+        executionBinding: {
+          family: "page",
+          operation: "query",
+        },
+      }),
+      descriptor({
+        id: "page.click",
+        exportable: false,
+      }),
+    ]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "page",
+      invoke: ({ binding, input }) => ({ operation: binding.operation, input }),
+    });
+    const projection = createMcpCapabilityProjection({
+      registry,
+      providers,
+    });
+
+    expect(projection.listExports()).toEqual(registry.projectMcpExportHandoffs());
+    await expect(
+      projection.invoke({
+        sessionId: "session-mcp",
+        exportName: "page_query",
+        input: { text: "Search" },
+      }),
+    ).resolves.toEqual({
+      operation: "query",
+      input: { text: "Search" },
+    });
+    await expect(
+      projection.invoke({
+        sessionId: "session-mcp",
+        exportName: "page_click",
+        input: { uid: "u1" },
+      }),
+    ).rejects.toMatchObject({
+      code: "E_CAPABILITY_NOT_FOUND",
+    });
   });
 
   it("dispatches by family provider", async () => {
