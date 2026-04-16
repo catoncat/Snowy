@@ -12,6 +12,11 @@
 
 本文件负责裁决真相源，不负责要求每个任务都全量读完。
 
+但要补一条默认意识：
+
+- 真相源不等于永远新鲜
+- planning 不应把文档直接当成静态真理，而应把它们当作需要被当前代码、测试和最近 landed 事实复核的候选真相
+
 ## 1. 核心结论
 
 当前仓库的真实状态是：
@@ -49,6 +54,9 @@
 - 旧仓文档与研究仓
   - 是参考来源
   - 不覆盖新仓已锁定的主线判断
+- 所有文档类真相源都存在 freshness / rot 风险
+  - locked / review / ledger / backlog / batch 文档都可能滞后于真实代码状态
+  - planning 应先判断它们是否仍然配得上当依据，再决定引用权重
 
 ## 2. 按问题类型找真相
 
@@ -121,6 +129,7 @@
 
 - “当前行为真相”以代码和测试为准
 - 设计文档只能说明目标态，不代表已经落地
+- planning 需要把这种冲突视为文档腐坏信号，而不是简单继续引用旧文档
 
 ### 场景 D：设计文档写了“已交付”，但 backlog 仍是 open
 
@@ -168,6 +177,12 @@
 3. implementation：当前 issue + `acceptance_ref`
 4. planning：`docs/module-tracking-ledger.json` + `docs/backlog/README.md`
 5. architecture：`docs/locked-decisions-2026-03-29.md` + recovery report + kernel skeleton
+
+planning 额外要做的不是“多读几份文档”，而是：
+
+1. 判断这些文档里哪些结论仍然新鲜
+2. 用当前 `src/` + `test/` + 最近完成 issue/commit 验证关键判断
+3. 把失真的地方当成 planning 输出的一部分
 
 ## 5. 这套架构到底想成为什么
 

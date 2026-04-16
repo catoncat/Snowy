@@ -14,6 +14,9 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 - workflow skill 负责判断
 - queue builder 只负责构建 live queue
 - ticket machine 只负责 lease
+- planning 是 agent 原生的 reflection / recommendation 环节，不是 helper 命令的别名
+- claim / planning commit 后默认连续推进，不把“是否开始做”“是否继续收口”当成暂停点
+- 只有遇到真实 blocker（缺失真相源、越权改动、共享 contract/schema/root config 需确认、外部输入、并行冲突无法自行化解）才停下来问
 
 ## 先读
 
@@ -74,19 +77,20 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 - 直接把该 ticket 当作当前 live task
 - 不重复 claim
 - 不切新任务
+- 读 issue 和 `acceptance_ref` 后直接进入实现，不额外等待批准
 
 ### 状态 C：live queue 有可做 entry
 
 - 使用 `auto-claim-issues-next`
 - 如果当前在 canonical workspace，可执行真正 claim
 - 如果不在 canonical workspace，只做 claim 判断并把结论带回
-- claim 后进入实现 loop
+- claim 后立即读取 issue / `acceptance_ref`，进入实现 loop，不额外询问“是否开始做”
 
 ### 状态 D：live queue 仍有 entry，但都已被 lease
 
 - 不要误判成 queue 为空
 - 不要因为 claim 不到 ticket 就立刻重建 queue
-- 默认进入 read-only planning preview / coverage review，或者明确回报“当前无 claim slot，等待中”
+- 默认进入 read-only planning preview / reflection / coverage review，或者明确回报“当前无 claim slot，等待中”
 - planning preview 可以读取 planning truth，但默认不回写 backlog / queue / lease
 
 ### 状态 E：queue 为空，但 backlog 刚变化
@@ -105,7 +109,7 @@ bun run workflow:queue:build
 - 对照 locked decisions / recovery report / kernel skeleton / 当前实现和测试做 review
 - 把发现的新 gap 落成 backlog issue
 - 生成下一批 planning 文档或 backlog 变更
-- 重建 queue 后再回到 claim loop
+- 重建 queue 后默认立刻回到 claim loop，不把 planning 文档当终点
 
 ## Optional Stance Overlays
 
@@ -148,6 +152,7 @@ bun run workflow:plan:json
 ## 输出要求
 
 - 若进入 issue 实现：
+  - 默认把当前 issue 一路推进到验证、commit、issue 收口；除非出现真实 blocker，不要停在中途请求批准
   - 最终要提交代码
   - 若触及 public/core surface，先执行 Doc Freshness Gate
   - 先给出自己 slice 的聚焦验证结果；repo 级 gate 若被并行改动阻塞，要显式记录
@@ -158,8 +163,10 @@ bun run workflow:plan:json
 - 若进入 next-batch planning：
   - 区分 planning preview（只读）和 planning commit（回写 backlog / planning doc / queue）
   - 若只是 queue saturation / all leased，默认先做 planning preview
+  - preview 默认输出 `North Star Check`、`Batch Retrospective`、`Rot / Freshness Review`、`Recommended Next Milestone`
   - 不要把“all live queue entries are already leased”误判成“queue 为空”
 - 若进入 next-batch planning commit：
   - issue 先按 `slice / review / follow-up / decision / doc-debt` 分类
+  - 不是每个 review finding 都要落票；优先落会推进 milestone、解除阻塞或修复真相源腐坏的发现
   - 不要只生成 planning 文档而不落 backlog
-  - 生成完成后重建 live queue
+  - 生成完成后重建 live queue，并默认继续回到 claim / implement loop

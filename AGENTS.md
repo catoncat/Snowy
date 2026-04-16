@@ -23,6 +23,8 @@
 - 当前阶段判断：v0 已完成的是 substrate foundation；当前主线是补回 browser-side kernel。
 - planning truth 是 `docs/module-tracking-ledger.json`。
 - dispatch truth 是 `docs/workflow/live-queue.json` + `~/.codex/workflow-leases/browser-brain-loop-next.json`。
+- planning 是 agent 原生的 reflection / recommendation 环节，不是脚本驱动的自动派工器。
+- queue / lease / metadata 校验可以脚本化，但“下一步做什么”必须由 agent 结合主线、代码、测试和当前上下文判断。
 
 ## 1.1 Mandatory Onboarding
 
@@ -80,6 +82,21 @@
   5. 若 backlog 元数据变化影响 dispatch，已执行 `bun run workflow:queue:build`
 - 不要把“测试过 / 代码写完 / 本地能跑”当成 issue 已收口。
 - 如果 repo 级 gate 被并行改动挡住，仍要把 blocker 和已通过的聚焦验证写进 issue。
+
+## 3.2 Planning Contract
+
+- planning 的首要职责不是“再找几个 gap”，而是重新确认 repo 当前最值得推进的 milestone。
+- planning 必须显式包含：
+  1. `North Star Check`
+  2. `Batch Retrospective`
+  3. `Rot / Freshness Check`
+  4. `Recommended Next Milestone`
+  5. `Not Now`
+- planning 不是命令输出的同义词；命令只负责事实收集、落盘和最小校验，不代替 agent 的判断、推荐和反省。
+- planning 使用的参考文档默认都可能腐坏；必须把文档视为候选真相，而不是静态真理。
+- 对“当前行为是否真的如此”“某个能力是否已经 landed”“某个 gap 是否仍存在”的判断，优先回到 `src/` + `test/` + 最近已完成 issue / commits 验证。
+- 如果 ledger、review、batch、issue 与代码现状不一致，planning 应先指出失真并优先安排 truth-repair，而不是继续沿着旧文档机械拆票。
+- 并非每个 review finding 都值得变成下一批 issue；只有能推进 module stage、解除真实阻塞、修复真相源腐坏，或明显影响当前 cutover/gate 的 finding 才应进入推荐集。
 
 ## 4. Repo Index
 
@@ -358,6 +375,8 @@
 - batch 文档只是历史 planning snapshot；当前 dispatch 只看 live queue + lease
 - backlog 变化后必须重建 live queue，至少包括：新增 issue、改 `done`、改 `depends_on`、改 `write_scope`
 - 若 live queue 返回空，先判断是否需要重建 queue；确认无票后再进入下一批规划
+- issue 一旦明确或 claim 成功，默认直接推进到验证、commit、issue 收口，不要把“是否继续”当成中断点
+- planning commit 完成后默认继续 queue rebuild -> claim loop；只有遇到真实 blocker（缺失真相源、越权改动、外部输入、并行冲突无法自行化解）才停下来问
 - worker 默认只对自己当前 slice / `write_scope` 的聚焦验证负责；repo 级 gate 是补充，不是并行情况下的唯一完成依据
 - 若 repo 级 lint / check 被别的 Agent 的活跃改动挡住，必须在 issue `## 工作总结` 里写明 blocker 和自己已通过的聚焦检查
 - 共享接线文件优先交给 integrator 或对应 lane owner；但共享写域重叠只是一种协调信号，不应替代真实 `depends_on`

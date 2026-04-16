@@ -32,6 +32,11 @@
 - behavior truth
   - `packages/*/src/` + `packages/*/test/*.spec.ts`
 
+planning 使用这些 truth layer 时要额外记住一条：
+
+- 文档类 truth 也会腐坏；它们是候选真相，不是永远新鲜的静态真理
+- 对“当前行为是否已落地”“某个 gap 是否仍存在”的最终判断，优先回到代码、测试和最近完成的 issue / commit
+
 ## Base Context
 
 默认先读：
@@ -107,6 +112,7 @@
 - Skills 决定当前动作
 - queue builder 只负责构建 dispatchable entry 集合
 - ticket machine 只负责 session 级 lease
+- helper 命令负责收集事实、落盘和最小校验，不代替 Agent 对 milestone、腐坏、优先级和推荐的判断
 - planning commit 只在 queue 空且无 active lease 时进入；planning preview 可在 active lease 存在时只读执行
 
 ## Unified Operating Loop
@@ -155,13 +161,14 @@ bun run workflow:queue:build
 
 - 使用 `auto-claim-issues-next`
 - 在 canonical workspace 中执行真正 claim
-- 再进入实现 loop
+- claim 后直接进入实现 loop，不额外等待批准
 
 #### State D: live queue 仍有 entry，但都已被 lease
 
 - 不要误判成 queue 为空
 - 不要因为没有 claim slot 就自动重建 queue
-- 默认进入 planning preview，或者明确回报等待当前 lease 释放
+- 默认进入 planning preview；只有用户明确要求纯等待时，才只回报等待当前 lease 释放
+- planning preview 的重点是 reflection / recommendation，不只是继续找 gap
 
 #### State E: queue 为空，但刚发生 backlog 变化
 
@@ -173,7 +180,13 @@ bun run workflow:queue:build
 - 进入 next-batch planning commit
 - 对照 locked decisions / recovery report / kernel skeleton / 当前实现和测试
 - 创建新的 backlog issue
-- 再重建 queue
+- 再重建 queue，并默认继续回到 claim / implement loop
+
+## Continuous Execution Default
+
+- issue 一旦明确或 claim 成功，默认直接推进到验证、commit、`workflow:done` 收口，不把“是否继续”当成暂停点
+- planning commit 完成后，默认继续 queue rebuild -> claim loop，不把 planning 文档当成终点
+- 只有遇到真实 blocker（缺失 acceptance/真相源、越权改动、外部输入、并行冲突无法自行化解）才停下来问
 
 ## Implementation Loop
 
@@ -196,6 +209,7 @@ bun run workflow:queue:build
    - 追加 `## 相关 commits`
    - 释放 lease
    - 重建 live queue
+11. 若当前 turn 仍在 workflow loop 中，默认继续回到下一次 claim / planning 判断，不因当前票收口而等待批准
 
 命令：
 
@@ -210,8 +224,11 @@ BBL_AGENT_NAME=<agent-name> bun run workflow:done -- --commit=HEAD --implemented
 1. 临时叠加 `coordinator` stance
 2. 使用 `next-batch-planner`
 3. 运行 `bun run workflow:plan:preview`
-4. 输出 coverage / drift / recommended next issues
-5. 默认不回写 backlog / queue / planning doc
+4. 先做 `North Star Check` 和 `Batch Retrospective`
+5. 再做 `Rot / Freshness Check`，把文档、ledger、batch、issue 与代码/测试之间的失真找出来
+6. 再输出 coverage / drift / recommended next milestone / recommended next issues / not now
+7. 默认不回写 backlog / queue / planning doc
+8. 除非用户明确要求纯等待，否则 preview 完成后继续给出下一步 recommendation，不要把 preview 当终点
 
 ## Planning Commit Loop
 
@@ -219,11 +236,14 @@ BBL_AGENT_NAME=<agent-name> bun run workflow:done -- --commit=HEAD --implemented
 
 1. 临时叠加 `coordinator` stance
 2. 使用 `next-batch-planner`
-3. 先做一轮 module coverage review
-4. 再做一轮 drift review
-5. 每个发现都落成 backlog issue
-6. 生成新的 planning 文档
-7. 重建 live queue
+3. 先做一轮 `North Star Check`
+4. 再做 `Batch Retrospective`
+5. 再做一轮 module coverage review 和 drift review
+6. 再做 `Rot / Freshness Check`
+7. 只把真正能推进当前 milestone、解除阻塞或修复真相源腐坏的发现落成 backlog issue
+8. 生成新的 planning 文档
+9. 重建 live queue
+10. 若 live queue 已恢复可认领 entry，默认继续回到 claim loop
 
 ## Recommended Commands
 
@@ -251,3 +271,8 @@ bun run workflow:plan:json
 - 把 “all live queue entries are already leased” 误判成 queue 为空
 - queue 为空就直接停工，不进入 planning
 - 把 batch snapshot 当成 live dispatch queue
+- claim 完只回报 ticket，不继续实现
+- planning commit 做完只停在文档输出，不继续 queue rebuild / claim
+- 把 helper 命令当成 planning 主体
+- 把参考文档当成静态真理，不检查它们是否已经腐坏
+- 因为发现更多 gap 就持续拆票，而不先回答“这是否推进当前 milestone”
