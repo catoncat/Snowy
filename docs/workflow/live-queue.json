@@ -1,24 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-16T03:05:58.053Z",
+  "generated_at": "2026-04-16T03:06:45.491Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-141",
-      "issue_path": "docs/backlog/2026-04-15-sidepanel-handoff-ui-for-intervention-requests-is-not-yet-implemented.md",
-      "title": "Sidepanel handoff UI for intervention requests is not yet implemented",
-      "parallel_group": "site-runtime",
-      "module_id": "intervention-handoff",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "apps/mv3-shell/src/sidepanel",
-        "packages/contracts/src/index.ts",
-        "apps/mv3-shell/test"
-      ]
-    },
     {
       "issue_id": "ISSUE-137",
       "issue_path": "docs/backlog/2026-04-15-mcp-export-handoff-projection-is-typed-but-not-routed.md",
