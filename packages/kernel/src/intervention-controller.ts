@@ -1,6 +1,7 @@
 import {
   CapabilityError,
   type InterventionAuditEntry,
+  type InterventionEscalationMetadata,
   type InterventionLifecycleStatus,
   type InterventionRecord,
   type InterventionRequest,
@@ -28,6 +29,7 @@ function isoNow(timestamp = Date.now()): string {
 function cloneRecord(record: StoredInterventionRecord): KernelInterventionRecord {
   return {
     ...record,
+    ...(record.escalation ? { escalation: { ...record.escalation } } : {}),
     ...(record.payload ? { payload: { ...record.payload } } : {}),
     ...(record.resolution ? { resolution: { ...record.resolution } } : {}),
   };
@@ -36,7 +38,18 @@ function cloneRecord(record: StoredInterventionRecord): KernelInterventionRecord
 function cloneEvent(entry: KernelInterventionEvent): KernelInterventionEvent {
   return {
     ...entry,
-    ...(entry.details ? { details: { ...entry.details } } : {}),
+    ...(entry.details
+      ? {
+          details: {
+            ...entry.details,
+            ...(entry.details.escalation &&
+            typeof entry.details.escalation === "object" &&
+            !Array.isArray(entry.details.escalation)
+              ? { escalation: { ...entry.details.escalation } }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -54,13 +67,19 @@ export class InterventionController {
     request: InterventionRequest,
     opts?: {
       timeoutMs?: number;
+      escalationMs?: number;
       now?: number;
     },
   ): KernelInterventionRecord {
     this.expire(opts?.now);
-    const timestamp = isoNow(opts?.now);
+    const now = opts?.now ?? Date.now();
+    const timestamp = isoNow(now);
     const timeoutMs =
       typeof opts?.timeoutMs === "number" && opts.timeoutMs > 0 ? opts.timeoutMs : null;
+    const escalationMs =
+      typeof opts?.escalationMs === "number" && opts.escalationMs > 0
+        ? opts.escalationMs
+        : timeoutMs;
     const record: StoredInterventionRecord = {
       ...request,
       ...(request.payload ? { payload: { ...request.payload } } : {}),
@@ -68,7 +87,15 @@ export class InterventionController {
       status: "requested",
       requestedAt: timestamp,
       updatedAt: timestamp,
-      expiresAt: timeoutMs == null ? null : isoNow((opts?.now ?? Date.now()) + timeoutMs),
+      expiresAt: timeoutMs == null ? null : isoNow(now + timeoutMs),
+      escalation:
+        escalationMs == null
+          ? null
+          : {
+              thresholdMs: escalationMs,
+              escalatesAt: isoNow(now + escalationMs),
+              escalatedAt: null,
+            },
       resolution: undefined,
     };
     this.#records.set(record.id, record);
@@ -117,19 +144,69 @@ export class InterventionController {
   expire(now = Date.now()): KernelInterventionRecord[] {
     const expired: KernelInterventionRecord[] = [];
     for (const record of this.#records.values()) {
-      if (
-        record.status === "requested" &&
-        typeof record.expiresAt === "string" &&
-        Date.parse(record.expiresAt) <= now
-      ) {
+      if (record.status !== "requested") {
+        continue;
+      }
+
+      const timeoutAt =
+        typeof record.expiresAt === "string" ? Date.parse(record.expiresAt) : Number.NaN;
+      if (Number.isFinite(timeoutAt) && timeoutAt <= now) {
         const updated: StoredInterventionRecord = {
           ...record,
           status: "timed_out",
           updatedAt: isoNow(now),
+          escalation:
+            record.escalation == null
+              ? null
+              : {
+                  ...record.escalation,
+                  escalatedAt: record.escalation.escalatedAt ?? isoNow(now),
+                },
         };
         this.#records.set(record.id, updated);
-        this.#appendEvent(updated, "timed_out", updated.updatedAt);
+        this.#appendEvent(updated, "timed_out", updated.updatedAt, {
+          escalation: this.#buildEscalationMetadata(
+            updated,
+            "timeout",
+            now,
+            typeof record.expiresAt === "string" ? timeoutAt : now,
+            typeof record.expiresAt === "string"
+              ? timeoutAt - Date.parse(record.requestedAt)
+              : now - Date.parse(record.requestedAt),
+          ),
+        });
         expired.push(cloneRecord(updated));
+        continue;
+      }
+
+      const escalationAt =
+        record.escalation && typeof record.escalation.escalatesAt === "string"
+          ? Date.parse(record.escalation.escalatesAt)
+          : Number.NaN;
+      if (
+        record.escalation &&
+        record.escalation.escalatedAt == null &&
+        Number.isFinite(escalationAt) &&
+        escalationAt <= now
+      ) {
+        const updated: StoredInterventionRecord = {
+          ...record,
+          updatedAt: isoNow(now),
+          escalation: {
+            ...record.escalation,
+            escalatedAt: isoNow(now),
+          },
+        };
+        this.#records.set(record.id, updated);
+        this.#appendEvent(updated, "requested", updated.updatedAt, {
+          escalation: this.#buildEscalationMetadata(
+            updated,
+            "stale",
+            now,
+            escalationAt,
+            record.escalation.thresholdMs,
+          ),
+        });
       }
     }
     return expired;
@@ -276,5 +353,21 @@ export class InterventionController {
     if (this.#events.length > this.#maxEvents) {
       this.#events.splice(0, this.#events.length - this.#maxEvents);
     }
+  }
+
+  #buildEscalationMetadata(
+    record: StoredInterventionRecord,
+    reason: "stale" | "timeout",
+    now: number,
+    referenceTimestamp: number,
+    thresholdMs: number,
+  ): InterventionEscalationMetadata {
+    return {
+      reason,
+      thresholdMs,
+      overdueMs: Math.max(0, now - referenceTimestamp),
+      expiresAt: record.expiresAt,
+      tabId: record.tabId ?? null,
+    };
   }
 }

@@ -14,6 +14,61 @@ async function waitFor(predicate: () => boolean, timeoutMs = 250) {
   }
 }
 
+async function waitForInterventionStatus(
+  bridge: { route: (message: unknown) => Promise<any> },
+  interventionId: string,
+  status: string,
+  timeoutMs = 250,
+) {
+  const start = Date.now();
+  while (Date.now() - start <= timeoutMs) {
+    const result = await bridge.route({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "intervention.list",
+    });
+    const matched = result?.data?.items?.find?.(
+      (entry: { id?: string; status?: string }) =>
+        entry?.id === interventionId && entry?.status === status,
+    );
+    if (matched) {
+      return result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error(`Timed out waiting for intervention ${interventionId} to reach ${status}`);
+}
+
+function createInterventionSyncChannelHub() {
+  const listeners = new Set<(event: { data: unknown }) => void>();
+
+  return {
+    createChannel() {
+      return {
+        postMessage(message: unknown) {
+          queueMicrotask(() => {
+            for (const listener of listeners) {
+              listener({ data: message });
+            }
+          });
+        },
+        addEventListener(type: string, listener: (event: { data: unknown }) => void) {
+          if (type === "message") {
+            listeners.add(listener);
+          }
+        },
+        removeEventListener(type: string, listener: (event: { data: unknown }) => void) {
+          if (type === "message") {
+            listeners.delete(listener);
+          }
+        },
+        close() {
+          return undefined;
+        },
+      };
+    },
+  };
+}
+
 describe("mv3-shell runtime chat bridge", () => {
   it("streams assistant fallback when no LLM config is set", async () => {
     const sentMessages: unknown[] = [];
@@ -1141,6 +1196,147 @@ describe("mv3-shell intervention bridge integration", () => {
               }),
             ]),
           },
+        },
+      },
+    });
+  });
+
+  it("surfaces stale and timeout intervention escalations through audit.tail", async () => {
+    const chromeApi = createFixtureChromeApi();
+    const runtimeServices = createBackgroundRuntimeServices({
+      chromeApi,
+      invokeRunner: createRunnerInvoke(),
+      pageHookBridge: createFixturePageHookBridge(),
+      sessionStorage: new InMemorySessionStorage(),
+      interventionTimeoutMs: 40,
+      interventionEscalationMs: 10,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi,
+      runtimeServices,
+    });
+
+    const invoked = await runtimeServices.invokeSiteSkill(buildSiteRuntimeInvokeRequest());
+
+    await new Promise((resolve) => setTimeout(resolve, 15));
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "audit.tail",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "audit.tail",
+        data: {
+          entries: expect.arrayContaining([
+            expect.objectContaining({
+              kind: "intervention.escalation",
+              interventionId: invoked.intervention.id,
+              status: "attention_required",
+              escalation: expect.objectContaining({
+                reason: "stale",
+                thresholdMs: 10,
+              }),
+            }),
+          ]),
+        },
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "audit.tail",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "audit.tail",
+        data: {
+          entries: expect.arrayContaining([
+            expect.objectContaining({
+              kind: "intervention.escalation",
+              interventionId: invoked.intervention.id,
+              status: "timed_out",
+              escalation: expect.objectContaining({
+                reason: "timeout",
+                thresholdMs: 40,
+              }),
+            }),
+          ]),
+        },
+      },
+    });
+  });
+
+  it("syncs intervention state across runtime service instances via a shared channel", async () => {
+    const sessionStorage = new InMemorySessionStorage();
+    const syncHub = createInterventionSyncChannelHub();
+    const firstChromeApi = createFixtureChromeApi();
+    const firstRuntimeServices = createBackgroundRuntimeServices({
+      chromeApi: firstChromeApi,
+      invokeRunner: createRunnerInvoke(),
+      pageHookBridge: createFixturePageHookBridge(),
+      sessionStorage,
+      interventionTimeoutMs: 10_000,
+      interventionSyncChannel: syncHub.createChannel(),
+    });
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstChromeApi,
+      runtimeServices: firstRuntimeServices,
+    });
+
+    const secondChromeApi = createFixtureChromeApi();
+    const secondRuntimeServices = createBackgroundRuntimeServices({
+      chromeApi: secondChromeApi,
+      invokeRunner: createRunnerInvoke(),
+      pageHookBridge: createFixturePageHookBridge(),
+      sessionStorage,
+      interventionTimeoutMs: 10_000,
+      interventionSyncChannel: syncHub.createChannel(),
+    });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondChromeApi,
+      runtimeServices: secondRuntimeServices,
+    });
+
+    await secondRuntimeServices.ensureSession();
+
+    const requested = await firstRuntimeServices.invokeSiteSkill(buildSiteRuntimeInvokeRequest());
+
+    await expect(
+      waitForInterventionStatus(secondBridge, requested.intervention.id, "requested"),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        summary: {
+          status: "requested",
+          activeCount: 1,
+        },
+      },
+    });
+
+    await secondBridge.route({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "intervention.resolve",
+      interventionId: requested.intervention.id,
+      resolution: {
+        resolution: "resume",
+      },
+    });
+
+    await expect(
+      waitForInterventionStatus(firstBridge, requested.intervention.id, "resolved"),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        summary: {
+          status: "settled",
+          activeCount: 0,
         },
       },
     });

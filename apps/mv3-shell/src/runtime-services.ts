@@ -40,12 +40,23 @@ async function resolveMaybe(value) {
 }
 
 const DEFAULT_INTERVENTION_TIMEOUT_MS = 5 * 60 * 1000;
+const INTERVENTION_SYNC_CHANNEL_NAME = "bbl-next.interventions.v1";
 const SKILL_STATUS_BY_ACTION = {
   "skills.install": "installed",
   "skills.enable": "enabled",
   "skills.disable": "disabled",
   "skills.uninstall": "archived",
 };
+
+function createInterventionSyncChannel(explicitChannel) {
+  if (explicitChannel) {
+    return explicitChannel;
+  }
+  if (typeof globalThis.BroadcastChannel === "function") {
+    return new globalThis.BroadcastChannel(INTERVENTION_SYNC_CHANNEL_NAME);
+  }
+  return null;
+}
 
 function createInMemorySkillManager() {
   const records = new Map();
@@ -1155,6 +1166,8 @@ export function createBackgroundRuntimeServices({
   onLoopTelemetry = undefined,
   workspaceId = "mv3-shell",
   interventionTimeoutMs = DEFAULT_INTERVENTION_TIMEOUT_MS,
+  interventionEscalationMs = undefined,
+  interventionSyncChannel = undefined,
   pageHookScriptPath = "src/page-hook.js",
 }: any = {}): any {
   let servicesPromise = null;
@@ -1162,6 +1175,47 @@ export function createBackgroundRuntimeServices({
   let chatRunStatus = "idle";
   let activeChatRun = null;
   const skillManager = createInMemorySkillManager();
+  const resolvedInterventionSyncChannel = createInterventionSyncChannel(interventionSyncChannel);
+  const interventionSyncSourceId = crypto.randomUUID();
+
+  async function persistAndBroadcastInterventions(sessionId, opts = undefined) {
+    const { kernel } = await ensureServices();
+    await kernel.persistInterventions(sessionId, opts);
+    if (typeof resolvedInterventionSyncChannel?.postMessage === "function") {
+      resolvedInterventionSyncChannel.postMessage({
+        type: "bbl-next.intervention.sync",
+        sourceId: interventionSyncSourceId,
+        sessionId,
+      });
+    }
+  }
+
+  function handleInterventionSync(event) {
+    const message = event?.data ?? event;
+    if (
+      !message ||
+      message.type !== "bbl-next.intervention.sync" ||
+      message.sourceId === interventionSyncSourceId ||
+      typeof message.sessionId !== "string" ||
+      !sessionPromise
+    ) {
+      return;
+    }
+    void (async () => {
+      const session = await sessionPromise;
+      if (!session || session.id !== message.sessionId) {
+        return;
+      }
+      const { kernel } = await ensureServices();
+      await kernel.rehydrateInterventions(session.id);
+    })();
+  }
+
+  if (typeof resolvedInterventionSyncChannel?.addEventListener === "function") {
+    resolvedInterventionSyncChannel.addEventListener("message", handleInterventionSync);
+  } else if (resolvedInterventionSyncChannel && "onmessage" in resolvedInterventionSyncChannel) {
+    resolvedInterventionSyncChannel.onmessage = handleInterventionSync;
+  }
 
   async function setManagedProfileConfig(activeServices, nextProfileConfig) {
     const nextManagedProfileConfig = syncLlmProfileConfig(
@@ -1429,7 +1483,7 @@ export function createBackgroundRuntimeServices({
     const summary = kernel.getInterventionSummary({
       sessionId: session.id,
     });
-    await kernel.persistInterventions(session.id);
+    await persistAndBroadcastInterventions(session.id);
     return {
       sessionId: session.id,
       ...summary,
@@ -1444,7 +1498,7 @@ export function createBackgroundRuntimeServices({
     const items = kernel.listInterventions({
       sessionId: session.id,
     });
-    await kernel.persistInterventions(session.id);
+    await persistAndBroadcastInterventions(session.id);
     return items;
   }
 
@@ -1457,7 +1511,7 @@ export function createBackgroundRuntimeServices({
       sessionId: session.id,
       limit,
     });
-    await kernel.persistInterventions(session.id);
+    await persistAndBroadcastInterventions(session.id);
     return entries;
   }
 
@@ -1471,7 +1525,7 @@ export function createBackgroundRuntimeServices({
       isPlainObject(resolution) ? resolution : undefined,
     );
     if (record.sessionId) {
-      await kernel.persistInterventions(record.sessionId);
+      await persistAndBroadcastInterventions(record.sessionId);
     }
     return record;
   }
@@ -1486,7 +1540,7 @@ export function createBackgroundRuntimeServices({
       typeof reason === "string" && reason.trim() ? { reason: reason.trim() } : undefined,
     );
     if (record.sessionId) {
-      await kernel.persistInterventions(record.sessionId);
+      await persistAndBroadcastInterventions(record.sessionId);
     }
     return record;
   }
@@ -1767,8 +1821,9 @@ export function createBackgroundRuntimeServices({
 
     const requested = kernel.requestIntervention(session.id, result.intervention, {
       timeoutMs: interventionTimeoutMs,
+      escalationMs: interventionEscalationMs,
     });
-    await kernel.persistInterventions(session.id);
+    await persistAndBroadcastInterventions(session.id);
 
     return {
       ...result,
@@ -1816,8 +1871,9 @@ export function createBackgroundRuntimeServices({
 
     const requested = kernel.requestIntervention(session.id, result.intervention, {
       timeoutMs: interventionTimeoutMs,
+      escalationMs: interventionEscalationMs,
     });
-    await kernel.persistInterventions(session.id);
+    await persistAndBroadcastInterventions(session.id);
 
     return {
       ...result,

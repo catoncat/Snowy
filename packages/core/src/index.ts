@@ -590,6 +590,7 @@ function normalizeConfigValues(
 function cloneInterventionRecord(record: InterventionRecord): InterventionRecord {
   return {
     ...record,
+    ...(record.escalation ? { escalation: { ...record.escalation } } : {}),
     ...(record.payload ? { payload: { ...record.payload } } : {}),
     ...(record.resolution ? { resolution: { ...record.resolution } } : {}),
   };
@@ -598,7 +599,18 @@ function cloneInterventionRecord(record: InterventionRecord): InterventionRecord
 function cloneInterventionAuditEntry(entry: InterventionAuditEntry): InterventionAuditEntry {
   return {
     ...entry,
-    ...(entry.details ? { details: { ...entry.details } } : {}),
+    ...(entry.details
+      ? {
+          details: {
+            ...entry.details,
+            ...(entry.details.escalation &&
+            typeof entry.details.escalation === "object" &&
+            !Array.isArray(entry.details.escalation)
+              ? { escalation: { ...entry.details.escalation } }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 

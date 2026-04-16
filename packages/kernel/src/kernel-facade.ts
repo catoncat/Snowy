@@ -169,7 +169,7 @@ export interface Kernel {
   requestIntervention(
     sessionId: string,
     request: InterventionRequest,
-    opts?: { timeoutMs?: number; now?: number },
+    opts?: { timeoutMs?: number; escalationMs?: number; now?: number },
   ): KernelInterventionRecord;
   resolveIntervention(
     interventionId: string,

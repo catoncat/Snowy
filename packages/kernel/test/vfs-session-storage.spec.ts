@@ -110,6 +110,7 @@ describe("VfsSessionStorage", () => {
             requestedAt: "2026-03-30T00:00:00.000Z",
             updatedAt: "2026-03-30T00:00:00.000Z",
             expiresAt: null,
+            escalation: null,
           },
         ],
         audit: [

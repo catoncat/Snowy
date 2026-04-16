@@ -250,6 +250,17 @@ describe("contracts", () => {
             changedFields: ["model"],
             status: "updated",
           },
+          {
+            timestamp: "2026-03-30T00:00:03.000Z",
+            sessionId: "session-1",
+            kind: "intervention.escalation",
+            interventionId: "ivr:session-1:verify",
+            status: "attention_required",
+            escalation: {
+              reason: "stale",
+              thresholdMs: 30_000,
+            },
+          },
         ],
       },
     } satisfies AuditTailResource;
@@ -386,6 +397,7 @@ describe("contracts", () => {
               requestedAt: "2026-04-09T07:44:00.000Z",
               updatedAt: "2026-04-09T07:44:00.000Z",
               expiresAt: null,
+              escalation: null,
             },
           ],
           recent: [],
@@ -485,6 +497,7 @@ describe("contracts", () => {
       "skills.disable",
       "skills.uninstall",
       "loop.step",
+      "intervention.escalation",
     ]);
     expect(CONTROL_PLANE_AUDIT_STATUSES).toEqual([
       "connected",
@@ -498,6 +511,8 @@ describe("contracts", () => {
       "archived",
       "executed",
       "failed",
+      "attention_required",
+      "timed_out",
     ]);
   });
 
@@ -529,6 +544,7 @@ describe("contracts", () => {
       requestedAt: "2026-03-31T00:00:00.000Z",
       updatedAt: "2026-03-31T00:00:01.000Z",
       expiresAt: "2026-03-31T00:05:00.000Z",
+      escalation: null,
       resolution: {
         verifier: "login_complete",
       },

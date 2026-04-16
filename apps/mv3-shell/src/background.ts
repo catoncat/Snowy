@@ -243,6 +243,7 @@ function cloneInterventionRecord(entry) {
     requestedAt: entry.requestedAt,
     updatedAt: entry.updatedAt,
     expiresAt: entry.expiresAt,
+    escalation: entry.escalation ? { ...entry.escalation } : null,
     resolution: entry.resolution,
   };
 }
@@ -746,17 +747,66 @@ export function createBackgroundRunnerBridge({
     return auditEntries.slice(-max);
   }
 
-  async function readAuditTail(limit) {
+  function toInterventionEscalationAuditEntry(entry) {
+    const escalation = entry?.details?.escalation;
+    if (!escalation || typeof escalation !== "object" || Array.isArray(escalation)) {
+      return null;
+    }
+    const thresholdMs =
+      typeof escalation.thresholdMs === "number" && escalation.thresholdMs > 0
+        ? escalation.thresholdMs
+        : null;
+    const reason = escalation.reason === "timeout" ? "timeout" : "stale";
+    if (thresholdMs == null) {
+      return null;
+    }
+    return {
+      timestamp: entry.timestamp,
+      sessionId: entry.sessionId ?? null,
+      kind: "intervention.escalation",
+      interventionId: entry.interventionId,
+      status: reason === "timeout" ? "timed_out" : "attention_required",
+      escalation: {
+        reason,
+        thresholdMs,
+        ...(typeof escalation.overdueMs === "number" ? { overdueMs: escalation.overdueMs } : {}),
+        ...(typeof escalation.expiresAt === "string" || escalation.expiresAt === null
+          ? { expiresAt: escalation.expiresAt ?? null }
+          : {}),
+        ...(typeof escalation.tabId === "number" || escalation.tabId === null
+          ? { tabId: escalation.tabId ?? null }
+          : {}),
+      },
+    };
+  }
+
+  async function readCombinedAuditTail(limit) {
     await auditReady;
-    return getAuditTail(limit);
+    const controlPlaneEntries = getAuditTail(AUDIT_MAX_ENTRIES);
+    const interventionEntries =
+      typeof getRuntimeServices().readInterventionAudit === "function"
+        ? await getRuntimeServices().readInterventionAudit(AUDIT_MAX_ENTRIES)
+        : [];
+    const projectedInterventionEntries = interventionEntries
+      .map((entry) => toInterventionEscalationAuditEntry(entry))
+      .filter(Boolean);
+    const merged = [...controlPlaneEntries, ...projectedInterventionEntries].sort((left, right) =>
+      left.timestamp.localeCompare(right.timestamp),
+    );
+    const max = typeof limit === "number" && limit > 0 ? limit : AUDIT_MAX_ENTRIES;
+    return merged.slice(-max);
+  }
+
+  async function readAuditTail(limit) {
+    return readCombinedAuditTail(limit);
   }
 
   async function readAuditResource(limit) {
-    await auditReady;
+    const entries = await readCombinedAuditTail(limit);
     return readAiSurfaceResource({
       resourceId: "audit.tail",
       auditTail: {
-        entries: [...auditEntries],
+        entries,
         ...(typeof limit === "number" ? { limit } : {}),
       },
     });

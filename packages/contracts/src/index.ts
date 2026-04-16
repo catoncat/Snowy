@@ -198,11 +198,22 @@ export type LoopAuditKind = (typeof LOOP_AUDIT_KINDS)[number];
 export const LOOP_AUDIT_STATUSES = ["executed", "failed"] as const;
 export type LoopAuditStatus = (typeof LOOP_AUDIT_STATUSES)[number];
 
+export const INTERVENTION_ESCALATION_AUDIT_KINDS = ["intervention.escalation"] as const;
+export type InterventionEscalationAuditKind = (typeof INTERVENTION_ESCALATION_AUDIT_KINDS)[number];
+
+export const INTERVENTION_ESCALATION_AUDIT_STATUSES = ["attention_required", "timed_out"] as const;
+export type InterventionEscalationAuditStatus =
+  (typeof INTERVENTION_ESCALATION_AUDIT_STATUSES)[number];
+
+export const INTERVENTION_ESCALATION_REASONS = ["stale", "timeout"] as const;
+export type InterventionEscalationReason = (typeof INTERVENTION_ESCALATION_REASONS)[number];
+
 export const CONTROL_PLANE_AUDIT_KINDS = [
   ...HOST_AUDIT_KINDS,
   ...CONFIG_AUDIT_KINDS,
   ...SKILL_AUDIT_KINDS,
   ...LOOP_AUDIT_KINDS,
+  ...INTERVENTION_ESCALATION_AUDIT_KINDS,
 ] as const;
 export type ControlPlaneAuditKind = (typeof CONTROL_PLANE_AUDIT_KINDS)[number];
 
@@ -211,6 +222,7 @@ export const CONTROL_PLANE_AUDIT_STATUSES = [
   ...CONFIG_AUDIT_STATUSES,
   ...SKILL_AUDIT_STATUSES,
   ...LOOP_AUDIT_STATUSES,
+  ...INTERVENTION_ESCALATION_AUDIT_STATUSES,
 ] as const;
 export type ControlPlaneAuditStatus = (typeof CONTROL_PLANE_AUDIT_STATUSES)[number];
 
@@ -246,11 +258,27 @@ export interface LoopStepAuditEntry extends ControlPlaneAuditEntryBase {
   durationMs: number;
 }
 
+export interface InterventionEscalationMetadata {
+  reason: InterventionEscalationReason;
+  thresholdMs: number;
+  overdueMs?: number;
+  expiresAt?: string | null;
+  tabId?: number | null;
+}
+
+export interface InterventionEscalationAuditEntry extends ControlPlaneAuditEntryBase {
+  kind: InterventionEscalationAuditKind;
+  interventionId: string;
+  status: InterventionEscalationAuditStatus;
+  escalation: InterventionEscalationMetadata;
+}
+
 export type ControlPlaneAuditEntry =
   | HostAuditEntry
   | ConfigAuditEntry
   | SkillAuditEntry
-  | LoopStepAuditEntry;
+  | LoopStepAuditEntry
+  | InterventionEscalationAuditEntry;
 
 export const INTERVENTION_KINDS = ["confirm", "takeover", "input"] as const;
 export type InterventionKind = (typeof INTERVENTION_KINDS)[number];
@@ -288,6 +316,11 @@ export interface InterventionRecord extends Omit<InterventionRequest, "status"> 
   requestedAt: string;
   updatedAt: string;
   expiresAt: string | null;
+  escalation: {
+    thresholdMs: number;
+    escalatesAt: string;
+    escalatedAt: string | null;
+  } | null;
   resolution?: Record<string, unknown>;
 }
 
