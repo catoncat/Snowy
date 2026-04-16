@@ -1,3 +1,5 @@
+[中文版](README.zh-CN.md)
+
 # browser-brain-loop-next
 
 Future mainline for the post-LIFO Browser Brain Loop runtime.
