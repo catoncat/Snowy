@@ -82,6 +82,10 @@ export type PlanResult =
       outputPath: string;
       markdown: string;
       issues: PlannedIssueSummary[];
+      provisional: boolean;
+      warnings: string[];
+      inProgress: IssueSummary[];
+      activeLeases: TicketLease[];
       missingModules: ModuleCoverageSummary[];
       unmappedIssues: string[];
       moduleCoverage: ModuleCoverageSummary[];
@@ -264,6 +268,7 @@ function buildPlanMarkdown(
   issues: PlannedIssueSummary[],
   counts: { done: number; open: number },
   moduleLedger: ModuleLedger,
+  warnings: string[],
 ): string {
   const currentBatch = batchNumber(repoRoot);
   const lines: string[] = [
@@ -277,7 +282,15 @@ function buildPlanMarkdown(
     `- done issues: ${counts.done}`,
     `- tracked modules: ${moduleLedger.modules.length}`,
     `- recommended batch: Batch ${currentBatch}`,
+    `- provisional: ${warnings.length > 0 ? "yes" : "no"}`,
   ];
+
+  if (warnings.length > 0) {
+    lines.push("", "## Planning Warnings", "");
+    for (const warning of warnings) {
+      lines.push(`- ${warning}`);
+    }
+  }
 
   const stageOrder: ModuleStage[] = ["mainline", "secondary", "deferred"];
   for (const stage of stageOrder) {
@@ -325,6 +338,26 @@ function buildPlanMarkdown(
   }
 
   return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function buildPreviewWarnings(input: {
+  inProgressIssues: IssueFile[];
+  liveLeases: TicketLease[];
+  missingModules: ModuleCoverageSummary[];
+}): string[] {
+  const warnings: string[] = [];
+
+  if (input.inProgressIssues.length > 0) {
+    warnings.push("Current backlog still has in-progress issues.");
+  }
+  if (input.liveLeases.length > 0) {
+    warnings.push("Current backlog still has active workflow leases.");
+  }
+  if (input.missingModules.length > 0) {
+    warnings.push("Tracked modules are missing live backlog coverage.");
+  }
+
+  return warnings;
 }
 
 export function parseArgs(argv: string[], cwd = process.cwd()): PlanArgs {
@@ -381,6 +414,12 @@ export function planNextBatch(args: PlanArgs): PlanResult {
   );
   const openIssues = issues.filter((issue) => issueStatus(issue) === "open");
   const doneCount = issues.filter((issue) => issueStatus(issue) === "done").length;
+  const inProgress = inProgressIssues.map(toIssueSummary);
+  const warnings = buildPreviewWarnings({
+    inProgressIssues,
+    liveLeases,
+    missingModules,
+  });
 
   if (metadataProblems.length > 0) {
     return {
@@ -395,11 +434,11 @@ export function planNextBatch(args: PlanArgs): PlanResult {
     };
   }
 
-  if (inProgressIssues.length > 0) {
+  if (!args.dryRun && inProgressIssues.length > 0) {
     return {
       kind: "blocked",
       reason: "Cannot plan a new batch while issues are still in-progress",
-      inProgress: inProgressIssues.map(toIssueSummary),
+      inProgress,
       activeLeases: liveLeases,
       open: openIssues.map(toIssueSummary),
       missingModules,
@@ -408,11 +447,11 @@ export function planNextBatch(args: PlanArgs): PlanResult {
     };
   }
 
-  if (liveLeases.length > 0) {
+  if (!args.dryRun && liveLeases.length > 0) {
     return {
       kind: "blocked",
       reason: "Cannot plan a new batch while workflow tickets are still leased",
-      inProgress: [],
+      inProgress,
       activeLeases: liveLeases,
       open: openIssues.map(toIssueSummary),
       missingModules,
@@ -421,11 +460,11 @@ export function planNextBatch(args: PlanArgs): PlanResult {
     };
   }
 
-  if (missingModules.length > 0) {
+  if (!args.dryRun && missingModules.length > 0) {
     return {
       kind: "blocked",
       reason: "Missing live backlog coverage for tracked modules",
-      inProgress: [],
+      inProgress,
       activeLeases: liveLeases,
       open: openIssues.map(toIssueSummary),
       missingModules,
@@ -434,11 +473,11 @@ export function planNextBatch(args: PlanArgs): PlanResult {
     };
   }
 
-  if (openIssues.length === 0) {
+  if (openIssues.length === 0 && (!args.dryRun || warnings.length === 0)) {
     return {
       kind: "blocked",
       reason: "No open issues available; create review backlog items first",
-      inProgress: [],
+      inProgress,
       activeLeases: liveLeases,
       open: [],
       missingModules,
@@ -461,6 +500,7 @@ export function planNextBatch(args: PlanArgs): PlanResult {
       open: openIssues.length,
     },
     moduleLedger,
+    warnings,
   );
 
   if (!args.dryRun) {
@@ -471,11 +511,18 @@ export function planNextBatch(args: PlanArgs): PlanResult {
 
   return {
     kind: args.dryRun ? "preview" : "planned",
-    reason: "Generated next batch plan from module coverage and open backlog issues",
+    reason:
+      args.dryRun && warnings.length > 0
+        ? "Generated provisional planning preview while active work or coverage gaps still exist"
+        : "Generated next batch plan from module coverage and open backlog issues",
     issueCount: summaries.length,
     outputPath,
     markdown,
     issues: summaries,
+    provisional: warnings.length > 0,
+    warnings,
+    inProgress,
+    activeLeases: liveLeases,
     missingModules,
     unmappedIssues: [],
     moduleCoverage,
@@ -540,6 +587,25 @@ function printResult(result: PlanResult, asJson: boolean): void {
 
   console.log(`result: ${result.kind}`);
   console.log(`reason: ${result.reason}`);
+  console.log(`provisional: ${result.provisional ? "yes" : "no"}`);
+  if (result.warnings.length > 0) {
+    console.log("warnings:");
+    for (const warning of result.warnings) {
+      console.log(`- ${warning}`);
+    }
+  }
+  if (result.activeLeases.length > 0) {
+    console.log("activeLeases:");
+    for (const lease of result.activeLeases) {
+      console.log(`- ${lease.session_id} ${lease.issue_id} ${lease.issue_title}`);
+    }
+  }
+  if (result.inProgress.length > 0) {
+    console.log("inProgress:");
+    for (const issue of result.inProgress) {
+      console.log(`- ${issue.id} ${issue.title}`);
+    }
+  }
   console.log(`issueCount: ${result.issueCount}`);
   console.log(`outputPath: ${result.outputPath}`);
   printCoverageSummary(result.moduleCoverage);

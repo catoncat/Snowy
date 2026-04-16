@@ -69,8 +69,13 @@ bun run workflow:queue:build
 
 1. 先确认是不是 queue 没重建
 2. 若 backlog 刚变化，先重建 queue
-3. 若 queue 仍为空，再看是否还有 active lease
-4. 若没有，则进入 `next-batch-planner`
+3. 若 live queue 还有 entry 但全部已被 lease，不要误判成 queue 为空
+4. 对于“all live queue entries are already leased”：
+   - 默认可切到 `workflow:plan:preview` / `next-batch-planner` 的 read-only planning preview
+   - 或者明确回报当前无 claim slot、等待 lease 释放
+   - 不要自动重建 queue
+5. 若 queue 真的为空，再看是否还有 active lease
+6. 若没有，则进入 `next-batch-planner` 的 planning commit
 
 ## 用法
 

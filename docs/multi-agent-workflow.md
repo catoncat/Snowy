@@ -7,7 +7,7 @@
 - 快速建立足够上下文
 - 不靠扫全 backlog 就锁定当前任务
 - 在并行开发下不抢同一片写域
-- 在 queue 为空时自动切到 planning
+- 在 queue 为空时自动切到 planning commit，在 queue 被 lease 占满时允许 planning preview
 
 当前 repo phase：
 
@@ -58,11 +58,11 @@
 ## Workflow Skills
 
 - `agent-workflow-next`
-  - 决定当前该继续 issue、取号、还是进入 planning
+  - 决定当前该继续 issue、取号、进入 planning preview，还是进入 planning commit
 - `auto-claim-issues-next`
   - 通过 live queue + lease 取号
 - `next-batch-planner`
-  - 当 queue 为空时做下一批规划
+  - 当 queue 为空时做下一批规划；当 queue 被 lease 占满时做只读 preview
 
 ## Optional Stance Overlays
 
@@ -107,7 +107,7 @@
 - Skills 决定当前动作
 - queue builder 只负责构建 dispatchable entry 集合
 - ticket machine 只负责 session 级 lease
-- planner 只在 queue 空且无 active lease 时进入
+- planning commit 只在 queue 空且无 active lease 时进入；planning preview 可在 active lease 存在时只读执行
 
 ## Unified Operating Loop
 
@@ -133,8 +133,9 @@ bun run workflow:queue:build
 1. 用户是否明确指定了某个 issue / 方向
 2. 当前 session 是否已有 hook 注入的 ticket / 已有 lease
 3. live queue 是否还有可取 entry
-4. 若 queue 为空，是否只是 queue 过期未重建
-5. 若 queue 为空且无 active lease，进入 next-batch planning
+4. live queue 是否存在，但全部 entry 都已被 lease
+5. 若 queue 为空，是否只是 queue 过期未重建
+6. 若 queue 为空且无 active lease，进入 next-batch planning commit
 
 ### Step 2: Choose Action
 
@@ -156,14 +157,20 @@ bun run workflow:queue:build
 - 在 canonical workspace 中执行真正 claim
 - 再进入实现 loop
 
-#### State D: queue 为空，但刚发生 backlog 变化
+#### State D: live queue 仍有 entry，但都已被 lease
+
+- 不要误判成 queue 为空
+- 不要因为没有 claim slot 就自动重建 queue
+- 默认进入 planning preview，或者明确回报等待当前 lease 释放
+
+#### State E: queue 为空，但刚发生 backlog 变化
 
 - 先重建 queue
 - 再重新判断
 
-#### State E: queue 为空，且没有 active lease
+#### State F: queue 为空，且没有 active lease
 
-- 进入 next-batch planning
+- 进入 next-batch planning commit
 - 对照 locked decisions / recovery report / kernel skeleton / 当前实现和测试
 - 创建新的 backlog issue
 - 再重建 queue
@@ -196,7 +203,17 @@ bun run workflow:queue:build
 BBL_AGENT_NAME=<agent-name> bun run workflow:done -- --commit=HEAD --implemented="..." --check="bun run test -- <target>"
 ```
 
-## Planning Loop
+## Planning Preview Loop
+
+当 queue 仍有 entry 但全部已被 lease，或用户明确要求提前做 planning 时：
+
+1. 临时叠加 `coordinator` stance
+2. 使用 `next-batch-planner`
+3. 运行 `bun run workflow:plan:preview`
+4. 输出 coverage / drift / recommended next issues
+5. 默认不回写 backlog / queue / planning doc
+
+## Planning Commit Loop
 
 当 queue 为空且无 active lease 后：
 
@@ -231,5 +248,6 @@ bun run workflow:plan:json
 - 因为 repo 级 lint 失败就顺手修其他 Agent 正在做的文件
 - 在共享文件看到陌生 diff 就直接 revert
 - backlog 已变化却不重建 queue
+- 把 “all live queue entries are already leased” 误判成 queue 为空
 - queue 为空就直接停工，不进入 planning
 - 把 batch snapshot 当成 live dispatch queue

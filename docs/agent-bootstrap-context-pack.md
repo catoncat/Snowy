@@ -77,8 +77,9 @@
    - 用户是否指定了 issue
    - 当前 session 是否已有 live ticket / lease
    - live queue 是否还有可取 ticket
+   - 若 live queue 仍有 entry，但都已被 lease，可先做 planning preview
    - 若 queue 为空，是否刚发生 backlog 变化需要先重建 queue
-   - 若无，则进入 next-batch planning
+   - 若无，则进入 next-batch planning commit
 3. 进入 issue 后：
    - 按 TDD 推进
    - 跑 `check_cmd`

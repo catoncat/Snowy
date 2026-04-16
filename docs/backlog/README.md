@@ -144,7 +144,8 @@ bun run workflow:queue:json
 4. 真正 claim 时，lease owner 必须使用 Agent 自己选定并持续复用的名字，不能写通用 `agent`。
 5. 若需要把 owner 同步回 issue frontmatter，使用同一个稳定名字。
 6. hook 只在显式触发 `$agent-workflow-next` 或 `$auto-claim-issues-next` 时预先取号。
-7. 若 queue 为空，先判断是否需要重建 queue；确认为空后再进入 next-batch planning。
+7. 若 `workflow:claim:preview` 返回 `all live queue entries are already leased`，不要误判成 queue 为空；可先做 planning preview。
+8. 若 queue 为空，先判断是否需要重建 queue；确认为空后再进入 next-batch planning commit。
 8. `write_scope` 重叠本身不是 claim blocker；除非存在真实前后依赖，否则用 `depends_on` 表达顺序约束，并通过 worktree / 小步提交处理并行编辑。
 9. worktree 必须复用 canonical repo 的同一份 lease 文件；不要把每个 worktree 视为独立 dispatch 空间。
 
@@ -183,16 +184,20 @@ bun run workflow:claim:json -- --name=<agent-name>
 6. 完成后回写 issue
 7. 用 `workflow:done` 收尾并重建 queue
 
-## 当 Queue 为空时
+## 当 Claim 暂时拿不到 Issue 时
 
 如果 claim 结果是空：
 
 1. 先确认是不是 queue 没重建
 2. 若 backlog 刚变化，先执行 `bun run workflow:queue:build`
-3. 若 queue 仍为空，再检查是否还有 active lease
-4. 若没有，再进入 `next-batch-planner`
-5. 把新发现的问题落成 backlog issue
-6. 再重建 queue
+3. 若 live queue 仍有 entry，但全部已被 lease：
+   - 不要误判成 queue 为空
+   - 可先执行 `bun run workflow:plan:preview` 做 read-only planning preview
+   - 或明确回报当前没有 claim slot、等待 lease 释放
+4. 若 queue 仍为空，再检查是否还有 active lease
+5. 若没有，再进入 `next-batch-planner` 的 planning commit
+6. 把新发现的问题落成 backlog issue
+7. 再重建 queue
 
 ## Completion Record
 

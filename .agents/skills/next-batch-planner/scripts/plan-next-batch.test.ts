@@ -156,7 +156,7 @@ check_cmd: bun run check
     expect(result.moduleCoverage).toHaveLength(2);
   });
 
-  it("refuses to plan a new batch while issues are still in progress", () => {
+  it("returns a provisional preview while issues are still in progress", () => {
     const repoRoot = makeRepo();
     writeModuleLedger(repoRoot, [
       {
@@ -200,15 +200,68 @@ check_cmd: bun run check
       json: false,
     });
 
+    expect(result.kind).toBe("preview");
+    if (result.kind !== "preview") {
+      throw new Error(`expected preview result, got ${result.kind}`);
+    }
+    expect(result.provisional).toBe(true);
+    expect(result.reason).toContain("provisional");
+    expect(result.inProgress.map((item) => item.id)).toEqual(["ISSUE-012"]);
+    expect(result.warnings).toContain("Current backlog still has in-progress issues.");
+  });
+
+  it("still blocks a persisted plan while issues are still in progress", () => {
+    const repoRoot = makeRepo();
+    writeModuleLedger(repoRoot, [
+      {
+        module_id: "kernel",
+        title: "Kernel",
+        tracking_order: 10,
+        stage: "mainline",
+        default_parallel_group: "kernel",
+      },
+    ]);
+    writeIssue(
+      repoRoot,
+      "2026-03-29-active.md",
+      `---
+id: ISSUE-012
+title: "Kernel B-2"
+status: in-progress
+priority: p0
+source: review
+created: 2026-03-29
+assignee: atlas
+tags: [kernel]
+module_id: kernel
+module_stage: mainline
+tracking_kind: mainline
+kind: slice
+epic: EPIC-kernel
+parallel_group: kernel
+depends_on: []
+write_scope:
+  - packages/kernel/src/run-controller.ts
+acceptance_ref: project_plan.md
+check_cmd: bun run check
+---`,
+    );
+
+    const result = planNextBatch({
+      repoRoot,
+      date: "2026-03-30",
+      dryRun: false,
+      json: false,
+    });
+
     expect(result.kind).toBe("blocked");
     if (result.kind !== "blocked") {
       throw new Error(`expected blocked result, got ${result.kind}`);
     }
     expect(result.reason).toContain("in-progress");
-    expect(result.inProgress.map((item) => item.id)).toEqual(["ISSUE-012"]);
   });
 
-  it("refuses to plan a new batch while workflow tickets are still leased", () => {
+  it("returns a provisional preview while workflow tickets are still leased", () => {
     const repoRoot = makeRepo();
     const leaseRootDir = path.join(repoRoot, ".leases");
     writeModuleLedger(repoRoot, [
@@ -283,12 +336,96 @@ check_cmd: bun run check
       json: false,
     });
 
+    expect(result.kind).toBe("preview");
+    if (result.kind !== "preview") {
+      throw new Error(`expected preview result, got ${result.kind}`);
+    }
+    expect(result.provisional).toBe(true);
+    expect(result.reason).toContain("provisional");
+    expect(result.activeLeases.map((item) => item.issue_id)).toEqual(["ISSUE-021"]);
+    expect(result.warnings).toContain("Current backlog still has active workflow leases.");
+  });
+
+  it("still blocks a persisted plan while workflow tickets are still leased", () => {
+    const repoRoot = makeRepo();
+    const leaseRootDir = path.join(repoRoot, ".leases");
+    writeModuleLedger(repoRoot, [
+      {
+        module_id: "kernel",
+        title: "Kernel",
+        tracking_order: 10,
+        stage: "mainline",
+        default_parallel_group: "kernel",
+      },
+    ]);
+    writeIssue(
+      repoRoot,
+      "2026-03-29-open.md",
+      `---
+id: ISSUE-021
+title: "Kernel session cleanup"
+status: open
+priority: p0
+source: review
+created: 2026-03-29
+assignee: unassigned
+tags: [kernel]
+module_id: kernel
+module_stage: mainline
+tracking_kind: mainline
+kind: slice
+epic: EPIC-kernel
+parallel_group: kernel
+depends_on: []
+write_scope:
+  - packages/kernel/src/session-store.ts
+acceptance_ref: project_plan.md
+check_cmd: bun run check
+---`,
+    );
+    mkdirSync(leaseRootDir, { recursive: true });
+    writeFileSync(
+      path.join(leaseRootDir, `${path.basename(repoRoot)}.json`),
+      JSON.stringify(
+        {
+          schema_version: 1,
+          repo_id: path.basename(repoRoot),
+          updated_at: "2026-03-30T00:00:00.000Z",
+          leases_by_session: {
+            "session-a": {
+              session_id: "session-a",
+              agent_name: "atlas",
+              issue_id: "ISSUE-021",
+              issue_title: "Kernel session cleanup",
+              parallel_group: "kernel",
+              write_scope: ["packages/kernel/src/session-store.ts"],
+              check_cmd: "bun run check",
+              claimed_at: "2026-03-30T00:00:00.000Z",
+            },
+          },
+          leases_by_issue: {
+            "ISSUE-021": "session-a",
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const result = planNextBatch({
+      repoRoot,
+      leaseRootDir,
+      date: "2026-03-30",
+      dryRun: false,
+      json: false,
+    });
+
     expect(result.kind).toBe("blocked");
     if (result.kind !== "blocked") {
       throw new Error(`expected blocked result, got ${result.kind}`);
     }
     expect(result.reason).toContain("workflow tickets");
-    expect(result.activeLeases.map((item) => item.issue_id)).toEqual(["ISSUE-021"]);
   });
 
   it("writes the planning document when not in dry-run mode", () => {
@@ -344,7 +481,7 @@ check_cmd: bun run check
     expect(readFileSync(outputFile, "utf8")).toContain("ISSUE-013");
   });
 
-  it("returns a coverage gap when a tracked non-deferred module has no live issue", () => {
+  it("returns a provisional preview when tracked modules still miss live issue coverage", () => {
     const repoRoot = makeRepo();
     writeModuleLedger(repoRoot, [
       {
@@ -395,11 +532,71 @@ check_cmd: bun run check
       json: false,
     });
 
+    expect(result.kind).toBe("preview");
+    if (result.kind !== "preview") {
+      throw new Error(`expected preview result, got ${result.kind}`);
+    }
+    expect(result.provisional).toBe(true);
+    expect(result.reason).toContain("provisional");
+    expect(result.missingModules.map((item) => item.moduleId)).toEqual(["observability-audit"]);
+    expect(result.warnings).toContain("Tracked modules are missing live backlog coverage.");
+  });
+
+  it("still blocks a persisted plan when tracked modules miss live issue coverage", () => {
+    const repoRoot = makeRepo();
+    writeModuleLedger(repoRoot, [
+      {
+        module_id: "kernel",
+        title: "Kernel",
+        tracking_order: 10,
+        stage: "mainline",
+        default_parallel_group: "kernel",
+      },
+      {
+        module_id: "observability-audit",
+        title: "Observability",
+        tracking_order: 20,
+        stage: "mainline",
+        default_parallel_group: "mv3-shell",
+      },
+    ]);
+    writeIssue(
+      repoRoot,
+      "2026-03-29-kernel.md",
+      `---
+id: ISSUE-051
+title: "Kernel B-1"
+status: open
+priority: p0
+source: review
+created: 2026-03-29
+assignee: unassigned
+tags: [kernel]
+module_id: kernel
+module_stage: mainline
+tracking_kind: mainline
+kind: slice
+epic: EPIC-kernel
+parallel_group: kernel
+depends_on: []
+write_scope:
+  - packages/kernel/src/
+acceptance_ref: project_plan.md
+check_cmd: bun run check
+---`,
+    );
+
+    const result = planNextBatch({
+      repoRoot,
+      date: "2026-03-30",
+      dryRun: false,
+      json: false,
+    });
+
     expect(result.kind).toBe("blocked");
     if (result.kind !== "blocked") {
       throw new Error(`expected blocked result, got ${result.kind}`);
     }
     expect(result.reason).toContain("coverage");
-    expect(result.missingModules.map((item) => item.moduleId)).toEqual(["observability-audit"]);
   });
 });

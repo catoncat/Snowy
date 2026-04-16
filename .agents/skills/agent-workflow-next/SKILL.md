@@ -1,6 +1,6 @@
 ---
 name: agent-workflow-next
-description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下一个”“这一批做完后接下来做什么”“当前应该实现、收口还是规划”时使用。适用于 browser-brain-loop-next 的统一 Agent 工作流。
+description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下一个”“当前没有 claim slot 时该等待还是先做预规划”“这一批做完后接下来做什么”“当前应该实现、收口还是规划”时使用。适用于 browser-brain-loop-next 的统一 Agent 工作流。
 ---
 
 # Agent Workflow Next
@@ -25,7 +25,7 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 
 2. `docs/workflow/live-queue.json`
 
-只有在 queue 为空、需要重建 queue、或要进入 planning 时，再补读：
+只有在 queue 为空、全部 live entry 已被 lease、需要重建 queue、或要进入 planning preview / planning commit 时，再补读：
 
 3. `docs/source-of-truth-map.md`
 4. `docs/backlog/README.md`
@@ -56,8 +56,9 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 1. 用户是否明确指定了某个 issue / 方向
 2. 当前 session 是否已有 hook 注入的 ticket / 已有 lease
 3. live queue 是否还有可取 entry
-4. 若 queue 为空，是否只是 queue 过期未重建
-5. 若 queue 为空且无 active lease，是否该进入 next-batch planning
+4. live queue 是否存在，但全部 entry 都已被 lease
+5. 若 queue 为空，是否只是 queue 过期未重建
+6. 若 queue 为空且无 active lease，是否该进入 next-batch planning commit
 
 ## 动作选择
 
@@ -81,7 +82,14 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 - 如果不在 canonical workspace，只做 claim 判断并把结论带回
 - claim 后进入实现 loop
 
-### 状态 D：queue 为空，但 backlog 刚变化
+### 状态 D：live queue 仍有 entry，但都已被 lease
+
+- 不要误判成 queue 为空
+- 不要因为 claim 不到 ticket 就立刻重建 queue
+- 默认进入 read-only planning preview / coverage review，或者明确回报“当前无 claim slot，等待中”
+- planning preview 可以读取 planning truth，但默认不回写 backlog / queue / lease
+
+### 状态 E：queue 为空，但 backlog 刚变化
 
 - 先重建 queue：
 
@@ -91,12 +99,12 @@ bun run workflow:queue:build
 
 - 再重新判断
 
-### 状态 E：queue 为空，且没有 active lease
+### 状态 F：queue 为空，且没有 active lease
 
 - 使用 `next-batch-planner`
 - 对照 locked decisions / recovery report / kernel skeleton / 当前实现和测试做 review
 - 把发现的新 gap 落成 backlog issue
-- 生成下一批 planning 文档
+- 生成下一批 planning 文档或 backlog 变更
 - 重建 queue 后再回到 claim loop
 
 ## Optional Stance Overlays
@@ -148,6 +156,10 @@ bun run workflow:plan:json
   - 追加 `## 工作总结`
   - 追加 `## 相关 commits`
 - 若进入 next-batch planning：
+  - 区分 planning preview（只读）和 planning commit（回写 backlog / planning doc / queue）
+  - 若只是 queue saturation / all leased，默认先做 planning preview
+  - 不要把“all live queue entries are already leased”误判成“queue 为空”
+- 若进入 next-batch planning commit：
   - issue 先按 `slice / review / follow-up / decision / doc-debt` 分类
   - 不要只生成 planning 文档而不落 backlog
   - 生成完成后重建 live queue

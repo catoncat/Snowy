@@ -149,7 +149,7 @@
   - `bun run workflow:claim`
 - backlog 刚变化后重建 queue：
   - `bun run workflow:queue:build`
-- queue 空了进入 planning：
+- queue 空了进入 planning commit；queue 被 lease 占满时可先做 planning preview：
   - `bun run workflow:plan:preview`
   - `bun run workflow:plan`
 

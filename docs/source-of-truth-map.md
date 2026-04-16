@@ -251,7 +251,7 @@
 4. 若还有 mainline module 的 live queue entry，先按 module order 推进
 5. mainline 收口后，再看 secondary modules
 6. deferred modules 只在前两层没有 live queue entry 时再进入
-7. 当 live queue 为空且没有 active lease 时，再进入 next-batch planning
+7. 当 live queue 还有 entry 但全部已被 lease 时，可先做 planning preview；当 live queue 为空且没有 active lease 时，再进入 next-batch planning commit
 
 当前 dispatch 与规划要这样看：
 
