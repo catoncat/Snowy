@@ -702,6 +702,26 @@ export interface BootstrapResourceBundle {
 export type CapabilityRisk = "low" | "medium" | "high";
 export type CapabilitySideEffects = "none" | "reads" | "writes" | "external";
 export type SkillStatus = "draft" | "staged" | "installed" | "enabled" | "disabled" | "archived";
+export const AI_SURFACE_ACTION_AUDIENCES = ["chat", "skill", "system", "mcp"] as const;
+export type AiSurfaceActionAudience = (typeof AI_SURFACE_ACTION_AUDIENCES)[number];
+export const CAPABILITY_CONFIRM_POLICIES = ["inherit-risk", "always"] as const;
+export type CapabilityConfirmPolicy = (typeof CAPABILITY_CONFIRM_POLICIES)[number];
+export const CAPABILITY_EXECUTION_TARGETS = ["browser", "runner", "host"] as const;
+export type CapabilityExecutionTarget = (typeof CAPABILITY_EXECUTION_TARGETS)[number];
+
+export interface CapabilityProjectionMetadata {
+  audiences: readonly AiSurfaceActionAudience[];
+  defaultExposed: boolean;
+  confirmPolicy: CapabilityConfirmPolicy;
+  executionTarget: CapabilityExecutionTarget;
+}
+
+export interface CapabilityProjectionInput {
+  audiences?: readonly AiSurfaceActionAudience[];
+  defaultExposed?: boolean;
+  confirmPolicy?: CapabilityConfirmPolicy;
+  executionTarget?: CapabilityExecutionTarget;
+}
 
 export type CapabilityErrorCode =
   | "E_BAD_INPUT"
@@ -736,6 +756,7 @@ export interface CapabilityDescriptor {
   exportable: boolean;
   exportName?: string;
   exportRisk?: CapabilityRisk;
+  projection?: CapabilityProjectionInput;
   executionBinding: ExecutionBinding;
 }
 
@@ -751,6 +772,10 @@ export interface ToolContract {
     sideEffects: CapabilitySideEffects;
     supportsVerify: boolean;
     supportsStreaming: boolean;
+    audiences: readonly AiSurfaceActionAudience[];
+    defaultExposed: boolean;
+    confirmPolicy: CapabilityConfirmPolicy;
+    executionTarget: CapabilityExecutionTarget;
   };
 }
 
@@ -794,6 +819,10 @@ export interface CapabilityExportHandoff {
     sideEffects: CapabilitySideEffects;
     supportsVerify: boolean;
     supportsStreaming: boolean;
+    audiences: readonly AiSurfaceActionAudience[];
+    defaultExposed: boolean;
+    confirmPolicy: CapabilityConfirmPolicy;
+    executionTarget: CapabilityExecutionTarget;
   };
 }
 
@@ -943,6 +972,81 @@ function assertJsonSchemaHasType(schema: JsonSchema, label: string): void {
   }
 }
 
+const DEFAULT_CAPABILITY_ACTION_AUDIENCES = ["chat", "skill", "system"] as const;
+
+function inferCapabilityExecutionTarget(binding: ExecutionBinding): CapabilityExecutionTarget {
+  switch (binding.family.trim()) {
+    case "runner":
+      return "runner";
+    case "host":
+      return "host";
+    default:
+      return "browser";
+  }
+}
+
+function normalizeCapabilityProjectionMetadata(
+  descriptor: CapabilityDescriptor,
+): CapabilityProjectionMetadata {
+  const configuredAudiences =
+    descriptor.projection?.audiences ??
+    (descriptor.exportable ? AI_SURFACE_ACTION_AUDIENCES : DEFAULT_CAPABILITY_ACTION_AUDIENCES);
+  const audiences: AiSurfaceActionAudience[] = [];
+  for (const audience of configuredAudiences) {
+    if (!AI_SURFACE_ACTION_AUDIENCES.includes(audience)) {
+      throw new CapabilityError("E_BAD_INPUT", `Invalid capability audience: ${String(audience)}`);
+    }
+    if (!audiences.includes(audience)) {
+      audiences.push(audience);
+    }
+  }
+  if (audiences.length === 0) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "Capability projection must expose at least one audience",
+    );
+  }
+
+  const defaultExposed = descriptor.projection?.defaultExposed ?? true;
+  if (typeof defaultExposed !== "boolean") {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "Capability projection defaultExposed must be boolean",
+    );
+  }
+
+  const confirmPolicy = descriptor.projection?.confirmPolicy ?? "inherit-risk";
+  if (!CAPABILITY_CONFIRM_POLICIES.includes(confirmPolicy)) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      `Invalid capability confirmPolicy: ${String(confirmPolicy)}`,
+    );
+  }
+
+  const executionTarget =
+    descriptor.projection?.executionTarget ??
+    inferCapabilityExecutionTarget(descriptor.executionBinding);
+  if (!CAPABILITY_EXECUTION_TARGETS.includes(executionTarget)) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      `Invalid capability executionTarget: ${String(executionTarget)}`,
+    );
+  }
+
+  return {
+    audiences,
+    defaultExposed,
+    confirmPolicy,
+    executionTarget,
+  };
+}
+
+export interface CapabilityProjectionFilter {
+  audience?: AiSurfaceActionAudience;
+  defaultExposedOnly?: boolean;
+  executionTarget?: CapabilityExecutionTarget;
+}
+
 export function assertCapabilityDescriptor(value: CapabilityDescriptor): CapabilityDescriptor {
   if (!CAPABILITY_ID_RE.test(value.id)) {
     throw new CapabilityError("E_BAD_INPUT", `Invalid capability id: ${value.id}`);
@@ -961,7 +1065,34 @@ export function assertCapabilityDescriptor(value: CapabilityDescriptor): Capabil
   }
   assertJsonSchemaHasType(value.inputSchema, "inputSchema");
   assertJsonSchemaHasType(value.outputSchema, "outputSchema");
+  normalizeCapabilityProjectionMetadata(value);
   return value;
+}
+
+export function getCapabilityProjectionMetadata(
+  descriptor: CapabilityDescriptor,
+): CapabilityProjectionMetadata {
+  assertCapabilityDescriptor(descriptor);
+  return normalizeCapabilityProjectionMetadata(descriptor);
+}
+
+export function filterCapabilityDescriptorsByProjection(
+  descriptors: CapabilityDescriptor[],
+  filter: CapabilityProjectionFilter = {},
+): CapabilityDescriptor[] {
+  return descriptors.filter((descriptor) => {
+    const projection = getCapabilityProjectionMetadata(descriptor);
+    if (filter.audience && !projection.audiences.includes(filter.audience)) {
+      return false;
+    }
+    if (filter.defaultExposedOnly && !projection.defaultExposed) {
+      return false;
+    }
+    if (filter.executionTarget && projection.executionTarget !== filter.executionTarget) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export function capabilityIdToToolName(capabilityId: string): string {
@@ -970,6 +1101,7 @@ export function capabilityIdToToolName(capabilityId: string): string {
 
 export function descriptorToToolContract(descriptor: CapabilityDescriptor): ToolContract {
   assertCapabilityDescriptor(descriptor);
+  const projection = getCapabilityProjectionMetadata(descriptor);
   return {
     name: capabilityIdToToolName(descriptor.id),
     capabilityId: descriptor.id,
@@ -981,6 +1113,10 @@ export function descriptorToToolContract(descriptor: CapabilityDescriptor): Tool
       sideEffects: descriptor.sideEffects,
       supportsVerify: descriptor.supportsVerify,
       supportsStreaming: descriptor.supportsStreaming,
+      audiences: [...projection.audiences],
+      defaultExposed: projection.defaultExposed,
+      confirmPolicy: projection.confirmPolicy,
+      executionTarget: projection.executionTarget,
     },
   };
 }
@@ -989,7 +1125,8 @@ export function descriptorToCapabilityExportHandoff(
   descriptor: CapabilityDescriptor,
 ): CapabilityExportHandoff | null {
   assertCapabilityDescriptor(descriptor);
-  if (!descriptor.exportable) {
+  const projection = getCapabilityProjectionMetadata(descriptor);
+  if (!descriptor.exportable || !projection.audiences.includes("mcp")) {
     return null;
   }
   return {
@@ -1004,6 +1141,10 @@ export function descriptorToCapabilityExportHandoff(
       sideEffects: descriptor.sideEffects,
       supportsVerify: descriptor.supportsVerify,
       supportsStreaming: descriptor.supportsStreaming,
+      audiences: [...projection.audiences],
+      defaultExposed: projection.defaultExposed,
+      confirmPolicy: projection.confirmPolicy,
+      executionTarget: projection.executionTarget,
     },
   };
 }

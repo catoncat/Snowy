@@ -122,6 +122,17 @@
 
 当前 resources 的 audience 投影由 `listAiSurfaceResourcesForAudience()` 收口；聊天 / skill / system / mcp 的默认 read 面不再靠散落常量或文档描述维护。
 
+当前 action 的 audience / projection 也已收口到 descriptor-owned metadata：
+
+- `CapabilityDescriptor.projection` 负责 `audiences` / `defaultExposed` / `confirmPolicy` / `executionTarget`
+- `packages/contracts` 提供 `getCapabilityProjectionMetadata()` 与 `filterCapabilityDescriptorsByProjection()`
+- `packages/core` 的 `CapabilityRegistry.listByProjection()` / `projectTools()` / `projectMcpExportHandoffs()` 使用同一套 metadata 做过滤
+- `defaultExposed` 表示“在该 audience 的默认 tool surface 是否直出”；例如 `runner.invoke` 仍属于聊天 audience，但默认不直出
+- `confirmPolicy` 当前最小语义：
+  - `inherit-risk`：沿用高风险 action 的 confirm gate
+  - `always`：即使不是 high risk，也要求显式确认
+- MCP export 除了 `exportable` 之外，还要求 descriptor 的 `audiences` 包含 `mcp`
+
 当前明确不该默认直接摊给聊天面的：
 
 - `runner.invoke`

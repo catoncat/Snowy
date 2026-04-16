@@ -10,6 +10,13 @@ import {
   buildTaskProgressMessage,
 } from "../src/prompt-builder.js";
 
+const BASE_TOOL_ANNOTATIONS = {
+  audiences: ["chat", "skill", "system"] as const,
+  defaultExposed: true,
+  confirmPolicy: "inherit-risk" as const,
+  executionTarget: "browser" as const,
+};
+
 const TEST_TOOLS: ToolContract[] = [
   {
     name: "page_query",
@@ -22,6 +29,7 @@ const TEST_TOOLS: ToolContract[] = [
       sideEffects: "reads",
       supportsVerify: false,
       supportsStreaming: false,
+      ...BASE_TOOL_ANNOTATIONS,
     },
   },
 ];

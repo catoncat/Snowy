@@ -1,4 +1,5 @@
 import {
+  AI_SURFACE_ACTION_AUDIENCES,
   type AiSurfaceBoundary,
   type AiSurfaceResourceAudience,
   type AiSurfaceResourceDocument,
@@ -17,6 +18,7 @@ import {
   type CapabilityDescriptor,
   CapabilityError,
   type CapabilityExportHandoff,
+  type CapabilityProjectionFilter,
   type CapabilityTraceEntry,
   type ConfigBootstrapSummary,
   type ConfigResourceField,
@@ -66,7 +68,9 @@ import {
   capabilityNamespace,
   descriptorToToolContract,
   descriptorsToCapabilityExportHandoffs,
+  filterCapabilityDescriptorsByProjection,
   getAiSurfaceResourceMetadata,
+  getCapabilityProjectionMetadata,
 } from "@bbl-next/contracts";
 
 export interface CapabilityProviderRequest {
@@ -277,6 +281,10 @@ export class CapabilityRegistry {
     return [...this.#descriptors.values()];
   }
 
+  listByProjection(filter: CapabilityProjectionFilter = {}): CapabilityDescriptor[] {
+    return filterCapabilityDescriptorsByProjection(this.list(), filter);
+  }
+
   get(capabilityId: string): CapabilityDescriptor | undefined {
     return this.#descriptors.get(capabilityId);
   }
@@ -289,12 +297,12 @@ export class CapabilityRegistry {
     return descriptor;
   }
 
-  projectTools(): ToolContract[] {
-    return this.list().map((descriptor) => descriptorToToolContract(descriptor));
+  projectTools(filter: CapabilityProjectionFilter = {}): ToolContract[] {
+    return this.listByProjection(filter).map((descriptor) => descriptorToToolContract(descriptor));
   }
 
   projectMcpExportHandoffs(): CapabilityExportHandoff[] {
-    return descriptorsToCapabilityExportHandoffs(this.list());
+    return descriptorsToCapabilityExportHandoffs(this.listByProjection({ audience: "mcp" }));
   }
 }
 
@@ -586,6 +594,7 @@ interface CatalogEntryInput {
   supportsVerify?: boolean;
   exportable?: boolean;
   exportRisk?: CapabilityDescriptor["risk"];
+  projection?: Partial<NonNullable<CapabilityDescriptor["projection"]>>;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -660,6 +669,37 @@ function normalizeConfigPatch(
   return normalized;
 }
 
+const DEFAULT_CATALOG_ACTION_AUDIENCES = ["chat", "skill", "system"] as const;
+
+function defaultCatalogExecutionTarget(
+  family: string,
+): NonNullable<CapabilityDescriptor["projection"]>["executionTarget"] {
+  switch (family) {
+    case "runner":
+      return "runner";
+    case "host":
+      return "host";
+    default:
+      return "browser";
+  }
+}
+
+function buildCatalogProjection(input: {
+  family: string;
+  exportable: boolean;
+  projection?: Partial<NonNullable<CapabilityDescriptor["projection"]>>;
+}): NonNullable<CapabilityDescriptor["projection"]> {
+  return {
+    audiences: input.exportable
+      ? [...AI_SURFACE_ACTION_AUDIENCES]
+      : [...DEFAULT_CATALOG_ACTION_AUDIENCES],
+    defaultExposed: true,
+    confirmPolicy: "inherit-risk",
+    executionTarget: defaultCatalogExecutionTarget(input.family),
+    ...input.projection,
+  };
+}
+
 function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
   const {
     id,
@@ -674,6 +714,7 @@ function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
     supportsVerify = family === "page" || family === "site",
     exportable = sideEffects === "reads" || sideEffects === "none",
     exportRisk,
+    projection,
   } = input;
   return {
     id,
@@ -689,6 +730,11 @@ function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
     exportable,
     exportName: id,
     exportRisk: exportRisk ?? risk,
+    projection: buildCatalogProjection({
+      family,
+      exportable,
+      projection,
+    }),
     executionBinding: { family, operation },
   };
 }
@@ -1183,6 +1229,9 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       sideEffects: "writes",
       permissions: ["runner.invoke"],
       description: "Invoke a JS module in the isolated runner host",
+      projection: {
+        defaultExposed: false,
+      },
       inputSchema: {
         type: "object",
         properties: { moduleId: { type: "string" }, input: { type: "object" } },
@@ -2769,7 +2818,11 @@ export function createSkillRuntimeContext(
     if (!options.permissions.some((permission) => matchesPermission(permission, capabilityId))) {
       throw new CapabilityError("E_PERMISSION_DENIED", `Capability not permitted: ${capabilityId}`);
     }
-    if (descriptor.risk === "high" && options.confirm) {
+    const projection = getCapabilityProjectionMetadata(descriptor);
+    const requiresConfirm =
+      projection.confirmPolicy === "always" ||
+      (projection.confirmPolicy === "inherit-risk" && descriptor.risk === "high");
+    if (requiresConfirm && options.confirm) {
       const confirmed = await options.confirm(descriptor, input);
       if (!confirmed) {
         throw new CapabilityError(

@@ -159,6 +159,72 @@ describe("core", () => {
     ]);
   });
 
+  it("lists and projects action capabilities by audience and default exposure", () => {
+    const registry = new CapabilityRegistry([
+      descriptor({
+        id: "page.query",
+        description: "Query page",
+        sideEffects: "reads",
+        exportable: true,
+        executionBinding: {
+          family: "page",
+          operation: "query",
+        },
+      }),
+      descriptor({
+        id: "runner.invoke",
+        description: "Invoke runner module",
+        sideEffects: "reads",
+        exportable: false,
+        projection: {
+          defaultExposed: false,
+          executionTarget: "runner",
+        },
+        executionBinding: {
+          family: "runner",
+          operation: "invoke",
+        },
+      }),
+      descriptor({
+        id: "host.exec",
+        description: "Execute on host",
+        sideEffects: "external",
+        exportable: false,
+        projection: {
+          audiences: ["skill", "system"],
+          executionTarget: "host",
+        },
+        executionBinding: {
+          family: "host",
+          operation: "exec",
+        },
+      }),
+    ]);
+
+    expect(
+      registry
+        .listByProjection({
+          audience: "chat",
+        })
+        .map((entry) => entry.id),
+    ).toEqual(["page.query", "runner.invoke"]);
+    expect(
+      registry
+        .projectTools({
+          audience: "chat",
+          defaultExposedOnly: true,
+        })
+        .map((entry) => entry.capabilityId),
+    ).toEqual(["page.query"]);
+    expect(
+      registry
+        .listByProjection({
+          executionTarget: "host",
+        })
+        .map((entry) => entry.id),
+    ).toEqual(["host.exec"]);
+  });
+
   it("keeps bootstrap resources and workflows outside the action capability catalog", () => {
     expect(AI_SURFACE_BOUNDARY).toMatchObject({
       actions: {
@@ -941,6 +1007,19 @@ describe("core", () => {
         id: "page.click",
         exportable: false,
       }),
+      descriptor({
+        id: "runtime.history",
+        description: "History",
+        sideEffects: "reads",
+        exportable: true,
+        projection: {
+          audiences: ["chat", "skill", "system"],
+        },
+        executionBinding: {
+          family: "runtime",
+          operation: "history",
+        },
+      }),
     ]);
 
     expect(registry.projectMcpExportHandoffs()).toEqual([
@@ -956,6 +1035,10 @@ describe("core", () => {
           sideEffects: "reads",
           supportsVerify: true,
           supportsStreaming: false,
+          audiences: ["chat", "skill", "system", "mcp"],
+          defaultExposed: true,
+          confirmPolicy: "inherit-risk",
+          executionTarget: "browser",
         },
       },
     ]);
@@ -1093,6 +1176,55 @@ describe("core", () => {
 
     await expect(ctx.call("page.click", { uid: "u1" })).rejects.toMatchObject({
       code: "E_PERMISSION_DENIED",
+    });
+  });
+
+  it("honors descriptor confirmPolicy overrides in the runtime context", async () => {
+    const registry = new CapabilityRegistry([
+      descriptor({
+        id: "config.update",
+        risk: "medium",
+        permissions: ["config.update"],
+        projection: {
+          confirmPolicy: "always",
+        },
+        executionBinding: {
+          family: "page",
+          operation: "update",
+        },
+      }),
+    ]);
+    const providers = new FamilyProviderRegistry();
+    providers.register({
+      family: "page",
+      invoke: ({ binding, input }) => ({ operation: binding.operation, input }),
+    });
+
+    const denied = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "s1",
+      skillId: "skill.config",
+      permissions: ["config.update"],
+      confirm: async () => false,
+    });
+
+    await expect(denied.call("config.update", { patch: {} })).rejects.toMatchObject({
+      code: "E_PERMISSION_DENIED",
+    });
+
+    const approved = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "s1",
+      skillId: "skill.config",
+      permissions: ["config.update"],
+      confirm: async () => true,
+    });
+
+    await expect(approved.call("config.update", { patch: {} })).resolves.toEqual({
+      operation: "update",
+      input: { patch: {} },
     });
   });
 

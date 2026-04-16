@@ -1,4 +1,5 @@
 import {
+  AI_SURFACE_ACTION_AUDIENCES,
   AI_SURFACE_BOUNDARY,
   AI_SURFACE_PRIMITIVES,
   AI_SURFACE_RESOURCE_AUDIENCES,
@@ -6,6 +7,8 @@ import {
   type AiSurfaceResourceDocument,
   type AuditTailResource,
   BOOTSTRAP_RESOURCE_KEYS,
+  CAPABILITY_CONFIRM_POLICIES,
+  CAPABILITY_EXECUTION_TARGETS,
   COMPACTION_REASONS,
   CONFIG_AUDIT_KINDS,
   CONFIG_AUDIT_STATUSES,
@@ -69,6 +72,9 @@ import {
   capabilityNamespace,
   createSkillLifecycleVersionSurface,
   descriptorToToolContract,
+  descriptorsToCapabilityExportHandoffs,
+  filterCapabilityDescriptorsByProjection,
+  getCapabilityProjectionMetadata,
   grantSkillTrusted,
   isPublicCapabilityNamespace,
   selectLatestTrustedSkillVersion,
@@ -126,6 +132,104 @@ describe("contracts", () => {
         supportsStreaming: false,
       },
     });
+  });
+
+  it("derives action projection metadata and exposes it through tool annotations", () => {
+    const descriptor = buildDescriptor({
+      projection: {
+        defaultExposed: false,
+        confirmPolicy: "always",
+        executionTarget: "runner",
+      },
+    });
+
+    expect(AI_SURFACE_ACTION_AUDIENCES).toEqual(["chat", "skill", "system", "mcp"]);
+    expect(CAPABILITY_CONFIRM_POLICIES).toEqual(["inherit-risk", "always"]);
+    expect(CAPABILITY_EXECUTION_TARGETS).toEqual(["browser", "runner", "host"]);
+    expect(getCapabilityProjectionMetadata(descriptor)).toEqual({
+      audiences: ["chat", "skill", "system"],
+      defaultExposed: false,
+      confirmPolicy: "always",
+      executionTarget: "runner",
+    });
+    expect(descriptorToToolContract(descriptor)).toMatchObject({
+      capabilityId: "page.click",
+      annotations: {
+        audiences: ["chat", "skill", "system"],
+        defaultExposed: false,
+        confirmPolicy: "always",
+        executionTarget: "runner",
+      },
+    });
+  });
+
+  it("filters descriptors by audience default exposure and execution target", () => {
+    const projected = filterCapabilityDescriptorsByProjection(
+      [
+        buildDescriptor({
+          id: "page.click",
+          projection: {
+            executionTarget: "browser",
+          },
+        }),
+        buildDescriptor({
+          id: "runner.invoke",
+          sideEffects: "reads",
+          exportable: false,
+          projection: {
+            defaultExposed: false,
+            executionTarget: "runner",
+          },
+          executionBinding: {
+            family: "runner",
+            operation: "invoke",
+          },
+        }),
+        buildDescriptor({
+          id: "host.exec",
+          sideEffects: "external",
+          exportable: false,
+          projection: {
+            audiences: ["skill", "system"],
+            executionTarget: "host",
+          },
+          executionBinding: {
+            family: "host",
+            operation: "exec",
+          },
+        }),
+      ],
+      {
+        audience: "chat",
+        defaultExposedOnly: true,
+      },
+    );
+
+    expect(projected.map((descriptor) => descriptor.id)).toEqual(["page.click"]);
+    expect(
+      filterCapabilityDescriptorsByProjection(projected, {
+        executionTarget: "browser",
+      }).map((descriptor) => descriptor.id),
+    ).toEqual(["page.click"]);
+  });
+
+  it("requires the mcp audience in addition to exportable for MCP handoffs", () => {
+    expect(
+      descriptorsToCapabilityExportHandoffs([
+        buildDescriptor({
+          id: "page.query",
+          sideEffects: "reads",
+          exportable: true,
+          projection: {
+            audiences: ["chat", "skill", "system"],
+          },
+          executionBinding: {
+            family: "page",
+            operation: "query",
+          },
+        }),
+      ]),
+    ).toEqual([]);
   });
 
   it("locks CapabilityDescriptor and ToolContract to the action primitive", () => {

@@ -131,6 +131,13 @@ const TEST_SITE_DESCRIPTOR = {
   executionBinding: { family: "siteRuntime", operation: "invoke" },
 };
 
+const BASE_TOOL_ANNOTATIONS = {
+  audiences: ["chat", "skill", "system"] as const,
+  defaultExposed: true,
+  confirmPolicy: "inherit-risk" as const,
+  executionTarget: "browser" as const,
+};
+
 describe("runLoop", () => {
   function setup(mockSendFn: (input: LlmProviderSendInput) => Promise<Response>) {
     const storage: SessionStorage = new InMemorySessionStorage();
@@ -1479,6 +1486,7 @@ describe("buildSystemPromptBase", () => {
           sideEffects: "reads",
           supportsVerify: false,
           supportsStreaming: false,
+          ...BASE_TOOL_ANNOTATIONS,
         },
       },
       {
@@ -1492,6 +1500,7 @@ describe("buildSystemPromptBase", () => {
           sideEffects: "writes",
           supportsVerify: true,
           supportsStreaming: false,
+          ...BASE_TOOL_ANNOTATIONS,
         },
       },
       {
@@ -1505,6 +1514,7 @@ describe("buildSystemPromptBase", () => {
           sideEffects: "writes",
           supportsVerify: true,
           supportsStreaming: false,
+          ...BASE_TOOL_ANNOTATIONS,
         },
       },
       {
@@ -1518,6 +1528,7 @@ describe("buildSystemPromptBase", () => {
           sideEffects: "writes",
           supportsVerify: false,
           supportsStreaming: false,
+          ...BASE_TOOL_ANNOTATIONS,
         },
       },
       {
@@ -1531,6 +1542,7 @@ describe("buildSystemPromptBase", () => {
           sideEffects: "reads",
           supportsVerify: false,
           supportsStreaming: false,
+          ...BASE_TOOL_ANNOTATIONS,
         },
       },
       {
@@ -1544,6 +1556,7 @@ describe("buildSystemPromptBase", () => {
           sideEffects: "writes",
           supportsVerify: false,
           supportsStreaming: false,
+          ...BASE_TOOL_ANNOTATIONS,
         },
       },
     ];
