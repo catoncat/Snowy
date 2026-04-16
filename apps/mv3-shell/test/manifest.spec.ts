@@ -63,20 +63,98 @@ function createDomSandbox(options?: {
     }
   }
 
+  class MouseEvent {
+    readonly type: string;
+    readonly bubbles: boolean;
+    readonly cancelable: boolean;
+
+    constructor(type: string, init: Record<string, unknown> = {}) {
+      this.type = type;
+      this.bubbles = init.bubbles === true;
+      this.cancelable = init.cancelable === true;
+    }
+  }
+
+  class InputEvent {
+    readonly type: string;
+    readonly bubbles: boolean;
+
+    constructor(type: string, init: Record<string, unknown> = {}) {
+      this.type = type;
+      this.bubbles = init.bubbles === true;
+    }
+  }
+
+  class Event {
+    readonly type: string;
+    readonly bubbles: boolean;
+
+    constructor(type: string, init: Record<string, unknown> = {}) {
+      this.type = type;
+      this.bubbles = init.bubbles === true;
+    }
+  }
+
+  function createMockElement(tag: string, attrs: Record<string, string>, text: string) {
+    const attrList = Object.entries(attrs).map(([name, value]) => ({ name, value }));
+    const el: Record<string, unknown> = {
+      tagName: tag.toUpperCase(),
+      textContent: text,
+      value: attrs.value ?? "",
+      attributes: Object.assign(attrList, { length: attrList.length }),
+      dispatchEvent(event: { type: string }) {
+        dispatchLog.push({ target: `${tag}#${attrs.id ?? "?"}`, type: event.type });
+        return true;
+      },
+      click() {
+        (el as Record<string, unknown> & { dispatchEvent: (e: unknown) => boolean }).dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+      },
+    };
+    return el;
+  }
+
   const activeElement = createTarget("activeElement");
   const body = createTarget("body");
   const documentElement = createTarget("documentElement");
+  const mockElements = [
+    createMockElement("button", { id: "submit-btn", class: "primary" }, "Submit"),
+    createMockElement("input", { id: "email", type: "email" }, ""),
+    createMockElement("div", { id: "content", class: "main" }, "Hello World"),
+  ];
   const document = {
     activeElement,
     body,
     documentElement,
     dispatchEvent: createTarget("document").dispatchEvent,
+    querySelectorAll(selector: string) {
+      if (selector === "*") return [...mockElements];
+      return mockElements.filter((el) => {
+        if ((el.tagName as string).toLowerCase() === selector.toLowerCase()) return true;
+        if (selector.startsWith("#")) {
+          return (el.attributes as Array<{ name: string; value: string }>).some(
+            (a) => a.name === "id" && a.value === selector.slice(1),
+          );
+        }
+        if (selector.startsWith(".")) {
+          return (el.attributes as Array<{ name: string; value: string }>).some(
+            (a) => a.name === "class" && (a.value as string).split(" ").includes(selector.slice(1)),
+          );
+        }
+        return false;
+      });
+    },
     __dispatchLog: dispatchLog,
+    __mockElements: mockElements,
   };
 
   return {
     document,
     KeyboardEvent,
+    MouseEvent,
+    InputEvent,
+    Event,
     fetch:
       options?.fetchImpl ??
       (async (input: unknown) => ({
@@ -92,6 +170,19 @@ function createDomSandbox(options?: {
         },
       })),
   };
+}
+
+function getFirstElementUid(result: unknown): string {
+  const elements = Array.from(
+    (((result as { elements?: ArrayLike<{ uid?: string }> } | null)?.elements ?? []) as ArrayLike<{
+      uid?: string;
+    }>) ?? [],
+  );
+  const first = elements[0];
+  if (!first?.uid) {
+    throw new Error("Expected query result to include at least one element uid");
+  }
+  return first.uid;
 }
 
 function createMessageBus() {
@@ -2241,6 +2332,167 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("routes page.query → fill → click through kernel-owned runner and site steps in runtime services", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 12,
+        url: "https://fixture.test/forms",
+        title: "Fixture Form",
+      },
+    });
+    const invokeRunner = vi.fn(async (invocation: { module: { id: string }; input: unknown }) => ({
+      ok: true,
+      data: {
+        ok: true,
+        result: {
+          result: invocation.input,
+          durationMs: 1,
+        },
+      },
+    }));
+    const services = createBackgroundRuntimeServices({
+      chromeApi: harness.chromeApi,
+      invokeRunner,
+      pageHookBridge: createPageHookBridge({
+        chromeApi: harness.chromeApi,
+      }),
+    });
+
+    const queryInputResult = await services.invokePageAction({
+      action: "query",
+      input: {
+        selector: "input",
+      },
+    });
+    const inputUid = getFirstElementUid(queryInputResult.result);
+    const fillResult = await services.invokePageAction({
+      action: "fill",
+      input: {
+        uid: inputUid,
+        value: "demo@example.com",
+      },
+    });
+    const queryButtonResult = await services.invokePageAction({
+      action: "query",
+      input: {
+        selector: "button",
+      },
+    });
+    const buttonUid = getFirstElementUid(queryButtonResult.result);
+    const clickResult = await services.invokePageAction({
+      action: "click",
+      input: {
+        uid: buttonUid,
+      },
+    });
+    const [{ kernel }, session] = await Promise.all([
+      services.ensureServices(),
+      services.ensureSession(),
+    ]);
+
+    expect(queryInputResult).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "query",
+        selector: "input",
+        count: 1,
+        elements: [expect.objectContaining({ tagName: "input" })],
+        installationId: "bbl-next.page-hook.page:1",
+        installedScriptId: "bbl-next.page-hook.page",
+      },
+      trace: [
+        "match:bbl.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:query",
+        "verify:page_query",
+      ],
+    });
+    expect(fillResult).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "fill",
+        uid: inputUid,
+        value: "demo@example.com",
+        tagName: "input",
+      },
+      trace: [
+        "match:bbl.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:fill",
+        "verify:page_fill",
+      ],
+    });
+    expect(clickResult).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "click",
+        uid: buttonUid,
+        tagName: "button",
+      },
+      trace: [
+        "match:bbl.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:click",
+        "verify:page_click",
+      ],
+    });
+    expect(invokeRunner).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        module: expect.objectContaining({
+          id: "bbl.page.query",
+        }),
+        input: {
+          selector: "input",
+        },
+      }),
+    );
+    expect(invokeRunner).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        module: expect.objectContaining({
+          id: "bbl.page.fill",
+        }),
+        input: {
+          uid: inputUid,
+          value: "demo@example.com",
+        },
+      }),
+    );
+    expect(invokeRunner).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        module: expect.objectContaining({
+          id: "bbl.page.query",
+        }),
+        input: {
+          selector: "button",
+        },
+      }),
+    );
+    expect(invokeRunner).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        module: expect.objectContaining({
+          id: "bbl.page.click",
+        }),
+        input: {
+          uid: buttonUid,
+        },
+      }),
+    );
+    expect(kernel.getStepCount(session.id)).toBe(8);
+    expect(kernel.getRunState(session.id).phase).toBe("paused");
+
+    harness.cleanup();
+  });
+
   it("delegates page.press_key through composed runtime services", async () => {
     const runtimeServices = {
       getKernelRuntimeState: vi.fn(async () => ({
@@ -2289,6 +2541,78 @@ describe("mv3-shell manifest", () => {
     });
     expect(harness.tabsApi.query).not.toHaveBeenCalled();
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("routes page.query → fill → click through the MV3 bridge", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 13,
+        url: "https://fixture.test/mv3-form",
+        title: "MV3 Fixture Form",
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    const queryInputResult = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "page.query",
+      selector: "input",
+    });
+    const inputUid = getFirstElementUid(queryInputResult.data);
+    const fillResult = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "page.fill",
+      uid: inputUid,
+      value: "mv3@example.com",
+    });
+    const queryButtonResult = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "page.query",
+      selector: "button",
+    });
+    const buttonUid = getFirstElementUid(queryButtonResult.data);
+    const clickResult = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "page.click",
+      uid: buttonUid,
+    });
+
+    expect(queryInputResult).toMatchObject({
+      ok: true,
+      data: {
+        ok: true,
+        action: "query",
+        selector: "input",
+        count: 1,
+        elements: [expect.objectContaining({ tagName: "input" })],
+      },
+    });
+    expect(fillResult).toMatchObject({
+      ok: true,
+      data: {
+        ok: true,
+        action: "fill",
+        uid: inputUid,
+        value: "mv3@example.com",
+        tagName: "input",
+      },
+    });
+    expect(clickResult).toMatchObject({
+      ok: true,
+      data: {
+        ok: true,
+        action: "click",
+        uid: buttonUid,
+        tagName: "button",
+      },
+    });
 
     dispose();
     harness.cleanup();

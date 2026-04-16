@@ -2326,6 +2326,37 @@ export function createBackgroundRunnerBridge({
           });
           return result.result;
         });
+      case "page.query":
+        return routeRuntimeService(async () => {
+          const result = await getRuntimeServices().invokePageAction({
+            action: "query",
+            input: {
+              selector: message.selector,
+            },
+          });
+          return result.result;
+        });
+      case "page.click":
+        return routeRuntimeService(async () => {
+          const result = await getRuntimeServices().invokePageAction({
+            action: "click",
+            input: {
+              uid: message.uid,
+            },
+          });
+          return result.result;
+        });
+      case "page.fill":
+        return routeRuntimeService(async () => {
+          const result = await getRuntimeServices().invokePageAction({
+            action: "fill",
+            input: {
+              uid: message.uid,
+              value: message.value,
+            },
+          });
+          return result.result;
+        });
       case "page.screenshot":
         return routeRuntimeService(async () => {
           const result = await getRuntimeServices().invokePageAction({

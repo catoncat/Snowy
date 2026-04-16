@@ -312,6 +312,102 @@ async function resolveRuntimeInvokeTab(chromeApi, requestedTab, actionKind) {
 
 function buildPageActionRequest({ action, input, tab, scriptPath }) {
   switch (action) {
+    case "query":
+      if (
+        !isPlainObject(input) ||
+        typeof input.selector !== "string" ||
+        input.selector.length === 0
+      ) {
+        throw new CapabilityError("E_BAD_INPUT", "page.query requires a non-empty selector");
+      }
+      return {
+        skillId: "bbl.page",
+        action: "query",
+        tab,
+        input: {
+          selector: input.selector,
+        },
+        plan: {
+          skillId: "bbl.page",
+          action: "query",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: scriptPath,
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "bbl.page.query",
+          source: "exports.default = async ({ input }) => ({ selector: input.selector });",
+        },
+        verifier: "page_query",
+      };
+    case "click":
+      if (!isPlainObject(input) || typeof input.uid !== "string" || input.uid.length === 0) {
+        throw new CapabilityError("E_BAD_INPUT", "page.click requires a non-empty uid");
+      }
+      return {
+        skillId: "bbl.page",
+        action: "click",
+        tab,
+        input: {
+          uid: input.uid,
+        },
+        plan: {
+          skillId: "bbl.page",
+          action: "click",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: scriptPath,
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "bbl.page.click",
+          source: "exports.default = async ({ input }) => ({ uid: input.uid });",
+        },
+        verifier: "page_click",
+      };
+    case "fill":
+      if (!isPlainObject(input) || typeof input.uid !== "string" || input.uid.length === 0) {
+        throw new CapabilityError("E_BAD_INPUT", "page.fill requires a non-empty uid");
+      }
+      if (typeof input.value !== "string") {
+        throw new CapabilityError("E_BAD_INPUT", "page.fill requires input.value");
+      }
+      return {
+        skillId: "bbl.page",
+        action: "fill",
+        tab,
+        input: {
+          uid: input.uid,
+          value: input.value,
+        },
+        plan: {
+          skillId: "bbl.page",
+          action: "fill",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: scriptPath,
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "bbl.page.fill",
+          source:
+            "exports.default = async ({ input }) => ({ uid: input.uid, value: input.value });",
+        },
+        verifier: "page_fill",
+      };
     case "press_key":
       if (!isPlainObject(input) || typeof input.key !== "string" || input.key.length === 0) {
         throw new CapabilityError("E_BAD_INPUT", "page.press_key requires a non-empty key");
