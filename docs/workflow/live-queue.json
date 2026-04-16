@@ -1,24 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-16T03:06:45.491Z",
+  "generated_at": "2026-04-16T03:08:27.510Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-137",
-      "issue_path": "docs/backlog/2026-04-15-mcp-export-handoff-projection-is-typed-but-not-routed.md",
-      "title": "AI surface runtime dispatch and enforcement: MCP export, resource providers, and audience filtering",
-      "parallel_group": "contracts-core",
-      "module_id": "ai-surface-control-plane",
-      "module_stage": "secondary",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/core/src/index.ts",
-        "packages/contracts/src/index.ts",
-        "packages/core/test"
-      ]
-    },
     {
       "issue_id": "ISSUE-149",
       "issue_path": "docs/backlog/2026-04-15-site-fetch-with-session-action-is-typed-but-fetch-with-auth-bridge-is-missing.md",
