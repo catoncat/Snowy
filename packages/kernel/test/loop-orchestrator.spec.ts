@@ -131,6 +131,44 @@ const TEST_SITE_DESCRIPTOR = {
   executionBinding: { family: "siteRuntime", operation: "invoke" },
 };
 
+const TEST_CHAT_HIDDEN_DESCRIPTOR = {
+  id: "runner.invoke.hidden",
+  version: 1,
+  description: "Hidden runner invoke",
+  inputSchema: { type: "object", properties: { moduleId: { type: "string" } } },
+  risk: "medium" as const,
+  sideEffects: "writes" as const,
+  permissions: [],
+  supportsVerify: false,
+  supportsStreaming: false,
+  outputSchema: { type: "object" },
+  exportable: false,
+  projection: {
+    audiences: ["chat", "skill", "system"] as const,
+    defaultExposed: false,
+  },
+  executionBinding: { family: "runner", operation: "invoke_hidden" },
+};
+
+const TEST_SYSTEM_ONLY_DESCRIPTOR = {
+  id: "runtime.internal.trace",
+  version: 1,
+  description: "Internal runtime trace",
+  inputSchema: { type: "object", properties: {} },
+  risk: "low" as const,
+  sideEffects: "reads" as const,
+  permissions: [],
+  supportsVerify: false,
+  supportsStreaming: false,
+  outputSchema: { type: "object" },
+  exportable: false,
+  projection: {
+    audiences: ["system"] as const,
+    defaultExposed: true,
+  },
+  executionBinding: { family: "runtime", operation: "internal_trace" },
+};
+
 const BASE_TOOL_ANNOTATIONS = {
   audiences: ["chat", "skill", "system"] as const,
   defaultExposed: true,
@@ -212,6 +250,64 @@ describe("runLoop", () => {
 
     expect(result.terminalStatus).toBe("done");
     expect(callCount).toBe(1);
+  });
+
+  it("projects only chat default-exposed tools into the llm request", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([
+      TEST_DESCRIPTOR,
+      TEST_CHAT_HIDDEN_DESCRIPTOR,
+      TEST_SYSTEM_ONLY_DESCRIPTOR,
+    ]);
+    const providers = new FamilyProviderRegistry();
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      registry,
+      providers,
+    });
+
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async (input) => {
+        payloads.push(input.payload);
+        return sseResponse([
+          chatChunk("Visible tools only."),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      },
+    };
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "List the tools you can use" },
+    );
+
+    expect(result.terminalStatus).toBe("done");
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]?.tools).toEqual([
+      {
+        type: "function",
+        function: {
+          name: "tabs_navigate",
+          description: "Navigate to a URL",
+          parameters: TEST_DESCRIPTOR.inputSchema,
+        },
+      },
+    ]);
+
+    const systemMessages = (payloads[0]?.messages as Array<{ role?: string; content?: unknown }>)
+      .filter((message) => message.role === "system")
+      .map((message) => String(message.content ?? ""));
+    expect(systemMessages.some((message) => message.includes("tabs_navigate"))).toBe(true);
+    expect(systemMessages.some((message) => message.includes("runner_invoke_hidden"))).toBe(false);
+    expect(systemMessages.some((message) => message.includes("runtime_internal_trace"))).toBe(
+      false,
+    );
   });
 
   it("negotiates the initial route through kernel provider registry state", async () => {

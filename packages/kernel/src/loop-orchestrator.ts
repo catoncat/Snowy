@@ -672,7 +672,7 @@ export async function runLoop(
   let route = routeResult.route;
 
   // Project tools
-  const tools = registry.projectTools();
+  const tools = registry.projectTools({ audience: "chat", defaultExposedOnly: true });
   const openAiTools = toolContractsToOpenAiTools(tools);
   const systemPromptMessages = opts.systemPromptBuilder
     ? [buildSystemPrompt(tools)]
