@@ -1663,6 +1663,42 @@ export function createBackgroundRuntimeServices({
     return entries;
   }
 
+  async function readReplayContinuityMarkers(limit) {
+    if (!sessionPromise) {
+      return [];
+    }
+    const [{ kernel }, session] = await Promise.all([ensureServices(), sessionPromise]);
+    const entries = await kernel.sessions.getEntries(session.id);
+    const markers = entries
+      .filter((entry) => {
+        if (entry?.type !== "compaction") {
+          return false;
+        }
+        const payload = entry.payload;
+        return (
+          payload &&
+          typeof payload === "object" &&
+          !Array.isArray(payload) &&
+          typeof payload.summary === "string" &&
+          typeof payload.firstKeptEntryId === "string" &&
+          (payload.previousSummary === undefined || typeof payload.previousSummary === "string")
+        );
+      })
+      .map((entry) => ({
+        entryId: entry.entryId,
+        sessionId: session.id,
+        timestamp: entry.timestamp,
+        summary: entry.payload.summary,
+        firstKeptEntryId: entry.payload.firstKeptEntryId,
+        ...(typeof entry.payload.previousSummary === "string"
+          ? { previousSummary: entry.payload.previousSummary }
+          : {}),
+      }));
+    const max =
+      typeof limit === "number" && Number.isFinite(limit) && limit >= 0 ? Math.floor(limit) : null;
+    return max == null ? markers : markers.slice(-max);
+  }
+
   async function resolveIntervention({ id, resolution } = {}) {
     if (typeof id !== "string" || !id.trim()) {
       throw new CapabilityError("E_BAD_INPUT", "intervention.resolve requires a request id");
@@ -2150,6 +2186,7 @@ export function createBackgroundRuntimeServices({
     listSkills,
     listInterventions,
     readInterventionAudit,
+    readReplayContinuityMarkers,
     resolveIntervention,
     cancelIntervention,
     sendChatPrompt,

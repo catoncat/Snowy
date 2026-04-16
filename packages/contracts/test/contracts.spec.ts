@@ -42,6 +42,7 @@ import {
   type MessagePayload,
   type ModelChangePayload,
   NO_PROGRESS_REASONS,
+  type ObservabilityReplayResource,
   PUBLIC_CAPABILITY_NAMESPACES,
   RUNTIME_CONTROL_PLANE_ACTIONS,
   RUN_PHASES,
@@ -259,6 +260,7 @@ describe("contracts", () => {
       "hosts.summary",
       "audit.tail",
       "audit.intervention",
+      "observability.replay",
     ]);
     expect(AI_SURFACE_RESOURCE_AUDIENCES).toEqual(["chat", "skill", "system", "mcp"]);
   });
@@ -293,6 +295,16 @@ describe("contracts", () => {
       ),
     ).toMatchObject({
       id: "audit.intervention",
+      readOwner: "audit",
+      projections: ["resource.read"],
+      audiences: ["chat", "skill", "system", "mcp"],
+    });
+    expect(
+      (registry as Array<Record<string, unknown>>).find(
+        (entry) => entry.id === "observability.replay",
+      ),
+    ).toMatchObject({
+      id: "observability.replay",
       readOwner: "audit",
       projections: ["resource.read"],
       audiences: ["chat", "skill", "system", "mcp"],
@@ -454,6 +466,45 @@ describe("contracts", () => {
       },
     } satisfies InterventionAuditResource;
 
+    const replayResource = {
+      id: "observability.replay",
+      primitive: "resource",
+      generatedAt: "2026-03-30T00:00:07.000Z",
+      data: {
+        status: "available" as const,
+        totalCount: 2,
+        continuityCount: 1,
+        entries: [
+          {
+            id: "cmp-1",
+            timestamp: "2026-03-30T00:00:00.500Z",
+            sessionId: "session-1",
+            subsystem: "session" as const,
+            eventType: "session.compaction",
+            status: "info" as const,
+            summary: "Earlier turns compacted",
+            continuity: {
+              kind: "compaction" as const,
+              entryId: "cmp-1",
+              firstKeptEntryId: "entry-9",
+              previousSummary: "Older summary",
+            },
+          },
+          {
+            id: "loop-1",
+            timestamp: "2026-03-30T00:00:06.000Z",
+            sessionId: "session-1",
+            subsystem: "loop" as const,
+            eventType: "loop.step",
+            status: "succeeded" as const,
+            summary: "tabs.navigate succeeded",
+            capabilityId: "tabs.navigate",
+            stepIndex: 0,
+          },
+        ],
+      },
+    } satisfies ObservabilityReplayResource;
+
     const resourceDocs = [
       runtimeResource,
       auditResource,
@@ -461,12 +512,14 @@ describe("contracts", () => {
       skillsResource,
       hostsResource,
       interventionAuditResource,
+      replayResource,
     ] satisfies AiSurfaceResourceDocument[];
 
     expect(resourceDocs[0]?.id).toBe("runtime.summary");
     expect(auditResource.data.entries[0]?.kind).toBe("hosts.connect");
     expect(auditResource.data.entries[1]?.kind).toBe("config.update");
     expect(resourceDocs[5]?.id).toBe("audit.intervention");
+    expect(resourceDocs[6]?.id).toBe("observability.replay");
   });
 
   it("accepts a typed runtime diagnostics payload with kernel-owned snapshot", () => {

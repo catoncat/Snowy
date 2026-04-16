@@ -564,6 +564,113 @@ describe("core", () => {
     });
   });
 
+  it("builds an ordered observability replay resource with compaction continuity", () => {
+    const resource = readAiSurfaceResource({
+      resourceId: "observability.replay",
+      observabilityReplay: {
+        loopEntries: [
+          {
+            stepIndex: 2,
+            capabilityId: "tabs.navigate",
+            startedAt: "2026-04-16T00:00:03.000Z",
+            endedAt: "2026-04-16T00:00:04.000Z",
+            durationMs: 1000,
+            ok: true,
+          },
+        ],
+        auditEntries: [
+          {
+            timestamp: "2026-04-16T00:00:01.000Z",
+            sessionId: "session-observability",
+            kind: "hosts.connect",
+            hostId: "local",
+            status: "connected",
+          },
+          {
+            timestamp: "2026-04-16T00:00:02.000Z",
+            sessionId: "session-observability",
+            kind: "config.update",
+            status: "updated",
+            changedFields: ["model"],
+          },
+          {
+            timestamp: "2026-04-16T00:00:04.000Z",
+            sessionId: "session-observability",
+            kind: "loop.step",
+            capabilityId: "tabs.navigate",
+            status: "executed",
+            durationMs: 1000,
+          },
+          {
+            timestamp: "2026-04-16T00:00:06.000Z",
+            sessionId: "session-observability",
+            kind: "intervention.escalation",
+            interventionId: "int-1",
+            status: "attention_required",
+            escalation: {
+              reason: "stale",
+              thresholdMs: 30000,
+            },
+          },
+        ],
+        interventionEntries: [
+          {
+            eventId: "evt-1",
+            interventionId: "int-1",
+            sessionId: "session-observability",
+            status: "requested",
+            timestamp: "2026-04-16T00:00:05.000Z",
+            kind: "takeover",
+            trigger: "verify_failed",
+          },
+        ],
+        continuityMarkers: [
+          {
+            entryId: "cmp-1",
+            sessionId: "session-observability",
+            timestamp: "2026-04-16T00:00:00.500Z",
+            summary: "Earlier turns compacted",
+            previousSummary: "Older session summary",
+            firstKeptEntryId: "entry-9",
+          },
+        ],
+      },
+    });
+
+    expect(resource).toMatchObject({
+      id: "observability.replay",
+      primitive: "resource",
+      data: {
+        status: "available",
+        totalCount: 5,
+        continuityCount: 1,
+      },
+    });
+    expect(resource.data.entries.map((entry) => `${entry.subsystem}:${entry.eventType}`)).toEqual([
+      "session:session.compaction",
+      "host:hosts.connect",
+      "config:config.update",
+      "loop:loop.step",
+      "intervention:intervention.requested",
+    ]);
+    expect(resource.data.entries.filter((entry) => entry.eventType === "loop.step")).toHaveLength(
+      1,
+    );
+    expect(
+      resource.data.entries.filter((entry) => entry.eventType === "intervention.escalation"),
+    ).toHaveLength(0);
+    expect(resource.data.entries[0]).toMatchObject({
+      sessionId: "session-observability",
+      summary: "Earlier turns compacted",
+      continuity: {
+        kind: "compaction",
+        entryId: "cmp-1",
+        firstKeptEntryId: "entry-9",
+        previousSummary: "Older session summary",
+      },
+    });
+  });
+
   it("builds a healthy bootstrap summary bundle", () => {
     const summary = createBootstrapSummary({
       generatedAt: "2026-03-29T00:00:00.000Z",

@@ -2151,6 +2151,28 @@ export function createBackgroundRunnerBridge({
     });
   }
 
+  async function readObservabilityReplayResource(limit) {
+    const runtimeServiceApi = getRuntimeServices();
+    const [interventionEntries, continuityMarkers] = await Promise.all([
+      typeof runtimeServiceApi.readInterventionAudit === "function"
+        ? runtimeServiceApi.readInterventionAudit(AUDIT_MAX_ENTRIES)
+        : [],
+      typeof runtimeServiceApi.readReplayContinuityMarkers === "function"
+        ? runtimeServiceApi.readReplayContinuityMarkers(AUDIT_MAX_ENTRIES)
+        : [],
+    ]);
+    return readAiSurfaceResource({
+      resourceId: "observability.replay",
+      observabilityReplay: {
+        loopEntries: getLoopTelemetry(TELEMETRY_MAX_ENTRIES),
+        auditEntries: getAuditTail(AUDIT_MAX_ENTRIES),
+        interventionEntries,
+        continuityMarkers,
+        ...(typeof limit === "number" ? { limit } : {}),
+      },
+    });
+  }
+
   async function readResource({ resourceId, world = "main", limit } = {}) {
     if (!isAiSurfaceResourceId(resourceId)) {
       return {
@@ -2174,6 +2196,11 @@ export function createBackgroundRunnerBridge({
         return {
           ok: true,
           data: await readInterventionResource(limit),
+        };
+      case "observability.replay":
+        return {
+          ok: true,
+          data: await readObservabilityReplayResource(limit),
         };
       default:
         return {

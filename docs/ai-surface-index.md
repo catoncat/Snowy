@@ -99,15 +99,17 @@
 - `hosts.summary`
 - `audit.tail`
 - `audit.intervention`
+- `observability.replay`
 
 当前口径：
 
 - `packages/contracts` 现提供 `AI_SURFACE_RESOURCE_METADATA_REGISTRY`、`getAiSurfaceResourceMetadata()`、`listAiSurfaceResourcesForAudience()`
 - metadata registry 已覆盖当前全部 resource id，并显式锁定 `audiences` / `projections` / `readOwner` / `bootstrapKey`
-- `packages/core` 继续提供 `readAiSurfaceResource()` lookup path；`apps/mv3-shell` 继续通过统一 `resource.read` bridge 暴露 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail`
+- `packages/core` 继续提供 `readAiSurfaceResource()` lookup path；`apps/mv3-shell` 继续通过统一 `resource.read` bridge 暴露 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail/audit.intervention/observability.replay`
 - `runtime.bootstrap` 继续保留为 bootstrap bundle compatibility read path
 - `audit.tail` 仍是当前 control-plane audit 主资源，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall`
 - `runtime.summary` 现已包含 typed `interventions` summary；`audit.intervention` 是 intervention lifecycle 的 shared audit read path
+- `observability.replay` 负责把 loop telemetry、control-plane audit、intervention lifecycle 与 compaction continuity marker 按时间顺序 stitch 成统一 replay 文档
 - `audit.host` 仅保留为 host-only compatibility alias
 - 当前 registry 仍是轻量 contract 层，不引入新的 descriptor family
 
@@ -141,7 +143,7 @@
 
 - intervention 是 cutover 前必需，但当前不作为新的 public action namespace
 - 当前最小形态是 `kernel/site-runtime` 之间的 runtime handoff contract
-- northbound read 面收口到 `runtime.summary.interventions` 与 `audit.intervention`
+- northbound read 面收口到 `runtime.summary.interventions`、`audit.intervention` 与 `observability.replay`
 - high-risk capability 的 pre-dispatch 确认继续走 core confirm gate
 - browser automation 的 verify failure / runtime blocked handoff 则产出结构化 intervention request
 ## 7. Host 原则

@@ -13,6 +13,7 @@ export const AI_SURFACE_RESOURCE_IDS = [
   "hosts.summary",
   "audit.tail",
   "audit.intervention",
+  "observability.replay",
 ] as const;
 export type AiSurfaceResourceId = (typeof AI_SURFACE_RESOURCE_IDS)[number];
 export const AI_SURFACE_RESOURCE_AUDIENCES = ["chat", "skill", "system", "mcp"] as const;
@@ -81,6 +82,12 @@ export const AI_SURFACE_RESOURCE_METADATA_REGISTRY = [
   },
   {
     id: "audit.intervention",
+    readOwner: "audit",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read"],
+  },
+  {
+    id: "observability.replay",
     readOwner: "audit",
     audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
     projections: ["resource.read"],
@@ -434,6 +441,47 @@ export interface RuntimeHistorySummary {
   entries: LoopTelemetryEntry[];
 }
 
+export const OBSERVABILITY_REPLAY_SUBSYSTEMS = [
+  "loop",
+  "host",
+  "config",
+  "skill",
+  "intervention",
+  "session",
+] as const;
+export type ObservabilityReplaySubsystem = (typeof OBSERVABILITY_REPLAY_SUBSYSTEMS)[number];
+
+export interface ObservabilityReplayContinuityMarker {
+  kind: "compaction";
+  entryId: string;
+  firstKeptEntryId: string;
+  previousSummary?: string;
+}
+
+export interface ObservabilityReplayEntry {
+  id: string;
+  timestamp: string;
+  sessionId: string | null;
+  subsystem: ObservabilityReplaySubsystem;
+  eventType: string;
+  status: ObservabilityEventStatus;
+  summary: string;
+  capabilityId?: string;
+  hostId?: string;
+  skillId?: string;
+  interventionId?: string;
+  stepIndex?: number;
+  continuity?: ObservabilityReplayContinuityMarker;
+  details?: Record<string, unknown>;
+}
+
+export interface ObservabilityReplaySummary {
+  status: "available" | "empty";
+  totalCount: number;
+  continuityCount: number;
+  entries: ObservabilityReplayEntry[];
+}
+
 export interface KernelDiagnosticsSessionSnapshot {
   id: string;
   createdAt: string;
@@ -572,6 +620,10 @@ export type InterventionAuditResource = ResourceDocument<
   "audit.intervention",
   InterventionAuditSummary
 >;
+export type ObservabilityReplayResource = ResourceDocument<
+  "observability.replay",
+  ObservabilityReplaySummary
+>;
 export type AiSurfaceResourceDocument =
   | RuntimeSummaryResource
   | RuntimeHistoryResource
@@ -579,7 +631,8 @@ export type AiSurfaceResourceDocument =
   | SkillsSummaryResource
   | HostsSummaryResource
   | AuditTailResource
-  | InterventionAuditResource;
+  | InterventionAuditResource
+  | ObservabilityReplayResource;
 
 export const OBSERVABILITY_EXPORT_RESOURCE_TYPES = ["timeline", "summary", "rawEventTail"] as const;
 export type ObservabilityExportResourceType = (typeof OBSERVABILITY_EXPORT_RESOURCE_TYPES)[number];

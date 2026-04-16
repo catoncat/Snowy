@@ -697,6 +697,51 @@ describe("mv3-shell end-to-end loop integration", () => {
     expect(doneEvent[0]?.text).toContain("No LLM provider is configured");
   });
 
+  it("reads compaction continuity markers for observability replay consumers", async () => {
+    const sessionStorage = new InMemorySessionStorage();
+    const services = createBackgroundRuntimeServices({
+      sessionStorage,
+      chromeApi: {
+        runtime: {
+          sendMessage: vi.fn(async () => undefined),
+        },
+      },
+    });
+
+    const bootstrap = await services.bootstrapChat();
+    const sessionId = bootstrap.sessionId;
+    expect(typeof sessionId).toBe("string");
+
+    const entries = await sessionStorage.getEntries(sessionId as string);
+    const parentId = entries.at(-1)?.entryId;
+
+    await sessionStorage.appendEntry(sessionId as string, {
+      entryId: "cmp-1",
+      parentId,
+      type: "compaction",
+      timestamp: "2026-04-16T00:00:10.000Z",
+      payload: {
+        reason: "threshold",
+        summary: "Earlier turns compacted",
+        firstKeptEntryId: "entry-9",
+        previousSummary: "Older session summary",
+        tokensBefore: 1200,
+        tokensAfter: 320,
+      },
+    });
+
+    await expect(services.readReplayContinuityMarkers()).resolves.toEqual([
+      {
+        entryId: "cmp-1",
+        sessionId,
+        timestamp: "2026-04-16T00:00:10.000Z",
+        summary: "Earlier turns compacted",
+        previousSummary: "Older session summary",
+        firstKeptEntryId: "entry-9",
+      },
+    ]);
+  });
+
   it("getLoopStatus returns idle when no run is active", () => {
     const services = createBackgroundRuntimeServices({
       sessionStorage: new InMemorySessionStorage(),

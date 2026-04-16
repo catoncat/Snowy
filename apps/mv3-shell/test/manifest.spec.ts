@@ -3156,6 +3156,147 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("reads observability replay through the unified resource.read path", async () => {
+    const interventionAuditEntries: Array<Record<string, unknown>> = [];
+    const replayContinuityMarkers: Array<Record<string, unknown>> = [];
+    const harness = createChromeHarness({
+      host: {
+        dispatch: vi.fn(),
+        getHealth: vi.fn(() => ({
+          status: "idle",
+          inflightCount: 0,
+          consecutiveFailures: 0,
+        })),
+      },
+      activeTab: {
+        id: 14,
+        url: "https://fixture.test/replay",
+        title: "Replay Fixture",
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      sessionId: "session-replay-1",
+      runtimeServices: {
+        readInterventionAudit: vi.fn(async () =>
+          interventionAuditEntries.map((entry) => ({ ...entry })),
+        ),
+        readReplayContinuityMarkers: vi.fn(async () =>
+          replayContinuityMarkers.map((entry) => ({ ...entry })),
+        ),
+      },
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "hosts.connect",
+      hostId: "local",
+    });
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "config.update",
+      patch: {
+        model: {
+          provider: "openai",
+        },
+      },
+    });
+
+    const auditResult = (await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "resource.read",
+      resourceId: "audit.tail",
+    })) as {
+      ok: boolean;
+      data: {
+        data: {
+          entries: Array<{ timestamp: string; sessionId: string | null; kind: string }>;
+        };
+      };
+    };
+
+    const hostTimestamp = auditResult.data.data.entries.find(
+      (entry) => entry.kind === "hosts.connect",
+    )?.timestamp;
+    const configTimestamp = auditResult.data.data.entries.find(
+      (entry) => entry.kind === "config.update",
+    )?.timestamp;
+    expect(typeof hostTimestamp).toBe("string");
+    expect(typeof configTimestamp).toBe("string");
+
+    replayContinuityMarkers.push({
+      entryId: "cmp-1",
+      sessionId: "session-replay-1",
+      timestamp: new Date(Date.parse(hostTimestamp as string) - 1000).toISOString(),
+      summary: "Earlier turns compacted",
+      previousSummary: "Older replay summary",
+      firstKeptEntryId: "entry-9",
+    });
+    interventionAuditEntries.push({
+      eventId: "int-1",
+      interventionId: "ivr-1",
+      sessionId: "session-replay-1",
+      status: "requested",
+      timestamp: new Date(Date.parse(configTimestamp as string) + 1000).toISOString(),
+      kind: "takeover",
+      trigger: "verify_failed",
+    });
+
+    const replayResult = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "resource.read",
+      resourceId: "observability.replay",
+    });
+
+    expect(replayResult).toMatchObject({
+      ok: true,
+      data: {
+        id: "observability.replay",
+        primitive: "resource",
+        data: {
+          status: "available",
+          continuityCount: 1,
+        },
+      },
+    });
+    expect(
+      replayResult.data.data.entries.map((entry) => `${entry.subsystem}:${entry.eventType}`),
+    ).toEqual([
+      "session:session.compaction",
+      "host:hosts.connect",
+      "config:config.update",
+      "intervention:intervention.requested",
+    ]);
+    expect(replayResult.data.data.entries[0]).toMatchObject({
+      subsystem: "session",
+      eventType: "session.compaction",
+      continuity: {
+        kind: "compaction",
+        entryId: "cmp-1",
+        firstKeptEntryId: "entry-9",
+      },
+    });
+    expect(replayResult.data.data.entries[1]).toMatchObject({
+      subsystem: "host",
+      eventType: "hosts.connect",
+      hostId: "local",
+    });
+    expect(replayResult.data.data.entries[2]).toMatchObject({
+      subsystem: "config",
+      eventType: "config.update",
+    });
+    expect(replayResult.data.data.entries[3]).toMatchObject({
+      subsystem: "intervention",
+      eventType: "intervention.requested",
+      interventionId: "ivr-1",
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("exports sidepanel management guard helpers for future UI consumers", () => {
     expect(isSidepanelManagementResourceId("runtime.summary")).toBe(true);
     expect(isSidepanelManagementResourceId("runtime.bootstrap")).toBe(false);

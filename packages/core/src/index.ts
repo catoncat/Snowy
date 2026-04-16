@@ -45,6 +45,9 @@ import {
   type ObservabilityExportResource,
   type ObservabilityExportResourceType,
   type ObservabilityExportSurface,
+  type ObservabilityReplayEntry,
+  type ObservabilityReplayResource,
+  type ObservabilityReplaySummary,
   type ObservabilityTimelineEvent,
   type ObservabilityTimelineSummary,
   PUBLIC_CAPABILITY_NAMESPACES,
@@ -416,6 +419,24 @@ export interface InterventionAuditResourceInput {
   limit?: number;
 }
 
+export interface ObservabilityReplayContinuityMarkerInput {
+  entryId: string;
+  timestamp: string;
+  sessionId: string | null;
+  summary: string;
+  previousSummary?: string;
+  firstKeptEntryId: string;
+}
+
+export interface ObservabilityReplayResourceInput {
+  loopEntries?: LoopTelemetryEntry[];
+  auditEntries?: ControlPlaneAuditEntry[];
+  interventionEntries?: InterventionAuditEntry[];
+  continuityMarkers?: ObservabilityReplayContinuityMarkerInput[];
+  generatedAt?: string;
+  limit?: number;
+}
+
 export interface TimelineExportResourceInput {
   events: ObservabilityTimelineEvent[];
   generatedAt?: string;
@@ -456,6 +477,7 @@ export interface ReadAiSurfaceResourceInput {
   runtimeHistory?: RuntimeHistoryResourceInput;
   auditTail?: AuditTailResourceInput;
   interventionAudit?: InterventionAuditResourceInput;
+  observabilityReplay?: ObservabilityReplayResourceInput;
   providers?: AiSurfaceResourceProviderRegistry;
 }
 
@@ -814,6 +836,16 @@ function cloneRawEventTailEntry(entry: RawEventTailEntry): RawEventTailEntry {
   return {
     ...entry,
     payload: clonePlainValue(entry.payload),
+  };
+}
+
+function cloneObservabilityReplayEntry(entry: ObservabilityReplayEntry): ObservabilityReplayEntry {
+  return {
+    ...entry,
+    ...(entry.continuity ? { continuity: { ...entry.continuity } } : {}),
+    ...(entry.details
+      ? { details: clonePlainValue(entry.details) as Record<string, unknown> }
+      : {}),
   };
 }
 
@@ -2308,6 +2340,159 @@ export function createInterventionAuditResource(
   return createResourceDocument("audit.intervention", generatedAt, data);
 }
 
+function loopTelemetryToReplayEntry(entry: LoopTelemetryEntry): ObservabilityReplayEntry {
+  return {
+    id: `loop:${entry.stepIndex}:${entry.capabilityId}:${entry.endedAt}`,
+    timestamp: entry.endedAt,
+    sessionId: null,
+    subsystem: "loop",
+    eventType: "loop.step",
+    status: entry.ok ? "succeeded" : "failed",
+    summary: `${entry.capabilityId} ${entry.ok ? "succeeded" : "failed"}`,
+    capabilityId: entry.capabilityId,
+    stepIndex: entry.stepIndex,
+    details: {
+      startedAt: entry.startedAt,
+      endedAt: entry.endedAt,
+      durationMs: entry.durationMs,
+      ...(entry.errorCode ? { errorCode: entry.errorCode } : {}),
+      ...(typeof entry.tokenEstimate === "number" ? { tokenEstimate: entry.tokenEstimate } : {}),
+    },
+  };
+}
+
+function controlPlaneAuditToReplayEntry(
+  entry: ControlPlaneAuditEntry,
+): ObservabilityReplayEntry | null {
+  switch (entry.kind) {
+    case "hosts.connect":
+    case "hosts.disconnect":
+    case "hosts.set_default":
+      return {
+        id: `audit:${entry.kind}:${entry.hostId}:${entry.timestamp}`,
+        timestamp: entry.timestamp,
+        sessionId: entry.sessionId,
+        subsystem: "host",
+        eventType: entry.kind,
+        status: entry.status === "failed" ? "failed" : "succeeded",
+        summary: `${entry.kind} ${entry.hostId}`,
+        hostId: entry.hostId,
+        ...(entry.error ? { details: { error: entry.error } } : {}),
+      };
+    case "config.update":
+      return {
+        id: `audit:${entry.kind}:${entry.timestamp}`,
+        timestamp: entry.timestamp,
+        sessionId: entry.sessionId,
+        subsystem: "config",
+        eventType: entry.kind,
+        status: "succeeded",
+        summary:
+          entry.changedFields.length > 0
+            ? `config.update ${entry.changedFields.join(", ")}`
+            : "config.update",
+        details: {
+          changedFields: [...entry.changedFields],
+          ...(entry.error ? { error: entry.error } : {}),
+        },
+      };
+    case "skills.install":
+    case "skills.enable":
+    case "skills.disable":
+    case "skills.uninstall":
+      return {
+        id: `audit:${entry.kind}:${entry.skillId}:${entry.timestamp}`,
+        timestamp: entry.timestamp,
+        sessionId: entry.sessionId,
+        subsystem: "skill",
+        eventType: entry.kind,
+        status: "succeeded",
+        summary: `${entry.kind} ${entry.skillId}`,
+        skillId: entry.skillId,
+        details: {
+          status: entry.status,
+          ...(typeof entry.trusted === "boolean" ? { trusted: entry.trusted } : {}),
+          ...(entry.error ? { error: entry.error } : {}),
+        },
+      };
+    case "loop.step":
+    case "intervention.escalation":
+      return null;
+    default:
+      return null;
+  }
+}
+
+function interventionAuditToReplayEntry(entry: InterventionAuditEntry): ObservabilityReplayEntry {
+  return {
+    id: `intervention:${entry.eventId}`,
+    timestamp: entry.timestamp,
+    sessionId: entry.sessionId,
+    subsystem: "intervention",
+    eventType: `intervention.${entry.status}`,
+    status:
+      entry.status === "resolved"
+        ? "succeeded"
+        : entry.status === "requested"
+          ? "attention"
+          : "failed",
+    summary: `${entry.interventionId} ${entry.status}`,
+    interventionId: entry.interventionId,
+    details: {
+      kind: entry.kind,
+      trigger: entry.trigger,
+      ...(entry.details ? { details: clonePlainValue(entry.details) } : {}),
+    },
+  };
+}
+
+function continuityMarkerToReplayEntry(
+  marker: ObservabilityReplayContinuityMarkerInput,
+): ObservabilityReplayEntry {
+  return {
+    id: `session:compaction:${marker.entryId}`,
+    timestamp: marker.timestamp,
+    sessionId: marker.sessionId,
+    subsystem: "session",
+    eventType: "session.compaction",
+    status: "info",
+    summary: marker.summary,
+    continuity: {
+      kind: "compaction",
+      entryId: marker.entryId,
+      firstKeptEntryId: marker.firstKeptEntryId,
+      ...(marker.previousSummary ? { previousSummary: marker.previousSummary } : {}),
+    },
+  };
+}
+
+export function createObservabilityReplayResource(
+  input: ObservabilityReplayResourceInput = {},
+): ObservabilityReplayResource {
+  const limit = normalizeLimit(input.limit);
+  const entries = [
+    ...(input.continuityMarkers ?? []).map(continuityMarkerToReplayEntry),
+    ...(input.loopEntries ?? []).map(loopTelemetryToReplayEntry),
+    ...(input.auditEntries ?? [])
+      .map((entry) => controlPlaneAuditToReplayEntry(entry))
+      .filter((entry): entry is ObservabilityReplayEntry => entry !== null),
+    ...(input.interventionEntries ?? []).map(interventionAuditToReplayEntry),
+  ]
+    .sort((left, right) => compareIsoTimestamp(left.timestamp, right.timestamp))
+    .map(cloneObservabilityReplayEntry);
+  const sliced = typeof limit === "number" ? entries.slice(-limit) : entries;
+  const lastEntry = sliced[sliced.length - 1];
+  const generatedAt = input.generatedAt ?? lastEntry?.timestamp ?? new Date().toISOString();
+  const data: ObservabilityReplaySummary = {
+    status: sliced.length > 0 ? "available" : "empty",
+    totalCount: sliced.length,
+    continuityCount: sliced.filter((entry) => entry.continuity != null).length,
+    entries: sliced,
+  };
+
+  return createResourceDocument("observability.replay", generatedAt, data);
+}
+
 function createBuiltinAiSurfaceResourceProviderRegistry(): AiSurfaceResourceProviderRegistry {
   const providers = new AiSurfaceResourceProviderRegistry();
 
@@ -2371,6 +2556,8 @@ function createBuiltinAiSurfaceResourceProviderRegistry(): AiSurfaceResourceProv
           return createAuditTailResource(input.auditTail ?? { entries: [] });
         case "audit.intervention":
           return createInterventionAuditResource(input.interventionAudit ?? { entries: [] });
+        case "observability.replay":
+          return createObservabilityReplayResource(input.observabilityReplay);
         default:
           throw new CapabilityError(
             "E_RUNTIME",
