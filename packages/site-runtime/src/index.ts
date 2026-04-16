@@ -160,6 +160,20 @@ export interface SiteInvocationIntervention {
 
 export type SiteInvocationResult = SiteInvocationSuccess | SiteInvocationIntervention;
 
+export interface SiteFetchWithSessionInput {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
+
+export interface SiteFetchWithSessionResult {
+  url: string;
+  status: number;
+  body: string;
+  ok: boolean;
+}
+
 export interface SingleActionSiteSkillRequest {
   skillId: string;
   action: string;

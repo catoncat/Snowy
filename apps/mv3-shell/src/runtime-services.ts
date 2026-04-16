@@ -20,7 +20,11 @@ import {
   createOpenAiCompatibleProvider,
   runLoop,
 } from "@bbl-next/kernel";
-import { invokeSingleActionSiteSkill } from "@bbl-next/site-runtime";
+import {
+  type SiteFetchWithSessionInput,
+  type SiteFetchWithSessionResult,
+  invokeSingleActionSiteSkill,
+} from "@bbl-next/site-runtime";
 export {
   SIDEPANEL_MANAGEMENT_ACTION_KINDS,
   SIDEPANEL_MANAGEMENT_RESOURCE_IDS,
@@ -340,6 +344,109 @@ function buildPageActionRequest({ action, input, tab, scriptPath }) {
     default:
       throw new CapabilityError("E_BAD_INPUT", `Unsupported page action: ${action}`);
   }
+}
+
+function normalizeSiteFetchWithSessionInput(input: unknown): SiteFetchWithSessionInput {
+  if (!isPlainObject(input)) {
+    throw new CapabilityError("E_BAD_INPUT", "site.fetch_with_session requires an object input");
+  }
+  if (typeof input.url !== "string" || !input.url.trim()) {
+    throw new CapabilityError("E_BAD_INPUT", "site.fetch_with_session requires a non-empty url");
+  }
+  if (input.method != null && (typeof input.method !== "string" || !input.method.trim())) {
+    throw new CapabilityError("E_BAD_INPUT", "site.fetch_with_session method must be a string");
+  }
+  if (input.body != null && typeof input.body !== "string") {
+    throw new CapabilityError("E_BAD_INPUT", "site.fetch_with_session body must be a string");
+  }
+  if (input.headers != null && !isPlainObject(input.headers)) {
+    throw new CapabilityError("E_BAD_INPUT", "site.fetch_with_session headers must be an object");
+  }
+
+  const normalizedHeaders =
+    input.headers == null
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(input.headers).map(([key, value]) => {
+            if (typeof value !== "string") {
+              throw new CapabilityError(
+                "E_BAD_INPUT",
+                `site.fetch_with_session header ${key} must be a string`,
+              );
+            }
+            return [key, value];
+          }),
+        );
+
+  return {
+    url: input.url.trim(),
+    ...(input.method ? { method: input.method.trim().toUpperCase() } : {}),
+    ...(normalizedHeaders && Object.keys(normalizedHeaders).length > 0
+      ? { headers: normalizedHeaders }
+      : {}),
+    ...(typeof input.body === "string" ? { body: input.body } : {}),
+  };
+}
+
+function buildSiteFetchWithSessionRequest({
+  input,
+  tab,
+  scriptPath,
+}: {
+  input: unknown;
+  tab: {
+    tabId: number;
+    url: string;
+    active: boolean;
+    title?: string;
+  };
+  scriptPath: string;
+}) {
+  const normalizedInput = normalizeSiteFetchWithSessionInput(input);
+  return {
+    skillId: "bbl.site",
+    action: "fetch_with_session",
+    tab,
+    input: normalizedInput,
+    plan: {
+      skillId: "bbl.site",
+      action: "fetch_with_session",
+      steps: [
+        {
+          world: "main",
+          scriptId: "bbl-next.page-hook.site",
+          jsPath: scriptPath,
+          runAt: "document_idle",
+        },
+      ],
+    },
+    module: {
+      id: "bbl.site.fetch_with_session",
+      source: "exports.default = async ({ input }) => input;",
+    },
+    verifier: "site_fetch_with_session",
+  };
+}
+
+function toSiteFetchWithSessionResult(result: unknown): SiteFetchWithSessionResult {
+  if (!isPlainObject(result)) {
+    throw new CapabilityError("E_RUNTIME", "site.fetch_with_session returned a non-object result");
+  }
+  if (typeof result.url !== "string" || !result.url) {
+    throw new CapabilityError("E_RUNTIME", "site.fetch_with_session result is missing url");
+  }
+  if (typeof result.status !== "number") {
+    throw new CapabilityError("E_RUNTIME", "site.fetch_with_session result is missing status");
+  }
+  if (typeof result.body !== "string") {
+    throw new CapabilityError("E_RUNTIME", "site.fetch_with_session result is missing body");
+  }
+  return {
+    url: result.url,
+    status: result.status,
+    body: result.body,
+    ok: typeof result.responseOk === "boolean" ? result.responseOk : result.ok === true,
+  };
 }
 
 function normalizeScreenshotRequest(input: unknown) {
@@ -1304,6 +1411,20 @@ export function createBackgroundRuntimeServices({
 
         providers.register(createTabsCapabilityProvider(createChromeTabsTransport({ chromeApi })));
         providers.register(createConfigCapabilityProvider(configControlPlane));
+        providers.register({
+          family: "site",
+          async invoke({ binding, input }) {
+            switch (binding.operation) {
+              case "fetch_with_session":
+                return invokeSiteFetchWithSession(input);
+              default:
+                throw new CapabilityError(
+                  "E_RUNTIME",
+                  `Unsupported site operation: ${binding.operation}`,
+                );
+            }
+          },
+        });
 
         const runnerHost = createBridgeRunnerHost({ invokeRunner });
         let kernelRef = null;
@@ -1856,6 +1977,24 @@ export function createBackgroundRuntimeServices({
       ...result,
       intervention: requested,
     };
+  }
+
+  async function invokeSiteFetchWithSession(input: unknown): Promise<SiteFetchWithSessionResult> {
+    const request = buildSiteFetchWithSessionRequest({
+      input,
+      tab: toCanonicalTab(await requireActiveTab(chromeApi, "site.fetch_with_session")),
+      scriptPath: pageHookScriptPath,
+    });
+    const result = await invokeSiteSkill({
+      skillId: request.skillId,
+      action: request.action,
+      tab: request.tab,
+      input: request.input,
+      plan: request.plan,
+      module: request.module,
+      verifier: request.verifier,
+    });
+    return toSiteFetchWithSessionResult(result.result);
   }
 
   async function invokePageAction({ action, input = {}, ctx = {} } = {}) {

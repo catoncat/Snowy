@@ -46,7 +46,31 @@ interface PageHookBridgeState {
     queryResults?: Array<Record<string, unknown>>;
     clickEvents?: Array<Record<string, unknown>>;
     fillEvents?: Array<Record<string, unknown>>;
+    fetchEvents?: Array<Record<string, unknown>>;
   };
+}
+
+function cloneSerializable<T>(value: T): T {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+  if (value === undefined) {
+    return value;
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function getFirstElementUid(result: unknown): string {
+  const elements = Array.from(
+    (((result as { elements?: ArrayLike<{ uid?: string }> } | null)?.elements ?? []) as ArrayLike<{
+      uid?: string;
+    }>) ?? [],
+  );
+  const first = elements[0];
+  if (!first?.uid) {
+    throw new Error("Expected query result to include at least one element uid");
+  }
+  return first.uid;
 }
 
 function createDomSandbox(options?: {
@@ -54,6 +78,7 @@ function createDomSandbox(options?: {
     string,
     { readyAfterQueries: number; elements?: Array<Record<string, string>> }
   >;
+  fetchImpl?: (input: unknown, init?: Record<string, unknown>) => unknown | Promise<unknown>;
 }) {
   const dispatchLog: Array<{ target: string; type: string; key?: string }> = [];
   const delayedSelectorChecks = new Map<string, number>();
@@ -189,11 +214,26 @@ function createDomSandbox(options?: {
     MouseEvent,
     InputEvent,
     Event,
+    fetch:
+      options?.fetchImpl ??
+      (async (input: unknown) => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        url: String(input),
+        text: async () => "",
+        headers: {
+          get() {
+            return null;
+          },
+        },
+      })),
   };
 }
 
 function createScriptingChromeHarness(options?: {
   domSandboxFactory?: () => Record<string, unknown>;
+  fetchImpl?: (input: unknown, init?: Record<string, unknown>) => unknown | Promise<unknown>;
 }) {
   const testDir = dirname(fileURLToPath(import.meta.url));
   const worlds = new Map<string, Record<string, unknown>>();
@@ -206,7 +246,11 @@ function createScriptingChromeHarness(options?: {
     }
     const sandbox: Record<string, unknown> = {
       console,
-      ...(options?.domSandboxFactory ? options.domSandboxFactory() : createDomSandbox()),
+      ...(options?.domSandboxFactory
+        ? options.domSandboxFactory()
+        : createDomSandbox({
+            ...(options?.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+          })),
     };
     sandbox.globalThis = sandbox;
     worlds.set(key, sandbox);
@@ -242,10 +286,16 @@ function createScriptingChromeHarness(options?: {
 
             if (request.func) {
               context.__bblArgs = request.args ?? [];
-              const result = await Promise.resolve(
-                runInNewContext(`(${request.func.toString()})(...globalThis.__bblArgs)`, context, {
-                  filename: "executeScript.js",
-                }),
+              const result = cloneSerializable(
+                await Promise.resolve(
+                  runInNewContext(
+                    `(${request.func.toString()})(...globalThis.__bblArgs)`,
+                    context,
+                    {
+                      filename: "executeScript.js",
+                    },
+                  ),
+                ),
               );
               context.__bblArgs = undefined;
               return [{ result }];
@@ -1384,9 +1434,11 @@ describe("site-runtime", () => {
       }),
     });
 
-    const inputUid = (
-      queryResult.result as Record<string, unknown> & { elements: Array<{ uid: string }> }
-    ).elements[0].uid;
+    const querySnapshot = (await pageHookBridge.snapshotState({
+      tabId: 16,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+    const inputUid = getFirstElementUid(querySnapshot?.queryResults?.at(-1));
 
     // Step 2: Fill the input field
     const fillResult = await runtime.invoke({
@@ -1408,16 +1460,18 @@ describe("site-runtime", () => {
     });
 
     // Step 3: Query button and click it
-    const buttonQuery = await runtime.invoke({
+    await runtime.invoke({
       skillId: "fixture.page",
       action: "query",
       tab: testTab,
       input: { selector: "button" },
     });
 
-    const buttonUid = (
-      buttonQuery.result as Record<string, unknown> & { elements: Array<{ uid: string }> }
-    ).elements[0].uid;
+    const buttonSnapshot = (await pageHookBridge.snapshotState({
+      tabId: 16,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+    const buttonUid = getFirstElementUid(buttonSnapshot?.queryResults?.at(-1));
 
     const clickResult = await runtime.invoke({
       skillId: "fixture.page",
@@ -1580,9 +1634,11 @@ describe("site-runtime", () => {
       ],
     });
 
-    const inputUid = (
-      queryResult.result as Record<string, unknown> & { elements: Array<{ uid: string }> }
-    ).elements[0].uid;
+    const querySnapshot = (await pageHookBridge.snapshotState({
+      tabId: 17,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+    const inputUid = getFirstElementUid(querySnapshot?.queryResults?.at(-1));
 
     const fillResult = await runtime.invoke({
       skillId: "fixture.page",
@@ -1612,7 +1668,7 @@ describe("site-runtime", () => {
       ],
     });
 
-    const buttonQuery = await runtime.invoke({
+    await runtime.invoke({
       skillId: "fixture.page",
       action: "query",
       lane: "background",
@@ -1620,9 +1676,11 @@ describe("site-runtime", () => {
       input: { selector: "button" },
     });
 
-    const buttonUid = (
-      buttonQuery.result as Record<string, unknown> & { elements: Array<{ uid: string }> }
-    ).elements[0].uid;
+    const buttonSnapshot = (await pageHookBridge.snapshotState({
+      tabId: 17,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+    const buttonUid = getFirstElementUid(buttonSnapshot?.queryResults?.at(-1));
 
     const clickResult = await runtime.invoke({
       skillId: "fixture.page",
@@ -1679,6 +1737,123 @@ describe("site-runtime", () => {
       { action: "fill", verified: true },
       { action: "query", verified: true },
       { action: "click", verified: true },
+    ]);
+  });
+
+  it("dispatches fetch_with_session through the real page-hook bridge with session credentials", async () => {
+    const fetchImpl = vi.fn(async (input: unknown, init?: Record<string, unknown>) => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      url: String(input),
+      text: async () => '{"user":"demo"}',
+      headers: {
+        get(name: string) {
+          return name.toLowerCase() === "content-type" ? "application/json" : null;
+        },
+      },
+      init,
+    }));
+    const scriptingHarness = createScriptingChromeHarness({
+      fetchImpl,
+    });
+    const pageHookBridge = createPageHookBridge({
+      chromeApi: scriptingHarness.chromeApi,
+    });
+
+    const result = await invokeSingleActionSiteSkill({
+      request: {
+        skillId: "fixture.site",
+        action: "fetch_with_session",
+        tab: {
+          tabId: 18,
+          url: "https://fixture.test/home",
+          active: true,
+        },
+        input: {
+          url: "https://fixture.test/api/me",
+          method: "POST",
+          body: '{"ping":true}',
+        },
+        plan: {
+          skillId: "fixture.site",
+          action: "fetch_with_session",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.site",
+              jsPath: "src/page-hook.js",
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "fixture.site.fetch_with_session",
+          source:
+            "exports.default = async ({ input }) => ({ url: input.url, method: input.method, body: input.body });",
+        },
+        verifier: "site_fetch_with_session",
+      },
+      runnerHost: new JsRunnerHost(),
+      installer: {
+        install: async (step, currentTab) => pageHookBridge.install(step, currentTab),
+        invoke: async ({ installation, action, input, tab: currentTab, ctx }) =>
+          pageHookBridge.invoke({
+            installation,
+            action,
+            input,
+            tab: currentTab,
+            ctx,
+          }),
+        verify: async ({ installation, action, result, tab: currentTab }) =>
+          pageHookBridge.verify({
+            installation,
+            action,
+            result,
+            tab: currentTab,
+          }),
+      },
+    });
+
+    expect(result).toMatchObject({
+      verified: true,
+      result: {
+        action: "fetch_with_session",
+        status: 200,
+        body: '{"user":"demo"}',
+        installationId: "bbl-next.page-hook.site:1",
+      },
+      trace: [
+        "match:fixture.site",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.site",
+        "invoke:fetch_with_session",
+        "verify:site_fetch_with_session",
+      ],
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://fixture.test/api/me",
+      expect.objectContaining({
+        method: "POST",
+        body: '{"ping":true}',
+        credentials: "include",
+      }),
+    );
+
+    const snapshot = (await pageHookBridge.snapshotState({
+      tabId: 18,
+      world: "main",
+    })) as PageHookBridgeState["state"] | null;
+
+    expect(snapshot?.fetchEvents).toEqual([
+      expect.objectContaining({
+        action: "fetch_with_session",
+        url: "https://fixture.test/api/me",
+        method: "POST",
+        credentials: "include",
+        status: 200,
+        body: '{"user":"demo"}',
+      }),
     ]);
   });
 

@@ -14,6 +14,7 @@
     queryResults: [],
     clickEvents: [],
     fillEvents: [],
+    fetchEvents: [],
   };
 
   const elementRefs = {};
@@ -72,6 +73,19 @@
     };
   }
 
+  function normalizeStringMap(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return undefined;
+    }
+    const normalized = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (typeof entry === "string") {
+        normalized[key] = entry;
+      }
+    }
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
+  }
+
   function install(step, tab) {
     const installationId = `${step.scriptId}:${state.installs.length + 1}`;
     const installed = {
@@ -90,7 +104,7 @@
     };
   }
 
-  function invoke(installationId, action, input, ctx) {
+  async function invoke(installationId, action, input, ctx) {
     const installed = getInstallation(installationId);
     if (!installed) {
       throw new Error(`Unknown installation: ${installationId}`);
@@ -221,6 +235,61 @@
       return fillResult;
     }
 
+    if (action === "fetch_with_session") {
+      const url = input && typeof input === "object" ? input.url : undefined;
+      const method =
+        input && typeof input === "object" && typeof input.method === "string" && input.method
+          ? input.method.toUpperCase()
+          : "GET";
+      const body = input && typeof input === "object" ? input.body : undefined;
+      const headers = normalizeStringMap(input && typeof input === "object" ? input.headers : null);
+      if (typeof url !== "string" || !url) {
+        throw new Error("site.fetch_with_session requires input.url");
+      }
+      if (body !== undefined && typeof body !== "string") {
+        throw new Error("site.fetch_with_session requires input.body to be a string");
+      }
+      if (typeof globalScope.fetch !== "function") {
+        throw new Error("fetch is not available on the page hook global scope");
+      }
+
+      const response = await globalScope.fetch(url, {
+        method,
+        credentials: "include",
+        ...(headers ? { headers } : {}),
+        ...(body !== undefined ? { body } : {}),
+      });
+      const responseBody = await response.text();
+      const fetchResult = {
+        ok: true,
+        action,
+        url: typeof response.url === "string" && response.url ? response.url : url,
+        method,
+        status: typeof response.status === "number" ? response.status : 0,
+        statusText: typeof response.statusText === "string" ? response.statusText : "",
+        body: responseBody,
+        responseOk: response.ok === true,
+        installationId,
+        installedScriptId: installed.scriptId,
+        tabUrl: String(ctx?.tab?.url || installed.url),
+        installCount: state.installs.length,
+      };
+      state.fetchEvents.push({
+        action,
+        url: fetchResult.url,
+        method,
+        credentials: "include",
+        status: fetchResult.status,
+        body: responseBody,
+        responseOk: fetchResult.responseOk,
+        installationId,
+        installedScriptId: installed.scriptId,
+        tabUrl: fetchResult.tabUrl,
+      });
+      state.invocations.push(fetchResult);
+      return fetchResult;
+    }
+
     const result = {
       ok: true,
       action,
@@ -319,6 +388,18 @@
         typeof result.value === "string" &&
         state.fillEvents.some(
           (entry) => entry.installationId === installationId && entry.uid === result.uid,
+        );
+    }
+    if (verified && action === "fetch_with_session") {
+      verified =
+        typeof result.url === "string" &&
+        typeof result.status === "number" &&
+        typeof result.body === "string" &&
+        state.fetchEvents.some(
+          (entry) =>
+            entry.installationId === installationId &&
+            entry.url === result.url &&
+            entry.status === result.status,
         );
     }
     const stabilizationResult = verified ? evaluateStabilization(result) : null;

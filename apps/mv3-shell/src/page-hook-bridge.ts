@@ -79,6 +79,16 @@ function unwrapExecuteScriptResult<T>(result: Array<ExecuteScriptResult<T>> | T)
   return result;
 }
 
+function cloneSerializableResult<T>(value: T | undefined): T | undefined {
+  if (value === undefined) {
+    return value;
+  }
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 function getInstallationId(installation: SiteInstallation): string | undefined {
   const result = installation.result;
   if (!result || typeof result !== "object" || !("installationId" in result)) {
@@ -113,7 +123,7 @@ export function createPageHookBridge({
       world: siteWorldToExecutionWorld(world),
       ...(files ? { files } : { func, args }),
     });
-    return unwrapExecuteScriptResult<T>(executionResult);
+    return cloneSerializableResult(unwrapExecuteScriptResult<T>(executionResult));
   }
 
   async function install(step: InjectionStep, tab: ActiveTabMetadata) {

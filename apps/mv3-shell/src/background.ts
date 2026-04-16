@@ -2310,6 +2310,13 @@ export function createBackgroundRunnerBridge({
           });
           return result.result;
         });
+      case "site.fetch_with_session":
+        return routeRuntimeCapability("site.fetch_with_session", {
+          url: message.url,
+          ...(message.method !== undefined ? { method: message.method } : {}),
+          ...(message.headers !== undefined ? { headers: message.headers } : {}),
+          ...(message.body !== undefined ? { body: message.body } : {}),
+        });
       case "tabs.list":
         return routeRuntimeCapability("tabs.list");
       case "tabs.get_active":

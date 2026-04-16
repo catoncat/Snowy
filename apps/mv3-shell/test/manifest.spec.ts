@@ -29,7 +29,9 @@ type MessageListener = (
   sendResponse: (value: unknown) => void,
 ) => unknown;
 
-function createDomSandbox() {
+function createDomSandbox(options?: {
+  fetchImpl?: (input: unknown, init?: Record<string, unknown>) => unknown | Promise<unknown>;
+}) {
   const dispatchLog: Array<{ target: string; type: string; key?: string }> = [];
 
   function createTarget(target: string) {
@@ -75,6 +77,20 @@ function createDomSandbox() {
   return {
     document,
     KeyboardEvent,
+    fetch:
+      options?.fetchImpl ??
+      (async (input: unknown) => ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        url: String(input),
+        text: async () => "",
+        headers: {
+          get() {
+            return null;
+          },
+        },
+      })),
   };
 }
 
@@ -417,7 +433,11 @@ function createChromeHarness({
   };
 }
 
-function createScriptingHarness() {
+function createScriptingHarness(
+  options: {
+    fetchImpl?: (input: unknown, init?: Record<string, unknown>) => unknown | Promise<unknown>;
+  } = {},
+) {
   const worlds = new Map<string, Record<string, unknown>>();
 
   function getContext(tabId: number, world: string): Record<string, unknown> {
@@ -428,7 +448,9 @@ function createScriptingHarness() {
     }
     const sandbox: Record<string, unknown> = {
       console,
-      ...createDomSandbox(),
+      ...createDomSandbox({
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+      }),
     };
     sandbox.globalThis = sandbox;
     worlds.set(key, sandbox);
@@ -460,10 +482,16 @@ function createScriptingHarness() {
 
             if (request.func) {
               context.__bblArgs = request.args ?? [];
-              const result = await Promise.resolve(
-                runInNewContext(`(${request.func.toString()})(...globalThis.__bblArgs)`, context, {
-                  filename: "executeScript.js",
-                }),
+              const result = cloneValue(
+                await Promise.resolve(
+                  runInNewContext(
+                    `(${request.func.toString()})(...globalThis.__bblArgs)`,
+                    context,
+                    {
+                      filename: "executeScript.js",
+                    },
+                  ),
+                ),
               );
               context.__bblArgs = undefined;
               return [{ result }];
@@ -495,10 +523,13 @@ function createIntegratedChromeHarness(
       active?: boolean;
       title?: string;
     } | null;
+    fetchImpl?: (input: unknown, init?: Record<string, unknown>) => unknown | Promise<unknown>;
   } = {},
 ) {
   const runtimeHarness = createChromeHarness(options);
-  const scriptingHarness = createScriptingHarness();
+  const scriptingHarness = createScriptingHarness({
+    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+  });
 
   return {
     ...runtimeHarness,
@@ -2256,6 +2287,146 @@ describe("mv3-shell manifest", () => {
         key: "Enter",
       },
     });
+    expect(harness.tabsApi.query).not.toHaveBeenCalled();
+    expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
+
+    dispose();
+    harness.cleanup();
+  });
+
+  it("dispatches site.fetch_with_session through runtime services using the active tab session", async () => {
+    const fetchImpl = vi.fn(async (input: unknown) => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      url: String(input),
+      text: async () => '{"user":"demo"}',
+      headers: {
+        get(name: string) {
+          return name.toLowerCase() === "content-type" ? "application/json" : null;
+        },
+      },
+    }));
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 19,
+        url: "https://fixture.test/home",
+      },
+      fetchImpl,
+    });
+    const invokeRunner = vi.fn(async (invocation: { input: Record<string, unknown> }) => ({
+      ok: true,
+      data: {
+        ok: true,
+        result: {
+          result: invocation.input,
+          durationMs: 1,
+        },
+      },
+    }));
+    const services = createBackgroundRuntimeServices({
+      chromeApi: harness.chromeApi,
+      invokeRunner,
+      pageHookBridge: createPageHookBridge({
+        chromeApi: harness.chromeApi,
+      }),
+    });
+
+    const result = await services.dispatchCapability({
+      capabilityId: "site.fetch_with_session",
+      input: {
+        url: "https://fixture.test/api/me",
+        method: "POST",
+        body: '{"ping":true}',
+      },
+      permissions: ["site.fetch_with_session"],
+    });
+    const [{ kernel }, session] = await Promise.all([
+      services.ensureServices(),
+      services.ensureSession(),
+    ]);
+
+    expect(result).toEqual({
+      url: "https://fixture.test/api/me",
+      status: 200,
+      body: '{"user":"demo"}',
+      ok: true,
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://fixture.test/api/me",
+      expect.objectContaining({
+        method: "POST",
+        body: '{"ping":true}',
+        credentials: "include",
+      }),
+    );
+    expect(invokeRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        module: expect.objectContaining({
+          id: "bbl.site.fetch_with_session",
+        }),
+        input: {
+          url: "https://fixture.test/api/me",
+          method: "POST",
+          body: '{"ping":true}',
+        },
+      }),
+    );
+    expect(kernel.getStepCount(session.id)).toBe(2);
+
+    harness.cleanup();
+  });
+
+  it("routes site.fetch_with_session through composed runtime services", async () => {
+    const runtimeServices = {
+      getKernelRuntimeState: vi.fn(async () => ({
+        session: { id: "kernel-session" },
+        runState: { phase: "idle" },
+      })),
+      dispatchCapability: vi.fn(async ({ input }: { input: { url: string } }) => ({
+        url: input.url,
+        status: 204,
+        body: "",
+        ok: true,
+      })),
+      invokeSiteSkill: vi.fn(),
+    };
+    const harness = createChromeHarness({
+      activeTab: null,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      runtimeServices,
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "site.fetch_with_session",
+        url: "https://fixture.test/api/me",
+        method: "GET",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        url: "https://fixture.test/api/me",
+        status: 204,
+        body: "",
+        ok: true,
+      },
+    });
+
+    expect(runtimeServices.dispatchCapability).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capabilityId: "site.fetch_with_session",
+        input: {
+          url: "https://fixture.test/api/me",
+          method: "GET",
+        },
+      }),
+    );
     expect(harness.tabsApi.query).not.toHaveBeenCalled();
     expect(harness.offscreenApi.createDocument).not.toHaveBeenCalled();
 
