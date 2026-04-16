@@ -1,25 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-15T16:46:09.104Z",
+  "generated_at": "2026-04-16T03:05:58.053Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-136",
-      "issue_path": "docs/backlog/2026-04-15-intervention-timeout-escalation-lacks-structured-alerting.md",
-      "title": "Intervention cross-endpoint coordination and timeout governance",
-      "parallel_group": "site-runtime",
-      "module_id": "intervention-handoff",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/kernel/src/intervention-controller.ts",
-        "packages/contracts/src/index.ts",
-        "apps/mv3-shell/src/background.ts",
-        "packages/kernel/test"
-      ]
-    },
     {
       "issue_id": "ISSUE-141",
       "issue_path": "docs/backlog/2026-04-15-sidepanel-handoff-ui-for-intervention-requests-is-not-yet-implemented.md",
@@ -50,22 +33,6 @@
         "packages/core/src/index.ts",
         "packages/contracts/src/index.ts",
         "packages/core/test"
-      ]
-    },
-    {
-      "issue_id": "ISSUE-147",
-      "issue_path": "docs/backlog/2026-04-15-screenshot-action-capability-is-typed-but-has-no-runtime-binding.md",
-      "title": "Screenshot action capability is typed but has no runtime binding",
-      "parallel_group": "site-runtime",
-      "module_id": "site-runtime-browser-automation",
-      "module_stage": "secondary",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/site-runtime/src/index.ts",
-        "apps/mv3-shell/src/background.ts",
-        "packages/site-runtime/test"
       ]
     },
     {
