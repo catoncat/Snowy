@@ -4555,6 +4555,284 @@ describe("mv3-shell manifest", () => {
     }
   });
 
+  it("config.update persists and rehydrates multiple remote transports with stable host ids", async () => {
+    const storageArea = createStorageAreaHarness();
+    const firstHarness = createChromeHarness({
+      storageArea,
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input) => {
+      const url = String(input);
+      if (url === "https://remote-primary.example.test/health") {
+        return new Response(
+          JSON.stringify({
+            status: "healthy",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+      if (url === "https://remote-primary.example.test/exec") {
+        return new Response(
+          JSON.stringify({
+            hostId: "remote-primary",
+            exitCode: 0,
+            stdout: "primary:echo ready",
+            stderr: "",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+      if (url === "https://remote-secondary.example.test/health") {
+        return new Response(
+          JSON.stringify({
+            status: "healthy",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+      if (url === "https://remote-secondary.example.test/exec") {
+        return new Response(
+          JSON.stringify({
+            hostId: "remote-secondary",
+            exitCode: 0,
+            stdout: "secondary:echo ready",
+            stderr: "",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+      throw new Error(`Unexpected fetch url: ${url}`);
+    });
+
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeFirst = firstBridge.registerRuntimeListener();
+
+    try {
+      await expect(
+        firstHarness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "config.update",
+          patch: {
+            automation: {
+              remoteTransports: [
+                {
+                  hostId: "remote-primary",
+                  baseUrl: "https://remote-primary.example.test",
+                  authToken: "primary-secret",
+                },
+                {
+                  hostId: "remote-secondary",
+                  baseUrl: "https://remote-secondary.example.test",
+                  authToken: "secondary-secret",
+                },
+              ],
+            },
+          },
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          config: {
+            status: "ready",
+            values: {
+              automation: {
+                remoteTransports: [
+                  {
+                    hostId: "remote-primary",
+                    baseUrl: "https://remote-primary.example.test",
+                    execPath: "/exec",
+                    probePath: "/health",
+                    authScheme: "bearer",
+                  },
+                  {
+                    hostId: "remote-secondary",
+                    baseUrl: "https://remote-secondary.example.test",
+                    execPath: "/exec",
+                    probePath: "/health",
+                    authScheme: "bearer",
+                  },
+                ],
+              },
+            },
+          },
+        },
+      });
+
+      expect(
+        JSON.stringify(storageArea.dump()["bbl-next.config.control-plane.v1"] ?? {}),
+      ).not.toContain("primary-secret");
+      expect(
+        JSON.stringify(storageArea.dump()["bbl-next.config.control-plane.v1"] ?? {}),
+      ).not.toContain("secondary-secret");
+      expect(storageArea.dump()["bbl-next.remote-transport.config.v1"]).toEqual([
+        {
+          hostId: "remote-primary",
+          baseUrl: "https://remote-primary.example.test",
+          execPath: "/exec",
+          probePath: "/health",
+          authToken: "primary-secret",
+        },
+        {
+          hostId: "remote-secondary",
+          baseUrl: "https://remote-secondary.example.test",
+          execPath: "/exec",
+          probePath: "/health",
+          authToken: "secondary-secret",
+        },
+      ]);
+    } finally {
+      disposeFirst();
+      firstHarness.cleanup();
+    }
+
+    const secondHarness = createChromeHarness({
+      storageArea,
+    });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeSecond = secondBridge.registerRuntimeListener();
+
+    try {
+      await expect(
+        secondHarness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "hosts.list",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              hostId: "remote-primary",
+              kind: "remote",
+            }),
+            expect.objectContaining({
+              hostId: "remote-secondary",
+              kind: "remote",
+            }),
+          ]),
+        },
+      });
+
+      await expect(
+        secondHarness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "hosts.connect",
+          hostId: "remote-primary",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          host: {
+            hostId: "remote-primary",
+            connected: true,
+          },
+        },
+      });
+
+      await expect(
+        secondHarness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "hosts.connect",
+          hostId: "remote-secondary",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          host: {
+            hostId: "remote-secondary",
+            connected: true,
+          },
+        },
+      });
+
+      await expect(
+        secondHarness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "host.exec",
+          hostId: "remote-primary",
+          command: "echo ready",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          hostId: "remote-primary",
+          stdout: "primary:echo ready",
+        },
+      });
+
+      await expect(
+        secondHarness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "host.exec",
+          hostId: "remote-secondary",
+          command: "echo ready",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          hostId: "remote-secondary",
+          stdout: "secondary:echo ready",
+        },
+      });
+
+      await expect(
+        secondHarness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "resource.read",
+          resourceId: "config.summary",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          data: {
+            values: {
+              automation: {
+                remoteTransports: [
+                  {
+                    hostId: "remote-primary",
+                    baseUrl: "https://remote-primary.example.test",
+                    execPath: "/exec",
+                    probePath: "/health",
+                    authScheme: "bearer",
+                  },
+                  {
+                    hostId: "remote-secondary",
+                    baseUrl: "https://remote-secondary.example.test",
+                    execPath: "/exec",
+                    probePath: "/health",
+                    authScheme: "bearer",
+                  },
+                ],
+              },
+            },
+          },
+        },
+      });
+    } finally {
+      disposeSecond();
+      secondHarness.cleanup();
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("routes host substrate read/write/edit/exec through an explicit local host id", async () => {
     const files = new Map<string, string>();
     const host = {

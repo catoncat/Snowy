@@ -770,6 +770,7 @@ export function createRemoteHostTransport({
 const REMOTE_TRANSPORT_CONFIG_STORAGE_KEY = "bbl-next.remote-transport.config.v1";
 const REMOTE_TRANSPORT_DEFAULT_EXEC_PATH = "/exec";
 const REMOTE_TRANSPORT_DEFAULT_PROBE_PATH = "/health";
+const REMOTE_TRANSPORT_DEFAULT_HOST_ID = "remote";
 const LLM_CONFIG_STORAGE_KEY = "bbl-next.llm.config.v1";
 const CONFIG_CONTROL_PLANE_STORAGE_KEY = "bbl-next.config.control-plane.v1";
 
@@ -815,7 +816,17 @@ function remoteTransportBaseUrlHasUserInfo(baseUrl) {
   }
 }
 
-function cloneRemoteTransportConfig(config) {
+function normalizeRemoteTransportHostId(hostId, fallbackHostId = REMOTE_TRANSPORT_DEFAULT_HOST_ID) {
+  if (typeof hostId === "string" && hostId.trim()) {
+    return hostId.trim();
+  }
+  return fallbackHostId;
+}
+
+function cloneRemoteTransportConfig(
+  config,
+  { fallbackHostId = REMOTE_TRANSPORT_DEFAULT_HOST_ID, requireHostId = false } = {},
+) {
   if (!isPlainObject(config)) {
     return null;
   }
@@ -825,7 +836,13 @@ function cloneRemoteTransportConfig(config) {
     return null;
   }
 
+  const hostId = normalizeRemoteTransportHostId(config.hostId, "");
+  if (requireHostId && !hostId) {
+    return null;
+  }
+
   const next = {
+    hostId: hostId || fallbackHostId,
     baseUrl,
     execPath: normalizeRemoteTransportPath(config.execPath, REMOTE_TRANSPORT_DEFAULT_EXEC_PATH),
     probePath: normalizeRemoteTransportPath(config.probePath, REMOTE_TRANSPORT_DEFAULT_PROBE_PATH),
@@ -836,17 +853,54 @@ function cloneRemoteTransportConfig(config) {
   return next;
 }
 
+function cloneRemoteTransportConfigs(config, { requireHostIds = false } = {}) {
+  if (config == null) {
+    return [];
+  }
+
+  const values = Array.isArray(config) ? config : [config];
+  const entries = [];
+  const seenHostIds = new Set();
+
+  for (const [index, value] of values.entries()) {
+    const fallbackHostId = index === 0 ? REMOTE_TRANSPORT_DEFAULT_HOST_ID : `remote-${index + 1}`;
+    const normalized = cloneRemoteTransportConfig(value, {
+      fallbackHostId,
+      requireHostId: requireHostIds || Array.isArray(config),
+    });
+    if (!normalized) {
+      return null;
+    }
+    if (seenHostIds.has(normalized.hostId)) {
+      return null;
+    }
+    seenHostIds.add(normalized.hostId);
+    entries.push(normalized);
+  }
+
+  return entries;
+}
+
 function buildRemoteTransportSummary(config) {
   const normalized = cloneRemoteTransportConfig(config);
   if (!normalized) {
     return null;
   }
   return {
+    hostId: normalized.hostId,
     baseUrl: normalized.baseUrl,
     execPath: normalized.execPath,
     probePath: normalized.probePath,
     ...(normalized.authToken ? { authScheme: "bearer" } : {}),
   };
+}
+
+function buildRemoteTransportSummaries(config) {
+  const normalized = cloneRemoteTransportConfigs(config);
+  if (!normalized) {
+    return [];
+  }
+  return normalized.map((entry) => buildRemoteTransportSummary(entry)).filter(Boolean);
 }
 
 async function loadRemoteTransportConfig(chromeApi) {
@@ -855,22 +909,28 @@ async function loadRemoteTransportConfig(chromeApi) {
     return null;
   }
   const result = await storageArea.get(REMOTE_TRANSPORT_CONFIG_STORAGE_KEY);
-  return cloneRemoteTransportConfig(result?.[REMOTE_TRANSPORT_CONFIG_STORAGE_KEY]);
+  const stored = result?.[REMOTE_TRANSPORT_CONFIG_STORAGE_KEY];
+  const normalized = cloneRemoteTransportConfigs(stored);
+  if (!normalized || normalized.length === 0) {
+    return null;
+  }
+  return Array.isArray(stored) ? normalized : normalized[0];
 }
 
 async function saveRemoteTransportConfig(chromeApi, config) {
-  const normalized = cloneRemoteTransportConfig(config);
-  if (!normalized) {
+  const normalized = cloneRemoteTransportConfigs(config);
+  if (!normalized || normalized.length === 0) {
     return null;
   }
 
   const storageArea = chromeApi?.storage?.local;
+  const stored = normalized.length === 1 ? normalized[0] : normalized;
   if (typeof storageArea?.set === "function") {
     await storageArea.set({
-      [REMOTE_TRANSPORT_CONFIG_STORAGE_KEY]: normalized,
+      [REMOTE_TRANSPORT_CONFIG_STORAGE_KEY]: stored,
     });
   }
-  return normalized;
+  return stored;
 }
 
 async function clearRemoteTransportConfig(chromeApi) {
@@ -894,6 +954,18 @@ function validateRemoteTransportPatch(patch) {
     throw new CapabilityError(
       "E_BAD_INPUT",
       "config.update automation.remoteTransport must be an object or null",
+    );
+  }
+  if (hasOwnKey(patch, "hostId") && patch.hostId != null && typeof patch.hostId !== "string") {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransport.hostId must be a string or null",
+    );
+  }
+  if (hasOwnKey(patch, "hostId") && typeof patch.hostId === "string" && !patch.hostId.trim()) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransport.hostId must not be empty",
     );
   }
   if (hasOwnKey(patch, "baseUrl") && patch.baseUrl != null && typeof patch.baseUrl !== "string") {
@@ -944,15 +1016,60 @@ function validateRemoteTransportPatch(patch) {
   }
 }
 
+function validateRemoteTransportsPatch(patch) {
+  if (patch === null) {
+    return;
+  }
+  if (!Array.isArray(patch)) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransports must be an array or null",
+    );
+  }
+
+  const seenHostIds = new Set();
+  for (const [index, entry] of patch.entries()) {
+    if (!isPlainObject(entry)) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        `config.update automation.remoteTransports[${index}] must be an object`,
+      );
+    }
+    validateRemoteTransportPatch(entry);
+    const hostId = normalizeRemoteTransportHostId(entry.hostId, "");
+    if (!hostId) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        `config.update automation.remoteTransports[${index}].hostId requires a non-empty string`,
+      );
+    }
+    if (seenHostIds.has(hostId)) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        `config.update automation.remoteTransports contains duplicate hostId: ${hostId}`,
+      );
+    }
+    seenHostIds.add(hostId);
+  }
+}
+
 async function syncRemoteTransportConfigFromConfigPatch(chromeApi, patch) {
   if (!isPlainObject(patch) || !isPlainObject(patch.automation)) {
     return patch;
   }
-  if (!hasOwnKey(patch.automation, "remoteTransport")) {
+
+  const hasSingleRemoteTransport = hasOwnKey(patch.automation, "remoteTransport");
+  const hasMultipleRemoteTransports = hasOwnKey(patch.automation, "remoteTransports");
+  if (!hasSingleRemoteTransport && !hasMultipleRemoteTransports) {
     return patch;
   }
+  if (hasSingleRemoteTransport && hasMultipleRemoteTransports) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "config.update automation.remoteTransport and automation.remoteTransports are mutually exclusive",
+    );
+  }
 
-  validateRemoteTransportPatch(patch.automation.remoteTransport);
   const nextPatch = {
     ...patch,
     automation: {
@@ -960,27 +1077,60 @@ async function syncRemoteTransportConfigFromConfigPatch(chromeApi, patch) {
     },
   };
 
+  if (hasMultipleRemoteTransports) {
+    validateRemoteTransportsPatch(patch.automation.remoteTransports);
+    const remoteTransportEntries = patch.automation.remoteTransports;
+    if (remoteTransportEntries === null || remoteTransportEntries.length === 0) {
+      await clearRemoteTransportConfig(chromeApi);
+      nextPatch.automation.remoteTransport = null;
+      nextPatch.automation.remoteTransports = [];
+      return nextPatch;
+    }
+
+    const normalizedEntries = cloneRemoteTransportConfigs(remoteTransportEntries, {
+      requireHostIds: true,
+    });
+    if (!normalizedEntries || normalizedEntries.length === 0) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        "config.update automation.remoteTransports requires valid http(s) baseUrl entries",
+      );
+    }
+
+    await saveRemoteTransportConfig(chromeApi, normalizedEntries);
+    const summaries = buildRemoteTransportSummaries(normalizedEntries);
+    nextPatch.automation.remoteTransport = summaries.length === 1 ? summaries[0] : null;
+    nextPatch.automation.remoteTransports = summaries;
+    return nextPatch;
+  }
+
+  validateRemoteTransportPatch(patch.automation.remoteTransport);
   if (patch.automation.remoteTransport === null) {
     await clearRemoteTransportConfig(chromeApi);
     nextPatch.automation.remoteTransport = null;
+    nextPatch.automation.remoteTransports = [];
     return nextPatch;
   }
 
   const currentConfig = await loadRemoteTransportConfig(chromeApi);
   const remoteTransportPatch = patch.automation.remoteTransport;
+  const currentSingleConfig = currentConfig && !Array.isArray(currentConfig) ? currentConfig : null;
   const normalized = cloneRemoteTransportConfig({
+    hostId: hasOwnKey(remoteTransportPatch, "hostId")
+      ? remoteTransportPatch.hostId
+      : currentSingleConfig?.hostId,
     baseUrl: hasOwnKey(remoteTransportPatch, "baseUrl")
       ? remoteTransportPatch.baseUrl
-      : currentConfig?.baseUrl,
+      : currentSingleConfig?.baseUrl,
     execPath: hasOwnKey(remoteTransportPatch, "execPath")
       ? remoteTransportPatch.execPath
-      : currentConfig?.execPath,
+      : currentSingleConfig?.execPath,
     probePath: hasOwnKey(remoteTransportPatch, "probePath")
       ? remoteTransportPatch.probePath
-      : currentConfig?.probePath,
+      : currentSingleConfig?.probePath,
     authToken: hasOwnKey(remoteTransportPatch, "authToken")
       ? remoteTransportPatch.authToken
-      : currentConfig?.authToken,
+      : currentSingleConfig?.authToken,
   });
 
   if (!normalized) {
@@ -992,6 +1142,7 @@ async function syncRemoteTransportConfigFromConfigPatch(chromeApi, patch) {
 
   await saveRemoteTransportConfig(chromeApi, normalized);
   nextPatch.automation.remoteTransport = buildRemoteTransportSummary(normalized);
+  nextPatch.automation.remoteTransports = buildRemoteTransportSummaries(normalized);
   return nextPatch;
 }
 
@@ -1048,7 +1199,7 @@ async function sendRemoteTransportRequest({
 export function createConfiguredRemoteHostTransport({
   config,
   fetchImpl = globalThis.fetch,
-  hostId = "remote",
+  hostId = undefined,
 } = {}) {
   const normalized = cloneRemoteTransportConfig(config);
   if (!normalized) {
@@ -1057,7 +1208,7 @@ export function createConfiguredRemoteHostTransport({
 
   const baseUrl = normalized.baseUrl;
   return createRemoteHostTransport({
-    hostId,
+    hostId: normalizeRemoteTransportHostId(hostId, normalized.hostId),
     sendExec: (request) =>
       sendRemoteTransportRequest({
         fetchImpl,
@@ -1088,10 +1239,25 @@ export function createConfiguredRemoteHostTransport({
 export async function loadConfiguredRemoteHostTransport({
   chromeApi = globalThis.chrome,
   fetchImpl = globalThis.fetch,
-  hostId = "remote",
+  hostId = undefined,
 } = {}) {
+  const configured = await loadRemoteTransportConfig(chromeApi);
+  if (!configured) {
+    return null;
+  }
+  if (Array.isArray(configured)) {
+    return configured
+      .map((entry, index) =>
+        createConfiguredRemoteHostTransport({
+          config: entry,
+          fetchImpl,
+          hostId: index === 0 ? hostId : undefined,
+        }),
+      )
+      .filter(Boolean);
+  }
   return createConfiguredRemoteHostTransport({
-    config: await loadRemoteTransportConfig(chromeApi),
+    config: configured,
     fetchImpl,
     hostId,
   });

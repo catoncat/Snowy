@@ -19,7 +19,7 @@
 | BrowserVFS public skill URI parity | `green` | canonical `mem://skills/...` round-trip 已测 |
 | JS Runner host | `green` | host / cancel / timeout / health / offscreen bridge 已测 |
 | MV3 shell substrate | `green` | offscreen bridge 与显式 page-hook bridge 已测 |
-| local execution host adapter | `yellow` | 默认 offscreen local adapter 已实现 read/write/edit（ISSUE-038）；exec 需 remote host；remote host path 仍未实现 |
+| local execution host adapter | `yellow` | 默认 offscreen local adapter 已实现 read/write/edit（ISSUE-038）；remote exec path、single/multi remote host record、production config 与 restart rehydrate 已落地，但 local exec 与更广 execution-host cutover 仍未完成 |
 | site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
 | kernel session/run/compaction baseline | `green` | `SessionStore` / `RunController` / `LoopEngine` / `CompactionManager` / `createKernel()` / `runLoop()` / child-run seam 与 prompt context message wiring 已落地并有测试；剩余问题已转入 provider policy / observability 等相邻模块 |
 | AI-native product control plane | `yellow` | 最小 `runtime/config/skills/hosts` bootstrap summary、轻量 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail` resource contract、`readAiSurfaceResource()` / MV3 `resource.read` 统一 lookup、`runtime.capture_diagnostics` / `runtime.clear_error`、本地 `hosts.*` / `config.update` / `skills.install/enable/disable/uninstall` 与统一 `audit.tail` read path 已落地并有测试；`ISSUE-085` 已补 sidepanel chat shell，`ISSUE-093` 已补齐 shared control-plane management consumer；完整 Skill Studio / lifecycle UI 仍是 cutover 后项 |
