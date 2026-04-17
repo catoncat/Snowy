@@ -1,24 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-17T13:50:37.218Z",
+  "generated_at": "2026-04-17T13:52:08.614Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-164",
-      "issue_path": "docs/backlog/2026-04-17-follow-up-provider-routing-control-plane-state-is-not-yet-wired-into-runtime-own.md",
-      "title": "Follow-up: provider routing control-plane state is not yet wired into runtime-owned profile config",
-      "parallel_group": "contracts-core",
-      "module_id": "provider-profile-routing",
-      "module_stage": "mainline",
-      "tracking_kind": "follow-up",
-      "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-163"],
-      "write_scope": [
-        "apps/mv3-shell/src/runtime-services.ts",
-        "packages/kernel/src/kernel-facade.ts",
-        "docs/legacy-to-vnext-migration-matrix.md"
-      ]
-    },
     {
       "issue_id": "ISSUE-162",
       "issue_path": "docs/backlog/2026-04-17-follow-up-re-evaluate-observability-export-after-browser-automation-event-source.md",
