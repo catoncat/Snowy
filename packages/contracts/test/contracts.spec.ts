@@ -442,8 +442,9 @@ describe("contracts", () => {
       data: {
         status: "healthy" as const,
         defaultHostId: "local",
+        defaultExecHostId: "remote",
         connectedCount: 1,
-        totalCount: 1,
+        totalCount: 2,
         items: [
           {
             hostId: "local",
@@ -451,6 +452,25 @@ describe("contracts", () => {
             connected: true,
             isDefault: true,
             state: "connected" as const,
+            capabilities: {
+              read: true,
+              write: true,
+              edit: true,
+              exec: false,
+            },
+          },
+          {
+            hostId: "remote",
+            kind: "remote" as const,
+            connected: false,
+            isDefault: false,
+            state: "disconnected" as const,
+            capabilities: {
+              read: false,
+              write: false,
+              edit: false,
+              exec: true,
+            },
           },
         ],
       },

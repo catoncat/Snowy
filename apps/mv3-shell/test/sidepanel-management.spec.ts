@@ -97,6 +97,7 @@ describe("sidepanel management state", () => {
       data: {
         status: "healthy",
         defaultHostId: "local",
+        defaultExecHostId: null,
         totalCount: 1,
         connectedCount: 1,
         items: [
@@ -106,6 +107,12 @@ describe("sidepanel management state", () => {
             connected: true,
             state: "connected",
             isDefault: true,
+            capabilities: {
+              read: true,
+              write: true,
+              edit: true,
+              exec: false,
+            },
           },
         ],
       },

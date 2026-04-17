@@ -3428,7 +3428,19 @@ describe("mv3-shell manifest", () => {
         id: "hosts.summary",
         data: {
           defaultHostId: "local",
+          defaultExecHostId: null,
           connectedCount: 1,
+          items: [
+            expect.objectContaining({
+              hostId: "local",
+              capabilities: {
+                read: true,
+                write: true,
+                edit: true,
+                exec: false,
+              },
+            }),
+          ],
         },
       },
     });
@@ -3952,6 +3964,12 @@ describe("mv3-shell manifest", () => {
             connected: false,
             state: "disconnected",
             isDefault: false,
+            capabilities: {
+              read: true,
+              write: true,
+              edit: true,
+              exec: false,
+            },
           },
         ],
       },
@@ -3971,6 +3989,12 @@ describe("mv3-shell manifest", () => {
         connected: false,
         state: "disconnected",
         isDefault: false,
+        capabilities: {
+          read: true,
+          write: true,
+          edit: true,
+          exec: false,
+        },
       },
     });
 
@@ -4001,6 +4025,7 @@ describe("mv3-shell manifest", () => {
       ok: true,
       data: {
         defaultHostId: null,
+        defaultExecHostId: "remote",
         items: expect.arrayContaining([
           expect.objectContaining({
             hostId: "local",
@@ -4008,6 +4033,12 @@ describe("mv3-shell manifest", () => {
             connected: false,
             state: "disconnected",
             isDefault: false,
+            capabilities: {
+              read: true,
+              write: true,
+              edit: true,
+              exec: false,
+            },
           }),
           expect.objectContaining({
             hostId: "remote",
@@ -4015,6 +4046,12 @@ describe("mv3-shell manifest", () => {
             connected: false,
             state: "disconnected",
             isDefault: false,
+            capabilities: {
+              read: false,
+              write: false,
+              edit: false,
+              exec: true,
+            },
           }),
         ]),
       },
@@ -4034,6 +4071,12 @@ describe("mv3-shell manifest", () => {
         connected: false,
         state: "disconnected",
         isDefault: false,
+        capabilities: {
+          read: false,
+          write: false,
+          edit: false,
+          exec: true,
+        },
       },
     });
 
@@ -5150,70 +5193,26 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("routes host substrate requests through the default host when hostId is omitted", async () => {
-    const host = {
-      dispatch: vi.fn(async (request: unknown) => {
-        const typedRequest = request as {
-          kind: string;
-          requestId?: string;
-          hostId?: string;
-          command?: string;
-        };
-        if (typedRequest.kind === "health") {
-          return {
-            kind: "health_result",
-            requestId: typedRequest.requestId,
-            ok: true,
-            health: {
-              status: "idle",
-              inflightCount: 0,
-              consecutiveFailures: 0,
-            },
-          };
-        }
-        if (typedRequest.kind === "exec") {
-          return {
-            hostId: typedRequest.hostId,
-            command: typedRequest.command,
-            exitCode: 0,
-            stdout: `default:${typedRequest.command}`,
-            stderr: "",
-          };
-        }
-        return {
-          ok: false,
-          error: {
-            code: "E_RUNTIME",
-            message: `Unknown host request: ${typedRequest.kind}`,
-          },
-        };
+  it("routes host.exec through the exec-capable default even when the generic default host is local", async () => {
+    const harness = createChromeHarness({});
+    const sendRemoteExec = vi.fn(
+      async (request: { hostId: string; command: string; timeoutMs?: number }) => ({
+        hostId: request.hostId,
+        command: request.command,
+        exitCode: 0,
+        stdout: `default:${request.command}`,
+        stderr: "",
       }),
-      getHealth: vi.fn(() => ({
-        status: "idle",
-        inflightCount: 0,
-        consecutiveFailures: 0,
-      })),
-    };
-    const harness = createChromeHarness({ host });
+    );
+    const remoteTransport = createRemoteHostTransport({
+      sendExec: sendRemoteExec,
+    });
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
+      remoteTransport,
     });
     const dispose = bridge.registerRuntimeListener();
-
-    await expect(
-      harness.runtimeApi.sendMessage({
-        target: RUNNER_BACKGROUND_TARGET,
-        kind: "host.exec",
-        command: "pwd",
-      }),
-    ).resolves.toMatchObject({
-      ok: false,
-      error: {
-        code: "E_BAD_INPUT",
-        message: "host.exec requires hostId or a default host",
-      },
-    });
 
     await expect(
       harness.runtimeApi.sendMessage({
@@ -5231,18 +5230,62 @@ describe("mv3-shell manifest", () => {
     await expect(
       harness.runtimeApi.sendMessage({
         target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "hosts.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "hosts.summary",
+        data: {
+          defaultHostId: "local",
+          defaultExecHostId: "remote",
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              hostId: "local",
+              capabilities: {
+                read: true,
+                write: true,
+                edit: true,
+                exec: false,
+              },
+            }),
+            expect.objectContaining({
+              hostId: "remote",
+              capabilities: {
+                read: false,
+                write: false,
+                edit: false,
+                exec: true,
+              },
+            }),
+          ]),
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
         kind: "host.exec",
         command: "pwd",
       }),
     ).resolves.toMatchObject({
       ok: true,
       data: {
-        hostId: "local",
+        hostId: "remote",
         command: "pwd",
         exitCode: 0,
         stdout: "default:pwd",
       },
     });
+    expect(sendRemoteExec).toHaveBeenCalledTimes(1);
+    expect(sendRemoteExec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: "remote",
+        command: "pwd",
+      }),
+    );
 
     dispose();
     harness.cleanup();
@@ -5325,13 +5368,8 @@ describe("mv3-shell manifest", () => {
     ).resolves.toMatchObject({
       ok: false,
       error: {
-        code: "E_CAPABILITY_NOT_FOUND",
-        message: "Execution host adapter does not implement exec",
-        details: {
-          kind: "exec",
-          hostId: "local",
-          reason: "operation_not_supported",
-        },
+        code: "E_BAD_INPUT",
+        message: "host.exec requires hostId or a default exec-capable host",
       },
     });
 

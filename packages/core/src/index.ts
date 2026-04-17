@@ -26,11 +26,12 @@ import {
   type ConfigSummaryStatus,
   type ControlPlaneAuditEntry,
   type ExecutionBinding,
+  type ExecutionHostCapabilities,
   type ExecutionHostHealthStatus,
   type ExecutionHostKind,
+  type ExecutionHostOperation,
   type ExecutionHostRecord,
   type ExecutionHostState,
-  type HostBootstrapSummaryItem,
   type HostControlPlaneSnapshot,
   type HostsBootstrapSummary,
   type HostsSummaryResource,
@@ -379,7 +380,7 @@ export interface BootstrapSummaryInput {
   };
   skills?: Partial<Omit<SkillsBootstrapSummary, "status">>;
   hosts?: {
-    items?: HostBootstrapSummaryItem[];
+    items?: HostControlPlaneRecordInput[];
     defaultHostId?: string | null;
     status?: BootstrapSummaryStatus;
   };
@@ -545,6 +546,7 @@ export interface HostControlPlaneRecordInput {
   connected?: boolean;
   state?: ExecutionHostState;
   isDefault?: boolean;
+  capabilities?: Partial<ExecutionHostCapabilities>;
   health?: {
     status?: ExecutionHostHealthStatus;
     checkedAt?: string;
@@ -1743,6 +1745,48 @@ export const BUILTIN_CAPABILITIES: CapabilityDescriptor[] = Object.values(BUILTI
 export const BUILTIN_EXPORT_HANDOFFS: CapabilityExportHandoff[] =
   descriptorsToCapabilityExportHandoffs(BUILTIN_CAPABILITIES);
 
+function defaultExecutionHostCapabilities(kind: ExecutionHostKind): ExecutionHostCapabilities {
+  if (kind === "remote") {
+    return {
+      read: false,
+      write: false,
+      edit: false,
+      exec: true,
+    };
+  }
+  return {
+    read: true,
+    write: true,
+    edit: true,
+    exec: false,
+  };
+}
+
+function normalizeExecutionHostCapabilities(
+  kind: ExecutionHostKind,
+  overrides?: Partial<ExecutionHostCapabilities>,
+): ExecutionHostCapabilities {
+  return {
+    ...defaultExecutionHostCapabilities(kind),
+    ...(overrides ?? {}),
+  };
+}
+
+function findDefaultHostIdForOperation(
+  hosts: Array<Pick<ExecutionHostRecord, "hostId" | "capabilities">>,
+  defaultHostId: string | null,
+  operation: ExecutionHostOperation,
+): string | null {
+  const defaultHost = defaultHostId
+    ? (hosts.find((host) => host.hostId === defaultHostId) ?? null)
+    : null;
+  if (defaultHost?.capabilities[operation]) {
+    return defaultHost.hostId;
+  }
+  const fallback = hosts.find((host) => host.capabilities[operation]);
+  return fallback?.hostId ?? null;
+}
+
 function normalizeExecutionHostRecord(input: HostControlPlaneRecordInput): ExecutionHostRecord {
   const connected = input.connected ?? (input.state === "connected" || input.state === "degraded");
   const state = input.state ?? (connected ? "connected" : "disconnected");
@@ -1756,6 +1800,7 @@ function normalizeExecutionHostRecord(input: HostControlPlaneRecordInput): Execu
     connected,
     state,
     isDefault: input.isDefault === true,
+    capabilities: normalizeExecutionHostCapabilities(input.kind ?? "local", input.capabilities),
     health: {
       status: healthStatus,
       ...(input.health?.checkedAt ? { checkedAt: input.health.checkedAt } : {}),
@@ -1773,6 +1818,7 @@ function finalizeHostControlPlaneSnapshot(
 
   return {
     defaultHostId,
+    defaultExecHostId: findDefaultHostIdForOperation(hosts, defaultHostId, "exec"),
     hosts: hosts.map((host) => ({
       ...host,
       isDefault: defaultHostId != null && host.hostId === defaultHostId,
@@ -1859,6 +1905,7 @@ export function resolveHostSubstrateTarget(
   snapshot: HostControlPlaneSnapshot,
   input: {
     hostId?: string | null;
+    operation?: ExecutionHostOperation;
   } = {},
 ): HostSubstrateTarget {
   if (input.hostId) {
@@ -1873,11 +1920,21 @@ export function resolveHostSubstrateTarget(
       via: "explicit",
     };
   }
-  if (snapshot.defaultHostId) {
+  const defaultHostId =
+    input.operation != null
+      ? findDefaultHostIdForOperation(snapshot.hosts, snapshot.defaultHostId, input.operation)
+      : snapshot.defaultHostId;
+  if (defaultHostId) {
     return {
-      hostId: snapshot.defaultHostId,
+      hostId: defaultHostId,
       via: "default",
     };
+  }
+  if (input.operation === "exec") {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "host exec requires hostId or a default exec-capable host",
+    );
   }
   throw new CapabilityError("E_BAD_INPUT", "host substrate requires hostId or a default host");
 }
@@ -1920,16 +1977,28 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
     recentChange: input.skills?.recentChange ?? null,
   };
 
-  const hostItems = input.hosts?.items ?? [];
+  const hostItems = (input.hosts?.items ?? []).map((entry) => {
+    const normalized = normalizeExecutionHostRecord(entry);
+    return {
+      hostId: normalized.hostId,
+      kind: normalized.kind,
+      connected: normalized.connected,
+      state: normalized.state,
+      isDefault: normalized.isDefault,
+      capabilities: normalized.capabilities,
+    };
+  });
   const connectedCount = hostItems.filter((entry) => entry.connected).length;
   const hasDegradedHost = hostItems.some((entry) => entry.state === "degraded");
   const hostsStatus =
     input.hosts?.status ??
     (hasDegradedHost ? "degraded" : connectedCount > 0 ? "healthy" : "empty");
+  const defaultHostId =
+    input.hosts?.defaultHostId ?? hostItems.find((entry) => entry.isDefault)?.hostId ?? null;
   const hosts: HostsBootstrapSummary = {
     status: hostsStatus,
-    defaultHostId:
-      input.hosts?.defaultHostId ?? hostItems.find((entry) => entry.isDefault)?.hostId ?? null,
+    defaultHostId,
+    defaultExecHostId: findDefaultHostIdForOperation(hostItems, defaultHostId, "exec"),
     totalCount: hostItems.length,
     connectedCount,
     items: hostItems,

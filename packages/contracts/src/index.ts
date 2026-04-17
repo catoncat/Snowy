@@ -210,6 +210,15 @@ export type InterventionControlPlaneAction = (typeof INTERVENTION_CONTROL_PLANE_
 export type ExecutionHostKind = "local" | "remote";
 export type ExecutionHostState = "connected" | "disconnected" | "degraded";
 export type ExecutionHostHealthStatus = "healthy" | "degraded" | "unknown";
+export const EXECUTION_HOST_OPERATIONS = ["read", "write", "edit", "exec"] as const;
+export type ExecutionHostOperation = (typeof EXECUTION_HOST_OPERATIONS)[number];
+
+export interface ExecutionHostCapabilities {
+  read: boolean;
+  write: boolean;
+  edit: boolean;
+  exec: boolean;
+}
 
 export interface ExecutionHostRecord {
   hostId: string;
@@ -217,6 +226,7 @@ export interface ExecutionHostRecord {
   connected: boolean;
   state: ExecutionHostState;
   isDefault: boolean;
+  capabilities: ExecutionHostCapabilities;
   health: {
     status: ExecutionHostHealthStatus;
     checkedAt?: string;
@@ -225,6 +235,7 @@ export interface ExecutionHostRecord {
 
 export interface HostControlPlaneSnapshot {
   defaultHostId: string | null;
+  defaultExecHostId: string | null;
   hosts: ExecutionHostRecord[];
 }
 
@@ -445,11 +456,13 @@ export interface HostBootstrapSummaryItem {
   connected: boolean;
   state: ExecutionHostState;
   isDefault: boolean;
+  capabilities: ExecutionHostCapabilities;
 }
 
 export interface HostsBootstrapSummary {
   status: BootstrapSummaryStatus;
   defaultHostId: string | null;
+  defaultExecHostId: string | null;
   totalCount: number;
   connectedCount: number;
   items: HostBootstrapSummaryItem[];

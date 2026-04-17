@@ -321,6 +321,24 @@ function toExecutionHostState(localState) {
   return localState.reachable ? "connected" : "disconnected";
 }
 
+function localHostCapabilities() {
+  return {
+    read: true,
+    write: true,
+    edit: true,
+    exec: false,
+  };
+}
+
+function remoteHostCapabilities() {
+  return {
+    read: false,
+    write: false,
+    edit: false,
+    exec: true,
+  };
+}
+
 function defaultBootstrapSummaryBuilder(input) {
   const summary = createBootstrapSummary({
     generatedAt: input.generatedAt,
@@ -1382,6 +1400,28 @@ export function createBackgroundRunnerBridge({
     return invalidHostSubstrate(`${action} requires hostId or a default host`);
   }
 
+  function getDefaultExecHostId() {
+    if (
+      typeof state.defaultHostId === "string" &&
+      state.defaultHostId.trim() &&
+      state.defaultHostId !== LOCAL_HOST_ID
+    ) {
+      return state.defaultHostId;
+    }
+    return getRemoteHostIds()[0] ?? null;
+  }
+
+  function resolveHostExecHostId(hostId) {
+    if (typeof hostId === "string" && hostId.trim()) {
+      return resolveHostId(hostId, "host.exec");
+    }
+    const defaultExecHostId = getDefaultExecHostId();
+    if (typeof defaultExecHostId === "string" && defaultExecHostId.trim()) {
+      return defaultExecHostId;
+    }
+    return invalidHostSubstrate("host.exec requires hostId or a default exec-capable host");
+  }
+
   async function readLocalHostControlState() {
     const checkedAt = isoNow();
     const offscreenPresent = await hasOffscreenDocument();
@@ -1430,6 +1470,7 @@ export function createBackgroundRunnerBridge({
       connected,
       state: toExecutionHostState(localState),
       isDefault: state.defaultHostId === LOCAL_HOST_ID,
+      capabilities: localHostCapabilities(),
       health,
     };
     if (localState.error) {
@@ -1465,6 +1506,7 @@ export function createBackgroundRunnerBridge({
             ? "connected"
             : "disconnected",
       isDefault: state.defaultHostId === hostId,
+      capabilities: remoteHostCapabilities(),
       health,
     };
     if (remoteState.error) {
@@ -1616,6 +1658,7 @@ export function createBackgroundRunnerBridge({
       ok: true,
       data: {
         defaultHostId: state.defaultHostId,
+        defaultExecHostId: getDefaultExecHostId(),
         items: await listExecutionHosts(),
       },
     };
@@ -1813,7 +1856,7 @@ export function createBackgroundRunnerBridge({
 
   async function routeHostExec(payload = {}) {
     await syncConfiguredRemoteTransport();
-    const resolvedHostId = resolveHostSubstrateHostId(payload.hostId, "host.exec");
+    const resolvedHostId = resolveHostExecHostId(payload.hostId);
     if (typeof resolvedHostId !== "string") {
       return resolvedHostId;
     }
@@ -2175,6 +2218,7 @@ export function createBackgroundRunnerBridge({
         connected: localHost.connected,
         state: localHost.state,
         isDefault: localHost.isDefault,
+        capabilities: localHost.capabilities,
       },
       ...remoteHosts.map((remoteHost) => ({
         hostId: remoteHost.hostId,
@@ -2182,6 +2226,7 @@ export function createBackgroundRunnerBridge({
         connected: remoteHost.connected,
         state: remoteHost.state,
         isDefault: remoteHost.isDefault,
+        capabilities: remoteHost.capabilities,
       })),
     ];
 
@@ -2253,6 +2298,7 @@ export function createBackgroundRunnerBridge({
             ? "healthy"
             : "empty",
         defaultHostId: state.defaultHostId,
+        defaultExecHostId: getDefaultExecHostId(),
         totalCount: hostItems.length,
         connectedCount: hostItems.filter((entry) => entry.connected).length,
         items: hostItems,

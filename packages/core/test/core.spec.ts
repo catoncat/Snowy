@@ -1059,12 +1059,19 @@ describe("core", () => {
 
     expect(seed).toMatchObject({
       defaultHostId: null,
+      defaultExecHostId: "ssh-prod",
       hosts: [
         {
           hostId: "local",
           connected: false,
           state: "disconnected",
           isDefault: false,
+          capabilities: {
+            read: true,
+            write: true,
+            edit: true,
+            exec: false,
+          },
           health: {
             status: "unknown",
           },
@@ -1074,6 +1081,12 @@ describe("core", () => {
           connected: false,
           state: "disconnected",
           isDefault: false,
+          capabilities: {
+            read: false,
+            write: false,
+            edit: false,
+            exec: true,
+          },
           health: {
             status: "unknown",
           },
@@ -1091,6 +1104,7 @@ describe("core", () => {
 
     expect(connected).toMatchObject({
       defaultHostId: null,
+      defaultExecHostId: "ssh-prod",
       hosts: [
         {
           hostId: "local",
@@ -1098,6 +1112,12 @@ describe("core", () => {
           connected: false,
           state: "disconnected",
           isDefault: false,
+          capabilities: {
+            read: true,
+            write: true,
+            edit: true,
+            exec: false,
+          },
           health: {
             status: "unknown",
           },
@@ -1108,6 +1128,12 @@ describe("core", () => {
           connected: true,
           state: "connected",
           isDefault: false,
+          capabilities: {
+            read: false,
+            write: false,
+            edit: false,
+            exec: true,
+          },
           health: {
             status: "healthy",
             checkedAt: "2026-03-29T00:00:00.000Z",
@@ -1117,6 +1143,7 @@ describe("core", () => {
     });
     expect(defaulted).toMatchObject({
       defaultHostId: "ssh-prod",
+      defaultExecHostId: "ssh-prod",
       hosts: [
         {
           hostId: "local",
@@ -1130,6 +1157,7 @@ describe("core", () => {
     });
     expect(disconnected).toMatchObject({
       defaultHostId: "ssh-prod",
+      defaultExecHostId: "ssh-prod",
       hosts: [
         {
           hostId: "local",
@@ -1226,6 +1254,10 @@ describe("core", () => {
       hostId: "local",
       via: "default",
     });
+    expect(resolveHostSubstrateTarget(snapshot, { operation: "exec" })).toEqual({
+      hostId: "ssh-prod",
+      via: "default",
+    });
     expect(() =>
       resolveHostSubstrateTarget(
         createHostControlPlaneSnapshot({
@@ -1239,6 +1271,20 @@ describe("core", () => {
         {},
       ),
     ).toThrow("host substrate requires hostId or a default host");
+    expect(() =>
+      resolveHostSubstrateTarget(
+        createHostControlPlaneSnapshot({
+          defaultHostId: "local",
+          hosts: [
+            {
+              hostId: "local",
+              kind: "local",
+            },
+          ],
+        }),
+        { operation: "exec" },
+      ),
+    ).toThrow("host exec requires hostId or a default exec-capable host");
   });
 
   it("projects bridge-side MCP export handoffs from exportable descriptors only", () => {
