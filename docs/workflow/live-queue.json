@@ -1,42 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-17T09:23:43.306Z",
+  "generated_at": "2026-04-17T13:14:44.240Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-150",
-      "issue_path": "docs/backlog/2026-04-16-provider-policy-taxonomy-is-still-kernel-local.md",
-      "title": "Review: provider policy taxonomy is still kernel-local",
-      "parallel_group": "contracts-core",
-      "module_id": "provider-profile-routing",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/contracts/src/index.ts",
-        "packages/kernel/src/llm-profile-resolver.ts",
-        "packages/kernel/src/llm-kernel-adapter.ts",
-        "packages/kernel/src/kernel-facade.ts",
-        "packages/kernel/test"
-      ]
-    },
-    {
-      "issue_id": "ISSUE-152",
-      "issue_path": "docs/backlog/2026-04-16-intervention-handoff-is-still-not-wired-into-page-action-failures.md",
-      "title": "Review: intervention handoff is still not wired into page action failures",
-      "parallel_group": "site-runtime",
-      "module_id": "intervention-handoff",
-      "module_stage": "mainline",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/contracts/src/index.ts",
-        "packages/core/src/index.ts",
-        "packages/site-runtime/src/index.ts",
-        "packages/site-runtime/test"
-      ]
-    }
-  ]
+  "entries": []
 }
