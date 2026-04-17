@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-17T13:42:14.624Z",
+  "generated_at": "2026-04-17T13:50:37.218Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
@@ -20,20 +20,21 @@
       ]
     },
     {
-      "issue_id": "ISSUE-161",
-      "issue_path": "docs/backlog/2026-04-17-browser-automation-cutover-docs-are-stale-after-page-action-handoff-closure.md",
-      "title": "Review: browser automation cutover docs are stale after page-action handoff closure",
-      "parallel_group": "site-runtime",
-      "module_id": "site-runtime-browser-automation",
-      "module_stage": "secondary",
-      "tracking_kind": "doc-debt",
+      "issue_id": "ISSUE-162",
+      "issue_path": "docs/backlog/2026-04-17-follow-up-re-evaluate-observability-export-after-browser-automation-event-source.md",
+      "title": "Follow-up: re-evaluate observability export after browser automation event sources stabilize",
+      "parallel_group": "mv3-shell",
+      "module_id": "observability-audit",
+      "module_stage": "mainline",
+      "tracking_kind": "follow-up",
       "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-158"],
+      "depends_on": ["ISSUE-161"],
       "write_scope": [
-        "docs/cutover-readiness-criteria.md",
+        "docs/module-tracking-ledger.json",
         "docs/migration-parity-dashboard.md",
-        "docs/browser-automation-cutover-boundary.md",
-        "docs/module-tracking-ledger.json"
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
+        "apps/mv3-shell/src/background.ts"
       ]
     },
     {
