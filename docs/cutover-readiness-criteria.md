@@ -77,7 +77,7 @@
 **当前裁决：cutover 后补。**
 
 - Level 2 cutover 不以完整 Skill Studio / sidepanel management UI 为前置；Gate G 继续只要求 shared AI-surface summary/action 主链成立，而不是要求先补完整产品壳。
-- `ISSUE-085` 已交付 sidepanel chat shell，但它不等于 management UI；settings/runtime/skills/hosts 的产品面仍由 follow-up `ISSUE-093` 承接。
+- `ISSUE-085` 已交付 sidepanel chat shell，`ISSUE-093` 也已补齐 shared management consumer；但它们仍不等于完整 Skill Studio / lifecycle UI。
 - sidepanel management UI 的最小范围已锁定为：通过统一 `resource.read` 消费 `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary`，并通过 `runtime.capture_diagnostics` / `runtime.clear_error` / `config.update` / `skills.install|enable|disable|uninstall` / `hosts.connect|disconnect|set_default` 触发共享 control-plane 动作；不新增 app-local bootstrap truth。
 
 ### Soft Gate 2: Browser Automation Product Parity
@@ -119,9 +119,9 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 主要原因：
 
 1. 迁移控制面刚建立，还未长期维护
-2. AI-native product control plane 已有最小实现；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read` 与最小 `audit.tail` 已形成主链，但完整 resource metadata registry 与更完整 product surface 仍未完成
+2. AI-native product control plane 的 Gate G 最小主链已成立；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read`、descriptor-owned action projection、`model.routing` shared control-plane 与最小 `audit.tail` 已形成主链，但完整 resource metadata registry、Skill Studio/lifecycle UI 与更完整 product surface 仍未完成
 3. browser automation 的 cutover 前 active-tab Tier 1 路径已闭环，但旧仓更广的 automation parity 仍未完整迁入：`page.scroll/select_option/hover`、`tabs.create/close`、stealth/computer mode，以及 screenshot/download export composites 仍属 cutover 后范围；background lane 目前也只保留已验证的最小 baseline
-4. diagnostics / provider / studio / automation parity 仍未成体系
+4. 以旧仓 full parity 为标准，diagnostics / provider / studio / automation 的更宽 breadth 仍未成体系；当前只证明了 cutover-critical 最小主链已成立
 
 ## Maintenance Rule
 

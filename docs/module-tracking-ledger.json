@@ -21,10 +21,10 @@
     {
       "module_id": "observability-audit",
       "title": "Observability And Audit",
-      "summary": "Diagnostics, audit tail, runtime history, replay, and observability export contracts/builders are landed. Remaining mainline gap is shared MV3 projection of timeline/summary/rawEventTail; broader export breadth stays deferred.",
+      "summary": "Cutover-critical diagnostics, audit tail, runtime history, replay, and observability export read surfaces are landed; broader export and event-source breadth stays deferred.",
       "tracking_order": 20,
       "stage": "mainline",
-      "status": "partial",
+      "status": "shipped",
       "depends_on_modules": ["kernel"],
       "code_roots": [
         "packages/contracts/src/index.ts",
@@ -44,6 +44,7 @@
         "audit.intervention resource (intervention lifecycle tracking)",
         "observability.replay resource (loop/audit/intervention/continuity replay)",
         "observability export contracts/builders for timeline/summary/rawEventTail (contracts/core/site-runtime, test-backed)",
+        "shared MV3 resource.read projection for observability.timeline/summary/rawEventTail",
         "kernel diagnostics facade (kernel.captureDiagnostics)",
         "error lifecycle tracking (active/cleared/recent/empty states)",
         "provider routing diagnostics (LLM profile resolution status)"
@@ -52,7 +53,7 @@
         "shared debug dump/export action (operator-level bulk export)",
         "richer future event-source breadth from full skill SDK/studio and wider browser automation composites"
       ],
-      "deferral_rationale": "Gate F (Operability) is satisfied. ISSUE-143 already landed the export schema/builder, and ISSUE-161 closed the page-action handoff boundary that previously blocked browser-automation event production. Waiting for full skill-runtime-sdk-studio shipped status is now too coarse: the next mainline gap is a narrower contracts/core/background projection tracked by ISSUE-166. Only bulk dump/export and broader future event-source breadth remain intentionally deferred."
+      "deferral_rationale": "Gate F (Operability) is satisfied. ISSUE-143 landed the export schema/builder, ISSUE-161 closed the page-action handoff boundary that previously blocked browser-automation event production, and ISSUE-166 exposed observability.timeline/summary/rawEventTail through the shared MV3 read path. Remaining work is intentionally post-cutover breadth: bulk dump/export and richer future event sources."
     },
     {
       "module_id": "intervention-handoff",
@@ -91,19 +92,34 @@
     {
       "module_id": "ai-surface-control-plane",
       "title": "AI Surface Control Plane",
-      "summary": "Product control-plane surfaces across runtime, config, skills, hosts, and northbound action/resource boundaries.",
+      "summary": "Cutover-critical product control-plane surfaces across runtime, config, skills, hosts, and northbound action/resource boundaries are landed; fuller studio and lifecycle breadth stays deferred.",
       "tracking_order": 40,
       "stage": "secondary",
-      "status": "partial",
+      "status": "shipped",
       "depends_on_modules": ["kernel"],
       "code_roots": [
         "packages/contracts/src/index.ts",
         "packages/core/src/index.ts",
+        "apps/mv3-shell/src/runtime-services.ts",
+        "apps/mv3-shell/src/sidepanel/",
         "docs/ai-native-capability-surface-design.md"
       ],
       "source_docs": ["docs/ai-native-capability-surface-design.md", "docs/ai-surface-index.md"],
       "cutover_gate": "Gate G",
-      "default_parallel_group": "contracts-core"
+      "default_parallel_group": "contracts-core",
+      "shipped_scope": [
+        "descriptor-owned northbound action projection controls (audiences/defaultExposed/confirmPolicy/executionTarget) across tool/chat/MCP projections",
+        "shared runtime/config/skills/hosts bootstrap and summary resource surfaces through readAiSurfaceResource() / MV3 resource.read",
+        "shared control-plane actions for runtime.capture_diagnostics/runtime.clear_error/config.update/skills.install|enable|disable|uninstall/hosts.connect|disconnect|set_default",
+        "provider routing northbound surface through config.summary/config.update model + model.routing state",
+        "shared sidepanel management consumer that reads and mutates only the shared AI-surface contract"
+      ],
+      "deferred_scope": [
+        "full Skill Studio/lifecycle/versioning UI beyond the shared management consumer",
+        "broader metadata-registry and audience-projection hardening across every future consumer",
+        "bridge-side MCP server/transport beyond the current descriptor-derived handoff contract"
+      ],
+      "deferral_rationale": "Gate G's minimum self-awareness surface is satisfied. ISSUE-153 and ISSUE-156 locked descriptor-owned action projection semantics, ISSUE-159/163/164 wired provider routing through the shared control-plane contract and runtime-owned rehydrate path, and ISSUE-093 closed the shared sidepanel management consumer. Remaining work is intentionally post-cutover product and export breadth."
     },
     {
       "module_id": "site-runtime-browser-automation",
@@ -141,35 +157,67 @@
     {
       "module_id": "execution-host-bridge",
       "title": "Execution Host And Bridge",
-      "summary": "JS runner, host substrate, offscreen bridge, MV3 runtime wiring, and local or remote execution host paths.",
+      "summary": "Cutover-critical JS runner, offscreen bridge, MV3 runtime wiring, browser-only local file host, and exec-capable remote host routing are landed; broader remote-host product breadth stays deferred.",
       "tracking_order": 60,
       "stage": "secondary",
-      "status": "partial",
+      "status": "shipped",
       "depends_on_modules": ["kernel"],
       "code_roots": [
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
         "packages/js-runner/",
         "apps/mv3-shell/src/offscreen.ts",
         "apps/mv3-shell/src/background.ts"
       ],
       "source_docs": ["docs/migration-parity-dashboard.md", "docs/cutover-readiness-criteria.md"],
       "cutover_gate": "Gate C",
-      "default_parallel_group": "js-runner"
+      "default_parallel_group": "js-runner",
+      "shipped_scope": [
+        "JS runner timeout/cancel/health/isolation with MV3 offscreen bridge wiring",
+        "browser-only local execution host adapter for host.read/write/edit and offscreen diagnostics",
+        "exec-capable remote host path with transport config, health/degraded handling, and multi-remote discovery/rehydrate baseline",
+        "capability-aware hosts.summary/get/list surfaces that distinguish file-only vs exec-capable hosts",
+        "default host and host.exec routing that prefer exec-capable hosts instead of treating local as a universal default"
+      ],
+      "deferred_scope": [
+        "broader operator UX and fleet-management polish beyond the current host summaries/actions",
+        "additional remote transport/providers beyond the current cutover path",
+        "old host_bash-style homogeneous host parity where local and remote hosts pretend to be interchangeable"
+      ],
+      "deferral_rationale": "Gate C is satisfied. ISSUE-038/073/125/126/127/134/157/165 closed the cutover-critical host path, including remote exec, health, transport config, multi-remote rehydrate, and capability-aware default routing. Remaining work is broader host productization, not an executable cutover gap."
     },
     {
       "module_id": "provider-profile-routing",
       "title": "Provider And Profile Routing",
-      "summary": "Provider registry, profile routing, escalation policy, and model-selection control flow.",
+      "summary": "Cutover-critical provider registry, profile routing, escalation policy, and shared control-plane routing baseline are landed; broader non-kernel rollout and provider-policy hardening stay deferred.",
       "tracking_order": 15,
       "stage": "mainline",
-      "status": "partial",
+      "status": "shipped",
       "depends_on_modules": ["kernel", "ai-surface-control-plane"],
-      "code_roots": ["packages/contracts/src/index.ts", "packages/kernel/"],
+      "code_roots": [
+        "packages/contracts/src/index.ts",
+        "packages/kernel/",
+        "apps/mv3-shell/src/runtime-services.ts"
+      ],
       "source_docs": [
         "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md",
         "docs/legacy-to-vnext-migration-matrix.md"
       ],
       "cutover_gate": null,
-      "default_parallel_group": "contracts-core"
+      "default_parallel_group": "contracts-core",
+      "shipped_scope": [
+        "provider registry, health negotiation, ordered profile chain, and retry escalation in packages/kernel",
+        "lane-aware routing plus runtime-owned baseline capability requirements for primary/compaction/title paths",
+        "shared control-plane model + model.routing contract for default/fallback/lane override state",
+        "runtime-services rehydrate of shared model.routing state back into runtime-owned provider profile config",
+        "provider routing diagnostics surfaced through shared runtime/diagnostics paths"
+      ],
+      "deferred_scope": [
+        "non-kernel call-site rollout to every future provider consumer",
+        "broader provider-policy hardening beyond the current runtime-owned baseline",
+        "richer operator tooling around provider ownership and policy governance"
+      ],
+      "deferral_rationale": "The provider/profile routing mainline no longer lacks an executable live slice. ISSUE-150 resolved kernel-local taxonomy/reusable route resolution, ISSUE-159 exposed the shared control-plane update surface, and ISSUE-163/164 completed routing override management plus runtime-owned rehydrate. Remaining work is broader rollout and hardening, not a current mainline coverage gap."
     },
     {
       "module_id": "browser-vfs",
