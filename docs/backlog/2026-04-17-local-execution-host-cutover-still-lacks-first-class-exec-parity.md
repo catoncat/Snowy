@@ -1,11 +1,11 @@
 ---
 id: ISSUE-160
 title: "Review: local execution host cutover still lacks first-class exec parity"
-status: open
+status: done
 priority: p1
 source: "next-batch-planner review 2026-04-17"
 created: 2026-04-17
-assignee: unassigned
+assignee: codex-019d9bb0
 tags:
   - review
   - execution-host
@@ -26,6 +26,7 @@ write_scope:
   - docs/legacy-to-vnext-migration-matrix.md
 acceptance_ref: docs/migration-parity-dashboard.md
 check_cmd: "bun run check"
+completed_at: 2026-04-17T14:18:47.582Z
 ---
 
 ## Goal
@@ -41,3 +42,20 @@ check_cmd: "bun run check"
 
 - 明确本地 offscreen host 还缺哪些 first-class exec parity / diagnostics / control-plane 语义，并同步回 parity docs。
 - 若当前 yellow 只剩文档口径或 cutover boundary 问题，则把剩余范围显式写清；若仍有可执行 gap，则拆成更窄的 implementation slice。
+
+## 工作总结
+
+### 实现了什么
+- 同步 execution-host parity 文档，明确 local offscreen host 是 browser-only file adapter，true exec parity 由 remote host path 承担
+- 新增 ISSUE-165，将剩余 partial scope 收窄为 operation-aware host capability summary 与 exec-capable default routing
+
+### 实际跑了什么检查
+- git diff --check
+- bun run check（失败：packages/core/test/core.spec.ts 695/702/706/708 的既有类型错误，属于 write scope 外 blocker）
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `aa5a35120d8e` docs(execution-host): 收窄本地主机剩余缺口

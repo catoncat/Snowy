@@ -1,40 +1,41 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-17T13:52:08.614Z",
+  "generated_at": "2026-04-17T14:18:59.288Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-162",
-      "issue_path": "docs/backlog/2026-04-17-follow-up-re-evaluate-observability-export-after-browser-automation-event-source.md",
-      "title": "Follow-up: re-evaluate observability export after browser automation event sources stabilize",
+      "issue_id": "ISSUE-166",
+      "issue_path": "docs/backlog/2026-04-17-follow-up-expose-observability-export-resources-through-shared-mv3-read-path.md",
+      "title": "Follow-up: expose observability export resources through shared MV3 read path",
       "parallel_group": "mv3-shell",
       "module_id": "observability-audit",
       "module_stage": "mainline",
       "tracking_kind": "follow-up",
       "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-161"],
+      "depends_on": ["ISSUE-162"],
       "write_scope": [
-        "docs/module-tracking-ledger.json",
-        "docs/migration-parity-dashboard.md",
         "packages/contracts/src/index.ts",
         "packages/core/src/index.ts",
-        "apps/mv3-shell/src/background.ts"
+        "apps/mv3-shell/src/background.ts",
+        "packages/core/test/core.spec.ts",
+        "apps/mv3-shell/test/manifest.spec.ts"
       ]
     },
     {
-      "issue_id": "ISSUE-160",
-      "issue_path": "docs/backlog/2026-04-17-local-execution-host-cutover-still-lacks-first-class-exec-parity.md",
-      "title": "Review: local execution host cutover still lacks first-class exec parity",
+      "issue_id": "ISSUE-165",
+      "issue_path": "docs/backlog/2026-04-17-follow-up-execution-host-control-plane-still-lacks-operation-aware-host-capabili.md",
+      "title": "Follow-up: execution host control plane still lacks operation-aware host capability summaries",
       "parallel_group": "js-runner",
       "module_id": "execution-host-bridge",
       "module_stage": "secondary",
-      "tracking_kind": "gap",
+      "tracking_kind": "follow-up",
       "check_cmd": "bun run check",
       "depends_on": [],
       "write_scope": [
-        "packages/js-runner/src/index.ts",
-        "apps/mv3-shell/src/offscreen.ts",
-        "apps/mv3-shell/src/runtime-services.ts",
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
+        "apps/mv3-shell/src/background.ts",
+        "apps/mv3-shell/test/manifest.spec.ts",
         "docs/migration-parity-dashboard.md",
         "docs/legacy-to-vnext-migration-matrix.md"
       ]
