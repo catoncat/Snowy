@@ -3,6 +3,7 @@ import type {
   LlmProfileConfig,
   LlmProfileDef,
   LlmProviderExecutionLane,
+  LlmProviderRoutingOverrideSurface,
   LlmResolvedRoute,
   ResolveLlmRouteResult,
 } from "@bbl-next/contracts";
@@ -26,6 +27,7 @@ export interface ResolveLlmRouteOptions {
   lane?: LlmProviderExecutionLane;
   providerRegistry?: LlmProviderRegistry;
   requiredCapabilities?: string[];
+  routing?: LlmProviderRoutingOverrideSurface;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -40,6 +42,41 @@ function normalizeCapabilities(capabilities: string[] | undefined): string[] {
 
 function normalizeProfileChain(values: Array<string | undefined>): string[] {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+function applyRoutingOverrides(
+  config: LlmProfileConfig,
+  routing?: LlmProviderRoutingOverrideSurface,
+): LlmProfileConfig {
+  if (!routing) {
+    return config;
+  }
+
+  const defaultProfile =
+    typeof routing.defaultProfile === "string" && routing.defaultProfile.trim()
+      ? routing.defaultProfile.trim()
+      : config.defaultProfile;
+  const fallbackProfile =
+    typeof routing.fallbackProfile === "string" && routing.fallbackProfile.trim()
+      ? routing.fallbackProfile.trim()
+      : config.fallbackProfile;
+
+  const laneProfiles =
+    routing.laneProfiles && typeof routing.laneProfiles === "object"
+      ? Object.fromEntries(
+          Object.entries(routing.laneProfiles).map(([lane, profiles]) => [
+            lane,
+            normalizeProfileChain(Array.isArray(profiles) ? profiles : []),
+          ]),
+        )
+      : config.laneProfiles;
+
+  return {
+    ...config,
+    defaultProfile,
+    fallbackProfile,
+    laneProfiles,
+  };
 }
 
 export function getRequiredCapabilitiesForLane(lane: LlmProviderExecutionLane): string[] {
@@ -166,10 +203,12 @@ export function resolveLlmRoute(
   role = "worker",
   options: ResolveLlmRouteOptions = {},
 ): ResolveLlmRouteResult {
+  const effectiveConfig = applyRoutingOverrides(config, options.routing);
   const lane = options.lane ?? "primary";
-  const orderedProfiles = buildOrderedProfiles(config, lane, profileId);
-  const targetProfile = orderedProfiles[0] ?? profileId ?? config.defaultProfile ?? "default";
-  const initialProfile = findProfile(config, targetProfile);
+  const orderedProfiles = buildOrderedProfiles(effectiveConfig, lane, profileId);
+  const targetProfile =
+    orderedProfiles[0] ?? profileId ?? effectiveConfig.defaultProfile ?? "default";
+  const initialProfile = findProfile(effectiveConfig, targetProfile);
   if (!initialProfile) {
     return {
       ok: false,
@@ -182,7 +221,7 @@ export function resolveLlmRoute(
   const requiredCapabilities = normalizeCapabilities(options.requiredCapabilities);
 
   for (const candidateProfileId of orderedProfiles) {
-    const profileDef = findProfile(config, candidateProfileId);
+    const profileDef = findProfile(effectiveConfig, candidateProfileId);
     if (!profileDef) {
       continue;
     }

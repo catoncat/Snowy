@@ -14,6 +14,7 @@ import {
   CONFIG_AUDIT_STATUSES,
   CONFIG_CONTROL_PLANE_ACTIONS,
   CONFIG_MODEL_PROVIDER_ROUTING_FIELDS,
+  CONFIG_MODEL_PROVIDER_ROUTING_OVERRIDE_FIELDS,
   CONTROL_PLANE_AUDIT_KINDS,
   CONTROL_PLANE_AUDIT_STATUSES,
   type CapabilityDescriptor,
@@ -746,6 +747,15 @@ describe("contracts", () => {
 
   it("locks the minimal shared provider routing model fields", () => {
     expect(CONFIG_MODEL_PROVIDER_ROUTING_FIELDS).toEqual(["provider", "model", "baseUrl"]);
+  });
+
+  it("locks the shared provider routing override fields", () => {
+    expect(CONFIG_MODEL_PROVIDER_ROUTING_OVERRIDE_FIELDS).toEqual([
+      "policy",
+      "defaultProfile",
+      "fallbackProfile",
+      "laneProfiles",
+    ]);
   });
 
   it("locks the minimal runtime control plane action set", () => {

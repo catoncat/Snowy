@@ -128,10 +128,25 @@ export const CONFIG_RESOURCE_FIELDS = [
 export type ConfigResourceField = (typeof CONFIG_RESOURCE_FIELDS)[number];
 export const CONFIG_MODEL_PROVIDER_ROUTING_FIELDS = ["provider", "model", "baseUrl"] as const;
 export type ConfigModelProviderRoutingField = (typeof CONFIG_MODEL_PROVIDER_ROUTING_FIELDS)[number];
+export const CONFIG_MODEL_PROVIDER_ROUTING_OVERRIDE_FIELDS = [
+  "policy",
+  "defaultProfile",
+  "fallbackProfile",
+  "laneProfiles",
+] as const;
+export type ConfigModelProviderRoutingOverrideField =
+  (typeof CONFIG_MODEL_PROVIDER_ROUTING_OVERRIDE_FIELDS)[number];
+export interface LlmProviderRoutingOverrideSurface {
+  policy?: LlmProfileCapabilityPolicy;
+  defaultProfile?: string;
+  fallbackProfile?: string;
+  laneProfiles?: Partial<Record<LlmProviderExecutionLane, string[]>>;
+}
 export interface ConfigModelProviderRoutingSurface {
   provider?: string;
   model?: string;
   baseUrl?: string;
+  routing?: LlmProviderRoutingOverrideSurface;
 }
 export const CONFIG_CONTROL_PLANE_ACTIONS = ["config.update"] as const;
 export type ConfigControlPlaneAction = (typeof CONFIG_CONTROL_PLANE_ACTIONS)[number];

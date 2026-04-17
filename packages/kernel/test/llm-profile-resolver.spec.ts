@@ -362,6 +362,53 @@ describe("resolveLlmRoute", () => {
     expect(resumed.route.orderedProfiles).toEqual(["balanced", "fallback"]);
   });
 
+  it("applies shared control-plane routing overrides without mutating the stored profile config", () => {
+    const config = makeConfig({
+      profiles: [
+        {
+          id: "default",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-default",
+          llmModel: "gpt-4",
+        },
+        {
+          id: "planner",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-planner",
+          llmModel: "gpt-4.1-mini",
+        },
+        {
+          id: "fallback",
+          providerId: "openai_compatible",
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-fallback",
+          llmModel: "gpt-4.1",
+        },
+      ],
+      defaultProfile: "default",
+      fallbackProfile: "fallback",
+    });
+
+    const resolved = resolveLlmRoute(config, undefined, "worker", {
+      lane: "primary",
+      routing: {
+        defaultProfile: "planner",
+        laneProfiles: {
+          primary: ["planner", "fallback"],
+        },
+      },
+    });
+
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(resolved.route.profile).toBe("planner");
+    expect(resolved.route.orderedProfiles).toEqual(["planner", "fallback"]);
+    expect(config.defaultProfile).toBe("default");
+    expect(config.laneProfiles).toBeUndefined();
+  });
+
   it("skips down providers and resolves the next eligible fallback profile", () => {
     const config = makeConfig({
       profiles: [

@@ -2,6 +2,7 @@ import {
   AI_SURFACE_RESOURCE_IDS,
   CONFIG_CONTROL_PLANE_ACTIONS,
   CONFIG_MODEL_PROVIDER_ROUTING_FIELDS,
+  CONFIG_MODEL_PROVIDER_ROUTING_OVERRIDE_FIELDS,
   type CapabilityDescriptor,
   CapabilityError,
   type ConfigBootstrapSummary,
@@ -114,6 +115,28 @@ describe("core", () => {
                     provider: { type: "string" },
                     model: { type: "string" },
                     baseUrl: { type: "string" },
+                    routing: {
+                      properties: {
+                        policy: {
+                          enum: ["chat", "chat_with_tools"],
+                        },
+                        defaultProfile: { type: "string" },
+                        fallbackProfile: { type: "string" },
+                        laneProfiles: {
+                          properties: {
+                            primary: {
+                              items: { type: "string" },
+                            },
+                            compaction: {
+                              items: { type: "string" },
+                            },
+                            title: {
+                              items: { type: "string" },
+                            },
+                          },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -123,6 +146,12 @@ describe("core", () => {
       },
     ]);
     expect(CONFIG_MODEL_PROVIDER_ROUTING_FIELDS).toEqual(["provider", "model", "baseUrl"]);
+    expect(CONFIG_MODEL_PROVIDER_ROUTING_OVERRIDE_FIELDS).toEqual([
+      "policy",
+      "defaultProfile",
+      "fallbackProfile",
+      "laneProfiles",
+    ]);
   });
 
   it("keeps runtime control-plane actions aligned with canonical contracts", () => {

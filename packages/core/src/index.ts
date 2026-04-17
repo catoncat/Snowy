@@ -900,11 +900,41 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
               model: {
                 type: "object",
                 description:
-                  "Minimal shared provider/profile routing surface. Richer profile overrides remain deferred to dedicated follow-up slices.",
+                  "Shared provider/profile routing surface. Kernel-consumable routing overrides live under model.routing.",
                 properties: {
                   provider: { type: "string" },
                   model: { type: "string" },
                   baseUrl: { type: "string" },
+                  routing: {
+                    type: "object",
+                    properties: {
+                      policy: {
+                        type: "string",
+                        enum: ["chat", "chat_with_tools"],
+                      },
+                      defaultProfile: { type: "string" },
+                      fallbackProfile: { type: "string" },
+                      laneProfiles: {
+                        type: "object",
+                        properties: {
+                          primary: {
+                            type: "array",
+                            items: { type: "string" },
+                          },
+                          compaction: {
+                            type: "array",
+                            items: { type: "string" },
+                          },
+                          title: {
+                            type: "array",
+                            items: { type: "string" },
+                          },
+                        },
+                        additionalProperties: false,
+                      },
+                    },
+                    additionalProperties: false,
+                  },
                 },
                 additionalProperties: true,
               },

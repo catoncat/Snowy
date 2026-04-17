@@ -10,6 +10,7 @@ import type {
   LlmProfileCapabilityPolicy,
   LlmProfileConfig,
   LlmProviderExecutionLane,
+  LlmProviderRoutingOverrideSurface,
   LoopTerminalStatus,
   LoopTurn,
   MessagePayload,
@@ -170,6 +171,7 @@ export interface Kernel {
     role?: string;
     lane?: LlmProviderExecutionLane;
     policy?: LlmProfileCapabilityPolicy;
+    routing?: LlmProviderRoutingOverrideSurface;
   }): ResolveLlmRouteResult | null;
   getActiveProfile(lane?: LlmProviderExecutionLane): ResolveLlmRouteResult | null;
   setProfileConfig(config: LlmProfileConfig): void;
@@ -442,20 +444,23 @@ export function createKernel(opts: KernelOptions): Kernel {
     role?: string;
     lane?: LlmProviderExecutionLane;
     policy?: LlmProfileCapabilityPolicy;
+    routing?: LlmProviderRoutingOverrideSurface;
   }): ResolveLlmRouteResult | null => {
     if (!profileConfig) {
       return null;
     }
 
     const lane = opts?.lane ?? "primary";
-    const requiredCapabilities = opts?.policy
-      ? getRequiredCapabilitiesForPolicy(opts.policy)
+    const effectivePolicy = opts?.policy ?? opts?.routing?.policy;
+    const requiredCapabilities = effectivePolicy
+      ? getRequiredCapabilitiesForPolicy(effectivePolicy)
       : getRequiredCapabilitiesForLane(lane);
 
     return resolveLlmRoute(profileConfig, opts?.profileId, opts?.role ?? "worker", {
       lane,
       providerRegistry: providerRegistry ?? undefined,
       requiredCapabilities,
+      routing: opts?.routing,
     });
   };
 

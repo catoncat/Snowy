@@ -865,5 +865,73 @@ describe("KernelFacade (createKernel)", () => {
       expect(resolved.route.role).toBe("planner");
       expect(resolved.route.orderedProfiles).toEqual(["summary", "fallback"]);
     });
+
+    it("accepts shared control-plane routing overrides when resolving provider routes", () => {
+      const providerRegistry = new LlmProviderRegistry();
+      providerRegistry.register(stubProvider("primary_provider"), {
+        healthStatus: "healthy",
+        capabilities: ["chat.completions", "tool_calls"],
+      });
+      providerRegistry.register(stubProvider("fallback_provider"), {
+        healthStatus: "healthy",
+        capabilities: ["chat.completions"],
+      });
+
+      const wiredKernel = createKernelWithFacadeOptions({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        providerRegistry,
+        profileConfig: {
+          defaultProfile: "default",
+          fallbackProfile: "fallback",
+          profiles: [
+            {
+              id: "default",
+              providerId: "primary_provider",
+              llmBase: "https://llm.example.com",
+              llmKey: "test-key",
+              llmModel: "gpt-4.1",
+            },
+            {
+              id: "fallback",
+              providerId: "fallback_provider",
+              llmBase: "https://fallback.example.com",
+              llmKey: "fallback-key",
+              llmModel: "gpt-4.1-mini",
+            },
+          ],
+        },
+      });
+
+      const resolved = callKernelMethod<
+        [
+          {
+            lane: "primary";
+            routing: {
+              policy: "chat";
+              defaultProfile: "fallback";
+              laneProfiles: { primary: ["fallback"] };
+            };
+          },
+        ],
+        ResolveLlmRouteResult | null
+      >(wiredKernel, "resolveProviderRoute", {
+        lane: "primary",
+        routing: {
+          policy: "chat",
+          defaultProfile: "fallback",
+          laneProfiles: { primary: ["fallback"] },
+        },
+      });
+
+      expect(resolved).not.toBeNull();
+      expect(resolved?.ok).toBe(true);
+      if (!resolved || !resolved.ok) {
+        throw new Error("expected a resolved provider route");
+      }
+      expect(resolved.route.profile).toBe("fallback");
+      expect(resolved.route.provider).toBe("fallback_provider");
+      expect(resolved.route.orderedProfiles).toEqual(["fallback"]);
+    });
   });
 });
