@@ -61,3 +61,5 @@ completed_at: 2026-04-17T14:18:40.000Z
 - 本次没有直接实现 `ISSUE-166` 的 contracts/core/background 投影；它仍是 observability-audit 的下一条主线可执行 slice
 
 ## 相关 commits
+
+- `e184bc97aeb7` docs(observability): 重评导出延迟边界
