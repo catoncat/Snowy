@@ -21,7 +21,7 @@
     {
       "module_id": "observability-audit",
       "title": "Observability And Audit",
-      "summary": "Diagnostics, audit tail, runtime history, and operator-facing runtime visibility. Current scope shipped; deeper export deferred.",
+      "summary": "Diagnostics, audit tail, runtime history, replay, and observability export contracts/builders are landed. Remaining mainline gap is shared MV3 projection of timeline/summary/rawEventTail; broader export breadth stays deferred.",
       "tracking_order": 20,
       "stage": "mainline",
       "status": "partial",
@@ -42,17 +42,17 @@
         "runtime.history resource (loop telemetry entries)",
         "audit.tail resource (config/skill/host/loop lifecycle, 500 entries, 7d retention)",
         "audit.intervention resource (intervention lifecycle tracking)",
+        "observability.replay resource (loop/audit/intervention/continuity replay)",
+        "observability export contracts/builders for timeline/summary/rawEventTail (contracts/core/site-runtime, test-backed)",
         "kernel diagnostics facade (kernel.captureDiagnostics)",
         "error lifecycle tracking (active/cleared/recent/empty states)",
         "provider routing diagnostics (LLM profile resolution status)"
       ],
       "deferred_scope": [
-        "timeline export (cross-subsystem chronological event sequencing)",
-        "structured summary export (aggregated diagnostics beyond point-in-time snapshot)",
-        "rawEventTail (unfiltered event stream for deep inspection)",
-        "shared debug dump/export action (operator-level bulk export)"
+        "shared debug dump/export action (operator-level bulk export)",
+        "richer future event-source breadth from full skill SDK/studio and wider browser automation composites"
       ],
-      "deferral_rationale": "Gate F (Operability) is satisfied: operator can diagnose core runtime issues without returning to legacy repo. Deferred items require richer event production from modules that are themselves still partial (site-runtime, skill-runtime). Adding export surfaces before underlying modules produce enough events would create empty contracts. Re-evaluate after site-runtime-browser-automation and skill-runtime-sdk-studio reach shipped status."
+      "deferral_rationale": "Gate F (Operability) is satisfied. ISSUE-143 already landed the export schema/builder, and ISSUE-161 closed the page-action handoff boundary that previously blocked browser-automation event production. Waiting for full skill-runtime-sdk-studio shipped status is now too coarse: the next mainline gap is a narrower contracts/core/background projection tracked by ISSUE-166. Only bulk dump/export and broader future event-source breadth remain intentionally deferred."
     },
     {
       "module_id": "intervention-handoff",
