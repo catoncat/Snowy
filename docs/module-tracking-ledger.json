@@ -57,22 +57,36 @@
     {
       "module_id": "intervention-handoff",
       "title": "Intervention And Handoff",
-      "summary": "Human intervention, handoff, and confirm-oriented control flow around automation and runtime failures.",
+      "summary": "Human intervention, runtime handoff, escalation, shared audit/read surfaces, and operator resolution flow around automation and runtime failures.",
       "tracking_order": 30,
       "stage": "mainline",
-      "status": "partial",
+      "status": "shipped",
       "depends_on_modules": ["kernel", "observability-audit"],
       "code_roots": [
         "packages/contracts/src/index.ts",
         "packages/core/src/index.ts",
-        "packages/site-runtime/src/index.ts"
+        "packages/kernel/src/",
+        "packages/site-runtime/src/index.ts",
+        "apps/mv3-shell/src/background.ts",
+        "apps/mv3-shell/src/sidepanel/"
       ],
       "source_docs": [
         "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md",
         "docs/cutover-readiness-criteria.md"
       ],
       "cutover_gate": "Soft Gate 3",
-      "default_parallel_group": "site-runtime"
+      "default_parallel_group": "site-runtime",
+      "shipped_scope": [
+        "runtime handoff contract for verify_failed/runtime_blocked automation failures",
+        "kernel and MV3 intervention request/resolve/cancel/timeout lifecycle with durable restart round-trip",
+        "runtime.summary.interventions and audit.intervention shared read surfaces",
+        "cross-tab/window coordination plus structured stale/timeout escalation audit entries",
+        "shared sidepanel resolve/reject UI for pending intervention requests"
+      ],
+      "deferred_scope": [
+        "richer studio/operator workflow polish beyond the shared sidepanel management surface"
+      ],
+      "deferral_rationale": "Current cutover-critical intervention scope is landed. Remaining UI polish belongs to adjacent AI-surface/studio work and no longer justifies keeping intervention-handoff itself in partial status."
     },
     {
       "module_id": "ai-surface-control-plane",
