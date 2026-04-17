@@ -1,11 +1,11 @@
 ---
 id: ISSUE-165
 title: "Follow-up: execution host control plane still lacks operation-aware host capability summaries"
-status: open
+status: done
 priority: p1
 source: "ISSUE-160 review 2026-04-17"
 created: 2026-04-17
-assignee: unassigned
+assignee: raven
 tags:
   - review
   - execution-host
@@ -28,6 +28,7 @@ write_scope:
   - docs/legacy-to-vnext-migration-matrix.md
 acceptance_ref: docs/migration-parity-dashboard.md
 check_cmd: "bun run check"
+completed_at: 2026-04-17T15:31:16.805Z
 ---
 
 ## Goal
@@ -45,3 +46,22 @@ check_cmd: "bun run check"
 - hosts.summary/hosts.get 至少能表达每个 host 的操作能力边界（至少区分 file ops 与 exec 支持），让 local/browser-only host 的 file-only 语义对 operator 可见
 - default host / host.exec 路由能基于一等 control-plane 语义区分 exec-capable host 与 file-only local host，不再只能依赖 operation_not_supported 事后暴露边界
 - 文档与测试同步锁定 execution-host 的 cutover boundary：local offscreen host 保留 browser-only file adapter，true exec parity 由 exec-capable host path 承担
+
+## 工作总结
+
+### 实现了什么
+- 为 hosts.summary/hosts.get/list 补齐 file-only 与 exec-capable 能力边界
+- 让 host.exec 默认走 exec-capable host 并同步 defaultExecHostId 摘要
+
+### 实际跑了什么检查
+- bun run test -- packages/contracts/test/contracts.spec.ts packages/core/test/core.spec.ts apps/mv3-shell/test/manifest.spec.ts
+- ./node_modules/.bin/biome check packages/contracts/src/index.ts packages/contracts/test/contracts.spec.ts packages/core/src/index.ts packages/core/test/core.spec.ts apps/mv3-shell/src/background.ts apps/mv3-shell/test/manifest.spec.ts apps/mv3-shell/test/sidepanel-management.spec.ts docs/migration-parity-dashboard.md docs/legacy-to-vnext-migration-matrix.md
+- git diff --check
+- bun run check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `1aa392a6435d` fix(execution-host): 收口主机能力边界与默认路由
