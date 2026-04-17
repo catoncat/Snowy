@@ -1,22 +1,23 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-17T13:33:30.666Z",
+  "generated_at": "2026-04-17T13:37:06.943Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
-      "issue_id": "ISSUE-159",
-      "issue_path": "docs/backlog/2026-04-17-provider-routing-still-lacks-a-shared-control-plane-update-surface.md",
-      "title": "Review: provider routing still lacks a shared control-plane update surface",
+      "issue_id": "ISSUE-163",
+      "issue_path": "docs/backlog/2026-04-17-follow-up-provider-routing-overrides-still-cannot-be-managed-through-shared-cont.md",
+      "title": "Follow-up: provider routing overrides still cannot be managed through shared control plane",
       "parallel_group": "contracts-core",
-      "module_id": "ai-surface-control-plane",
-      "module_stage": "secondary",
-      "tracking_kind": "gap",
+      "module_id": "provider-profile-routing",
+      "module_stage": "mainline",
+      "tracking_kind": "follow-up",
       "check_cmd": "bun run check",
-      "depends_on": [],
+      "depends_on": ["ISSUE-159"],
       "write_scope": [
         "packages/contracts/src/index.ts",
-        "packages/core/src/index.ts",
-        "docs/ai-surface-index.md"
+        "packages/kernel/src/llm-profile-resolver.ts",
+        "packages/kernel/src/kernel-facade.ts",
+        "docs/legacy-to-vnext-migration-matrix.md"
       ]
     },
     {
