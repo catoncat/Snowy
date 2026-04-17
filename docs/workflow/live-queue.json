@@ -1,6 +1,58 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-17T13:14:44.240Z",
+  "generated_at": "2026-04-17T13:22:27.634Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": []
+  "entries": [
+    {
+      "issue_id": "ISSUE-158",
+      "issue_path": "docs/backlog/2026-04-17-intervention-module-status-and-cutover-docs-are-stale-after-page-action-handoff-.md",
+      "title": "Review: intervention module status and cutover docs are stale after page-action handoff closure",
+      "parallel_group": "site-runtime",
+      "module_id": "intervention-handoff",
+      "module_stage": "mainline",
+      "tracking_kind": "doc-debt",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "docs/cutover-readiness-criteria.md",
+        "docs/migration-parity-dashboard.md",
+        "docs/legacy-to-vnext-migration-matrix.md",
+        "docs/module-tracking-ledger.json"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-159",
+      "issue_path": "docs/backlog/2026-04-17-provider-routing-still-lacks-a-shared-control-plane-update-surface.md",
+      "title": "Review: provider routing still lacks a shared control-plane update surface",
+      "parallel_group": "contracts-core",
+      "module_id": "ai-surface-control-plane",
+      "module_stage": "secondary",
+      "tracking_kind": "gap",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
+        "docs/ai-surface-index.md"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-160",
+      "issue_path": "docs/backlog/2026-04-17-local-execution-host-cutover-still-lacks-first-class-exec-parity.md",
+      "title": "Review: local execution host cutover still lacks first-class exec parity",
+      "parallel_group": "js-runner",
+      "module_id": "execution-host-bridge",
+      "module_stage": "secondary",
+      "tracking_kind": "gap",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "packages/js-runner/src/index.ts",
+        "apps/mv3-shell/src/offscreen.ts",
+        "apps/mv3-shell/src/runtime-services.ts",
+        "docs/migration-parity-dashboard.md",
+        "docs/legacy-to-vnext-migration-matrix.md"
+      ]
+    }
+  ]
 }
