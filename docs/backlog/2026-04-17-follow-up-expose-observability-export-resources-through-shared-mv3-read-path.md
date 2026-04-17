@@ -1,11 +1,11 @@
 ---
 id: ISSUE-166
 title: "Follow-up: expose observability export resources through shared MV3 read path"
-status: open
+status: done
 priority: p1
 source: "ISSUE-162 re-evaluation 2026-04-17"
 created: 2026-04-17
-assignee: unassigned
+assignee: raven
 tags:
   - review
   - observability
@@ -27,6 +27,7 @@ write_scope:
   - apps/mv3-shell/test/manifest.spec.ts
 acceptance_ref: docs/reviews/2026-03-29-vnext-architecture-recovery-report.md
 check_cmd: "bun run check"
+completed_at: 2026-04-17T15:18:42.341Z
 ---
 
 ## Goal
@@ -43,3 +44,18 @@ check_cmd: "bun run check"
 - shared AI surface resource IDs / metadata 覆盖 timeline/summary/rawEventTail 的 operator-facing read path，或显式锁定命名边界。
 - core/background 提供对应 resource.read 投影，并复用现有 observability export builder 组合可用事件源。
 - 测试覆盖 contracts/core/background 的 read path、limit/ordering 语义，并且不回退 observability.replay。
+
+## 工作总结
+
+### 实现了什么
+- 暴露 observability.timeline/summary/rawEventTail 共享 resource.read，并接通 page-action observability 事件缓存与 MV3 读面
+
+### 实际跑了什么检查
+- bun run check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `0cee4211fec5` fix(observability): 接通共享导出资源读面

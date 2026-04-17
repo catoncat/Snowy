@@ -1,26 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-17T14:18:59.288Z",
+  "generated_at": "2026-04-17T15:18:42.349Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-166",
-      "issue_path": "docs/backlog/2026-04-17-follow-up-expose-observability-export-resources-through-shared-mv3-read-path.md",
-      "title": "Follow-up: expose observability export resources through shared MV3 read path",
-      "parallel_group": "mv3-shell",
-      "module_id": "observability-audit",
-      "module_stage": "mainline",
-      "tracking_kind": "follow-up",
-      "check_cmd": "bun run check",
-      "depends_on": ["ISSUE-162"],
-      "write_scope": [
-        "packages/contracts/src/index.ts",
-        "packages/core/src/index.ts",
-        "apps/mv3-shell/src/background.ts",
-        "packages/core/test/core.spec.ts",
-        "apps/mv3-shell/test/manifest.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-165",
       "issue_path": "docs/backlog/2026-04-17-follow-up-execution-host-control-plane-still-lacks-operation-aware-host-capabili.md",
