@@ -180,7 +180,7 @@ bun run workflow:claim:json -- --name=<agent-name>
 2. 再读本文件和 `docs/multi-agent-workflow.md`
 3. backlog 刚变化过就先 `bun run workflow:queue:build`
 4. 再执行 claim / preview
-5. 拿到 ticket 后进入对应 issue
+5. 拿到 ticket 后直接进入对应 issue 并持续推进，不额外等待批准
 6. 完成后回写 issue
 7. 用 `workflow:done` 收尾并重建 queue
 
@@ -192,12 +192,12 @@ bun run workflow:claim:json -- --name=<agent-name>
 2. 若 backlog 刚变化，先执行 `bun run workflow:queue:build`
 3. 若 live queue 仍有 entry，但全部已被 lease：
    - 不要误判成 queue 为空
-   - 可先执行 `bun run workflow:plan:preview` 做 read-only planning preview
-   - 或明确回报当前没有 claim slot、等待 lease 释放
+   - 默认先执行 `bun run workflow:plan:preview` 做 read-only planning preview
+   - 只有用户明确要求纯等待时，才只回报当前没有 claim slot、等待 lease 释放
 4. 若 queue 仍为空，再检查是否还有 active lease
 5. 若没有，再进入 `next-batch-planner` 的 planning commit
 6. 把新发现的问题落成 backlog issue
-7. 再重建 queue
+7. 再重建 queue，并默认继续回到 claim / implement loop
 
 ## Completion Record
 

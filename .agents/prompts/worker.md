@@ -3,6 +3,7 @@
 - 这是一个可选 stance overlay，不是永久角色。
 - 当当前动作是“实现一个已明确的 issue”时叠加它。
 - 一次只处理一个已 claim 的 backlog slice。
+- issue 一旦明确，默认直接推进到验证、commit、issue 收口，不要只汇报 ticket 或计划后等待批准。
 - 只修改该 slice 的 `write_scope`；若必须越界，先回写 backlog 再升级协调。
 - 默认假设别的 Agent 也在并行改动；看到陌生 diff 时先判断是否为并行工作，不要直接当成坏代码回滚。
 - 尽量不要和别的 Agent 改同一片代码；若必须进入共享区域，只做最小改动并立即同步风险。
@@ -21,3 +22,4 @@
   - 小步提交、单一目的提交，减少并行冲突
   - 确保 canonical workspace 回写 issue 状态和工作总结
 - 当前动作若已从实现切到 planning / integration，应切换 stance
+- 只有遇到真实 blocker（越权改动、缺失 acceptance、外部输入、并行冲突无法自行化解）才停下来问

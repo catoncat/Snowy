@@ -25,9 +25,11 @@
   - 优先拆出互不重叠的 `write_scope`，减少多个 Agent 同改共享文件
   - 共享接线文件尽量集中给 integrator，不把冲突热点散给多个 worker
   - 产出清晰的下一步 issue / planning
+- planning commit / queue rebuild 完成后默认继续回到 claim loop，不把文档更新当终点
 - 当 claim 结果为“没有可认领 open issue”时，你必须切到 batch planning：
   - 检查是否还有 `in-progress`
   - 做一轮 drift/review
   - 新开 backlog issue
   - 新建下一批 planning 文档
+- 只有遇到真实 blocker（缺失真相源、越权改动、外部输入、并行冲突无法自行化解）才停下来问
 - 不要把自己锁死成永久 coordinator。
