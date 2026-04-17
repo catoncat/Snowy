@@ -72,6 +72,8 @@
 | Background mode / background-specific failure tracking | 第二执行 lane；Focus mode-first 足够支撑 cutover |
 | highlight / bounding box / screenshot with highlight | 辅助调试 composite——非阻塞 |
 
+注：Tier 2 表示“不是 cutover 前 blocker”，并不等于“尚未实现”。当前仓内的 `tabs.list`、`site.fetch_with_session` 与 background lane baseline 已有最小 runtime/test 覆盖，但它们仍不构成 cutover 前必需门槛。
+
 ## 暂不纳入主链（Tier 3）
 
 | 能力 | 说明 |
@@ -85,15 +87,19 @@
 | Lease policy | Background mode 并发控制，Focus mode 不需要 |
 | Focus escalation UI | 依赖 Background mode |
 
-## 新仓仍需补充的 Descriptor
+## Tier 1 Descriptor 收口状态
 
-基于 Tier 1 分析，以下 descriptor 仍需要加入 `BUILTIN_CATALOG`：
+基于当前代码与测试，Tier 1 所需 descriptor 已补齐到 `BUILTIN_CAPABILITIES`：
 
-| ID | Family | Operation | Risk | Side Effects |
-|----|--------|-----------|------|-------------|
-| `page.press_key` | `page` | `press_key` | medium | writes |
-| `page.screenshot` | `page` | `screenshot` | low | reads |
-现有 `page.query/click/fill`、`tabs.list/get_active` 与 `tabs.navigate` 已在 catalog 中。
+| ID | 状态 | 备注 |
+|----|------|------|
+| `page.query` / `page.click` / `page.fill` | 已落地 | 生产路径由 `ISSUE-154` 收口 |
+| `page.press_key` | 已落地 | `ISSUE-057` |
+| `page.screenshot` | 已落地 | `ISSUE-057` + `ISSUE-147` |
+| `tabs.get_active` / `tabs.navigate` | 已落地 | `ISSUE-058` |
+| verify + intervention handoff | 已落地 | `ISSUE-068` / `ISSUE-071` / `ISSUE-141` / `ISSUE-152` |
+
+额外补充：`tabs.list`（`ISSUE-138`）与 `site.fetch_with_session`（`ISSUE-149`）也已具备最小 runtime path，但它们属于 Tier 2 扩展面，而不是 cutover 前 blocker。
 
 ## 当前阶段的 production path 边界
 
@@ -121,9 +127,9 @@ ISSUE-045 已锁定：
 | page.press_key | 已落地：descriptor + site-runtime invoke pipe + injected key dispatch；不要求提前注册 `page` FamilyProvider | core, site-runtime, mv3-shell |
 | page.screenshot | 已落地：descriptor + `chrome.tabs.captureVisibleTab` active-tab path | core, mv3-shell |
 | tabs.navigate | 已落地：descriptor + `chrome.tabs.update` active-tab round-trip | core, mv3-shell |
-| tabs.get_active 真实实现 | 绑定到 MV3 active-tab metadata read path，不要求提前注册 `tabs` FamilyProvider | core, mv3-shell |
-| verify 扩展 | 继续复用 site-runtime verify pipe；统一 trace / capability bridge 留给后续批次 | site-runtime, core |
-| intervention / handoff | 已落地最小 request contract：site-runtime 可对 verify/runtime blocked 返回结构化 intervention request；真正 resolve/cancel/timeout/audit 仍待上接 kernel/mv3-shell | contracts, site-runtime, kernel, mv3-shell |
+| tabs.get_active 真实实现 | 已落地：绑定到 MV3 active-tab metadata read path；`tabs.list` 也已有对外桥接，但不属于 Tier 1 blocker | core, mv3-shell |
+| verify 扩展 | 已落地：继续复用 site-runtime verify pipe；统一 trace / capability bridge 仍留给后续批次 | site-runtime, core |
+| intervention / handoff | 已落地：`ISSUE-068/071/141/152` 已补齐 request/resolve/cancel/timeout/audit、restart durability、sidepanel handoff UI 与 page action failure 接管主链 | contracts, site-runtime, kernel, mv3-shell |
 
 ## 与其他迁移文档的口径对齐
 
@@ -144,37 +150,21 @@ ISSUE-045 已锁定：
 
 Soft Gate 2 要求"必须明确哪些旧 automation 能力属于 cutover 前必需"。
 
-**本文件已明确回答此问题。** Soft Gate 2 的"边界裁决"部分已满足。剩余是 Tier 1 的实际实现。
+**本文件已明确回答此问题。** Soft Gate 2 的“边界裁决 + Tier 1 active-tab 路径”都已满足。当前剩余 scope 已转为 Tier 2 / Tier 3 breadth 与 product/export 范围，而不再是 cutover 前 blocker。
 
-## Follow-up Issues 需求
+## 当前已收口的实现
 
-基于本 cutover boundary 裁决，follow-up 已落到 live backlog：
+- `ISSUE-057`：补齐 `page.press_key` / `page.screenshot` descriptor 与 runtime path
+- `ISSUE-058`：补齐 `tabs.navigate` active-tab automation path
+- `ISSUE-138`：补齐 `tabs.list` 对外桥接与覆盖
+- `ISSUE-147`：补齐 `page.screenshot` runtime binding
+- `ISSUE-149`：补齐 `site.fetch_with_session` bridge
+- `ISSUE-154`：补齐 `page.query/click/fill` production path
+- `ISSUE-110` / `ISSUE-118` / `ISSUE-123` / `ISSUE-124`：补齐 background lane baseline、stabilization 与 non-active-tab page action 覆盖
+- `ISSUE-068` / `ISSUE-071` / `ISSUE-141` / `ISSUE-152`：补齐 intervention lifecycle、restart durability、shared UI 与 page action failure handoff
 
-1. **ISSUE-037**
-   - 锁定 `page.*` / `tabs.*` 的最小 public automation path
-   - 避免 capability namespace 无序膨胀
+## 当前仍属 deferred 的范围
 
-2. **ISSUE-039**
-   - 已裁决 background mode / background-specific failure tracking 后置到 cutover 后
-   - cutover 前仅保留 kernel no-progress / diagnostics / verify 作为极简替代物
-
-3. **ISSUE-040**
-   - 处理 screenshot / download 在产品主链中的位置
-
-4. **ISSUE-041**
-   - 已完成 intervention / human handoff 的 cutover 定性
-   - 锁定“cutover 前必需，但当前以 runtime handoff contract 落地，不新造 public capability family”
-
-5. **ISSUE-068**
-   - 把 intervention request lifecycle 接到 kernel / MV3 app integration path
-   - 补 resolve / cancel / timeout / audit 闭环
-
-6. **ISSUE-057**
-   - 已完成 `page.press_key` / `page.screenshot` descriptor
-   - 已补最小 page automation production path（site-runtime `press_key` + active-tab screenshot）
-   - 保持不提前引入强制 `page` FamilyProvider bridge
-
-7. **ISSUE-058**
-   - 已完成 `tabs.navigate` descriptor
-   - 已完成 active-tab-only 导航 runtime path
-   - 保持不提前引入强制 `tabs` FamilyProvider bridge
+- Tier 2 / Tier 3 breadth：`page.scroll/select_option/hover`、`tabs.create/close`、stealth/computer mode
+- download / export composites：`screenshot_with_highlight`、`download_image`、`download_chat_images`
+- 若未来要统一 northbound dispatch，再考虑把 `page.*` / `tabs.*` / `site.*` 默认桥接到 FamilyProvider；当前 cutover 不把它当 blocker

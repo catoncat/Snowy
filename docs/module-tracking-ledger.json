@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-04-15",
+  "updated_at": "2026-04-17",
   "modules": [
     {
       "module_id": "kernel",
@@ -108,10 +108,10 @@
     {
       "module_id": "site-runtime-browser-automation",
       "title": "Site Runtime And Browser Automation",
-      "summary": "Site runtime, page/tabs/site automation, background mode, downloads, screenshots, and cutover boundaries.",
+      "summary": "Current cutover-critical site runtime and browser automation scope is landed; wider automation breadth and export surfaces remain deferred.",
       "tracking_order": 50,
       "stage": "secondary",
-      "status": "partial",
+      "status": "shipped",
       "depends_on_modules": ["kernel", "intervention-handoff"],
       "code_roots": [
         "packages/site-runtime/",
@@ -123,7 +123,20 @@
         "docs/reviews/2026-03-29-vnext-architecture-recovery-report.md"
       ],
       "cutover_gate": "Soft Gate 2",
-      "default_parallel_group": "site-runtime"
+      "default_parallel_group": "site-runtime",
+      "shipped_scope": [
+        "active-tab-only site runtime boundary, explicit invoke-only injection, and real page-hook injection chain",
+        "page.query/click/fill/press_key/screenshot plus tabs.list/get_active/navigate runtime paths through MV3/runtime-services",
+        "site.fetch_with_session active-tab session bridge",
+        "background lane baseline with explicit target routing, DOM stabilization policy, and non-active-tab page action coverage",
+        "cutover docs that lock Tier 1/Tier 2/Tier 3 browser automation scope"
+      ],
+      "deferred_scope": [
+        "Tier 2/Tier 3 breadth such as page.scroll/select_option/hover, tabs.create/close, and stealth/computer mode",
+        "download/export composites such as screenshot_with_highlight, download_image, and download_chat_images",
+        "future provider-bridge unification if page/tabs/site runtime is later routed through FamilyProvider by default"
+      ],
+      "deferral_rationale": "Soft Gate 2's cutover-critical scope is landed and no longer needs an executable live slice. Remaining work is intentionally outside the current cutover bar or belongs to later product/export breadth, so the module should be tracked as shipped-with-deferred-scope rather than partial."
     },
     {
       "module_id": "execution-host-bridge",

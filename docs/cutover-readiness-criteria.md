@@ -86,7 +86,7 @@
 
 **状态：边界已裁决。** 详见 `docs/browser-automation-cutover-boundary.md`。
 
-Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tabs.navigate/get_active + verify + intervention。Tier 2（cutover 后可补）：scroll, select_option, hover, tabs.create/close, background mode 等。Tier 3（暂不纳入）：stealth tab, computer mode, batch download 等。当前阶段默认沿用 site-runtime / MV3 独立路径，不要求先补 page/tabs FamilyProvider bridge；其中 `tabs.navigate`、`page.query`、`page.click`、`page.fill`、`page.press_key`、`page.screenshot` 已有最小 runtime path，page action failure 上的 intervention lifecycle integration 也已由 `ISSUE-152` 收口。当前剩余的 browser automation gap 已不再是 intervention 主链，而是更广的 automation breadth 与 cutover 后范围。
+Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tabs.navigate/get_active + verify + intervention。Tier 2（cutover 后可补）：scroll, select_option, hover, tabs.create/close, background mode 等。Tier 3（暂不纳入）：stealth tab, computer mode, batch download 等。当前阶段默认沿用 site-runtime / MV3 独立路径，不要求先补 page/tabs FamilyProvider bridge；其中 cutover 前必需的 active-tab Tier 1 闭环已经成立，`tabs.list`、`site.fetch_with_session` 与 background lane baseline 也已有最小 runtime/test 覆盖。当前剩余 scope 已收敛为 Tier 2 / Tier 3 breadth：`page.scroll/select_option/hover`、`tabs.create/close`、stealth/computer mode，以及 screenshot/download export composites 等 cutover 后范围。
 
 补充裁决：background automation mode 与 background-specific failure tracking 不属于 cutover 前必需，详见 `docs/background-automation-mode-boundary.md`。cutover 前仅保留 kernel no-progress / diagnostics / verify 作为极简替代物。
 
@@ -120,7 +120,7 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 
 1. 迁移控制面刚建立，还未长期维护
 2. AI-native product control plane 已有最小实现；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read` 与最小 `audit.tail` 已形成主链，但完整 resource metadata registry 与更完整 product surface 仍未完成
-3. browser automation 主线仍未完整迁入：`tabs.navigate`、`page.query/click/fill`、`page.press_key`、`page.screenshot` 与 intervention Tier 1 lifecycle 已有最小路径，但更广的 automation breadth 与 cutover 后范围仍未收口
+3. browser automation 的 cutover 前 active-tab Tier 1 路径已闭环，但旧仓更广的 automation parity 仍未完整迁入：`page.scroll/select_option/hover`、`tabs.create/close`、stealth/computer mode，以及 screenshot/download export composites 仍属 cutover 后范围；background lane 目前也只保留已验证的最小 baseline
 4. diagnostics / provider / studio / automation parity 仍未成体系
 
 ## Maintenance Rule
