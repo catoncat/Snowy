@@ -7,6 +7,7 @@ import type {
   InterventionRequest,
   KernelDiagnosticsSnapshot,
   KernelLlmAdapter,
+  LlmProfileCapabilityPolicy,
   LlmProfileConfig,
   LlmProviderExecutionLane,
   LoopTerminalStatus,
@@ -34,7 +35,11 @@ import {
   type KernelInterventionRecord,
   type KernelInterventionSummary,
 } from "./intervention-controller.js";
-import { resolveLlmRoute } from "./llm-profile-resolver.js";
+import {
+  getRequiredCapabilitiesForLane,
+  getRequiredCapabilitiesForPolicy,
+  resolveLlmRoute,
+} from "./llm-profile-resolver.js";
 import type { LlmProviderRegistry } from "./llm-provider-registry.js";
 import {
   LoopEngine,
@@ -160,6 +165,12 @@ export interface Kernel {
   triggerCompaction(sessionId: string, reason: CompactionReason): Promise<CompactionDraft>;
 
   // Provider/profile management
+  resolveProviderRoute(opts?: {
+    profileId?: string;
+    role?: string;
+    lane?: LlmProviderExecutionLane;
+    policy?: LlmProfileCapabilityPolicy;
+  }): ResolveLlmRouteResult | null;
   getActiveProfile(lane?: LlmProviderExecutionLane): ResolveLlmRouteResult | null;
   setProfileConfig(config: LlmProfileConfig): void;
   updateLaneProfiles(lane: LlmProviderExecutionLane, profiles: string[]): void;
@@ -426,6 +437,28 @@ export function createKernel(opts: KernelOptions): Kernel {
     };
   };
 
+  const resolveProviderRoute = (opts?: {
+    profileId?: string;
+    role?: string;
+    lane?: LlmProviderExecutionLane;
+    policy?: LlmProfileCapabilityPolicy;
+  }): ResolveLlmRouteResult | null => {
+    if (!profileConfig) {
+      return null;
+    }
+
+    const lane = opts?.lane ?? "primary";
+    const requiredCapabilities = opts?.policy
+      ? getRequiredCapabilitiesForPolicy(opts.policy)
+      : getRequiredCapabilitiesForLane(lane);
+
+    return resolveLlmRoute(profileConfig, opts?.profileId, opts?.role ?? "worker", {
+      lane,
+      providerRegistry: providerRegistry ?? undefined,
+      requiredCapabilities,
+    });
+  };
+
   return {
     // Session
     createSession: (o) => sessions.createSession(o),
@@ -488,13 +521,9 @@ export function createKernel(opts: KernelOptions): Kernel {
     },
 
     // Provider/profile management
+    resolveProviderRoute,
     getActiveProfile: (lane: LlmProviderExecutionLane = "primary") =>
-      profileConfig
-        ? resolveLlmRoute(profileConfig, undefined, "worker", {
-            lane,
-            providerRegistry: providerRegistry ?? undefined,
-          })
-        : null,
+      resolveProviderRoute({ lane }),
     setProfileConfig(config) {
       profileConfig = config;
     },

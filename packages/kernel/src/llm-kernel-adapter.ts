@@ -1,9 +1,14 @@
 import type {
   KernelLlmAdapter,
+  LlmProfileCapabilityPolicy,
   LlmProfileConfig,
   LlmProviderExecutionLane,
 } from "@bbl-next/contracts";
-import { getRequiredCapabilitiesForLane, resolveLlmRoute } from "./llm-profile-resolver.js";
+import {
+  getRequiredCapabilitiesForLane,
+  getRequiredCapabilitiesForPolicy,
+  resolveLlmRoute,
+} from "./llm-profile-resolver.js";
 import type { LlmProviderRegistry } from "./llm-provider-registry.js";
 import { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
 
@@ -38,6 +43,7 @@ function withTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortS
 
 export interface CreateKernelLlmFromProviderOptions {
   lane?: LlmProviderExecutionLane;
+  policy?: LlmProfileCapabilityPolicy;
   role?: string;
 }
 
@@ -55,7 +61,9 @@ export function createKernelLlmFromProvider(
 ): KernelLlmAdapter {
   const lane = options.lane ?? "compaction";
   const role = options.role ?? "worker";
-  const requiredCapabilities = getRequiredCapabilitiesForLane(lane);
+  const requiredCapabilities = options.policy
+    ? getRequiredCapabilitiesForPolicy(options.policy)
+    : getRequiredCapabilitiesForLane(lane);
 
   return {
     async complete({ systemPrompt, messages, maxTokens, signal }) {

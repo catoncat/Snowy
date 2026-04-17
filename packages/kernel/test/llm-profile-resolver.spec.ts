@@ -1,7 +1,10 @@
 import type { LlmProfileConfig, LlmProviderAdapter } from "@bbl-next/contracts";
 import { LlmProviderRegistry, resolveLlmRoute } from "@bbl-next/kernel";
 import { describe, expect, it } from "vitest";
-import { getRequiredCapabilitiesForLane } from "../src/llm-profile-resolver.js";
+import {
+  getRequiredCapabilitiesForLane,
+  getRequiredCapabilitiesForPolicy,
+} from "../src/llm-profile-resolver.js";
 
 function makeConfig(overrides: Partial<LlmProfileConfig> = {}): LlmProfileConfig {
   return {
@@ -258,6 +261,14 @@ describe("resolveLlmRoute", () => {
     expect(getRequiredCapabilitiesForLane("primary")).toEqual(["chat.completions", "tool_calls"]);
     expect(getRequiredCapabilitiesForLane("compaction")).toEqual(["chat.completions"]);
     expect(getRequiredCapabilitiesForLane("title")).toEqual(["chat.completions"]);
+  });
+
+  it("declares reusable provider capability policies beyond lane names", () => {
+    expect(getRequiredCapabilitiesForPolicy("chat")).toEqual(["chat.completions"]);
+    expect(getRequiredCapabilitiesForPolicy("chat_with_tools")).toEqual([
+      "chat.completions",
+      "tool_calls",
+    ]);
   });
 
   it("uses auxProfile as the default root for compaction and title lanes", () => {

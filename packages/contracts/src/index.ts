@@ -1601,6 +1601,9 @@ export interface KernelLlmAdapter {
 export const LLM_PROVIDER_EXECUTION_LANES = ["primary", "compaction", "title"] as const;
 export type LlmProviderExecutionLane = (typeof LLM_PROVIDER_EXECUTION_LANES)[number];
 
+export const LLM_PROFILE_CAPABILITY_POLICIES = ["chat", "chat_with_tools"] as const;
+export type LlmProfileCapabilityPolicy = (typeof LLM_PROFILE_CAPABILITY_POLICIES)[number];
+
 export const LLM_PROFILE_ESCALATION_POLICIES = ["disabled", "upgrade_only"] as const;
 export type LlmProfileEscalationPolicy = (typeof LLM_PROFILE_ESCALATION_POLICIES)[number];
 

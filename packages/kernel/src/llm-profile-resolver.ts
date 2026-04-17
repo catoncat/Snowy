@@ -1,4 +1,5 @@
 import type {
+  LlmProfileCapabilityPolicy,
   LlmProfileConfig,
   LlmProfileDef,
   LlmProviderExecutionLane,
@@ -16,8 +17,10 @@ const MIN_RETRY = 0;
 const MAX_RETRY = 6;
 
 const DEFAULT_MAX_RETRY_DELAY_MS = 4_000;
-const PRIMARY_LANE_REQUIRED_CAPABILITIES = ["chat.completions", "tool_calls"] as const;
-const AUXILIARY_LANE_REQUIRED_CAPABILITIES = ["chat.completions"] as const;
+const POLICY_REQUIRED_CAPABILITIES: Record<LlmProfileCapabilityPolicy, readonly string[]> = {
+  chat: ["chat.completions"],
+  chat_with_tools: ["chat.completions", "tool_calls"],
+};
 
 export interface ResolveLlmRouteOptions {
   lane?: LlmProviderExecutionLane;
@@ -42,11 +45,15 @@ function normalizeProfileChain(values: Array<string | undefined>): string[] {
 export function getRequiredCapabilitiesForLane(lane: LlmProviderExecutionLane): string[] {
   switch (lane) {
     case "primary":
-      return [...PRIMARY_LANE_REQUIRED_CAPABILITIES];
+      return getRequiredCapabilitiesForPolicy("chat_with_tools");
     case "compaction":
     case "title":
-      return [...AUXILIARY_LANE_REQUIRED_CAPABILITIES];
+      return getRequiredCapabilitiesForPolicy("chat");
   }
+}
+
+export function getRequiredCapabilitiesForPolicy(policy: LlmProfileCapabilityPolicy): string[] {
+  return [...POLICY_REQUIRED_CAPABILITIES[policy]];
 }
 
 function buildLaneBaseProfiles(config: LlmProfileConfig, lane: LlmProviderExecutionLane): string[] {

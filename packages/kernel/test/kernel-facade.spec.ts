@@ -2,6 +2,7 @@ import type {
   CapabilityDescriptor,
   KernelLlmAdapter,
   LlmProfileConfig,
+  LlmProviderAdapter,
   ResolveLlmRouteResult,
 } from "@bbl-next/contracts";
 import {
@@ -35,6 +36,14 @@ function createDescriptor(id: string): CapabilityDescriptor {
       family: "test",
       operation,
     },
+  };
+}
+
+function stubProvider(id: string): LlmProviderAdapter {
+  return {
+    id,
+    resolveRequestUrl: () => `https://stub/${id}`,
+    send: async () => new Response("ok"),
   };
 }
 
@@ -790,6 +799,71 @@ describe("KernelFacade (createKernel)", () => {
       expect(primary.route.profile).toBe("default");
       expect(compaction.route.profile).toBe("summary");
       expect(compaction.route.orderedProfiles).toEqual(["summary", "fallback"]);
+    });
+
+    it("exposes policy-driven route resolution for non-kernel callers while preserving lane fallback order", () => {
+      const providerRegistry = new LlmProviderRegistry();
+      providerRegistry.register(stubProvider("summary_provider"), {
+        healthStatus: "healthy",
+        capabilities: ["chat.completions"],
+      });
+      providerRegistry.register(stubProvider("fallback_provider"), {
+        healthStatus: "healthy",
+        capabilities: ["chat.completions", "tool_calls"],
+      });
+
+      const wiredKernel = createKernelWithFacadeOptions({
+        storage: new InMemorySessionStorage(),
+        llm: createMockLlm(),
+        providerRegistry,
+        profileConfig: {
+          defaultProfile: "default",
+          auxProfile: "summary",
+          fallbackProfile: "fallback",
+          profiles: [
+            {
+              id: "default",
+              providerId: "fallback_provider",
+              llmBase: "https://llm.example.com",
+              llmKey: "test-key",
+              llmModel: "gpt-4.1",
+            },
+            {
+              id: "summary",
+              providerId: "summary_provider",
+              llmBase: "https://summary.example.com",
+              llmKey: "summary-key",
+              llmModel: "gpt-4.1-mini",
+            },
+            {
+              id: "fallback",
+              providerId: "fallback_provider",
+              llmBase: "https://llm.example.com",
+              llmKey: "test-key",
+              llmModel: "gpt-4.1",
+            },
+          ],
+        },
+      });
+
+      const resolved = callKernelMethod<
+        [{ lane: "title"; policy: "chat_with_tools"; role: "planner" }],
+        ResolveLlmRouteResult | null
+      >(wiredKernel, "resolveProviderRoute", {
+        lane: "title",
+        policy: "chat_with_tools",
+        role: "planner",
+      });
+
+      expect(resolved).not.toBeNull();
+      expect(resolved?.ok).toBe(true);
+      if (!resolved || !resolved.ok) {
+        throw new Error("expected a resolved provider route");
+      }
+      expect(resolved.route.profile).toBe("fallback");
+      expect(resolved.route.provider).toBe("fallback_provider");
+      expect(resolved.route.role).toBe("planner");
+      expect(resolved.route.orderedProfiles).toEqual(["summary", "fallback"]);
     });
   });
 });
