@@ -1,25 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-17T13:22:27.634Z",
+  "generated_at": "2026-04-17T13:33:30.666Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
-    {
-      "issue_id": "ISSUE-158",
-      "issue_path": "docs/backlog/2026-04-17-intervention-module-status-and-cutover-docs-are-stale-after-page-action-handoff-.md",
-      "title": "Review: intervention module status and cutover docs are stale after page-action handoff closure",
-      "parallel_group": "site-runtime",
-      "module_id": "intervention-handoff",
-      "module_stage": "mainline",
-      "tracking_kind": "doc-debt",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "docs/cutover-readiness-criteria.md",
-        "docs/migration-parity-dashboard.md",
-        "docs/legacy-to-vnext-migration-matrix.md",
-        "docs/module-tracking-ledger.json"
-      ]
-    },
     {
       "issue_id": "ISSUE-159",
       "issue_path": "docs/backlog/2026-04-17-provider-routing-still-lacks-a-shared-control-plane-update-surface.md",
@@ -34,6 +17,23 @@
         "packages/contracts/src/index.ts",
         "packages/core/src/index.ts",
         "docs/ai-surface-index.md"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-161",
+      "issue_path": "docs/backlog/2026-04-17-browser-automation-cutover-docs-are-stale-after-page-action-handoff-closure.md",
+      "title": "Review: browser automation cutover docs are stale after page-action handoff closure",
+      "parallel_group": "site-runtime",
+      "module_id": "site-runtime-browser-automation",
+      "module_stage": "secondary",
+      "tracking_kind": "doc-debt",
+      "check_cmd": "bun run check",
+      "depends_on": ["ISSUE-158"],
+      "write_scope": [
+        "docs/cutover-readiness-criteria.md",
+        "docs/migration-parity-dashboard.md",
+        "docs/browser-automation-cutover-boundary.md",
+        "docs/module-tracking-ledger.json"
       ]
     },
     {
