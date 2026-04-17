@@ -897,7 +897,17 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
           patch: {
             type: "object",
             properties: {
-              model: { type: "object" },
+              model: {
+                type: "object",
+                description:
+                  "Minimal shared provider/profile routing surface. Richer profile overrides remain deferred to dedicated follow-up slices.",
+                properties: {
+                  provider: { type: "string" },
+                  model: { type: "string" },
+                  baseUrl: { type: "string" },
+                },
+                additionalProperties: true,
+              },
               automation: { type: "object" },
               permissions: { type: "object" },
               preferences: { type: "object" },

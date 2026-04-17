@@ -112,6 +112,9 @@
 - `observability.replay` 负责把 loop telemetry、control-plane audit、intervention lifecycle 与 compaction continuity marker 按时间顺序 stitch 成统一 replay 文档
 - `audit.host` 仅保留为 host-only compatibility alias
 - 当前 registry 仍是轻量 contract 层，不引入新的 descriptor family
+- provider/profile routing 当前不新增独立 `providers.*` namespace；最小 northbound shared surface 复用 `config.summary.values.model` 与 `config.update.patch.model`
+- 当前 contracts/core 明确保证的 provider routing key 只有 `model.provider`、`model.model`、`model.baseUrl`
+- 更深的 routing override（如 profile 列表、default/fallback profile、lane-specific override）仍属于 follow-up `ISSUE-163`，当前不应回退成 app-local settings glue
 
 ## 5. Audience 原则
 

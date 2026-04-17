@@ -13,6 +13,7 @@ import {
   CONFIG_AUDIT_KINDS,
   CONFIG_AUDIT_STATUSES,
   CONFIG_CONTROL_PLANE_ACTIONS,
+  CONFIG_MODEL_PROVIDER_ROUTING_FIELDS,
   CONTROL_PLANE_AUDIT_KINDS,
   CONTROL_PLANE_AUDIT_STATUSES,
   type CapabilityDescriptor,
@@ -741,6 +742,10 @@ describe("contracts", () => {
 
   it("locks the minimal config control plane action set", () => {
     expect(CONFIG_CONTROL_PLANE_ACTIONS).toEqual(["config.update"]);
+  });
+
+  it("locks the minimal shared provider routing model fields", () => {
+    expect(CONFIG_MODEL_PROVIDER_ROUTING_FIELDS).toEqual(["provider", "model", "baseUrl"]);
   });
 
   it("locks the minimal runtime control plane action set", () => {

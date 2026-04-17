@@ -126,6 +126,13 @@ export const CONFIG_RESOURCE_FIELDS = [
   "preferences",
 ] as const;
 export type ConfigResourceField = (typeof CONFIG_RESOURCE_FIELDS)[number];
+export const CONFIG_MODEL_PROVIDER_ROUTING_FIELDS = ["provider", "model", "baseUrl"] as const;
+export type ConfigModelProviderRoutingField = (typeof CONFIG_MODEL_PROVIDER_ROUTING_FIELDS)[number];
+export interface ConfigModelProviderRoutingSurface {
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+}
 export const CONFIG_CONTROL_PLANE_ACTIONS = ["config.update"] as const;
 export type ConfigControlPlaneAction = (typeof CONFIG_CONTROL_PLANE_ACTIONS)[number];
 export const SKILL_CONTROL_PLANE_ACTIONS = [

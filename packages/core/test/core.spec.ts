@@ -1,6 +1,7 @@
 import {
   AI_SURFACE_RESOURCE_IDS,
   CONFIG_CONTROL_PLANE_ACTIONS,
+  CONFIG_MODEL_PROVIDER_ROUTING_FIELDS,
   type CapabilityDescriptor,
   CapabilityError,
   type ConfigBootstrapSummary,
@@ -104,8 +105,24 @@ describe("core", () => {
       {
         id: "config.update",
         sideEffects: "writes",
+        inputSchema: {
+          properties: {
+            patch: {
+              properties: {
+                model: {
+                  properties: {
+                    provider: { type: "string" },
+                    model: { type: "string" },
+                    baseUrl: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     ]);
+    expect(CONFIG_MODEL_PROVIDER_ROUTING_FIELDS).toEqual(["provider", "model", "baseUrl"]);
   });
 
   it("keeps runtime control-plane actions aligned with canonical contracts", () => {
