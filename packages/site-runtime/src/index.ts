@@ -201,6 +201,7 @@ const DEFAULT_SITE_STABILIZATION_POLICY: Required<SiteActionStabilizationPolicy>
   intervalMs: 100,
   maxAttempts: 5,
 };
+const PAGE_ACTION_HANDOFF_ACTIONS = new Set(["query", "click", "fill"]);
 
 export function buildInjectionPlan(skillId: string, action: SiteSkillAction): InjectionPlan {
   if (action.injectionSteps && action.injectionSteps.length > 0) {
@@ -261,6 +262,23 @@ function buildInterventionRequest(input: {
       ...(input.policy.payload ?? {}),
       ...(input.payload ?? {}),
     },
+  };
+}
+
+function buildImplicitPageActionInterventionPolicy(input: {
+  skillId: string;
+  action: string;
+  trigger: Extract<InterventionTrigger, "verify_failed" | "runtime_blocked">;
+}): SiteActionInterventionPolicy | null {
+  if (input.skillId !== "bbl.page" || !PAGE_ACTION_HANDOFF_ACTIONS.has(input.action)) {
+    return null;
+  }
+
+  return {
+    kind: "takeover",
+    trigger: input.trigger,
+    title: "Page action needs human handoff",
+    message: `Finish the page.${input.action} step manually before continuing.`,
   };
 }
 
@@ -605,7 +623,13 @@ export class SiteSkillRuntime {
       payload?: Record<string, unknown>,
       result: unknown = null,
     ): SiteInvocationIntervention | null => {
-      const policy = action.intervention;
+      const policy =
+        action.intervention ??
+        buildImplicitPageActionInterventionPolicy({
+          skillId: request.skillId,
+          action: request.action,
+          trigger,
+        });
       if (!policy || (policy.trigger ?? "verify_failed") !== trigger) {
         return null;
       }

@@ -2147,6 +2147,165 @@ describe("site-runtime", () => {
       );
     });
 
+    it("implicitly converts page.query verify failures into takeover handoff requests", async () => {
+      const result = await invokeSingleActionSiteSkill({
+        request: {
+          skillId: "bbl.page",
+          action: "query",
+          tab: { tabId: 8, url: "https://fixture.test/query", active: true },
+          input: {
+            selector: "#missing",
+          },
+          plan: {
+            skillId: "bbl.page",
+            action: "query",
+            steps: [],
+          },
+          module: {
+            id: "bbl.page.query",
+            source: "exports.default = async ({ input }) => ({ selector: input.selector });",
+          },
+          verifier: "page_query",
+        },
+        runnerHost: new JsRunnerHost(),
+        verifier: {
+          verify: async () => false,
+        },
+      });
+
+      expect(result).toMatchObject({
+        verified: false,
+        result: {
+          selector: "#missing",
+        },
+        intervention: {
+          kind: "takeover",
+          trigger: "verify_failed",
+          skillId: "bbl.page",
+          action: "query",
+          tabId: 8,
+          payload: {
+            tabUrl: "https://fixture.test/query",
+            verifier: "page_query",
+            result: {
+              selector: "#missing",
+            },
+          },
+        },
+        trace: [
+          "match:bbl.page",
+          "invoke:query",
+          "verify:page_query",
+          "intervention:takeover:verify_failed",
+        ],
+      });
+    });
+
+    it("implicitly converts page.click verify failures into takeover handoff requests", async () => {
+      const result = await invokeSingleActionSiteSkill({
+        request: {
+          skillId: "bbl.page",
+          action: "click",
+          tab: { tabId: 9, url: "https://fixture.test/click", active: true },
+          input: {
+            uid: "missing-button",
+          },
+          plan: {
+            skillId: "bbl.page",
+            action: "click",
+            steps: [],
+          },
+          module: {
+            id: "bbl.page.click",
+            source: "exports.default = async ({ input }) => ({ uid: input.uid });",
+          },
+          verifier: "page_click",
+        },
+        runnerHost: new JsRunnerHost(),
+        verifier: {
+          verify: async () => false,
+        },
+      });
+
+      expect(result).toMatchObject({
+        verified: false,
+        result: {
+          uid: "missing-button",
+        },
+        intervention: {
+          kind: "takeover",
+          trigger: "verify_failed",
+          skillId: "bbl.page",
+          action: "click",
+          tabId: 9,
+          payload: {
+            tabUrl: "https://fixture.test/click",
+            verifier: "page_click",
+            result: {
+              uid: "missing-button",
+            },
+          },
+        },
+        trace: [
+          "match:bbl.page",
+          "invoke:click",
+          "verify:page_click",
+          "intervention:takeover:verify_failed",
+        ],
+      });
+    });
+
+    it("implicitly converts page.fill runtime failures into takeover handoff requests", async () => {
+      const result = await invokeSingleActionSiteSkill({
+        request: {
+          skillId: "bbl.page",
+          action: "fill",
+          tab: { tabId: 10, url: "https://fixture.test/fill", active: true },
+          input: {
+            uid: "email-input",
+            value: "demo@example.com",
+          },
+          plan: {
+            skillId: "bbl.page",
+            action: "fill",
+            steps: [],
+          },
+          module: {
+            id: "bbl.page.fill",
+            source: "exports.default = async () => ({ ok: true });",
+          },
+          executeRunner: async () => {
+            throw new Error("input disappeared");
+          },
+        },
+        runnerHost: new JsRunnerHost(),
+      });
+
+      expect(result).toMatchObject({
+        verified: false,
+        result: null,
+        intervention: {
+          kind: "takeover",
+          trigger: "runtime_blocked",
+          skillId: "bbl.page",
+          action: "fill",
+          tabId: 10,
+          payload: {
+            tabUrl: "https://fixture.test/fill",
+            input: {
+              uid: "email-input",
+              value: "demo@example.com",
+            },
+            error: {
+              name: "Error",
+              message: "input disappeared",
+            },
+          },
+        },
+        trace: ["match:bbl.page", "intervention:takeover:runtime_blocked"],
+      });
+    });
+
     it("runner does not trigger install or verify when they are absent", async () => {
       const registry = new SiteSkillRegistry([
         {
