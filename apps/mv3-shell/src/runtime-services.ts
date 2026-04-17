@@ -36,6 +36,8 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+const LLM_PROVIDER_ROUTING_LANES = ["primary", "compaction", "title"];
+
 async function resolveMaybe(value) {
   if (typeof value === "function") {
     return value();
@@ -1290,6 +1292,14 @@ function cloneLlmProfileConfig(config) {
   }
   return {
     ...config,
+    laneProfiles: isPlainObject(config.laneProfiles)
+      ? Object.fromEntries(
+          Object.entries(config.laneProfiles).map(([lane, profiles]) => [
+            lane,
+            Array.isArray(profiles) ? [...profiles] : [],
+          ]),
+        )
+      : undefined,
     profiles: Array.isArray(config.profiles)
       ? config.profiles.map((profile) => ({ ...profile }))
       : [],
@@ -1423,6 +1433,42 @@ function createEmptyLlmProfileConfig() {
   };
 }
 
+function normalizeRoutingLaneProfiles(laneProfiles, { includeEmpty = false } = {}) {
+  if (!isPlainObject(laneProfiles)) {
+    return {};
+  }
+
+  const normalized = {};
+  for (const lane of LLM_PROVIDER_ROUTING_LANES) {
+    if (!Object.prototype.hasOwnProperty.call(laneProfiles, lane)) {
+      continue;
+    }
+    const profiles = laneProfiles[lane];
+    if (!Array.isArray(profiles)) {
+      continue;
+    }
+    const values = [
+      ...new Set(profiles.map((value) => String(value || "").trim()).filter(Boolean)),
+    ];
+    if (includeEmpty || values.length > 0) {
+      normalized[lane] = values;
+    }
+  }
+  return normalized;
+}
+
+function laneProfilesEqual(left, right) {
+  const lanes = [...new Set([...Object.keys(left ?? {}), ...Object.keys(right ?? {})])];
+  return lanes.every((lane) => {
+    const leftProfiles = Array.isArray(left?.[lane]) ? left[lane] : [];
+    const rightProfiles = Array.isArray(right?.[lane]) ? right[lane] : [];
+    return (
+      leftProfiles.length === rightProfiles.length &&
+      leftProfiles.every((profile, index) => profile === rightProfiles[index])
+    );
+  });
+}
+
 function buildConfigModelValues(profileConfig) {
   const normalized = cloneLlmProfileConfig(profileConfig);
   if (!normalized || !Array.isArray(normalized.profiles) || normalized.profiles.length === 0) {
@@ -1446,6 +1492,16 @@ function buildConfigModelValues(profileConfig) {
   if (typeof activeProfile.llmModel === "string" && activeProfile.llmModel.trim()) {
     model.model = activeProfile.llmModel.trim();
   }
+  model.routing = {
+    defaultProfile:
+      typeof normalized.defaultProfile === "string" && normalized.defaultProfile.trim()
+        ? normalized.defaultProfile.trim()
+        : activeProfile.id,
+    ...(typeof normalized.fallbackProfile === "string" && normalized.fallbackProfile.trim()
+      ? { fallbackProfile: normalized.fallbackProfile.trim() }
+      : {}),
+    laneProfiles: normalizeRoutingLaneProfiles(normalized.laneProfiles, { includeEmpty: true }),
+  };
 
   return Object.keys(model).length > 0 ? model : undefined;
 }
@@ -1534,6 +1590,50 @@ function applyConfigModelPatchToProfileConfig(currentConfig, modelPatch) {
     changed = true;
   }
 
+  const routingPatch = isPlainObject(modelPatch.routing) ? modelPatch.routing : null;
+  if (routingPatch) {
+    if (typeof routingPatch.defaultProfile === "string" && routingPatch.defaultProfile.trim()) {
+      const defaultProfile = routingPatch.defaultProfile.trim();
+      if (next.defaultProfile !== defaultProfile) {
+        next.defaultProfile = defaultProfile;
+        changed = true;
+      }
+    }
+    if (typeof routingPatch.fallbackProfile === "string" && routingPatch.fallbackProfile.trim()) {
+      const fallbackProfile = routingPatch.fallbackProfile.trim();
+      if (next.fallbackProfile !== fallbackProfile) {
+        next.fallbackProfile = fallbackProfile;
+        changed = true;
+      }
+    }
+    if (isPlainObject(routingPatch.laneProfiles)) {
+      const currentLaneProfiles = normalizeRoutingLaneProfiles(next.laneProfiles, {
+        includeEmpty: true,
+      });
+      const nextLaneProfiles = { ...currentLaneProfiles };
+      const normalizedPatchLaneProfiles = normalizeRoutingLaneProfiles(routingPatch.laneProfiles, {
+        includeEmpty: true,
+      });
+
+      for (const lane of LLM_PROVIDER_ROUTING_LANES) {
+        if (!Object.prototype.hasOwnProperty.call(routingPatch.laneProfiles, lane)) {
+          continue;
+        }
+        const laneProfiles = normalizedPatchLaneProfiles[lane] ?? [];
+        if (laneProfiles.length > 0) {
+          nextLaneProfiles[lane] = laneProfiles;
+        } else {
+          delete nextLaneProfiles[lane];
+        }
+      }
+
+      if (!laneProfilesEqual(currentLaneProfiles, nextLaneProfiles)) {
+        next.laneProfiles = Object.keys(nextLaneProfiles).length > 0 ? nextLaneProfiles : undefined;
+        changed = true;
+      }
+    }
+  }
+
   return changed ? next : null;
 }
 
@@ -1558,6 +1658,27 @@ async function persistConfigSummaryFromProfileConfig(chromeApi, profileConfig) {
     },
   };
   return saveConfigControlPlaneSummary(chromeApi, next);
+}
+
+async function loadManagedProfileConfig({
+  chromeApi,
+  initialProfileConfig,
+}: {
+  chromeApi: typeof globalThis.chrome;
+  initialProfileConfig?: LlmProfileConfig;
+}): Promise<LlmProfileConfig | null> {
+  const current =
+    cloneLlmProfileConfig(initialProfileConfig) ?? (await loadLlmProfileConfig(chromeApi));
+  const persistedSummary = await loadConfigControlPlaneSummary(chromeApi);
+  const modelPatch = isPlainObject(persistedSummary?.values?.model)
+    ? persistedSummary.values.model
+    : undefined;
+  const updated = applyConfigModelPatchToProfileConfig(current, modelPatch);
+  if (!updated) {
+    return cloneLlmProfileConfig(current);
+  }
+  await saveLlmProfileConfig(chromeApi, updated);
+  return updated;
 }
 
 export function createBackgroundRuntimeServices({
@@ -1665,9 +1786,10 @@ export function createBackgroundRuntimeServices({
         });
         const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
         const providers = new FamilyProviderRegistry();
-        const managedProfileConfig: LlmProfileConfig | null = cloneLlmProfileConfig(
-          profileConfig ?? (await loadLlmProfileConfig(chromeApi)),
-        );
+        const managedProfileConfig: LlmProfileConfig | null = await loadManagedProfileConfig({
+          chromeApi,
+          initialProfileConfig: profileConfig,
+        });
         const configControlPlane = createConfigControlPlane({
           summary: async () =>
             buildConfigControlPlaneSummary({

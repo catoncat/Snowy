@@ -858,6 +858,206 @@ describe("mv3-shell end-to-end loop integration", () => {
     });
   });
 
+  it("applies shared model.routing overrides to the active kernel route without explicit per-call overrides", async () => {
+    const storedData: Record<string, unknown> = {};
+    const createStorageArea = () => ({
+      get: vi.fn(async (keys) => {
+        const result: Record<string, unknown> = {};
+        for (const key of Array.isArray(keys) ? keys : [keys]) {
+          if (storedData[key]) {
+            result[key] = storedData[key];
+          }
+        }
+        return result;
+      }),
+      set: vi.fn(async (items) => {
+        Object.assign(storedData, items);
+      }),
+    });
+
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      profileConfig: {
+        profiles: [
+          {
+            id: "default",
+            providerId: "openai_compatible",
+            llmBase: "https://api.openai.com/v1",
+            llmKey: "sk-default",
+            llmModel: "gpt-4.1",
+          },
+          {
+            id: "fallback",
+            providerId: "openai_compatible",
+            llmBase: "https://api.openai.com/v1",
+            llmKey: "sk-fallback",
+            llmModel: "gpt-4.1-mini",
+          },
+        ],
+        defaultProfile: "default",
+      },
+      chromeApi: {
+        ...createFixtureChromeApi(),
+        storage: {
+          local: createStorageArea(),
+        },
+      },
+    });
+
+    await expect(
+      services.dispatchCapability({
+        capabilityId: "config.update",
+        input: {
+          patch: {
+            model: {
+              routing: {
+                defaultProfile: "fallback",
+                fallbackProfile: "default",
+                laneProfiles: {
+                  primary: ["fallback"],
+                  compaction: ["default"],
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      config: {
+        values: {
+          model: {
+            routing: {
+              defaultProfile: "fallback",
+              fallbackProfile: "default",
+              laneProfiles: {
+                primary: ["fallback"],
+                compaction: ["default"],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const runtimeState = await services.getKernelRuntimeState();
+    expect(runtimeState.activeProfile).toMatchObject({
+      ok: true,
+      route: expect.objectContaining({
+        profile: "fallback",
+        orderedProfiles: ["fallback"],
+      }),
+    });
+
+    const { kernel } = await services.ensureServices();
+    expect(kernel.resolveProviderRoute({ lane: "compaction" })).toMatchObject({
+      ok: true,
+      route: expect.objectContaining({
+        profile: "default",
+        orderedProfiles: ["default"],
+      }),
+    });
+  });
+
+  it("rehydrates shared model.routing overrides from config.summary into runtime-owned profile config after restart", async () => {
+    const storedData: Record<string, unknown> = {
+      "bbl-next.llm.config.v1": {
+        profiles: [
+          {
+            id: "default",
+            providerId: "openai_compatible",
+            llmBase: "https://api.openai.com/v1",
+            llmKey: "sk-default",
+            llmModel: "gpt-4.1",
+          },
+          {
+            id: "fallback",
+            providerId: "openai_compatible",
+            llmBase: "https://api.openai.com/v1",
+            llmKey: "sk-fallback",
+            llmModel: "gpt-4.1-mini",
+          },
+        ],
+        defaultProfile: "default",
+      },
+      "bbl-next.config.control-plane.v1": {
+        status: "ready",
+        fields: ["model", "automation", "permissions", "preferences"],
+        values: {
+          model: {
+            routing: {
+              defaultProfile: "fallback",
+              fallbackProfile: "default",
+              laneProfiles: {
+                primary: ["fallback"],
+                compaction: ["default"],
+              },
+            },
+          },
+        },
+        note: null,
+        updatedAt: "2026-04-17T10:00:00.000Z",
+      },
+    };
+    const createStorageArea = () => ({
+      get: vi.fn(async (keys) => {
+        const result: Record<string, unknown> = {};
+        for (const key of Array.isArray(keys) ? keys : [keys]) {
+          if (storedData[key]) {
+            result[key] = storedData[key];
+          }
+        }
+        return result;
+      }),
+      set: vi.fn(async (items) => {
+        Object.assign(storedData, items);
+      }),
+    });
+
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        ...createFixtureChromeApi(),
+        storage: {
+          local: createStorageArea(),
+        },
+      },
+    });
+
+    await expect(services.getConfigBootstrapSummary()).resolves.toMatchObject({
+      status: "ready",
+      values: {
+        model: {
+          routing: {
+            defaultProfile: "fallback",
+            fallbackProfile: "default",
+            laneProfiles: {
+              primary: ["fallback"],
+              compaction: ["default"],
+            },
+          },
+        },
+      },
+    });
+
+    const runtimeState = await services.getKernelRuntimeState();
+    expect(runtimeState.activeProfile).toMatchObject({
+      ok: true,
+      route: expect.objectContaining({
+        profile: "fallback",
+        orderedProfiles: ["fallback"],
+      }),
+    });
+
+    const { kernel } = await services.ensureServices();
+    expect(kernel.resolveProviderRoute({ lane: "compaction" })).toMatchObject({
+      ok: true,
+      route: expect.objectContaining({
+        profile: "default",
+        orderedProfiles: ["default"],
+      }),
+    });
+  });
+
   it("updateLlmConfig stores and updates kernel-managed profile state without resetting services", async () => {
     const storedData: Record<string, unknown> = {};
     const initialProfileConfig: LlmProfileConfig = {
