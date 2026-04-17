@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-16T05:36:21.415Z",
+  "generated_at": "2026-04-17T09:23:43.306Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
@@ -36,42 +36,6 @@
         "packages/core/src/index.ts",
         "packages/site-runtime/src/index.ts",
         "packages/site-runtime/test"
-      ]
-    },
-    {
-      "issue_id": "ISSUE-154",
-      "issue_path": "docs/backlog/2026-04-16-page-query-click-fill-production-path-is-still-not-closed.md",
-      "title": "Review: page.query/click/fill production path is still not closed",
-      "parallel_group": "site-runtime",
-      "module_id": "site-runtime-browser-automation",
-      "module_stage": "secondary",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/site-runtime/src/index.ts",
-        "packages/site-runtime/test/site-runtime.spec.ts",
-        "apps/mv3-shell/src/background.ts",
-        "apps/mv3-shell/src/page-hook.ts",
-        "apps/mv3-shell/test/manifest.spec.ts"
-      ]
-    },
-    {
-      "issue_id": "ISSUE-155",
-      "issue_path": "docs/backlog/2026-04-16-execution-host-control-plane-still-lacks-multi-remote-host-records.md",
-      "title": "Review: execution host control plane still lacks multi-remote host records",
-      "parallel_group": "js-runner",
-      "module_id": "execution-host-bridge",
-      "module_stage": "secondary",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "packages/js-runner/src/index.ts",
-        "apps/mv3-shell/src/offscreen.ts",
-        "apps/mv3-shell/src/background.ts",
-        "apps/mv3-shell/src/runtime-services.ts",
-        "apps/mv3-shell/test/manifest.spec.ts"
       ]
     }
   ]

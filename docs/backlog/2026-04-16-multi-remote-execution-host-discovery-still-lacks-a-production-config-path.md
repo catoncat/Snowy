@@ -1,11 +1,11 @@
 ---
 id: ISSUE-157
 title: "Review: multi-remote execution host discovery still lacks a production config path"
-status: open
+status: done
 priority: p1
 source: "ISSUE-155 follow-up 2026-04-16"
 created: 2026-04-16
-assignee: unassigned
+assignee: sable
 tags:
   - review
   - execution-host
@@ -27,6 +27,7 @@ write_scope:
   - docs/legacy-to-vnext-migration-matrix.md
 acceptance_ref: docs/migration-parity-dashboard.md
 check_cmd: "bun run check"
+completed_at: 2026-04-17T09:23:43.294Z
 ---
 
 ## Goal
@@ -44,3 +45,21 @@ check_cmd: "bun run check"
 - shared config / storage 能表达多个 remote host transport record，并为每条 record 保留稳定 `hostId`
 - background bridge 重启后可从配置中恢复多条 remote host record，`hosts.list/get/set_default` 保持一致
 - config summary 继续做 secret sanitization，并补齐 multi-remote config / rehydrate 测试
+
+## 工作总结
+
+### 实现了什么
+- 将 automation.remoteTransports[] 接入 config.update/config.summary 与独立 storage 持久化
+- 补齐 multi-remote host 的 restart rehydrate 与 manifest 回归测试
+
+### 实际跑了什么检查
+- bunx vitest run apps/mv3-shell/test/manifest.spec.ts
+- ./node_modules/.bin/biome check apps/mv3-shell/src/runtime-services.ts apps/mv3-shell/test/manifest.spec.ts docs/legacy-to-vnext-migration-matrix.md docs/migration-parity-dashboard.md
+- git diff --check
+
+### 残留风险
+- bun run check 仍被 write scope 外 packages/core/test/core.spec.ts:649/656/660/662 的既有类型错误阻塞
+
+## 相关 commits
+
+- `74a5a70fe81f` feat(mv3-shell): 支持多远端主机配置恢复
