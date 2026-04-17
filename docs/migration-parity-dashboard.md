@@ -19,7 +19,7 @@
 | BrowserVFS public skill URI parity | `green` | canonical `mem://skills/...` round-trip 已测 |
 | JS Runner host | `green` | host / cancel / timeout / health / offscreen bridge 已测 |
 | MV3 shell substrate | `green` | offscreen bridge 与显式 page-hook bridge 已测 |
-| local execution host adapter | `yellow` | 默认 offscreen local adapter 已实现 read/write/edit（ISSUE-038）；remote exec path、single/multi remote host record、production config 与 restart rehydrate 已落地，但 local exec 与更广 execution-host cutover 仍未完成 |
+| local execution host adapter | `yellow` | 默认 offscreen local adapter 的真实边界已明确：browser-only local host 负责 `host.read/write/edit` 与 offscreen diagnostics，true exec parity 由 remote host path 承担。当前 `yellow` 的更窄原因已不再是“local adapter 还缺一条 shell exec”，而是 control-plane 仍无法一等表达 host 的操作能力边界与 exec-capable default routing；`hosts.summary` 只能暴露 kind/state/default/health，operator 仍要到 `host.exec` 命中 `operation_not_supported` 后才知道 local host 是 file-only（见 `ISSUE-165`） |
 | site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
 | kernel session/run/compaction baseline | `green` | `SessionStore` / `RunController` / `LoopEngine` / `CompactionManager` / `createKernel()` / `runLoop()` / child-run seam 与 prompt context message wiring 已落地并有测试；剩余问题已转入 provider policy / observability 等相邻模块 |
 | AI-native product control plane | `yellow` | 最小 `runtime/config/skills/hosts` bootstrap summary、轻量 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail` resource contract、`readAiSurfaceResource()` / MV3 `resource.read` 统一 lookup、`runtime.capture_diagnostics` / `runtime.clear_error`、本地 `hosts.*` / `config.update` / `skills.install/enable/disable/uninstall` 与统一 `audit.tail` read path 已落地并有测试；`ISSUE-085` 已补 sidepanel chat shell，`ISSUE-093` 已补齐 shared control-plane management consumer；完整 Skill Studio / lifecycle UI 仍是 cutover 后项 |
@@ -29,7 +29,7 @@
 | plugin -> executable skill migration | `yellow` | 方向明确，但还不是可替代旧 plugin 生态的状态 |
 | Skill Studio / lifecycle product surface | `red` | 生命周期模型有，产品 UI 没有；Soft Gate 1 已裁决为 cutover 后补；`ISSUE-093` 已完成 shared control-plane management consumer |
 | provider / profile routing | `yellow` | `packages/kernel` 已有 provider health negotiation、lane-aware routing、ordered profile chain、retry escalation，以及 `primary / compaction / title` 的 runtime-owned baseline capability requirements；剩余 gap 是更细的 capability taxonomy、非 kernel 调用点 rollout 与更广 provider policy hardening |
-| diagnostics / debug / audit | `yellow` | `runtime.capture_diagnostics` / `runtime.history` / `audit.tail` / `audit.intervention` / error lifecycle / provider routing diagnostics 已落地，满足 Gate F；更广 export surface（timeline / summary / rawEventTail）已显式延迟至依赖模块就绪后（详见 `docs/module-tracking-ledger.json` observability-audit 条目） |
+| diagnostics / debug / audit | `yellow` | `runtime.capture_diagnostics` / `runtime.history` / `audit.tail` / `audit.intervention` / `observability.replay` / error lifecycle / provider routing diagnostics 已落地，满足 Gate F；`ISSUE-143` 已补齐 timeline / summary / rawEventTail 的 contract/builder。当前剩余主线缺口已收窄为 `ISSUE-166` 的 shared MV3 projection，而 bulk debug dump/export 与更广 future event breadth 继续 deferred（详见 `docs/module-tracking-ledger.json` observability-audit 条目） |
 | bridge-side MCP export | `yellow` | descriptor-derived handoff contract 已落地并有测试；真正 bridge-side MCP server/transport 仍未实现 |
 
 ## Current Gate View
