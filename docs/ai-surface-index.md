@@ -100,16 +100,20 @@
 - `audit.tail`
 - `audit.intervention`
 - `observability.replay`
+- `observability.timeline`
+- `observability.summary`
+- `observability.rawEventTail`
 
 当前口径：
 
 - `packages/contracts` 现提供 `AI_SURFACE_RESOURCE_METADATA_REGISTRY`、`getAiSurfaceResourceMetadata()`、`listAiSurfaceResourcesForAudience()`
 - metadata registry 已覆盖当前全部 resource id，并显式锁定 `audiences` / `projections` / `readOwner` / `bootstrapKey`
-- `packages/core` 继续提供 `readAiSurfaceResource()` lookup path；`apps/mv3-shell` 继续通过统一 `resource.read` bridge 暴露 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail/audit.intervention/observability.replay`
+- `packages/core` 继续提供 `readAiSurfaceResource()` lookup path；`apps/mv3-shell` 继续通过统一 `resource.read` bridge 暴露 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail/audit.intervention/observability.replay/observability.timeline/observability.summary/observability.rawEventTail`
 - `runtime.bootstrap` 继续保留为 bootstrap bundle compatibility read path
 - `audit.tail` 仍是当前 control-plane audit 主资源，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall`
 - `runtime.summary` 现已包含 typed `interventions` summary；`audit.intervention` 是 intervention lifecycle 的 shared audit read path
 - `observability.replay` 负责把 loop telemetry、control-plane audit、intervention lifecycle 与 compaction continuity marker 按时间顺序 stitch 成统一 replay 文档
+- `observability.timeline` / `observability.summary` / `observability.rawEventTail` 现已通过 shared MV3 `resource.read` 暴露 runtime-owned observability export builder 的 operator-facing read path，并保持 `observability.replay` 作为更高层 stitched replay 文档
 - `audit.host` 仅保留为 host-only compatibility alias
 - 当前 registry 仍是轻量 contract 层，不引入新的 descriptor family
 - provider/profile routing 当前不新增独立 `providers.*` namespace；northbound shared surface 复用 `config.summary.values.model` 与 `config.update.patch.model`

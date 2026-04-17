@@ -45,11 +45,14 @@ import {
   type ObservabilityExportResource,
   type ObservabilityExportResourceType,
   type ObservabilityExportSurface,
+  type ObservabilityRawEventTailSurfaceResource,
   type ObservabilityReplayEntry,
   type ObservabilityReplayResource,
   type ObservabilityReplaySummary,
+  type ObservabilitySummarySurfaceResource,
   type ObservabilityTimelineEvent,
   type ObservabilityTimelineSummary,
+  type ObservabilityTimelineSurfaceResource,
   PUBLIC_CAPABILITY_NAMESPACES,
   type RawEventTailEntry,
   type RawEventTailResource,
@@ -478,6 +481,9 @@ export interface ReadAiSurfaceResourceInput {
   auditTail?: AuditTailResourceInput;
   interventionAudit?: InterventionAuditResourceInput;
   observabilityReplay?: ObservabilityReplayResourceInput;
+  timelineEvents?: ObservabilityTimelineEvent[];
+  rawEvents?: RawEventTailEntry[];
+  limit?: number;
   providers?: AiSurfaceResourceProviderRegistry;
 }
 
@@ -1961,6 +1967,46 @@ function createResourceDocument<ResourceId extends AiSurfaceResourceId, Payload>
   };
 }
 
+function createSharedObservabilityExportResource(
+  resourceId: "observability.timeline" | "observability.summary" | "observability.rawEventTail",
+  input: {
+    timelineEvents?: ObservabilityTimelineEvent[];
+    rawEvents?: RawEventTailEntry[];
+    limit?: number;
+  },
+):
+  | ObservabilityTimelineSurfaceResource
+  | ObservabilitySummarySurfaceResource
+  | ObservabilityRawEventTailSurfaceResource {
+  switch (resourceId) {
+    case "observability.timeline": {
+      const resource = createTimelineExportResource({
+        events: input.timelineEvents ?? [],
+        limit: input.limit,
+      });
+      return createResourceDocument("observability.timeline", resource.generatedAt, resource.data);
+    }
+    case "observability.summary": {
+      const resource = createStructuredRunSummaryResource({
+        timelineEvents: input.timelineEvents ?? [],
+        rawEvents: input.rawEvents ?? [],
+      });
+      return createResourceDocument("observability.summary", resource.generatedAt, resource.data);
+    }
+    case "observability.rawEventTail": {
+      const resource = createRawEventTailExportResource({
+        entries: input.rawEvents ?? [],
+        limit: input.limit,
+      });
+      return createResourceDocument(
+        "observability.rawEventTail",
+        resource.generatedAt,
+        resource.data,
+      );
+    }
+  }
+}
+
 function createObservabilityExportDocument<
   ResourceType extends ObservabilityExportResourceType,
   Payload,
@@ -2598,6 +2644,14 @@ function createBuiltinAiSurfaceResourceProviderRegistry(): AiSurfaceResourceProv
           return createInterventionAuditResource(input.interventionAudit ?? { entries: [] });
         case "observability.replay":
           return createObservabilityReplayResource(input.observabilityReplay);
+        case "observability.timeline":
+        case "observability.summary":
+        case "observability.rawEventTail":
+          return createSharedObservabilityExportResource(metadata.id, {
+            timelineEvents: input.timelineEvents,
+            rawEvents: input.rawEvents,
+            limit: input.limit,
+          });
         default:
           throw new CapabilityError(
             "E_RUNTIME",

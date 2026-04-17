@@ -8,6 +8,7 @@ import {
   type ConfigBootstrapSummary,
   HOST_CONTROL_PLANE_ACTIONS,
   HOST_SUBSTRATE_ACTIONS,
+  type ObservabilityReplayResource,
   PUBLIC_CAPABILITY_NAMESPACES,
   RUNTIME_CONTROL_PLANE_ACTIONS,
   assertCapabilityDescriptor,
@@ -322,11 +323,106 @@ describe("core", () => {
           bootstrap: createBootstrapSummary(),
           auditTail: { entries: [] },
           interventionAudit: { entries: [] },
+          timelineEvents: [],
+          rawEvents: [],
         }),
     );
 
     expect(results.map((entry) => entry.id)).toEqual(AI_SURFACE_RESOURCE_IDS);
     expect(results.every((entry) => entry.primitive === "resource")).toBe(true);
+  });
+
+  it("reads shared observability export resources through the unified AI surface lookup path", () => {
+    const timelineEvents = [
+      {
+        id: "evt-1",
+        source: "site-runtime" as const,
+        eventType: "site.invoke",
+        status: "started" as const,
+        timestamp: "2026-04-17T00:00:00.000Z",
+        summary: "Invoke compose action",
+        skillId: "site.twitter",
+        action: "compose",
+        tabId: 7,
+      },
+      {
+        id: "evt-2",
+        source: "site-runtime" as const,
+        eventType: "site.verify",
+        status: "succeeded" as const,
+        timestamp: "2026-04-17T00:00:01.000Z",
+        summary: "Verify compose action",
+        skillId: "site.twitter",
+        action: "compose",
+        tabId: 7,
+      },
+    ];
+    const rawEvents = [
+      {
+        index: 1,
+        timestamp: "2026-04-17T00:00:00.000Z",
+        source: "site-runtime" as const,
+        type: "site.invoke",
+        payload: {
+          skillId: "site.twitter",
+          action: "compose",
+        },
+      },
+      {
+        index: 2,
+        timestamp: "2026-04-17T00:00:01.000Z",
+        source: "site-runtime" as const,
+        type: "site.verify",
+        payload: {
+          skillId: "site.twitter",
+          action: "compose",
+        },
+      },
+    ];
+
+    expect(
+      readAiSurfaceResource({
+        resourceId: "observability.timeline" as never,
+        timelineEvents,
+        rawEvents,
+      }),
+    ).toMatchObject({
+      id: "observability.timeline",
+      primitive: "resource",
+      data: {
+        status: "available",
+        totalCount: 2,
+      },
+    });
+    expect(
+      readAiSurfaceResource({
+        resourceId: "observability.summary" as never,
+        timelineEvents,
+        rawEvents,
+      }),
+    ).toMatchObject({
+      id: "observability.summary",
+      primitive: "resource",
+      data: {
+        status: "available",
+        totalTimelineEvents: 2,
+        totalRawEvents: 2,
+      },
+    });
+    expect(
+      readAiSurfaceResource({
+        resourceId: "observability.rawEventTail" as never,
+        timelineEvents,
+        rawEvents,
+      }),
+    ).toMatchObject({
+      id: "observability.rawEventTail",
+      primitive: "resource",
+      data: {
+        status: "available",
+        totalCount: 2,
+      },
+    });
   });
 
   it("dispatches AI surface resource reads through the owner provider registry", () => {
@@ -683,7 +779,9 @@ describe("core", () => {
       },
     });
 
-    expect(resource).toMatchObject({
+    const replayResource = resource as ObservabilityReplayResource;
+
+    expect(replayResource).toMatchObject({
       id: "observability.replay",
       primitive: "resource",
       data: {
@@ -692,20 +790,22 @@ describe("core", () => {
         continuityCount: 1,
       },
     });
-    expect(resource.data.entries.map((entry) => `${entry.subsystem}:${entry.eventType}`)).toEqual([
+    expect(
+      replayResource.data.entries.map((entry) => `${entry.subsystem}:${entry.eventType}`),
+    ).toEqual([
       "session:session.compaction",
       "host:hosts.connect",
       "config:config.update",
       "loop:loop.step",
       "intervention:intervention.requested",
     ]);
-    expect(resource.data.entries.filter((entry) => entry.eventType === "loop.step")).toHaveLength(
-      1,
-    );
     expect(
-      resource.data.entries.filter((entry) => entry.eventType === "intervention.escalation"),
+      replayResource.data.entries.filter((entry) => entry.eventType === "loop.step"),
+    ).toHaveLength(1);
+    expect(
+      replayResource.data.entries.filter((entry) => entry.eventType === "intervention.escalation"),
     ).toHaveLength(0);
-    expect(resource.data.entries[0]).toMatchObject({
+    expect(replayResource.data.entries[0]).toMatchObject({
       sessionId: "session-observability",
       summary: "Earlier turns compacted",
       continuity: {

@@ -65,6 +65,13 @@ function isoNow() {
   return new Date().toISOString();
 }
 
+function cloneValue(value) {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
 function isAiSurfaceResourceId(value) {
   return typeof value === "string" && AI_SURFACE_RESOURCE_IDS.includes(value);
 }
@@ -480,8 +487,12 @@ export function createBackgroundRunnerBridge({
   const resolvedRetention = auditRetention ?? AUDIT_RETENTION_DEFAULTS;
   const AUDIT_MAX_ENTRIES = resolvedRetention.maxEntries;
   const TELEMETRY_MAX_ENTRIES = 128;
+  const OBSERVABILITY_EXPORT_MAX_ENTRIES = 256;
   const auditEntries = [];
   const loopTelemetryEntries = [];
+  const observabilityTimelineEvents = [];
+  const observabilityRawEvents = [];
+  let observabilityRawEventSequence = 0;
   const resolvedAuditStore =
     auditStore ??
     createChromeAuditStore(
@@ -789,6 +800,46 @@ export function createBackgroundRunnerBridge({
     loopTelemetryEntries.push({ ...entry });
     if (loopTelemetryEntries.length > TELEMETRY_MAX_ENTRIES) {
       loopTelemetryEntries.splice(0, loopTelemetryEntries.length - TELEMETRY_MAX_ENTRIES);
+    }
+  }
+
+  function appendObservabilityExportEvents(value) {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+
+    if (Array.isArray(value.timelineEvents)) {
+      for (const event of value.timelineEvents) {
+        if (!event || typeof event !== "object") {
+          continue;
+        }
+        observabilityTimelineEvents.push(cloneValue(event));
+      }
+      if (observabilityTimelineEvents.length > OBSERVABILITY_EXPORT_MAX_ENTRIES) {
+        observabilityTimelineEvents.splice(
+          0,
+          observabilityTimelineEvents.length - OBSERVABILITY_EXPORT_MAX_ENTRIES,
+        );
+      }
+    }
+
+    if (Array.isArray(value.rawEvents)) {
+      for (const entry of value.rawEvents) {
+        if (!entry || typeof entry !== "object") {
+          continue;
+        }
+        observabilityRawEventSequence += 1;
+        observabilityRawEvents.push({
+          ...cloneValue(entry),
+          index: observabilityRawEventSequence,
+        });
+      }
+      if (observabilityRawEvents.length > OBSERVABILITY_EXPORT_MAX_ENTRIES) {
+        observabilityRawEvents.splice(
+          0,
+          observabilityRawEvents.length - OBSERVABILITY_EXPORT_MAX_ENTRIES,
+        );
+      }
     }
   }
 
@@ -1227,7 +1278,7 @@ export function createBackgroundRunnerBridge({
     const automationTarget = message.automationTarget;
     const backgroundTab = await createBackgroundAutomationTab(automationTarget);
     try {
-      return await invokeSingleActionSiteSkill({
+      const result = await invokeSingleActionSiteSkill({
         request: {
           skillId: message.skillId,
           action: message.action,
@@ -1244,6 +1295,8 @@ export function createBackgroundRunnerBridge({
         runnerHost: createRunnerHostProxy(),
         installer: effectivePageHookBridge,
       });
+      appendObservabilityExportEvents(result);
+      return result;
     } finally {
       await teardownBackgroundAutomationTab(backgroundTab.tabId, automationTarget?.cleanup);
     }
@@ -1258,7 +1311,7 @@ export function createBackgroundRunnerBridge({
 
   async function routeRuntimeCapability(capabilityId, input = {}) {
     try {
-      return {
+      const response = {
         ok: true,
         data: await getRuntimeServices().dispatchCapability({
           capabilityId,
@@ -1266,6 +1319,8 @@ export function createBackgroundRunnerBridge({
           permissions: [capabilityId],
         }),
       };
+      appendObservabilityExportEvents(response.data);
+      return response;
     } catch (error) {
       return {
         ok: false,
@@ -1287,10 +1342,12 @@ export function createBackgroundRunnerBridge({
 
   async function routeRuntimeService(call) {
     try {
-      return {
+      const response = {
         ok: true,
         data: await call(),
       };
+      appendObservabilityExportEvents(response.data);
+      return response;
     } catch (error) {
       return {
         ok: false,
@@ -2254,6 +2311,15 @@ export function createBackgroundRunnerBridge({
     });
   }
 
+  async function invokePageActionResource(action, input) {
+    const result = await getRuntimeServices().invokePageAction({
+      action,
+      input,
+    });
+    appendObservabilityExportEvents(result);
+    return result.result;
+  }
+
   async function readResource({ resourceId, world = "main", limit } = {}) {
     if (!isAiSurfaceResourceId(resourceId)) {
       return {
@@ -2289,6 +2355,9 @@ export function createBackgroundRunnerBridge({
           data: readAiSurfaceResource({
             resourceId,
             bootstrap: await buildBootstrapResourceInput({ world }),
+            timelineEvents: observabilityTimelineEvents,
+            rawEvents: observabilityRawEvents,
+            limit,
           }),
         };
     }
@@ -2398,57 +2467,37 @@ export function createBackgroundRunnerBridge({
           }),
         });
       case "page.press_key":
-        return routeRuntimeService(async () => {
-          const result = await getRuntimeServices().invokePageAction({
-            action: "press_key",
-            input: {
-              key: message.key,
-            },
-          });
-          return result.result;
-        });
+        return routeRuntimeService(() =>
+          invokePageActionResource("press_key", {
+            key: message.key,
+          }),
+        );
       case "page.query":
-        return routeRuntimeService(async () => {
-          const result = await getRuntimeServices().invokePageAction({
-            action: "query",
-            input: {
-              selector: message.selector,
-            },
-          });
-          return result.result;
-        });
+        return routeRuntimeService(() =>
+          invokePageActionResource("query", {
+            selector: message.selector,
+          }),
+        );
       case "page.click":
-        return routeRuntimeService(async () => {
-          const result = await getRuntimeServices().invokePageAction({
-            action: "click",
-            input: {
-              uid: message.uid,
-            },
-          });
-          return result.result;
-        });
+        return routeRuntimeService(() =>
+          invokePageActionResource("click", {
+            uid: message.uid,
+          }),
+        );
       case "page.fill":
-        return routeRuntimeService(async () => {
-          const result = await getRuntimeServices().invokePageAction({
-            action: "fill",
-            input: {
-              uid: message.uid,
-              value: message.value,
-            },
-          });
-          return result.result;
-        });
+        return routeRuntimeService(() =>
+          invokePageActionResource("fill", {
+            uid: message.uid,
+            value: message.value,
+          }),
+        );
       case "page.screenshot":
-        return routeRuntimeService(async () => {
-          const result = await getRuntimeServices().invokePageAction({
-            action: "screenshot",
-            input: {
-              format: message.format,
-              quality: message.quality,
-            },
-          });
-          return result.result;
-        });
+        return routeRuntimeService(() =>
+          invokePageActionResource("screenshot", {
+            format: message.format,
+            quality: message.quality,
+          }),
+        );
       case "site.fetch_with_session":
         return routeRuntimeCapability("site.fetch_with_session", {
           url: message.url,

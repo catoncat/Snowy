@@ -263,6 +263,9 @@ describe("contracts", () => {
       "audit.tail",
       "audit.intervention",
       "observability.replay",
+      "observability.timeline",
+      "observability.summary",
+      "observability.rawEventTail",
     ]);
     expect(AI_SURFACE_RESOURCE_AUDIENCES).toEqual(["chat", "skill", "system", "mcp"]);
   });
@@ -307,6 +310,16 @@ describe("contracts", () => {
       ),
     ).toMatchObject({
       id: "observability.replay",
+      readOwner: "audit",
+      projections: ["resource.read"],
+      audiences: ["chat", "skill", "system", "mcp"],
+    });
+    expect(
+      (registry as Array<Record<string, unknown>>).find(
+        (entry) => entry.id === "observability.timeline",
+      ),
+    ).toMatchObject({
+      id: "observability.timeline",
       readOwner: "audit",
       projections: ["resource.read"],
       audiences: ["chat", "skill", "system", "mcp"],

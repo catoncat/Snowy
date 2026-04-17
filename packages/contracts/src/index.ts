@@ -14,6 +14,9 @@ export const AI_SURFACE_RESOURCE_IDS = [
   "audit.tail",
   "audit.intervention",
   "observability.replay",
+  "observability.timeline",
+  "observability.summary",
+  "observability.rawEventTail",
 ] as const;
 export type AiSurfaceResourceId = (typeof AI_SURFACE_RESOURCE_IDS)[number];
 export const AI_SURFACE_RESOURCE_AUDIENCES = ["chat", "skill", "system", "mcp"] as const;
@@ -88,6 +91,24 @@ export const AI_SURFACE_RESOURCE_METADATA_REGISTRY = [
   },
   {
     id: "observability.replay",
+    readOwner: "audit",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read"],
+  },
+  {
+    id: "observability.timeline",
+    readOwner: "audit",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read"],
+  },
+  {
+    id: "observability.summary",
+    readOwner: "audit",
+    audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
+    projections: ["resource.read"],
+  },
+  {
+    id: "observability.rawEventTail",
     readOwner: "audit",
     audiences: ALL_AI_SURFACE_RESOURCE_AUDIENCES,
     projections: ["resource.read"],
@@ -646,6 +667,18 @@ export type ObservabilityReplayResource = ResourceDocument<
   "observability.replay",
   ObservabilityReplaySummary
 >;
+export type ObservabilityTimelineSurfaceResource = ResourceDocument<
+  "observability.timeline",
+  ObservabilityTimelineSummary
+>;
+export type ObservabilitySummarySurfaceResource = ResourceDocument<
+  "observability.summary",
+  StructuredRunSummaryExport
+>;
+export type ObservabilityRawEventTailSurfaceResource = ResourceDocument<
+  "observability.rawEventTail",
+  RawEventTailSummary
+>;
 export type AiSurfaceResourceDocument =
   | RuntimeSummaryResource
   | RuntimeHistoryResource
@@ -654,7 +687,10 @@ export type AiSurfaceResourceDocument =
   | HostsSummaryResource
   | AuditTailResource
   | InterventionAuditResource
-  | ObservabilityReplayResource;
+  | ObservabilityReplayResource
+  | ObservabilityTimelineSurfaceResource
+  | ObservabilitySummarySurfaceResource
+  | ObservabilityRawEventTailSurfaceResource;
 
 export const OBSERVABILITY_EXPORT_RESOURCE_TYPES = ["timeline", "summary", "rawEventTail"] as const;
 export type ObservabilityExportResourceType = (typeof OBSERVABILITY_EXPORT_RESOURCE_TYPES)[number];

@@ -3634,6 +3634,174 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("reads timeline summary and rawEventTail through the shared observability resource.read path", async () => {
+    const invokePageAction = vi.fn(async ({ action }) => {
+      if (action === "query") {
+        return {
+          result: {
+            ok: true,
+            action: "query",
+            count: 1,
+            elements: [{ uid: "query-result-1", tagName: "button" }],
+          },
+          timelineEvents: [
+            {
+              id: "evt-1",
+              source: "site-runtime",
+              eventType: "site.invoke",
+              status: "started",
+              timestamp: "2026-04-17T00:00:00.000Z",
+              summary: "Invoke page query",
+              skillId: "site.fixture",
+              action: "query",
+              tabId: 14,
+            },
+          ],
+          rawEvents: [
+            {
+              index: 1,
+              timestamp: "2026-04-17T00:00:00.000Z",
+              source: "site-runtime",
+              type: "site.invoke",
+              payload: {
+                skillId: "site.fixture",
+                action: "query",
+              },
+            },
+          ],
+        };
+      }
+      if (action === "click") {
+        return {
+          result: {
+            ok: true,
+            action: "click",
+            verified: true,
+          },
+          timelineEvents: [
+            {
+              id: "evt-2",
+              source: "site-runtime",
+              eventType: "site.verify",
+              status: "succeeded",
+              timestamp: "2026-04-17T00:00:01.000Z",
+              summary: "Verify page click",
+              skillId: "site.fixture",
+              action: "click",
+              tabId: 14,
+            },
+          ],
+          rawEvents: [
+            {
+              index: 2,
+              timestamp: "2026-04-17T00:00:01.000Z",
+              source: "site-runtime",
+              type: "site.verify",
+              payload: {
+                skillId: "site.fixture",
+                action: "click",
+              },
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected page action: ${String(action)}`);
+    });
+
+    const harness = createChromeHarness({
+      activeTab: {
+        id: 14,
+        url: "https://fixture.test/observability",
+        title: "Observability Fixture",
+      },
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+      runtimeServices: {
+        invokePageAction,
+      },
+    });
+    const dispose = bridge.registerRuntimeListener();
+
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "page.query",
+      selector: "button",
+    });
+    await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "page.click",
+      uid: "query-result-1",
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "observability.timeline",
+        limit: 1,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "observability.timeline",
+        primitive: "resource",
+        data: {
+          status: "available",
+          totalCount: 1,
+          events: [expect.objectContaining({ id: "evt-2", eventType: "site.verify" })],
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "observability.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "observability.summary",
+        primitive: "resource",
+        data: {
+          status: "available",
+          totalTimelineEvents: 2,
+          totalRawEvents: 2,
+          lastEvent: expect.objectContaining({
+            eventType: "site.verify",
+            status: "succeeded",
+          }),
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "observability.rawEventTail",
+        limit: 1,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "observability.rawEventTail",
+        primitive: "resource",
+        data: {
+          status: "available",
+          totalCount: 1,
+          entries: [expect.objectContaining({ index: 2, type: "site.verify" })],
+        },
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("exports sidepanel management guard helpers for future UI consumers", () => {
     expect(isSidepanelManagementResourceId("runtime.summary")).toBe(true);
     expect(isSidepanelManagementResourceId("runtime.bootstrap")).toBe(false);
