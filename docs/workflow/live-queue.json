@@ -1,23 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-10T08:44:20.040Z",
+  "generated_at": "2026-05-10T08:45:44.620Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-168",
-      "issue_path": "docs/backlog/2026-05-10-workflow-queue-build-hangs-during-biome-formatting.md",
-      "title": "Review: workflow queue build hangs during Biome formatting",
-      "parallel_group": "sdk-docs",
-      "module_id": "repo-workflow-dx",
-      "module_stage": "deferred",
-      "tracking_kind": "follow-up",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        ".agents/skills/auto-claim-issues-next/scripts/build-live-queue.ts",
-        ".agents/skills/auto-claim-issues-next/scripts/build-live-queue.test.ts",
-        "docs/workflow/live-queue.json"
-      ]
-    }
-  ]
+  "entries": []
 }
