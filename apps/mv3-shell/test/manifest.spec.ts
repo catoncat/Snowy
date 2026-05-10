@@ -3289,6 +3289,99 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("rehydrates skill lifecycle state across bridge restart", async () => {
+    const storageArea = createStorageAreaHarness();
+    const host = {
+      dispatch: vi.fn(async (request) => ({
+        kind: "health_result",
+        requestId: (request as { requestId: string }).requestId,
+        ok: true,
+        health: { status: "idle", inflightCount: 0, consecutiveFailures: 0 },
+      })),
+      getHealth: vi.fn(() => ({
+        status: "idle",
+        inflightCount: 0,
+        consecutiveFailures: 0,
+      })),
+    };
+    const firstHarness = createChromeHarness({ host, storageArea });
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeFirst = firstBridge.registerRuntimeListener();
+
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.install",
+      skillId: "skill.persisted",
+    });
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.enable",
+      skillId: "skill.persisted",
+    });
+
+    disposeFirst();
+    firstHarness.cleanup();
+
+    const secondHarness = createChromeHarness({ host, storageArea });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeSecond = secondBridge.registerRuntimeListener();
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.list",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: ["skill.persisted"],
+    });
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.bootstrap",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skills: {
+          status: "healthy",
+          installedCount: 1,
+          enabledCount: 1,
+          trustedCount: 0,
+          recentChange: "skills.enable",
+        },
+      },
+    });
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "skills.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "skills.summary",
+        data: {
+          installedCount: 1,
+          enabledCount: 1,
+          recentChange: "skills.enable",
+        },
+      },
+    });
+
+    disposeSecond();
+    secondHarness.cleanup();
+  });
+
   it("reads summary and audit resources through the unified resource.read path", async () => {
     const harness = createChromeHarness({
       host: {
