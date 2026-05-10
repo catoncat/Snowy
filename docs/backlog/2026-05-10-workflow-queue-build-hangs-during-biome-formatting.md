@@ -1,11 +1,11 @@
 ---
 id: ISSUE-168
 title: "Review: workflow queue build hangs during Biome formatting"
-status: open
+status: done
 priority: p0
 source: "live workflow 2026-05-10"
 created: 2026-05-10
-assignee: unassigned
+assignee: codex-next
 tags:
   - review
   - workflow
@@ -25,6 +25,7 @@ write_scope:
   - docs/workflow/live-queue.json
 acceptance_ref: docs/backlog/README.md
 check_cmd: "bun run check"
+completed_at: 2026-05-10T08:45:44.613Z
 ---
 
 ## Goal
@@ -43,3 +44,23 @@ check_cmd: "bun run check"
 - bun run workflow:queue:build completes and writes docs/workflow/live-queue.json when the queue has zero entries
 - queue builder formatting avoids the hanging node_modules/.bin/biome wrapper or has a deterministic fallback
 - focused regression tests cover the formatter path used by buildLiveQueue
+
+## 工作总结
+
+### 实现了什么
+- ISSUE-168: queue builder now resolves the platform-native Biome executable before falling back to the package wrapper, and the formatter call is time-bounded to prevent rebuild hangs.
+- Added regression coverage for native formatter resolution and non-dry-run empty queue writes.
+
+### 实际跑了什么检查
+- bun test ./.agents/skills/auto-claim-issues-next/scripts/build-live-queue.test.ts
+- bun run workflow:queue:build
+- node_modules/@biomejs/cli-darwin-arm64/biome check .agents/skills/auto-claim-issues-next/scripts/build-live-queue.ts .agents/skills/auto-claim-issues-next/scripts/build-live-queue.test.ts docs/workflow/live-queue.json docs/backlog/2026-05-10-workflow-queue-build-hangs-during-biome-formatting.md
+- bun run typecheck
+- bun run check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `c515bb5c8619` fix(workflow): 避开 queue build 卡死
