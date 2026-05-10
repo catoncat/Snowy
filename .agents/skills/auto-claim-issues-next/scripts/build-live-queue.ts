@@ -2,6 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,12 +27,23 @@ import { type LiveQueue, type QueueEntry, liveQueuePath } from "./ticket-machine
 
 const SCRIPT_REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../");
 const BIOME_CONFIG_PATH = path.join(SCRIPT_REPO_ROOT, "biome.json");
-const BIOME_EXECUTABLE_PATH = path.join(
+const BIOME_EXECUTABLE_WRAPPER_PATH = path.join(
   SCRIPT_REPO_ROOT,
   "node_modules",
   ".bin",
   process.platform === "win32" ? "biome.cmd" : "biome",
 );
+const BIOME_FORMAT_TIMEOUT_MS = 5000;
+const requireFromScript = createRequire(import.meta.url);
+
+const BIOME_NATIVE_EXECUTABLES: Record<string, string> = {
+  "darwin-arm64": "@biomejs/cli-darwin-arm64/biome",
+  "darwin-x64": "@biomejs/cli-darwin-x64/biome",
+  "linux-arm64": "@biomejs/cli-linux-arm64/biome",
+  "linux-x64": "@biomejs/cli-linux-x64/biome",
+  "win32-arm64": "@biomejs/cli-win32-arm64/biome.exe",
+  "win32-x64": "@biomejs/cli-win32-x64/biome.exe",
+};
 
 export interface BuildLiveQueueArgs {
   repoRoot: string;
@@ -100,6 +112,20 @@ function queueEntryFromIssue(repoRoot: string, issue: IssueFile): QueueEntry {
   };
 }
 
+export function resolveBiomeExecutablePath(): string {
+  const nativePackage = BIOME_NATIVE_EXECUTABLES[`${process.platform}-${process.arch}`];
+  if (nativePackage) {
+    try {
+      return requireFromScript.resolve(nativePackage);
+    } catch {
+      // Fall back to the package wrapper below. The formatter call is still
+      // time-bounded so a broken wrapper cannot hang queue rebuild forever.
+    }
+  }
+
+  return BIOME_EXECUTABLE_WRAPPER_PATH;
+}
+
 function resolveCanonicalRepoRoot(repoRoot: string): string {
   const gitPath = path.join(repoRoot, ".git");
   try {
@@ -125,15 +151,22 @@ function resolveCanonicalRepoRoot(repoRoot: string): string {
 function formatQueueJson(outputPath: string, queue: LiveQueue, repoRoot: string): string {
   const relativeOutputPath = path.relative(repoRoot, outputPath) || path.basename(outputPath);
   const raw = `${JSON.stringify(queue, null, 2)}\n`;
-  return execFileSync(
-    BIOME_EXECUTABLE_PATH,
-    ["format", `--config-path=${BIOME_CONFIG_PATH}`, `--stdin-file-path=${relativeOutputPath}`],
-    {
-      cwd: repoRoot,
-      encoding: "utf8",
-      input: raw,
-    },
-  );
+  const biomeExecutable = resolveBiomeExecutablePath();
+  try {
+    return execFileSync(
+      biomeExecutable,
+      ["format", `--config-path=${BIOME_CONFIG_PATH}`, `--stdin-file-path=${relativeOutputPath}`],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        input: raw,
+        timeout: BIOME_FORMAT_TIMEOUT_MS,
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to format ${relativeOutputPath} with Biome: ${message}`);
+  }
 }
 
 export function buildLiveQueue(args: BuildLiveQueueArgs): BuildLiveQueueResult {
