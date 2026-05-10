@@ -53,6 +53,8 @@ const SKILL_STATUS_BY_ACTION = {
   "skills.disable": "disabled",
   "skills.uninstall": "archived",
 };
+const SKILL_LIFECYCLE_STORAGE_KEY = "bbl-next.skills.lifecycle.v1";
+const SKILL_LIFECYCLE_STATUSES = new Set(Object.values(SKILL_STATUS_BY_ACTION));
 
 function createInterventionSyncChannel(explicitChannel) {
   if (explicitChannel) {
@@ -64,8 +66,55 @@ function createInterventionSyncChannel(explicitChannel) {
   return null;
 }
 
-function createInMemorySkillManager() {
+function normalizeSkillLifecycleRecord(record) {
+  if (!isPlainObject(record) || typeof record.skillId !== "string" || !record.skillId.trim()) {
+    return null;
+  }
+  const status = SKILL_LIFECYCLE_STATUSES.has(record.status) ? record.status : "installed";
+  return {
+    skillId: record.skillId.trim(),
+    status,
+    trusted: record.trusted === true,
+    recentChange: typeof record.recentChange === "string" ? record.recentChange : null,
+    lastChangedAt: typeof record.lastChangedAt === "string" ? record.lastChangedAt : null,
+  };
+}
+
+async function loadSkillLifecycleRecords(chromeApi) {
+  const storageArea = chromeApi?.storage?.local;
+  if (typeof storageArea?.get !== "function") {
+    return [];
+  }
+  const result = await storageArea.get(SKILL_LIFECYCLE_STORAGE_KEY);
+  const stored = result?.[SKILL_LIFECYCLE_STORAGE_KEY];
+  const records = Array.isArray(stored) ? stored : [];
+  return records.map((record) => normalizeSkillLifecycleRecord(record)).filter(Boolean);
+}
+
+async function saveSkillLifecycleRecords(chromeApi, records) {
+  const storageArea = chromeApi?.storage?.local;
+  if (typeof storageArea?.set !== "function") {
+    return;
+  }
+  await storageArea.set({
+    [SKILL_LIFECYCLE_STORAGE_KEY]: records.map((record) => ({ ...record })),
+  });
+}
+
+function createSkillLifecycleManager({ chromeApi } = {}) {
   const records = new Map();
+  let loadPromise = null;
+
+  async function ensureLoaded() {
+    if (!loadPromise) {
+      loadPromise = (async () => {
+        for (const record of await loadSkillLifecycleRecords(chromeApi)) {
+          records.set(record.skillId, record);
+        }
+      })();
+    }
+    await loadPromise;
+  }
 
   function cloneSkillRecord(record) {
     return {
@@ -79,14 +128,17 @@ function createInMemorySkillManager() {
 
   return {
     async list() {
+      await ensureLoaded();
       return [...records.values()].map((record) => cloneSkillRecord(record));
     },
     async listActiveIds() {
+      await ensureLoaded();
       return [...records.values()]
         .filter((record) => record.status !== "archived")
         .map((record) => record.skillId);
     },
     async manage({ action, skillId }) {
+      await ensureLoaded();
       const previous = records.get(skillId);
       const status = SKILL_STATUS_BY_ACTION[action];
       if (!status) {
@@ -101,6 +153,7 @@ function createInMemorySkillManager() {
         lastChangedAt: new Date().toISOString(),
       };
       records.set(skillId, nextRecord);
+      await saveSkillLifecycleRecords(chromeApi, [...records.values()]);
 
       return {
         skill: {
@@ -1700,7 +1753,7 @@ export function createBackgroundRuntimeServices({
   let sessionPromise = null;
   let chatRunStatus = "idle";
   let activeChatRun = null;
-  const skillManager = createInMemorySkillManager();
+  const skillManager = createSkillLifecycleManager({ chromeApi });
   const resolvedInterventionSyncChannel = createInterventionSyncChannel(interventionSyncChannel);
   const interventionSyncSourceId = crypto.randomUUID();
 
