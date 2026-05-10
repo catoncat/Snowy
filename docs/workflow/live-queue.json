@@ -1,22 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-10T08:49:13.554Z",
+  "generated_at": "2026-05-10T08:53:25.734Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-169",
-      "issue_path": "docs/backlog/2026-05-10-skill-lifecycle-state-is-in-memory-across-runtime-restart.md",
-      "title": "Review: skill lifecycle state is in-memory across runtime restart",
-      "parallel_group": "sdk-docs",
-      "module_id": "skill-runtime-sdk-studio",
-      "module_stage": "deferred",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "apps/mv3-shell/src/runtime-services.ts",
-        "apps/mv3-shell/test/manifest.spec.ts"
-      ]
-    }
-  ]
+  "entries": []
 }
