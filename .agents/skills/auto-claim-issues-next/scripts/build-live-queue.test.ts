@@ -6,12 +6,12 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { buildLiveQueue } from "./build-live-queue";
+import { buildLiveQueue, resolveBiomeExecutablePath } from "./build-live-queue";
 
 const tempDirs: string[] = [];
 const SCRIPT_REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../");
 const BIOME_CONFIG_PATH = path.join(SCRIPT_REPO_ROOT, "biome.json");
-const BIOME_EXECUTABLE_PATH = path.join(
+const BIOME_EXECUTABLE_WRAPPER_PATH = path.join(
   SCRIPT_REPO_ROOT,
   "node_modules",
   ".bin",
@@ -75,7 +75,7 @@ function writeIssue(repoRoot: string, filename: string, frontmatter: string) {
 
 function formatLikeBiome(repoRoot: string, relativeFilePath: string, content: string): string {
   return execFileSync(
-    BIOME_EXECUTABLE_PATH,
+    resolveBiomeExecutablePath(),
     ["format", `--config-path=${BIOME_CONFIG_PATH}`, `--stdin-file-path=${relativeFilePath}`],
     {
       cwd: repoRoot,
@@ -95,6 +95,16 @@ afterEach(() => {
 });
 
 describe("build-live-queue", () => {
+  it("uses the native Biome executable for queue formatting when available", () => {
+    const executable = resolveBiomeExecutablePath();
+    if (executable !== BIOME_EXECUTABLE_WRAPPER_PATH) {
+      expect(executable).toContain(`${path.sep}@biomejs${path.sep}cli-`);
+      return;
+    }
+
+    expect(executable).toBe(BIOME_EXECUTABLE_WRAPPER_PATH);
+  });
+
   it("keeps all ready issues in the live queue even when write scopes overlap", () => {
     const repoRoot = makeRepo();
     writeModuleLedger(repoRoot);
@@ -254,6 +264,24 @@ check_cmd: bun run check
       entries: [{ issue_id: "ISSUE-036", depends_on: ["ISSUE-010"] }],
     });
     expect(written).toContain('"depends_on": ["ISSUE-010"],');
+    expect(written).toBe(formatLikeBiome(repoRoot, "docs/workflow/live-queue.json", written));
+  });
+
+  it("writes a formatted empty queue file when no issues are open", () => {
+    const repoRoot = makeRepo();
+    writeModuleLedger(repoRoot);
+
+    const result = buildLiveQueue({
+      repoRoot,
+      dryRun: false,
+      json: false,
+    });
+
+    expect(result.kind).toBe("built");
+    expect(result.entryCount).toBe(0);
+    const filePath = path.join(repoRoot, "docs", "workflow", "live-queue.json");
+    const written = readFileSync(filePath, "utf8");
+    expect(JSON.parse(written)).toMatchObject({ entries: [] });
     expect(written).toBe(formatLikeBiome(repoRoot, "docs/workflow/live-queue.json", written));
   });
 
