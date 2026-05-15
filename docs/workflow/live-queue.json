@@ -1,19 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-15T09:42:48.903Z",
+  "generated_at": "2026-05-15T09:43:47.744Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-170",
-      "issue_path": "docs/backlog/2026-05-15-mainline-repo-guidance-is-not-installed-after-init.md",
-      "title": "Review: Mainline repo guidance is not installed after init",
-      "parallel_group": "sdk-docs",
-      "module_id": "repo-workflow-dx",
-      "module_stage": "deferred",
-      "tracking_kind": "doc-debt",
-      "check_cmd": "mainline agents check --json && git diff --check",
-      "depends_on": [],
-      "write_scope": ["AGENTS.md"]
-    }
-  ]
+  "entries": []
 }
