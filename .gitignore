@@ -4,3 +4,5 @@ coverage
 dist
 *.log
 
+.ml-cache/
+.mainline/local.toml
