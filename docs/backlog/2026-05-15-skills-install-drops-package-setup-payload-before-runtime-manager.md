@@ -1,11 +1,11 @@
 ---
 id: ISSUE-171
 title: "Review: skills.install drops package setup payload before runtime manager"
-status: open
+status: done
 priority: p1
 source: "planning commit after ISSUE-170"
 created: 2026-05-15
-assignee: unassigned
+assignee: codex-cat
 tags:
   - review
   - skill-runtime
@@ -23,6 +23,7 @@ write_scope:
   - docs/skill-authoring-guide.md
 acceptance_ref: docs/legacy-to-vnext-migration-matrix.md
 check_cmd: "bun run test -- packages/core/test/core.spec.ts"
+completed_at: 2026-05-15T09:50:12.716Z
 ---
 
 ## Goal
@@ -41,3 +42,18 @@ check_cmd: "bun run test -- packages/core/test/core.spec.ts"
 - Core tests prove extra install metadata reaches manageSkill while existing string skill lifecycle calls still work.
 - Skill authoring docs state that current runtime install wiring preserves setup metadata for the runtime manager
 - while actual BrowserVFS writes remain a later slice.
+
+## 工作总结
+
+### 实现了什么
+- 让 SkillManagementRequest 保留原始 control-plane input，skills.install typed helper 支持可选 metadata/setupPlan，并在 authoring docs 说明 runtime manager 接线边界。
+
+### 实际跑了什么检查
+- bun run test -- packages/core/test/core.spec.ts; bun run typecheck; ./node_modules/.bin/biome check packages/core/src/index.ts packages/core/test/core.spec.ts docs/skill-authoring-guide.md
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `918db62270d2` fix(skill): 保留安装管理请求载荷

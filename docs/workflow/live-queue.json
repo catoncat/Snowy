@@ -1,23 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-15T09:45:38.026Z",
+  "generated_at": "2026-05-15T09:50:12.724Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-171",
-      "issue_path": "docs/backlog/2026-05-15-skills-install-drops-package-setup-payload-before-runtime-manager.md",
-      "title": "Review: skills.install drops package setup payload before runtime manager",
-      "parallel_group": "contracts-core",
-      "module_id": "skill-runtime-sdk-studio",
-      "module_stage": "deferred",
-      "tracking_kind": "gap",
-      "check_cmd": "bun run test -- packages/core/test/core.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "packages/core/src/index.ts",
-        "packages/core/test/core.spec.ts",
-        "docs/skill-authoring-guide.md"
-      ]
-    }
-  ]
+  "entries": []
 }
