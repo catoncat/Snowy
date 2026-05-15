@@ -93,6 +93,14 @@ const plan = await runSkillSetupHooks(skill, {
 - `ctx.writeFile()` rejects absolute paths, `..`, backslashes, and any write outside the canonical skill package root.
 - Setup hooks are for package scaffolding and metadata/bootstrap files; they are not runtime side-effect hooks.
 
+The runtime skill-management bridge now preserves install metadata instead of
+reducing `skills.install` to only a `skillId`: callers may pass a setup plan
+through `ctx.call("skills.install", { skillId, setupPlan })`, or through the
+typed helper's optional second argument. Core validates `skillId` and forwards
+the complete input payload to the runtime manager. Writing those setup-plan
+files into BrowserVFS remains a follow-up runtime-manager slice; normal skill
+invocation still never executes setup hooks.
+
 ### Recommended File Layout for Setup Writes
 
 - `SKILL.md` — author-facing instructions or packaged behavior contract

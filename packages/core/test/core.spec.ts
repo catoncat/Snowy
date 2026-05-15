@@ -1458,6 +1458,76 @@ describe("core", () => {
     });
   });
 
+  it("passes the original skill management payload to the runtime manager", async () => {
+    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+    const providers = new FamilyProviderRegistry();
+    const captured: Array<Record<string, unknown>> = [];
+    const ctx = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "s1",
+      skillId: "skill.manager",
+      permissions: ["skills.install"],
+      manageSkill: async (request) => {
+        captured.push(request as unknown as Record<string, unknown>);
+        return { ok: true };
+      },
+    });
+
+    const input = {
+      skillId: "skill.setup",
+      setupPlan: {
+        writes: [{ uri: "mem://skills/skill.setup/SKILL.md", content: "# Skill\n" }],
+      },
+    };
+
+    await expect(ctx.call("skills.install", input)).resolves.toEqual({ ok: true });
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({
+      skillId: "skill.setup",
+      action: "skills.install",
+      input,
+    });
+  });
+
+  it("keeps string skill lifecycle helpers working while forwarding normalized input", async () => {
+    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+    const providers = new FamilyProviderRegistry();
+    const captured: Array<Record<string, unknown>> = [];
+    const ctx = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "s1",
+      skillId: "skill.manager",
+      permissions: ["skills.*"],
+      manageSkill: async (request) => {
+        captured.push(request as unknown as Record<string, unknown>);
+        return { ok: true };
+      },
+    });
+
+    await ctx.skills.install("skill.lifecycle");
+    await ctx.skills.enable("skill.lifecycle");
+    await ctx.skills.disable("skill.lifecycle");
+    await ctx.skills.uninstall("skill.lifecycle");
+    await ctx.skills.install("skill.lifecycle.setup", { setupPlan: { notes: ["ready"] } });
+
+    expect(captured.map((request) => request.action)).toEqual([
+      "skills.install",
+      "skills.enable",
+      "skills.disable",
+      "skills.uninstall",
+      "skills.install",
+    ]);
+    expect(captured.map((request) => request.input)).toEqual([
+      { skillId: "skill.lifecycle" },
+      { skillId: "skill.lifecycle" },
+      { skillId: "skill.lifecycle" },
+      { skillId: "skill.lifecycle" },
+      { setupPlan: { notes: ["ready"] }, skillId: "skill.lifecycle.setup" },
+    ]);
+  });
+
   it("blocks capabilities outside the declared permission set", async () => {
     const registry = new CapabilityRegistry([descriptor()]);
     const providers = new FamilyProviderRegistry();
