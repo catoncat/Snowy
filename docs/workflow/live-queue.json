@@ -1,27 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T21:27:38.379Z",
+  "generated_at": "2026-05-26T21:28:08.011Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-185",
-      "issue_path": "docs/backlog/2026-05-26-cutover-milestone-release-acceptance-proof-is-not-one-command-reproducible.md",
-      "title": "Cutover milestone: release acceptance proof is not one-command reproducible",
-      "parallel_group": "mv3-shell",
-      "module_id": "old-product-replacement-loop",
-      "module_stage": "mainline",
-      "tracking_kind": "mainline",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "package.json",
-        "scripts/release-acceptance.ts",
-        "docs/cutover-readiness-criteria.md",
-        "docs/level-2-cutover-acceptance-2026-05-27.md",
-        "docs/level-2-uat-scenario-2026-05-27.md",
-        "docs/module-tracking-ledger.json",
-        "docs/source-of-truth-map.md"
-      ]
-    }
-  ]
+  "entries": []
 }
