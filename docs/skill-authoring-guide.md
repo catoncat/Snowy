@@ -97,9 +97,12 @@ The runtime skill-management bridge now preserves install metadata instead of
 reducing `skills.install` to only a `skillId`: callers may pass a setup plan
 through `ctx.call("skills.install", { skillId, setupPlan })`, or through the
 typed helper's optional second argument. Core validates `skillId` and forwards
-the complete input payload to the runtime manager. Writing those setup-plan
-files into BrowserVFS remains a follow-up runtime-manager slice; normal skill
-invocation still never executes setup hooks.
+the complete input payload to the runtime manager. The shared MV3 runtime
+materializes valid setup-plan writes into BrowserVFS under
+`mem://skills/<skillId>/...` before updating lifecycle state; invalid plans
+are rejected before a skill is recorded as installed. Restarted runtimes can
+read those package files through the normal `memfs.*` capability path. Normal
+skill invocation still never executes setup hooks.
 
 ### Recommended File Layout for Setup Writes
 
