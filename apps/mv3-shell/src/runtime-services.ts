@@ -58,6 +58,8 @@ const SKILL_STATUS_BY_ACTION = {
 const SKILL_LIFECYCLE_STORAGE_KEY = "bbl-next.skills.lifecycle.v1";
 const SKILL_LIFECYCLE_STATUSES = new Set(Object.values(SKILL_STATUS_BY_ACTION));
 const BROWSER_VFS_STORAGE_KEY = "bbl-next.browser-vfs.nodes.v1";
+const SKILL_PACKAGE_MANIFEST_FILE = "skill.json";
+const DEFAULT_SKILL_PACKAGE_ENTRY = "handler.js";
 
 function createInterventionSyncChannel(explicitChannel) {
   if (explicitChannel) {
@@ -237,6 +239,118 @@ function normalizeInstallSetupPlan({ skillId, input }) {
       content: write.content,
     };
   });
+}
+
+function normalizePackageRelativePath(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.startsWith("mem://") || trimmed.startsWith("/") || /^[A-Za-z]:[\\/]/.test(trimmed)) {
+    return null;
+  }
+  if (trimmed.includes("\\")) {
+    return null;
+  }
+  const segments = trimmed.split("/").filter(Boolean);
+  if (segments.length === 0 || segments.some((segment) => segment === "." || segment === "..")) {
+    return null;
+  }
+  return segments.join("/");
+}
+
+function normalizeSkillPackageManifest(skillId, packageUri, content) {
+  let manifest = null;
+  try {
+    manifest = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (!isPlainObject(manifest) || manifest.id !== skillId) {
+    return null;
+  }
+  const permissions = Array.isArray(manifest.permissions)
+    ? manifest.permissions.filter((permission) => typeof permission === "string" && permission)
+    : [];
+  const entry =
+    normalizePackageRelativePath(manifest.entry) ??
+    normalizePackageRelativePath(DEFAULT_SKILL_PACKAGE_ENTRY);
+  if (!entry) {
+    return null;
+  }
+
+  return {
+    id: skillId,
+    packageUri,
+    entry,
+    permissions,
+    description: typeof manifest.description === "string" ? manifest.description : "",
+    version: Number.isInteger(manifest.version) ? manifest.version : null,
+    kind: typeof manifest.kind === "string" ? manifest.kind : "prompt",
+  };
+}
+
+async function registerBrowserVfsSkillPackages({ browserVfs, runnerHost, skillInvocationService }) {
+  const packages = await browserVfs.discoverPackages();
+  for (const packageInfo of packages) {
+    if (!packageInfo.hasMarker) {
+      continue;
+    }
+    let manifestContent = "";
+    try {
+      manifestContent = await browserVfs.read(`${packageInfo.uri}/${SKILL_PACKAGE_MANIFEST_FILE}`);
+    } catch {
+      continue;
+    }
+    const manifest = normalizeSkillPackageManifest(
+      packageInfo.id,
+      packageInfo.uri,
+      manifestContent,
+    );
+    if (!manifest) {
+      continue;
+    }
+
+    skillInvocationService.register({
+      id: manifest.id,
+      permissions: manifest.permissions,
+      async handler(ctx, action, args) {
+        const source = await ctx.call("memfs.read", {
+          uri: `${manifest.packageUri}/${manifest.entry}`,
+        });
+        if (typeof source !== "string") {
+          throw new CapabilityError(
+            "E_RUNTIME",
+            `Skill package handler is not readable: ${manifest.id}`,
+          );
+        }
+        const invocation = await runnerHost.invoke({
+          module: {
+            id: `${manifest.id}:${manifest.entry}`,
+            source,
+          },
+          input: {
+            action,
+            args,
+          },
+          ctx: {
+            skillId: manifest.id,
+            package: {
+              uri: manifest.packageUri,
+              entry: manifest.entry,
+            },
+            manifest: {
+              id: manifest.id,
+              version: manifest.version,
+              kind: manifest.kind,
+              description: manifest.description,
+            },
+          },
+        });
+        return invocation.result;
+      },
+    });
+  }
 }
 
 function createBrowserVfsMemfsTransport(vfs) {
@@ -2061,6 +2175,11 @@ export function createBackgroundRuntimeServices({
         }
 
         const runnerHost = createBridgeRunnerHost({ invokeRunner });
+        await registerBrowserVfsSkillPackages({
+          browserVfs,
+          runnerHost,
+          skillInvocationService,
+        });
         let kernelRef = null;
         const executeRunnerStep = async ({ step }) => {
           try {
