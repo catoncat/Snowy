@@ -63,6 +63,7 @@ import {
   type SessionHeader,
   type SessionInfoPayload,
   type SessionStorage,
+  type SkillAuditEntry,
   type SkillsSummaryResource,
   THINKING_LEVELS,
   type ThinkingLevelChangePayload,
@@ -739,8 +740,15 @@ describe("contracts", () => {
       "skills.enable",
       "skills.disable",
       "skills.uninstall",
+      "skills.rollback",
     ]);
-    expect(SKILL_AUDIT_STATUSES).toEqual(["installed", "enabled", "disabled", "archived"]);
+    expect(SKILL_AUDIT_STATUSES).toEqual([
+      "installed",
+      "enabled",
+      "disabled",
+      "archived",
+      "rolled_back",
+    ]);
     expect(LOOP_AUDIT_KINDS).toEqual(["loop.step"]);
     expect(LOOP_AUDIT_STATUSES).toEqual(["executed", "failed"]);
     expect(CONTROL_PLANE_AUDIT_KINDS).toEqual([
@@ -752,6 +760,7 @@ describe("contracts", () => {
       "skills.enable",
       "skills.disable",
       "skills.uninstall",
+      "skills.rollback",
       "loop.step",
       "intervention.escalation",
     ]);
@@ -765,6 +774,7 @@ describe("contracts", () => {
       "enabled",
       "disabled",
       "archived",
+      "rolled_back",
       "executed",
       "failed",
       "attention_required",
@@ -857,7 +867,23 @@ describe("contracts", () => {
       "skills.enable",
       "skills.disable",
       "skills.uninstall",
+      "skills.rollback",
     ]);
+  });
+
+  it("allows rollback audit entries to carry version evidence", () => {
+    const entry = {
+      timestamp: "2026-05-27T00:00:00.000Z",
+      sessionId: "session-1",
+      kind: "skills.rollback",
+      skillId: "skill.demo",
+      status: "rolled_back",
+      trusted: true,
+      versionId: "2026-05-27T00:00:00.000Z",
+      versionUri: "mem://skills/skill.demo/@versions/2026-05-27T00:00:00.000Z",
+    } satisfies SkillAuditEntry;
+
+    expect(entry.versionUri).toContain("mem://skills/skill.demo/@versions/");
   });
 
   it("locks the minimal execution host substrate action set", () => {

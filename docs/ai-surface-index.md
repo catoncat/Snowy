@@ -24,7 +24,7 @@
 3. skill/workflow
 4. audit
 
-## 2. 当前 action surface (43 actions)
+## 2. 当前 action surface (44 actions)
 
 ### Browser-local substrate (memfs / page / tabs / site)
 
@@ -74,6 +74,7 @@
 - `skills.enable`
 - `skills.disable`
 - `skills.uninstall`
+- `skills.rollback`
 
 - `hosts.list`
 - `hosts.get`
@@ -85,10 +86,11 @@
 ## 3. 当前已锁定的 skill lifecycle control-plane 边界
 
 - `skills.invoke` 是 runtime substrate action；在 MV3 shared runtime path 中，它只会调用已安装且已启用的 executable skill，并按 skill 声明权限触达真实 capability
-- `skills.install/enable/disable/uninstall` 现在都属于 northbound product control plane
+- `skills.install/enable/disable/uninstall/rollback` 现在都属于 northbound product control plane
 - `skills.uninstall` 的语义是把 skill 从 active product library 归档到 `archived`
 - `skills.uninstall` 不等于物理删除 `mem://skills/...` 包内容
 - `skills.uninstall` 不等于清空 `@versions` 历史，也不改变 rollback / trusted version contract
+- `skills.rollback` 的语义是从 shared version surface 选择显式 `versionUri` 或 latest trusted rollback target，经 BrowserVFS rehydrate 还原 `mem://skills/<id>`，并保留原 lifecycle status / trusted 状态
 
 ## 4. 当前已落地的轻量 resources
 
@@ -112,8 +114,8 @@
 - `packages/core` 继续提供 `readAiSurfaceResource()` lookup path；`apps/mv3-shell` 继续通过统一 `resource.read` bridge 暴露 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail/audit.intervention/observability.replay/observability.timeline/observability.summary/observability.rawEventTail`
 - `runtime.bootstrap` 继续保留为 bootstrap bundle compatibility read path
 - `skills.summary` 现在包含 per-skill `items`。对 package-backed skills，items 会把 `skill.json` 的 `actions`、`matches`、`requiresActiveTab`、`entry`、`version`、`kind`、`description`、`permissions` 与 `tags` 暴露给 AI/product consumers；malformed packages 只保留 lifecycle record，不暴露无效 action catalog。sidepanel management 的 Skills catalog 消费同一份 `skills.summary.items`，不维护 app-local package registry。
-- package-backed `skills.summary.items` 现在还暴露 `versionSurface`，把 active manifest version、canonical snapshot root、rollback policy、latest trusted rollback target（若存在）接到 shared AI Surface；sidepanel Skills catalog 只消费该 shared surface，不维护 app-local version/rollback truth。
-- `audit.tail` 仍是当前 control-plane / execution evidence 主资源，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall`，并通过 `loop.step` 记录 `skills.invoke` 及其子 capability trace 的 operator-visible evidence
+- package-backed `skills.summary.items` 现在还暴露 `versionSurface`，把 active manifest version、canonical snapshot root、rollback policy、latest trusted rollback target（若存在）接到 shared AI Surface；sidepanel Skills catalog 只消费该 shared surface，并通过 `skills.rollback` 触发 rollback，不维护 app-local version/rollback truth。
+- `audit.tail` 仍是当前 control-plane / execution evidence 主资源，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall/rollback`，并通过 `loop.step` 记录 `skills.invoke` 及其子 capability trace 的 operator-visible evidence；rollback audit entry 会记录 skill/version evidence
 - `runtime.summary` 现已包含 typed `interventions` summary；`audit.intervention` 是 intervention lifecycle 的 shared audit read path
 - `observability.replay` 负责把 loop telemetry、control-plane audit、intervention lifecycle 与 compaction continuity marker 按时间顺序 stitch 成统一 replay 文档
 - `observability.timeline` / `observability.summary` / `observability.rawEventTail` 现已通过 shared MV3 `resource.read` 暴露 runtime-owned observability export builder 的 operator-facing read path，并保持 `observability.replay` 作为更高层 stitched replay 文档

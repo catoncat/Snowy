@@ -257,14 +257,17 @@
         "ISSUE-174 proved installed skill.json manifests register persisted package handlers and invoke them through the JS runner",
         "ISSUE-175 proved package actions, site metadata, permissions, tags, and active-tab requirements are discoverable through shared skills.summary/runtime.bootstrap",
         "ISSUE-176 proved the sidepanel Skills catalog consumes the same shared skills.summary.items and operates package-backed skills through existing lifecycle actions",
-        "ISSUE-177 consolidated the gate proof and separated shipped cutover-critical proof from deferred product breadth"
+        "ISSUE-177 consolidated the gate proof and separated shipped cutover-critical proof from deferred product breadth",
+        "ISSUE-178 exposed package lifecycle/version readiness through shared skills.summary and sidepanel catalog",
+        "ISSUE-179 connected shared skills.rollback to BrowserVFS rehydrate, package registry refresh, summary/invoke readback, and audit.tail evidence"
       ],
       "deferred_scope": [
-        "full Skill Studio authoring and version/rollback UI",
+        "full Skill Studio authoring and interactive version selection UI",
+        "rollback confirmation, diff/preview, and richer Studio UX around the shared rollback action",
         "bulk migration of every old plugin ecosystem affordance",
         "post-cutover product polish around package browsing, install sources, and studio workflows"
       ],
-      "deferral_rationale": "ISSUE-172 through ISSUE-177 prove one representative old product capability loop end-to-end on the shared vNext runtime and product surface. Remaining items are broader product/ecosystem breadth and no longer block the cutover-critical replacement proof."
+      "deferral_rationale": "ISSUE-172 through ISSUE-179 prove one representative old product capability loop end-to-end on the shared vNext runtime and product surface, including install, package persistence, discovery, sidepanel management, invocation, rollback, and audit evidence. Remaining items are broader product/ecosystem breadth and no longer block the cutover-critical replacement proof."
     },
     {
       "module_id": "skill-studio-completion-loop",
@@ -300,6 +303,7 @@
       "completion_scope": [
         "shared skills.summary version/rollback readiness surface for package-backed skills",
         "sidepanel Skills catalog consumption of the shared version/rollback surface",
+        "shared skills.rollback action that restores latest trusted package snapshots through BrowserVFS and records rollback evidence",
         "authoring/studio workflow milestones that build on Skill package convention and lifecycle/version engine contracts"
       ]
     },

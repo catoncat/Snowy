@@ -44,6 +44,7 @@
 - rollback triggers：
   - verifier failed + 用户确认
   - release gate failed
+- rollback action：`skills.rollback` 是共享 product control-plane action，可显式传入 `versionUri`，未传入时按 latest trusted rollback target 执行
 
 ### 3. Snapshot primitives
 
@@ -53,6 +54,17 @@
 - canonical skill version URI round-trip
 - 从 `VfsSnapshotInfo` 提升到 engine contract 可消费的 `SkillVersionRef`
 
+### 4. Shared product loop
+
+`apps/mv3-shell` 当前把这层 contract 接成一条最小可执行产品闭环：
+
+1. `skills.summary.items[].versionSurface` 暴露 active version、snapshot root、rollback policy 和 rollback target
+2. sidepanel Skills catalog 只根据 shared `versionSurface.rollbackTarget` 启用 rollback 命令
+3. `skills.rollback` 通过 shared management action path 进入 runtime lifecycle manager
+4. runtime 选择显式 `versionUri` 或 latest trusted rollback target，并调用 BrowserVFS rehydrate 还原 `mem://skills/<id>`
+5. rollback 后保留原 lifecycle status / trusted 状态，刷新 package registry，让后续 `skills.summary` / `skills.invoke` 看到回滚后的 package
+6. `audit.tail` 记录 `skills.rollback`、`rolled_back` status 与 skill/version evidence
+
 ## 什么仍然不在这层里
 
 以下仍然**不属于**当前 engine boundary：
@@ -61,6 +73,7 @@
 - catalog / versions / permissions 的可视化管理界面
 - skill 包物理删除或 `@versions` purge 语义
 - 发布审批与交互式 rollback UX
+- 多版本选择器、rollback confirmation flow、diff/preview 等完整 Studio 交互
 - 任何需要用户面板或产品流程编排的功能
 
 这些都应继续留在后续 Skill Studio / product surface 中实现。

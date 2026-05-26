@@ -11,6 +11,7 @@ import {
   type ObservabilityReplayResource,
   PUBLIC_CAPABILITY_NAMESPACES,
   RUNTIME_CONTROL_PLANE_ACTIONS,
+  SKILL_CONTROL_PLANE_ACTIONS,
   assertCapabilityDescriptor,
   capabilityNamespace,
 } from "@bbl-next/contracts";
@@ -153,6 +154,53 @@ describe("core", () => {
       "fallbackProfile",
       "laneProfiles",
     ]);
+  });
+
+  it("keeps skill control-plane actions aligned with canonical contracts", () => {
+    expect(SKILL_CONTROL_PLANE_ACTIONS).toEqual([
+      "skills.install",
+      "skills.enable",
+      "skills.disable",
+      "skills.uninstall",
+      "skills.rollback",
+    ]);
+    expect(getBuiltinsByNamespace("skills").map((entry) => entry.id)).toEqual([
+      "skills.invoke",
+      "skills.list",
+      "skills.install",
+      "skills.enable",
+      "skills.disable",
+      "skills.uninstall",
+      "skills.rollback",
+    ]);
+    expect(
+      getBuiltinsByNamespace("skills").find((entry) => entry.id === "skills.rollback"),
+    ).toMatchObject({
+      id: "skills.rollback",
+      executionBinding: {
+        family: "skills",
+        operation: "rollback",
+      },
+      sideEffects: "writes",
+      permissions: ["skills.rollback"],
+      inputSchema: {
+        properties: {
+          skillId: { type: "string" },
+          versionUri: { type: "string" },
+        },
+        required: ["skillId"],
+      },
+      outputSchema: {
+        properties: {
+          rollback: {
+            properties: {
+              skillId: { type: "string" },
+              versionUri: { type: "string" },
+            },
+          },
+        },
+      },
+    });
   });
 
   it("keeps runtime control-plane actions aligned with canonical contracts", () => {
@@ -1579,6 +1627,9 @@ describe("core", () => {
     await ctx.skills.enable("skill.lifecycle");
     await ctx.skills.disable("skill.lifecycle");
     await ctx.skills.uninstall("skill.lifecycle");
+    await ctx.skills.rollback("skill.lifecycle", {
+      versionUri: "mem://skills/skill.lifecycle/@versions/2026-05-27T00:00:00.000Z",
+    });
     await ctx.skills.install("skill.lifecycle.setup", { setupPlan: { notes: ["ready"] } });
 
     expect(captured.map((request) => request.action)).toEqual([
@@ -1586,6 +1637,7 @@ describe("core", () => {
       "skills.enable",
       "skills.disable",
       "skills.uninstall",
+      "skills.rollback",
       "skills.install",
     ]);
     expect(captured.map((request) => request.input)).toEqual([
@@ -1593,6 +1645,10 @@ describe("core", () => {
       { skillId: "skill.lifecycle" },
       { skillId: "skill.lifecycle" },
       { skillId: "skill.lifecycle" },
+      {
+        skillId: "skill.lifecycle",
+        versionUri: "mem://skills/skill.lifecycle/@versions/2026-05-27T00:00:00.000Z",
+      },
       { setupPlan: { notes: ["ready"] }, skillId: "skill.lifecycle.setup" },
     ]);
   });

@@ -35,7 +35,8 @@ type SkillActionKind =
   | "skills.install"
   | "skills.enable"
   | "skills.disable"
-  | "skills.uninstall";
+  | "skills.uninstall"
+  | "skills.rollback";
 
 const runtimeApi = (
   globalThis as {
@@ -341,6 +342,17 @@ function submitSkillAction(kind: SkillActionKind, selectedSkillId = skillIdDraft
     return;
   }
   void runManagementAction(kind, { skillId });
+}
+
+function submitSkillRollback(skill: SkillCatalogItem) {
+  const versionUri = skill.versionSurface?.rollbackTarget?.uri;
+  if (!versionUri) {
+    return;
+  }
+  void runManagementAction("skills.rollback", {
+    skillId: skill.skillId,
+    versionUri,
+  });
 }
 
 function selectSkill(skillId: string) {
@@ -690,6 +702,13 @@ onUnmounted(() => {
                   @click="submitSkillAction('skills.uninstall', skill.skillId)"
                 >
                   Uninstall
+                </button>
+                <button
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50"
+                  :disabled="managementBusy || !skill.versionSurface?.rollbackTarget"
+                  @click="submitSkillRollback(skill)"
+                >
+                  Rollback
                 </button>
               </div>
             </article>
