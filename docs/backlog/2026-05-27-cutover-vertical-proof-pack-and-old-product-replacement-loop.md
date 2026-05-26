@@ -1,11 +1,11 @@
 ---
 id: ISSUE-172
 title: "Cutover milestone: old-product replacement skill loop is not proven end-to-end"
-status: open
+status: done
 priority: p0
 source: "anti-fragmentation planning 2026-05-27"
 created: 2026-05-27
-assignee: unassigned
+assignee: codex-milestone
 tags:
   - cutover
   - milestone
@@ -36,6 +36,7 @@ write_scope:
   - docs/legacy-to-vnext-migration-matrix.md
 acceptance_ref: docs/cutover-readiness-criteria.md
 check_cmd: "bun run check"
+completed_at: 2026-05-26T17:05:37.426Z
 ---
 
 ## Goal
@@ -73,3 +74,22 @@ This is the next milestone because the current docs say many substrate gates are
 1. Northbound surface impact: uses existing `skills.invoke` / `skills.install` / `skills.enable` actions and `skills.summary` / `audit.tail` resources; no new public capability namespace is added.
 2. Consumer impact: Skill runtime gains a shared MV3 invocation path for enabled executable skills, UI / Agent / system consumers can observe lifecycle and invocation evidence through existing shared resources, MCP export surface is unchanged.
 3. Control-plane docs: `docs/ai-surface-index.md`, `docs/agent-bootstrap-context-pack.md`, `docs/cutover-readiness-criteria.md`, `docs/migration-parity-dashboard.md`, and `docs/legacy-to-vnext-migration-matrix.md` must stay synced with the exact proof scope.
+
+## 工作总结
+
+### 实现了什么
+- 打通 MV3 shared runtime 的 skills.invoke 路由，已安装且启用的 executable skill 可经 SkillInvocationService 调用真实 capability
+- 新增 install -> persist/restart -> enable -> invoke -> tabs.get_active -> audit.tail 的纵向测试，并同步 cutover/parity/AI surface 文档
+
+### 实际跑了什么检查
+- RED: bun run test -- apps/mv3-shell/test/manifest.spec.ts --testNamePattern='invokes a rehydrated enabled executable skill' 先失败于 skills.invoke 缺口
+- bun run test -- apps/mv3-shell/test/manifest.spec.ts
+- git diff --check
+- bun run check
+
+### 残留风险
+- 完整 Skill Studio、版本管理和旧 plugin 生态迁移仍未完成；本次只证明一条代表性 old-product replacement Skill loop
+
+## 相关 commits
+
+- `da6333b23d5b` feat(mv3): 打通 Skill 调用纵向闭环
