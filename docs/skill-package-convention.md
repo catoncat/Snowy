@@ -125,8 +125,44 @@ Valid package manifests are also projected into the shared AI surface. After
 restart, `resource.read skills.summary` and `runtime.bootstrap` include per-skill
 `items` with lifecycle state plus manifest metadata: `entry`, `version`, `kind`,
 `description`, `permissions`, `tags`, `matches`, `requiresActiveTab`, and
-`actions`. Malformed packages remain lifecycle-visible but do not expose bogus
-action metadata.
+`actions`. Runtime event subscriptions are projected as `eventSubscriptions`
+with `{ event, action, description? }`. Malformed packages remain
+lifecycle-visible but do not expose bogus action or subscription metadata.
+
+### Runtime Event Subscriptions
+
+Package-backed Skills may subscribe to runtime events in `skill.json`:
+
+```json
+{
+  "id": "skill.legacy.send-success",
+  "entry": "handler.js",
+  "permissions": ["memfs.read"],
+  "eventSubscriptions": [
+    {
+      "event": "runtime.route.after",
+      "action": "notify_success",
+      "description": "Emit success evidence after a successful brain run start route"
+    }
+  ]
+}
+```
+
+The shared MV3 runtime dispatches matching events through the existing
+`skills.invoke` + JS Runner path. The handler receives
+`input.args.event` and `input.args.subscription`, returns normal Skill output,
+and leaves the same `audit.tail` evidence as explicit invocation. This is the
+replacement path for legacy hook-driven plugins such as
+`send-success-global-message`; it is not a private Plugin registry and it does
+not reintroduce Plugin as a product concept.
+
+Current scope:
+
+- Supported pilot event: `runtime.route.after`.
+- Dispatch entry: `runtime.event.dispatch`.
+- Event subscribers must be installed and enabled package-backed Skills.
+- Bulk legacy hook compatibility, hook ordering, cancellation semantics, and a
+  full hook matrix are Not Now unless the pilot exposes a real blocker.
 
 ### Install-Only Setup Hooks
 

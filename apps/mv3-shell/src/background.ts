@@ -73,6 +73,10 @@ function cloneValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function isAiSurfaceResourceId(value) {
   return typeof value === "string" && AI_SURFACE_RESOURCE_IDS.includes(value);
 }
@@ -514,6 +518,25 @@ function normalizeSkillSummaryInput(entry) {
                     .filter((step) => step && typeof step === "object" && !Array.isArray(step))
                     .map((step) => ({ ...step })),
                 }
+              : {}),
+          }))
+      : [],
+    eventSubscriptions: Array.isArray(entry.eventSubscriptions)
+      ? entry.eventSubscriptions
+          .filter(
+            (subscription) =>
+              subscription &&
+              typeof subscription === "object" &&
+              typeof subscription.event === "string" &&
+              subscription.event.trim() &&
+              typeof subscription.action === "string" &&
+              subscription.action.trim(),
+          )
+          .map((subscription) => ({
+            event: subscription.event.trim(),
+            action: subscription.action.trim(),
+            ...(typeof subscription.description === "string" && subscription.description.trim()
+              ? { description: subscription.description.trim() }
               : {}),
           }))
       : [],
@@ -1496,6 +1519,111 @@ export function createBackgroundRunnerBridge({
     );
     await appendSkillInvocationAudit(response, Date.now() - startedAt);
     return response;
+  }
+
+  function normalizeRuntimeEventDispatchMessage(message) {
+    const eventPayload = isPlainObject(message?.event) ? message.event : {};
+    const eventNameCandidate =
+      typeof message?.eventName === "string"
+        ? message.eventName
+        : typeof eventPayload.name === "string"
+          ? eventPayload.name
+          : typeof eventPayload.event === "string"
+            ? eventPayload.event
+            : "";
+    const eventName = eventNameCandidate.trim();
+    if (!eventName) {
+      return {
+        ok: false,
+        error: {
+          code: "E_BAD_INPUT",
+          message: "runtime.event.dispatch requires event.name or eventName",
+        },
+      };
+    }
+    return {
+      ok: true,
+      data: {
+        eventName,
+        event: {
+          ...eventPayload,
+          name: eventName,
+        },
+      },
+    };
+  }
+
+  function findRuntimeEventSubscriptions(skillEntries, eventName) {
+    const subscriptions = [];
+    for (const entry of skillEntries) {
+      if (
+        !entry ||
+        entry.source !== "package" ||
+        entry.enabled !== true ||
+        entry.status !== "enabled"
+      ) {
+        continue;
+      }
+      for (const subscription of entry.eventSubscriptions ?? []) {
+        if (subscription.event !== eventName) {
+          continue;
+        }
+        subscriptions.push({
+          skillId: entry.skillId,
+          subscription,
+        });
+      }
+    }
+    return subscriptions;
+  }
+
+  async function routeRuntimeEventDispatch(message) {
+    const normalized = normalizeRuntimeEventDispatchMessage(message);
+    if (!normalized.ok) {
+      return normalized;
+    }
+    const { eventName, event } = normalized.data;
+    const skillEntries =
+      typeof getRuntimeServices().listSkills === "function"
+        ? await getRuntimeServices().listSkills()
+        : [];
+    const subscriptions = findRuntimeEventSubscriptions(skillEntries, eventName);
+    const invocations = [];
+
+    for (const { skillId, subscription } of subscriptions) {
+      const response = await routeSkillInvocation({
+        skillId,
+        action: subscription.action,
+        args: {
+          event,
+          subscription: { ...subscription },
+        },
+      });
+      invocations.push({
+        skillId,
+        action: subscription.action,
+        ok: response.ok === true,
+        ...(response.ok
+          ? {
+              result: response.data?.result,
+              trace: Array.isArray(response.data?.trace) ? response.data.trace : [],
+            }
+          : {
+              error: response.error,
+            }),
+      });
+    }
+
+    return {
+      ok: true,
+      data: {
+        event: eventName,
+        dispatchedCount: subscriptions.length,
+        succeededCount: invocations.filter((entry) => entry.ok).length,
+        failedCount: invocations.filter((entry) => !entry.ok).length,
+        invocations,
+      },
+    };
   }
 
   async function routeRuntimeService(call) {
@@ -2677,6 +2805,8 @@ export function createBackgroundRunnerBridge({
               : {}),
           }),
         });
+      case "runtime.event.dispatch":
+        return routeRuntimeEventDispatch(message);
       case "page.press_key":
         return routeRuntimeService(() =>
           invokePageActionResource("press_key", {

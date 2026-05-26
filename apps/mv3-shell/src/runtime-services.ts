@@ -320,6 +320,26 @@ function normalizeManifestAction(value) {
   return action;
 }
 
+function normalizeManifestEventSubscription(value) {
+  if (
+    !isPlainObject(value) ||
+    typeof value.event !== "string" ||
+    !value.event.trim() ||
+    typeof value.action !== "string" ||
+    !value.action.trim()
+  ) {
+    return null;
+  }
+  const subscription = {
+    event: value.event.trim(),
+    action: value.action.trim(),
+  };
+  if (typeof value.description === "string" && value.description.trim()) {
+    subscription.description = value.description.trim();
+  }
+  return subscription;
+}
+
 function normalizeSkillPackageManifest(skillId, packageUri, content) {
   let manifest = null;
   try {
@@ -350,6 +370,11 @@ function normalizeSkillPackageManifest(skillId, packageUri, content) {
     requiresActiveTab: manifest.requiresActiveTab === true,
     actions: Array.isArray(manifest.actions)
       ? manifest.actions.map((action) => normalizeManifestAction(action)).filter(Boolean)
+      : [],
+    eventSubscriptions: Array.isArray(manifest.eventSubscriptions)
+      ? manifest.eventSubscriptions
+          .map((subscription) => normalizeManifestEventSubscription(subscription))
+          .filter(Boolean)
       : [],
     description: typeof manifest.description === "string" ? manifest.description : "",
     version: Number.isInteger(manifest.version) ? manifest.version : null,
@@ -481,6 +506,7 @@ function packageManifestToSkillSummary(record, manifest, versionSurface = null) 
         ? { injectionSteps: action.injectionSteps.map((step) => ({ ...step })) }
         : {}),
     })),
+    eventSubscriptions: manifest.eventSubscriptions.map((subscription) => ({ ...subscription })),
   };
 }
 
@@ -501,6 +527,7 @@ function lifecycleRecordToSkillSummary(record) {
     matches: [],
     requiresActiveTab: false,
     actions: [],
+    eventSubscriptions: [],
   };
 }
 

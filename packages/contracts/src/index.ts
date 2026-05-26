@@ -470,6 +470,12 @@ export interface SkillActionSummary {
   outputSchema?: JsonSchema;
 }
 
+export interface SkillEventSubscriptionSummary {
+  event: string;
+  action: string;
+  description?: string;
+}
+
 export interface SkillBootstrapSummaryItem {
   skillId: string;
   status: string;
@@ -489,6 +495,7 @@ export interface SkillBootstrapSummaryItem {
   matches: string[];
   requiresActiveTab: boolean;
   actions: SkillActionSummary[];
+  eventSubscriptions?: SkillEventSubscriptionSummary[];
 }
 
 export interface HostBootstrapSummaryItem {

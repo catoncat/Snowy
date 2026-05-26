@@ -933,6 +933,12 @@ describe("core", () => {
                 verifier: "results_visible",
               },
             ],
+            eventSubscriptions: [
+              {
+                event: "runtime.route.after",
+                action: "notify_success",
+              },
+            ],
           },
         ],
       },
@@ -985,6 +991,12 @@ describe("core", () => {
               {
                 name: "search_posts",
                 verifier: "results_visible",
+              },
+            ],
+            eventSubscriptions: [
+              {
+                event: "runtime.route.after",
+                action: "notify_success",
               },
             ],
           },

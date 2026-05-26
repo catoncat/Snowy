@@ -482,6 +482,12 @@ describe("contracts", () => {
                 verifier: "results_visible",
               },
             ],
+            eventSubscriptions: [
+              {
+                event: "runtime.route.after",
+                action: "notify_success",
+              },
+            ],
           },
         ],
       },

@@ -2240,6 +2240,12 @@ function cloneSkillSummaryAction(
   };
 }
 
+function cloneSkillEventSubscription(
+  subscription: NonNullable<SkillsBootstrapSummary["items"][number]["eventSubscriptions"]>[number],
+): NonNullable<SkillsBootstrapSummary["items"][number]["eventSubscriptions"]>[number] {
+  return { ...subscription };
+}
+
 type SkillSummaryVersionSurface = NonNullable<
   SkillsBootstrapSummary["items"][number]["versionSurface"]
 >;
@@ -2278,6 +2284,13 @@ function cloneSkillSummaryItem(
     tags: [...item.tags],
     matches: [...item.matches],
     actions: item.actions.map((action) => cloneSkillSummaryAction(action)),
+    ...(item.eventSubscriptions
+      ? {
+          eventSubscriptions: item.eventSubscriptions.map((subscription) =>
+            cloneSkillEventSubscription(subscription),
+          ),
+        }
+      : {}),
   };
 }
 
