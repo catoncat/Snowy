@@ -2669,6 +2669,12 @@ export function createBackgroundRunnerBridge({
             trusted: data?.skill?.trusted,
             ...(data?.rollback?.versionId ? { versionId: data.rollback.versionId } : {}),
             ...(data?.rollback?.versionUri ? { versionUri: data.rollback.versionUri } : {}),
+            ...(data?.update?.previousVersion?.versionId
+              ? { versionId: data.update.previousVersion.versionId }
+              : {}),
+            ...(data?.update?.previousVersion?.uri
+              ? { versionUri: data.update.previousVersion.uri }
+              : {}),
           }),
         });
       case "page.press_key":

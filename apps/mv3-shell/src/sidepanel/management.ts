@@ -62,6 +62,8 @@ type SkillAction = {
     | "skills.uninstall"
     | "skills.rollback";
   skillId: string;
+  setupPlan?: SkillPackageSetupPlan;
+  metadata?: Record<string, unknown>;
   versionUri?: string;
 };
 
@@ -112,6 +114,28 @@ export interface SkillCatalogItem {
   actions: SkillCatalogAction[];
 }
 
+export interface SkillPackageSetupPlan {
+  skillId: string;
+  phase: "install";
+  baseUri: string;
+  writes: Array<{ uri: string; content: string }>;
+  notes: string[];
+}
+
+export interface SkillPackageConventionFile {
+  path: string;
+  content: string;
+}
+
+export interface SkillPackageConventionInput {
+  manifest: Record<string, unknown>;
+  handlerSource: string;
+  skillMarkdown?: string;
+  readme?: string;
+  files?: SkillPackageConventionFile[];
+  notes?: string[];
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -121,6 +145,80 @@ function requireNonEmptyString(value: unknown, message: string): string {
     throw new Error(message);
   }
   return value.trim();
+}
+
+function normalizePackageRelativePath(value: unknown, message: string): string {
+  const trimmed = requireNonEmptyString(value, message);
+  if (trimmed.startsWith("mem://") || trimmed.startsWith("/") || /^[A-Za-z]:[\\/]/.test(trimmed)) {
+    throw new Error(message);
+  }
+  if (trimmed.includes("\\")) {
+    throw new Error(message);
+  }
+  const segments = trimmed.split("/").filter(Boolean);
+  if (segments.length === 0 || segments.some((segment) => segment === "." || segment === "..")) {
+    throw new Error(message);
+  }
+  return segments.join("/");
+}
+
+export function createSkillPackageSetupPlan(
+  skillIdValue: string,
+  input: SkillPackageConventionInput,
+): SkillPackageSetupPlan {
+  const skillId = requireNonEmptyString(skillIdValue, "skill package requires skillId");
+  if (!isPlainObject(input.manifest)) {
+    throw new Error("skill package requires manifest");
+  }
+  const handlerSource = requireNonEmptyString(
+    input.handlerSource,
+    "skill package requires handlerSource",
+  );
+  const baseUri = `mem://skills/${skillId}`;
+  const manifest: Record<string, unknown> = {
+    ...input.manifest,
+    id: skillId,
+  };
+  const entry = normalizePackageRelativePath(manifest.entry ?? "handler.js", "invalid entry path");
+  manifest.entry = entry;
+  const writes: SkillPackageSetupPlan["writes"] = [
+    {
+      uri: `${baseUri}/SKILL.md`,
+      content:
+        typeof input.skillMarkdown === "string" && input.skillMarkdown.length > 0
+          ? input.skillMarkdown
+          : `# ${skillId}\n`,
+    },
+    {
+      uri: `${baseUri}/skill.json`,
+      content: `${JSON.stringify(manifest, null, 2)}\n`,
+    },
+    {
+      uri: `${baseUri}/${entry}`,
+      content: handlerSource,
+    },
+  ];
+
+  if (typeof input.readme === "string" && input.readme.length > 0) {
+    writes.push({
+      uri: `${baseUri}/README.md`,
+      content: input.readme,
+    });
+  }
+  for (const file of input.files ?? []) {
+    writes.push({
+      uri: `${baseUri}/${normalizePackageRelativePath(file.path, "invalid package file path")}`,
+      content: String(file.content ?? ""),
+    });
+  }
+
+  return {
+    skillId,
+    phase: "install",
+    baseUri,
+    writes,
+    notes: Array.isArray(input.notes) ? input.notes.map((note) => String(note)) : [],
+  };
 }
 
 export function createInitialManagementState(): ManagementState {
@@ -254,6 +352,12 @@ export function createManagementActionMessage(
       return {
         kind,
         skillId: requireNonEmptyString(payload.skillId, `${kind} requires skillId`),
+        ...(kind === "skills.install" && isPlainObject(payload.setupPlan)
+          ? { setupPlan: payload.setupPlan as unknown as SkillPackageSetupPlan }
+          : {}),
+        ...(kind === "skills.install" && isPlainObject(payload.metadata)
+          ? { metadata: payload.metadata }
+          : {}),
         ...(kind === "skills.rollback" &&
         typeof payload.versionUri === "string" &&
         payload.versionUri.trim()

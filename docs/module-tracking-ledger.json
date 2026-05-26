@@ -259,23 +259,25 @@
         "ISSUE-176 proved the sidepanel Skills catalog consumes the same shared skills.summary.items and operates package-backed skills through existing lifecycle actions",
         "ISSUE-177 consolidated the gate proof and separated shipped cutover-critical proof from deferred product breadth",
         "ISSUE-178 exposed package lifecycle/version readiness through shared skills.summary and sidepanel catalog",
-        "ISSUE-179 connected shared skills.rollback to BrowserVFS rehydrate, package registry refresh, summary/invoke readback, and audit.tail evidence"
+        "ISSUE-179 connected shared skills.rollback to BrowserVFS rehydrate, package registry refresh, summary/invoke readback, and audit.tail evidence",
+        "ISSUE-180 proved shared Studio/package authoring data can create/update package-backed skills, auto-snapshot prior package state, refresh registry, invoke updated code, rollback, and read audit evidence"
       ],
       "deferred_scope": [
-        "full Skill Studio authoring and interactive version selection UI",
-        "rollback confirmation, diff/preview, and richer Studio UX around the shared rollback action",
+        "interactive version selection UI",
+        "diff/preview for package updates",
+        "rollback confirmation and richer Studio UX around the shared rollback action",
         "bulk migration of every old plugin ecosystem affordance",
         "post-cutover product polish around package browsing, install sources, and studio workflows"
       ],
-      "deferral_rationale": "ISSUE-172 through ISSUE-179 prove one representative old product capability loop end-to-end on the shared vNext runtime and product surface, including install, package persistence, discovery, sidepanel management, invocation, rollback, and audit evidence. Remaining items are broader product/ecosystem breadth and no longer block the cutover-critical replacement proof."
+      "deferral_rationale": "ISSUE-172 through ISSUE-180 prove one representative old product capability loop end-to-end on the shared vNext runtime and product surface, including authoring, install, update, package persistence, discovery, sidepanel management, invocation, rollback, and audit evidence. Remaining items are broader product/ecosystem breadth and no longer block the cutover-critical replacement proof."
     },
     {
       "module_id": "skill-studio-completion-loop",
       "title": "Skill Studio Completion Loop",
-      "summary": "Product-level Skill Studio, lifecycle, versioning, rollback readiness, and authoring surfaces required to move from representative old-product replacement proof toward full browser plugin refactor completion.",
+      "summary": "Product-level Skill Studio, lifecycle, versioning, rollback readiness, and author/update surfaces now use the shared AI-surface path; richer editor and migration breadth stays deferred.",
       "tracking_order": 14,
       "stage": "mainline",
-      "status": "partial",
+      "status": "shipped",
       "depends_on_modules": [
         "old-product-replacement-loop",
         "skill-runtime-sdk-studio",
@@ -300,12 +302,21 @@
       "cutover_gate": "Full product completion after Level 2 proof",
       "default_parallel_group": "sdk-docs",
       "milestone_rationale": "ISSUE-172 through ISSUE-177 proved the cutover-critical executable Skill replacement chain. Full browser plugin refactor completion now needs the product-level Skill Studio/versioning lane to consume the existing lifecycle/version engine through shared AI-surface resources instead of remaining hidden as deferred breadth.",
-      "completion_scope": [
+      "shipped_scope": [
         "shared skills.summary version/rollback readiness surface for package-backed skills",
         "sidepanel Skills catalog consumption of the shared version/rollback surface",
         "shared skills.rollback action that restores latest trusted package snapshots through BrowserVFS and records rollback evidence",
-        "authoring/studio workflow milestones that build on Skill package convention and lifecycle/version engine contracts"
-      ]
+        "sidepanel package editor that builds setupPlan from manifest JSON, handler source, and SKILL.md instead of using a private Studio registry",
+        "shared skills.install create/update path that writes mem://skills/<skillId> package files and refreshes package registry immediately",
+        "automatic snapshot of previous package state before update so versionSurface, skills.rollback, skills.invoke, and audit.tail prove rollback"
+      ],
+      "deferred_scope": [
+        "interactive version selection and rollback confirmation UI",
+        "package diff/preview before update",
+        "bulk migration of legacy plugin ecosystem affordances",
+        "richer editor polish and package source browsing"
+      ],
+      "deferral_rationale": "ISSUE-178 through ISSUE-180 close the product-level lifecycle/version/author-update chain through shared AI-surface resources and actions. Remaining items are workflow breadth and UX polish, not blockers for the browser plugin refactor's representative Skill Studio completion loop."
     },
     {
       "module_id": "browser-vfs",

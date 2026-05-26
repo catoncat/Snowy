@@ -245,6 +245,23 @@ function normalizeInstallSetupPlan({ skillId, input }) {
   });
 }
 
+async function snapshotCurrentPackageForUpdate({ skillId, vfs }) {
+  const packageUri = `mem://skills/${skillId}`;
+  if (!(await vfs.isPackageRoot(packageUri))) {
+    return null;
+  }
+  const versionId = new Date().toISOString();
+  const versionUri = `${packageUri}/@versions/${versionId}`;
+  await vfs.snapshot(packageUri, versionUri, {
+    trusted: true,
+  });
+  return {
+    versionId,
+    uri: versionUri,
+    trusted: true,
+  };
+}
+
 function normalizePackageRelativePath(value) {
   const trimmed = String(value || "").trim();
   if (!trimmed) {
@@ -611,13 +628,43 @@ function createSkillLifecycleManager({ chromeApi, getVfs, refreshPackages } = {}
 
       if (action === "skills.install") {
         const setupWrites = normalizeInstallSetupPlan({ skillId, input });
+        let previousVersion = null;
         if (setupWrites.length > 0) {
           const vfs = await getVfs?.();
           if (!vfs) {
             throw new CapabilityError("E_RUNTIME", "BrowserVFS is required for skill setupPlan");
           }
+          if (previous && previous.status !== "archived") {
+            previousVersion = await snapshotCurrentPackageForUpdate({ skillId, vfs });
+          }
           await vfs.stage(setupWrites);
         }
+        await refreshPackages?.();
+        const nextRecord = {
+          skillId,
+          status,
+          trusted: previous?.trusted ?? false,
+          recentChange: action,
+          lastChangedAt: new Date().toISOString(),
+        };
+        records.set(skillId, nextRecord);
+        await saveSkillLifecycleRecords(chromeApi, [...records.values()]);
+
+        return {
+          skill: {
+            skillId,
+            status,
+            trusted: nextRecord.trusted,
+            recentChange: action,
+          },
+          ...(previousVersion
+            ? {
+                update: {
+                  previousVersion,
+                },
+              }
+            : {}),
+        };
       }
 
       const nextRecord = {

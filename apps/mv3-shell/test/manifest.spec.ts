@@ -4289,6 +4289,274 @@ describe("mv3-shell manifest", () => {
     runtimeHarness.cleanup();
   });
 
+  it("creates updates invokes and rolls back a package-backed skill through the shared surface", async () => {
+    const storageArea = createStorageAreaHarness();
+    const skillId = "skill.studio.authoring";
+    const packageUri = `mem://skills/${skillId}`;
+    const setupPlan = (version: number) => ({
+      skillId,
+      phase: "install",
+      baseUri: packageUri,
+      writes: [
+        {
+          uri: `${packageUri}/SKILL.md`,
+          content: `# Studio Authored Skill v${version}\n`,
+        },
+        {
+          uri: `${packageUri}/skill.json`,
+          content: JSON.stringify({
+            id: skillId,
+            version,
+            permissions: ["memfs.read"],
+            description: `Studio-authored package v${version}`,
+            kind: "prompt",
+            entry: "handler.js",
+          }),
+        },
+        {
+          uri: `${packageUri}/handler.js`,
+          content: `
+            exports.default = async ({ ctx, input }) => ({
+              skillId: ctx.skillId,
+              action: input.action,
+              version: ${version},
+              packageVersion: ctx.manifest.version,
+              note: input.args.note
+            });
+          `,
+        },
+      ],
+      notes: [`studio-authored-v${version}`],
+    });
+    const harness = createChromeHarness({
+      activeTab: {
+        id: 63,
+        url: "https://fixture.test/studio-authoring",
+        title: "Studio Authoring",
+      },
+      storageArea,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+    const send = (message: Record<string, unknown>) =>
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        ...message,
+      });
+
+    await expect(
+      send({
+        kind: "skills.install",
+        skillId,
+        setupPlan: setupPlan(1),
+        metadata: {
+          source: "studio",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skill: {
+          skillId,
+          status: "installed",
+        },
+      },
+    });
+    await send({ kind: "skills.enable", skillId });
+
+    await expect(
+      send({
+        kind: "skills.invoke",
+        skillId,
+        action: "inspect",
+        args: { note: "initial" },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        result: {
+          skillId,
+          action: "inspect",
+          version: 1,
+          packageVersion: 1,
+          note: "initial",
+        },
+      },
+    });
+
+    await expect(
+      send({
+        kind: "skills.install",
+        skillId,
+        setupPlan: setupPlan(2),
+        metadata: {
+          source: "studio",
+          operation: "update",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skill: {
+          skillId,
+          status: "installed",
+        },
+        update: {
+          previousVersion: {
+            trusted: true,
+            uri: expect.stringContaining(`${packageUri}/@versions/`),
+          },
+        },
+      },
+    });
+    await send({ kind: "skills.enable", skillId });
+
+    await expect(
+      send({
+        kind: "skills.invoke",
+        skillId,
+        action: "inspect",
+        args: { note: "updated" },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        result: {
+          skillId,
+          action: "inspect",
+          version: 2,
+          packageVersion: 2,
+          note: "updated",
+        },
+      },
+    });
+
+    const summaryResponse = (await send({
+      kind: "resource.read",
+      resourceId: "skills.summary",
+    })) as {
+      ok: boolean;
+      data: {
+        data: {
+          items: Array<{
+            skillId: string;
+            version: number | null;
+            versionSurface?: {
+              rollbackTarget?: {
+                uri: string;
+                versionId: string;
+                trusted: boolean;
+              } | null;
+            } | null;
+          }>;
+        };
+      };
+    };
+    expect(summaryResponse.ok).toBe(true);
+    const authoredSkill = summaryResponse.data.data.items.find((item) => item.skillId === skillId);
+    expect(authoredSkill).toMatchObject({
+      skillId,
+      version: 2,
+      versionSurface: {
+        activeVersion: {
+          versionId: "2",
+        },
+        rollbackTarget: {
+          trusted: true,
+          uri: expect.stringContaining(`${packageUri}/@versions/`),
+        },
+      },
+    });
+    const rollbackUri = authoredSkill?.versionSurface?.rollbackTarget?.uri;
+    expect(rollbackUri).toEqual(expect.stringContaining(`${packageUri}/@versions/`));
+
+    await expect(
+      send({
+        kind: "skills.rollback",
+        skillId,
+        versionUri: rollbackUri,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skill: {
+          skillId,
+          status: "enabled",
+          recentChange: "skills.rollback",
+        },
+        rollback: {
+          skillId,
+          versionUri: rollbackUri,
+        },
+      },
+    });
+
+    await expect(
+      send({
+        kind: "skills.invoke",
+        skillId,
+        action: "inspect",
+        args: { note: "rolled-back" },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        result: {
+          skillId,
+          action: "inspect",
+          version: 1,
+          packageVersion: 1,
+          note: "rolled-back",
+        },
+      },
+    });
+
+    const auditResult = (await send({
+      kind: "resource.read",
+      resourceId: "audit.tail",
+    })) as {
+      ok: boolean;
+      data: {
+        data: {
+          entries: Array<{
+            kind: string;
+            skillId?: string;
+            capabilityId?: string;
+            status: string;
+            versionUri?: string;
+          }>;
+        };
+      };
+    };
+    expect(auditResult.ok).toBe(true);
+    expect(auditResult.data.data.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "skills.install",
+          skillId,
+          status: "installed",
+        }),
+        expect.objectContaining({
+          kind: "skills.rollback",
+          skillId,
+          status: "rolled_back",
+          versionUri: rollbackUri,
+        }),
+        expect.objectContaining({
+          kind: "loop.step",
+          capabilityId: "skills.invoke",
+          status: "executed",
+        }),
+      ]),
+    );
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("skips malformed installed package manifests without breaking runtime boot", async () => {
     const storageArea = createStorageAreaHarness();
     const firstHarness = createChromeHarness({
