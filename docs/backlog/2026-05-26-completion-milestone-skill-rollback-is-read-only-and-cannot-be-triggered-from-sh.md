@@ -80,4 +80,4 @@ Turn Skill Studio version readiness into an executable product loop: inspect rol
 
 ## 相关 commits
 
-- `a9a7867c9318` feat(studio): 支持 Skill 回滚
+- `a9a7867c931818c2419f9d0719b129dcee862290` feat(studio): 支持 Skill 回滚
