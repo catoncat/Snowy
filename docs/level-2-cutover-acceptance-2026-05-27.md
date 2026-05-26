@@ -6,7 +6,7 @@
 
 ## Decision Summary
 
-The repository now has current repo-side evidence for Level 2 cutover readiness. The old-product replacement proof is no longer missing a representative executable Skill path: `ISSUE-172` through `ISSUE-181` cover install, package persistence, restart discovery, package execution, shared discoverability, visible management, rollback, author/update, runtime event subscription, and audit evidence.
+The repository now has current repo-side evidence for Level 2 cutover readiness. The old-product replacement proof is no longer missing a representative executable Skill path: `ISSUE-172` through `ISSUE-181` cover install, package persistence, restart discovery, package execution, shared discoverability, visible management, rollback, author/update, runtime event subscription, and audit evidence. `ISSUE-184` adds the release-facing real Chromium MV3 proof: package handlers execute in a sandbox runner instead of `unsafe-eval`, and sandboxed handlers can call back into the shared capability path.
 
 This document does not approve a product release or switch the old mainline by itself. The representative UAT readout is captured in `docs/level-2-uat-scenario-2026-05-27.md`. The remaining decision is external release acceptance: either accept this proof pack as the Level 2 cutover basis, request another concrete UAT scenario, or explicitly promote one deferred breadth item into the current milestone.
 
@@ -16,10 +16,10 @@ This document does not approve a product release or switch the old mainline by i
 |---|---|---|
 | Gate A: Contract / Runtime Correctness | satisfied | `CapabilityDescriptor`, action projection, ctx permissions, trace, nested invoke, skill lifecycle, package action catalog, and event subscription summaries are covered by `packages/contracts/test/contracts.spec.ts` and `packages/core/test/core.spec.ts`; latest related implementation commits include `da6333b`, `e5cd727`, and `fd53473`. |
 | Gate B: BrowserVFS Correctness | satisfied | BrowserVFS baseline and canonical `mem://skills/<skillId>/...` behavior are established; `ISSUE-173` / `04c9986` proves `skills.install` setup plans materialize package files into the canonical package root and survive restart readback. |
-| Gate C: JS Runner + MV3 Host Correctness | satisfied | JS Runner and MV3 offscreen bridge remain the execution path for package handlers; `ISSUE-174` / `4e14beb` proves installed `skill.json` + `handler.js` registration and invocation through the runner path. |
+| Gate C: JS Runner + MV3 Host Correctness | satisfied | JS Runner and MV3 offscreen bridge remain the execution path for package handlers; `ISSUE-174` / `4e14beb` proves installed `skill.json` + `handler.js` registration and invocation through the runner path, and `ISSUE-184` proves the same release UAT path works in real Chromium MV3 CSP by executing dynamic package code in a sandbox page rather than an extension page. |
 | Gate D: Site Runtime Minimum Production Path | satisfied | Active-tab Tier 1 automation is sufficient for cutover; `ISSUE-172` / `da6333b` proves an executable Skill can invoke real `tabs.get_active` through the shared MV3 runtime and leave audit evidence. |
 | Gate E: Migration Control Plane Exists | satisfied | `docs/legacy-to-vnext-migration-matrix.md`, `docs/migration-parity-dashboard.md`, `docs/cutover-readiness-criteria.md`, and `docs/module-tracking-ledger.json` distinguish shipped cutover-critical proof from deferred breadth. |
-| Gate F: Operability | satisfied | `audit.tail`, runtime diagnostics, intervention/audit resources, and observability read surfaces are landed; `ISSUE-172` through `ISSUE-181` all rely on vNext audit/runtime evidence rather than old-repo diagnostics. |
+| Gate F: Operability | satisfied | `audit.tail`, runtime diagnostics, intervention/audit resources, and observability read surfaces are landed; `ISSUE-172` through `ISSUE-184` rely on vNext audit/runtime evidence rather than old-repo diagnostics, including real Chromium `audit.tail` readback for `skills.invoke` and sandboxed `memfs.read`. |
 | Gate G: Product Self-Awareness Surface | satisfied | `runtime.summary`, `config.summary`, `skills.summary`, `hosts.summary`, and `runtime.bootstrap` expose shared state; `ISSUE-175`, `ISSUE-176`, `ISSUE-178`, `ISSUE-179`, `ISSUE-180`, and `ISSUE-181` extend that surface through package catalog, sidepanel catalog, version/rollback readiness, update/rollback actions, and event subscriptions. |
 
 ## Representative Product Loop
@@ -34,7 +34,7 @@ skills.install setupPlan
 → sidepanel Skills catalog / shared skills.summary
 → enable
 → skills.invoke or runtime.event.dispatch
-→ JS Runner package handler
+→ sandboxed JS Runner package handler under MV3 CSP
 → shared capability call such as tabs.get_active or memfs.read
 → audit.tail evidence
 → optional update snapshot and skills.rollback readback
@@ -58,7 +58,7 @@ These items remain deliberately outside the current Level 2 proof. They should n
 
 There should be at most one next planning boundary after this pack:
 
-1. Accept this repository state plus `docs/level-2-uat-scenario-2026-05-27.md` as the Level 2 cutover evidence basis and move to external release / product cutover.
+1. Accept this repository state plus the real Chromium MV3 smoke in `docs/level-2-uat-scenario-2026-05-27.md` as the Level 2 cutover evidence basis and move to external release / product cutover.
 2. Request one additional concrete UAT scenario that exercises a human-selected real browser/profile workflow.
 3. Explicitly promote one deferred breadth item to mainline with a named product reason.
 

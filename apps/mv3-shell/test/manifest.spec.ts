@@ -650,6 +650,13 @@ describe("mv3-shell manifest", () => {
     expect(manifest.side_panel).toMatchObject({
       default_path: "src/sidepanel.html",
     });
+    expect(manifest.sandbox).toMatchObject({
+      pages: ["src/runner-sandbox.html"],
+    });
+    expect(manifest.content_security_policy).toMatchObject({
+      extension_pages: "script-src 'self'; object-src 'self'",
+      sandbox: expect.stringContaining("'unsafe-eval'"),
+    });
   });
 
   it("keeps the offscreen entry free of TypeScript source imports", () => {

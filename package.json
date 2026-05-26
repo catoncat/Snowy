@@ -19,6 +19,7 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "format:check": "biome format .",
+    "release:smoke:mv3": "bun scripts/release-smoke-mv3-real-browser.ts",
     "workflow:claim": "bun .agents/skills/auto-claim-issues-next/scripts/claim-issue.ts",
     "workflow:claim:preview": "bun .agents/skills/auto-claim-issues-next/scripts/claim-issue.ts --dry-run",
     "workflow:claim:json": "bun .agents/skills/auto-claim-issues-next/scripts/claim-issue.ts --json",
@@ -37,6 +38,7 @@
     "@types/node": "^24.0.0",
     "fake-indexeddb": "^6.2.4",
     "idb": "^8.0.3",
+    "playwright": "^1.60.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.0"
   }

@@ -75,7 +75,7 @@
 
 - Gate A: `CapabilityDescriptor`、projection、ctx permissions、trace、nested invoke 已由 contracts/core 测试覆盖；`skills.invoke` 继续走 public Capability API。
 - Gate B: BrowserVFS 已提供 canonical `mem://skills/<skillId>/...` package root；`ISSUE-173` 证明 setup plan 写入、restart 后读取与 package-root escape guard。
-- Gate C: JS Runner + MV3 offscreen host 已承担 package handler execution；`ISSUE-174` 证明 installed `skill.json` + `handler.js` 在 restart 后可注册并执行。
+- Gate C: JS Runner + MV3 offscreen host 已承担 package handler execution；`ISSUE-174` 证明 installed `skill.json` + `handler.js` 在 restart 后可注册并执行，`ISSUE-184` 进一步证明真实 Chromium MV3 CSP 下 package handler 不再依赖 extension page `unsafe-eval`，而是经 sandbox runner 执行并可通过 gateway 回调 shared capability。
 - Gate D: active-tab path 已有 Tier 1 automation baseline；`ISSUE-172` 的代表性 skill 通过 `tabs.get_active` 触达真实 shared capability path 并写入 audit evidence。
 - Gate E: migration matrix、parity dashboard、module ledger、source-of-truth 文档已维护当前 cutover-critical proof 与 deferred breadth 的边界。
 - Gate F: `audit.tail`、runtime diagnostics、intervention/audit read surfaces 已能记录 config、skill、host、loop 和 child-capability evidence；`ISSUE-172` 到 `ISSUE-181` 的 proof 都不需要回旧仓定位主链状态。
@@ -141,7 +141,7 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 
 主要原因：
 
-1. AI-native product control plane 的 Gate G 最小主链已成立；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read`、descriptor-owned action projection、`model.routing` shared control-plane、最小 `audit.tail`，以及 `ISSUE-172` / `ISSUE-173` / `ISSUE-174` / `ISSUE-175` / `ISSUE-176` 的 `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke → JS runner → tabs.get_active/memfs.read → audit.tail` executable skill 纵向证明已形成主链；`ISSUE-181` 继续补上 `eventSubscriptions → runtime.event.dispatch → event-triggered skills.invoke → audit.tail` 的 hook/event pilot。
+1. AI-native product control plane 的 Gate G 最小主链已成立；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read`、descriptor-owned action projection、`model.routing` shared control-plane、最小 `audit.tail`，以及 `ISSUE-172` / `ISSUE-173` / `ISSUE-174` / `ISSUE-175` / `ISSUE-176` 的 `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke → JS runner → tabs.get_active/memfs.read → audit.tail` executable skill 纵向证明已形成主链；`ISSUE-181` 继续补上 `eventSubscriptions → runtime.event.dispatch → event-triggered skills.invoke → audit.tail` 的 hook/event pilot；`ISSUE-184` 把该 pilot 升级为真实 Chromium MV3 release smoke，覆盖 sandboxed handler execution、`ctx.call("memfs.read")` gateway 和 `audit.tail` 读回。
 2. `ISSUE-177` 把早期证据映射到 Level 2 gates，并把 `old-product-replacement-loop` 记录为 shipped-with-deferred-scope；`ISSUE-178` 到 `ISSUE-181` 继续补强 version / rollback / author-update / event subscription。后续 planning 不应再把 `ISSUE-172` 到 `ISSUE-181` 拆成局部补票。
 3. 完整 Skill Studio/lifecycle UI、版本管理、旧 plugin 生态全迁移、Tier 2 / Tier 3 browser automation、download/export composites、bulk debug export 与 bridge-side MCP server 仍是 deferred breadth，不是当前代表性 old-product replacement proof 的 blocker。
 4. `docs/level-2-cutover-acceptance-2026-05-27.md` 是当前接受包：下一步只应是外部 release acceptance、一个明确 UAT 场景，或显式把某个 deferred breadth 提升为主线；通过 `bun run check` 只能证明仓库质量门禁，不等于产品切换批准。

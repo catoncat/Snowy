@@ -1,7 +1,7 @@
 # Level 2 UAT Scenario: Legacy Plugin Event Replacement
 
 > date: 2026-05-27
-> status: executed against current repo state
+> status: executed against current repo state and real Chromium MV3 extension
 > scope: representative old-plugin replacement loop for release acceptance
 
 ## Scenario
@@ -18,7 +18,8 @@ skills.install setupPlan
 -> resource.read skills.summary
 -> runtime.bootstrap
 -> runtime.event.dispatch runtime.route.after
--> skills.invoke through JS Runner
+-> skills.invoke through sandboxed JS Runner
+-> package handler ctx.call("memfs.read")
 -> package handler result
 -> resource.read audit.tail evidence
 ```
@@ -29,13 +30,14 @@ This is intentionally not a full legacy plugin ecosystem migration. It is the re
 
 | Check | Command | Observed Result |
 |---|---|---|
+| Real Chromium MV3 release smoke | `bun run release:smoke:mv3` | Passed after ISSUE-184: Playwright Chromium loaded `apps/mv3-shell/dist` as an unpacked MV3 extension, installed `skill.release.real-browser`, enabled it, read `skills.summary` / `runtime.bootstrap`, dispatched `runtime.route.after`, executed the package handler inside the MV3 sandbox runner, called `ctx.call("memfs.read")` back through the offscreen/background capability gateway, and found both `skills.invoke` and `memfs.read` evidence in `audit.tail`. The same smoke was RED before the fix with Chrome MV3 CSP rejecting `unsafe-eval` during package handler evaluation. |
 | Event-driven Skill UAT | `bun run test -- apps/mv3-shell/test/manifest.spec.ts -t "dispatches runtime events to enabled package-backed skill subscriptions"` | Passed: 1 test passed, 91 skipped. The test installed `skill.legacy.send-success`, exposed `eventSubscriptions` through `skills.summary` and `runtime.bootstrap`, dispatched `runtime.route.after`, received a `notify_success` result, and found install/enable/invoke evidence in `audit.tail`. |
 | Repository gate | `bun run check` | Passed: typecheck passed, MV3 bridge gate passed with 2 tests, Biome checked 115 files, and the full Vitest suite passed with 35 test files / 616 tests. |
-| Extension build smoke | `bun run build` | Passed: Vite transformed 46 modules and produced MV3 shell assets under `apps/mv3-shell/dist/`, including `background.js`, `offscreen.js`, `page-hook.js`, and sidepanel assets. |
+| Extension build smoke | `bun run build` | Passed: Vite transformed 47 modules and produced MV3 shell assets under `apps/mv3-shell/dist/`, including `background.js`, `offscreen.js`, `runner-sandbox.js`, `page-hook.js`, and sidepanel assets. |
 
 ## Release Readout
 
-The scenario supports accepting `docs/level-2-cutover-acceptance-2026-05-27.md` as the repo-side Level 2 evidence basis.
+The scenario supports accepting `docs/level-2-cutover-acceptance-2026-05-27.md` as the repo-side Level 2 evidence basis. The release-facing proof now includes real Chromium MV3 CSP behavior, not only Vitest harness execution.
 
 Remaining decisions are outside this repository's autonomous workflow:
 

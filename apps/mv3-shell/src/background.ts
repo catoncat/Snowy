@@ -647,6 +647,7 @@ export function createBackgroundRunnerBridge({
   let activeRemoteTransports = new Map();
   let configuredRemoteTransportLoaded = hasExplicitRemoteTransportConfig;
   let composedRuntimeServices = null;
+  const runnerCapabilityGateways = new Map();
 
   function normalizeRemoteTransportEntries(...inputs) {
     const entries = [];
@@ -2309,11 +2310,60 @@ export function createBackgroundRunnerBridge({
   }
 
   async function invoke(invocation) {
-    const ensured = await ensureHost();
-    if (!ensured.ok) {
-      return ensured;
+    const capabilityContext = invocation?.capabilityContext;
+    const gatewayId =
+      capabilityContext && typeof capabilityContext.call === "function" ? nextRequestId() : null;
+    const forwardedInvocation = gatewayId
+      ? {
+          ...invocation,
+          capabilityContext: undefined,
+          gatewayId,
+        }
+      : invocation;
+    if (gatewayId) {
+      runnerCapabilityGateways.set(gatewayId, capabilityContext);
     }
-    return sendToOffscreen("runner.invoke", { invocation });
+    const ensured = await ensureHost();
+    try {
+      if (!ensured.ok) {
+        return ensured;
+      }
+      return sendToOffscreen("runner.invoke", { invocation: forwardedInvocation });
+    } finally {
+      if (gatewayId) {
+        setTimeout(() => {
+          runnerCapabilityGateways.delete(gatewayId);
+        }, timeoutMs);
+      }
+    }
+  }
+
+  async function routeRunnerCapabilityCall(message) {
+    const gateway = runnerCapabilityGateways.get(message.gatewayId);
+    if (!gateway || typeof gateway.call !== "function") {
+      return {
+        ok: false,
+        error: {
+          code: "E_RUNTIME",
+          message: "Runner capability gateway is unavailable",
+          details: {
+            gatewayId: message.gatewayId ?? null,
+            capabilityId: message.capabilityId ?? null,
+          },
+        },
+      };
+    }
+    try {
+      return {
+        ok: true,
+        data: await gateway.call(message.capabilityId, message.input),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: toBridgeError(error),
+      };
+    }
   }
 
   async function cancel(targetRequestId) {
@@ -2694,6 +2744,8 @@ export function createBackgroundRunnerBridge({
         });
       case "runner.invoke":
         return invoke(message.invocation);
+      case "runner.capability_call":
+        return routeRunnerCapabilityCall(message);
       case "runner.cancel":
         return cancel(message.targetRequestId);
       case "runner.health":

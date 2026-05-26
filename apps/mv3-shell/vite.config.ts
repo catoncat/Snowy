@@ -8,6 +8,7 @@ const appRoot = fileURLToPath(new URL(".", import.meta.url));
 const staticFiles = [
   ["manifest.json", "manifest.json"],
   ["src/offscreen.html", "src/offscreen.html"],
+  ["src/runner-sandbox.html", "src/runner-sandbox.html"],
 ] as const;
 
 function copyStaticExtensionFiles() {
@@ -43,6 +44,7 @@ const viteConfig = {
         background: resolve(appRoot, "src/background.ts"),
         offscreen: resolve(appRoot, "src/offscreen.ts"),
         "page-hook": resolve(appRoot, "src/page-hook.ts"),
+        "runner-sandbox": resolve(appRoot, "src/runner-sandbox.ts"),
         sidepanel: resolve(appRoot, "src/sidepanel.html"),
       },
       output: {

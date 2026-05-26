@@ -445,6 +445,7 @@ async function registerBrowserVfsSkillPackages({
               description: manifest.description,
             },
           },
+          capabilityContext: ctx,
         });
         return invocation.result;
       },
