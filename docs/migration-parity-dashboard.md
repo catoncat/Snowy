@@ -22,6 +22,7 @@
 | local execution host adapter | `green` | 默认 offscreen local adapter 的 cutover boundary 已收口：browser-only local host 继续负责 `host.read/write/edit` 与 offscreen diagnostics，true exec parity 明确由 exec-capable remote host path 承担；control-plane 现已通过 capability-aware host summary / get / bootstrap 暴露 file-only vs exec-capable 边界，并让 `host.exec` 默认走 exec-capable host，而不是把 `local` 当成同质默认目标 |
 | site runtime baseline | `green` | active-tab 边界、explicit invoke 与真实 injection chain 已测 |
 | kernel session/run/compaction baseline | `green` | `SessionStore` / `RunController` / `LoopEngine` / `CompactionManager` / `createKernel()` / `runLoop()` / child-run seam 与 prompt context message wiring 已落地并有测试；剩余问题已转入 provider policy / observability 等相邻模块 |
+| old-product replacement loop | `green` | `ISSUE-172` 到 `ISSUE-177` 已把一条代表性旧 Plugin / Skill 能力链收束为 shipped-with-deferred-scope proof：install setupPlan → package files → restart discovery → manifest handler execution → shared action/catalog discovery → sidepanel-visible management → invoke real shared capability → audit evidence；完整 Skill Studio、版本/rollback、旧 plugin 生态批量迁移仍是 post-cutover breadth |
 | AI-native product control plane | `yellow` | Gate G 的 cutover-critical scope 已 landed：descriptor-owned action projection controls、最小 `runtime/config/skills/hosts` bootstrap summary、`runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail` resource contract、`readAiSurfaceResource()` / MV3 `resource.read` 统一 lookup、`runtime.capture_diagnostics` / `runtime.clear_error`、本地 `hosts.*` / `config.update` / `skills.install/enable/disable/uninstall`、provider routing 的 `model.routing` shared control-plane、`ISSUE-093` 的 shared management consumer，以及 `ISSUE-172` / `ISSUE-173` / `ISSUE-174` / `ISSUE-175` / `ISSUE-176` 的 `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke → JS runner → tabs.get_active/memfs.read → audit.tail` executable skill 纵向证明都已落地并有测试；`yellow` 只反映完整 Skill Studio / lifecycle UI 与更宽 product breadth 仍后置 |
 | old browser automation parity | `yellow` | Tier 1/2/3 cutover boundary 已锁定；cutover 前必需的 active-tab Tier 1 path（`tabs.navigate/get_active`、`page.query/click/fill/press_key/screenshot`、verify、intervention）已收口，`tabs.list`、`site.fetch_with_session` 与 background lane baseline 也已有最小 runtime/test 覆盖。Status 仍保持 `yellow`，因为 `page.scroll/select_option/hover`、`tabs.create/close`、stealth/computer mode 与 screenshot/download export composites 仍属于 cutover 后 breadth |
 | old visual/download/intervention parity | `yellow` | screenshot/download/intervention 边界已锁定：`page.screenshot` 已由 `ISSUE-057` 落地，intervention 的 request/resolve/cancel/timeout/audit、restart durability、shared sidepanel handoff UI 与 page action failure handoff 已落地；download 继续延后到 product/workflow 层，因此该组合 area 仍保持 `yellow` |
@@ -42,15 +43,15 @@
 - JS Runner host
 - MV3 shell substrate
 - site runtime baseline
+- cutover-critical old-product replacement loop
 
 ### 仍不能宣称“已完成迁移”的关键层
 
 - AI-native product control plane
-- executable Skill old-product replacement loop broader coverage
 - provider / profile policy hardening
-- 完整 browser automation 能力
-- diagnostics / observability
-- Skill Studio / lifecycle 产品面
+- 完整 browser automation breadth
+- diagnostics / observability export breadth
+- Skill Studio / lifecycle / versioning 产品面
 
 ## 文档维护规则
 

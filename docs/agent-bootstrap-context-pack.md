@@ -52,22 +52,23 @@
 - MV3 shell baseline
 - lightweight resource contracts/builders + lookup: `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary` / `audit.tail` / `audit.intervention` + `readAiSurfaceResource()` / MV3 `resource.read`
 - minimal product control-plane actions: `hosts.*`, `config.update`, `skills.install/enable/disable/uninstall`, `runtime.capture_diagnostics`, `runtime.clear_error`
-- representative executable Skill old-product loop: `install → persist/restart → enable → skills.invoke → tabs.get_active → audit.tail`
+- representative executable Skill old-product loop: `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke → JS runner → tabs.get_active/memfs.read → audit.tail`
+- `ISSUE-177` 已把 `ISSUE-172` 到 `ISSUE-176` 的 old-product replacement proof 收口成 shipped-with-deferred-scope；后续不要把这条链重新拆成局部小票
 
 注意：
 
 - 这些是 foundation
-- 不是完整 kernel parity
+- 不是完整旧产品全量生态迁移
 - `skills.*` lifecycle、`skills.invoke` shared runtime invocation、`runtime.summary.interventions`、`audit.intervention` 与 MV3 `resource.read` 已有最小 app integration path
 - 更完整的 diagnostics / debug 主面仍未收口
 
 ## 5. 当前最重要的未收口区
 
-1. browser-side kernel（session / run / compaction）
-2. diagnostics / debug shared 主面
-3. browser automation parity
-4. provider / profile / routing 主层
-5. Skill / product UI 收口
+1. 外部 cutover decision / release acceptance
+2. 完整 Skill Studio / lifecycle / versioning 产品面
+3. Tier 2 / Tier 3 browser automation 与 download/export composites
+4. diagnostics / debug bulk export breadth
+5. bridge-side MCP server 与更广 provider policy hardening
 
 ## 6. 新 Agent 默认 operating loop
 

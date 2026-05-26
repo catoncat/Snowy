@@ -67,6 +67,24 @@
 
 补充：`ISSUE-172` 已把旧产品替代判断从 lifecycle-only 推到一条纵向 Skill 证明链：代表性 executable skill 可经 shared MV3 runtime 完成 `install → persist/restart → enable → skills.invoke → tabs.get_active → audit.tail`。`ISSUE-173` 继续把 package-install 边界接上：`skills.install` 的 setup plan 会在 shared MV3 runtime 中 materialize 到 `mem://skills/<skillId>/...`，重启后 enabled skill 可通过 `memfs.read` 读取安装写入的 package 文件，并在 `audit.tail` 留下 install/enable/invoke/child-capability 证据。`ISSUE-174` 再把 package execution 接上：重启后的 shared MV3 runtime 会从 BrowserVFS 发现 `SKILL.md` + `skill.json` package，注册有效 manifest 的 `handler.js`，并让 `skills.invoke` 通过现有 JS runner 执行该 package handler；malformed manifest 不会拖垮 runtime boot，而是跳过注册并在调用时返回结构化 capability error。`ISSUE-175` 把 package discoverability 接到 shared AI surface：`skills.summary` / `runtime.bootstrap` 会暴露 package-backed skill 的 lifecycle state、actions、matches、requiresActiveTab、entry、version、kind、description、permissions 和 tags。`ISSUE-176` 把这些 per-skill items 接到 sidepanel management 的可见 Skills catalog，让用户可从同一 shared summary inspect package metadata 并触发现有 enable/disable/uninstall actions。这证明新版共享运行面已经能替代旧 plugin loop 的一条最小用户能力链、安装内容注入链、持久 package execution 链、action catalog 发现链和可见管理面入口，但不等于完整 Skill Studio、版本管理、旧 plugin 生态迁移都已完成。
 
+## Level 2 Gate Proof Pack
+
+`ISSUE-177` 对当前 cutover-critical 证据的结论是：旧产品替代主链已经从 review gap 收敛为一条可验证的 shipped-with-deferred-scope product loop。它证明的是一条代表性旧 Plugin / Skill 用户能力链已可由 vNext shared runtime 和 shared product surface 替代；它不是完整 Skill Studio、版本管理、旧 plugin 生态全迁移或外部切主线批准。
+
+- Gate A: `CapabilityDescriptor`、projection、ctx permissions、trace、nested invoke 已由 contracts/core 测试覆盖；`skills.invoke` 继续走 public Capability API。
+- Gate B: BrowserVFS 已提供 canonical `mem://skills/<skillId>/...` package root；`ISSUE-173` 证明 setup plan 写入、restart 后读取与 package-root escape guard。
+- Gate C: JS Runner + MV3 offscreen host 已承担 package handler execution；`ISSUE-174` 证明 installed `skill.json` + `handler.js` 在 restart 后可注册并执行。
+- Gate D: active-tab path 已有 Tier 1 automation baseline；`ISSUE-172` 的代表性 skill 通过 `tabs.get_active` 触达真实 shared capability path 并写入 audit evidence。
+- Gate E: migration matrix、parity dashboard、module ledger、source-of-truth 文档已维护当前 cutover-critical proof 与 deferred breadth 的边界。
+- Gate F: `audit.tail`、runtime diagnostics、intervention/audit read surfaces 已能记录 config、skill、host、loop 和 child-capability evidence；`ISSUE-172` 到 `ISSUE-176` 的 proof 都不需要回旧仓定位主链状态。
+- Gate G: Agent/product consumer 可通过 `runtime.summary`、`config.summary`、`skills.summary`、`hosts.summary` 和 `runtime.bootstrap` 读取共享状态；sidepanel management 也消费同一 `skills.summary.items`，不再维护 app-local package truth。
+
+剩余 blocker 不再是这条 old-product replacement loop 未证明，而是下面这些显式后置或治理项：
+
+- 完整 Skill Studio、版本选择、rollback、authoring studio 与旧 plugin 生态批量迁移仍属 post-cutover product breadth。
+- Tier 2 / Tier 3 browser automation、download/export composites、bulk debug export、bridge-side MCP server 等仍按各自 deferred scope 跟踪。
+- 是否把新仓正式切成旧主线替代，需要一次外部 cutover decision / release acceptance；本文件只提供 gate evidence，不自动执行切换。
+
 ## Soft Gates
 
 ### Soft Gate 1: Skill Studio / Lifecycle Product Surface
@@ -116,15 +134,15 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 当前新仓：
 
 - 已经超过空壳
-- 但仍未达到 `Level 1 fully stable`
-- 更未达到 `Level 2 cutover ready`
+- 已达到 cutover-critical substrate foundation + representative old-product replacement loop 的 shipped-with-deferred-scope 状态
+- 仍未由本文自动宣称为 `Level 2 cutover ready`，因为正式切主线还需要外部 release / product acceptance
 
 主要原因：
 
-1. 迁移控制面刚建立，还未长期维护
-2. AI-native product control plane 的 Gate G 最小主链已成立；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read`、descriptor-owned action projection、`model.routing` shared control-plane、最小 `audit.tail`，以及 `ISSUE-172` / `ISSUE-173` / `ISSUE-174` / `ISSUE-175` / `ISSUE-176` 的 `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke → JS runner → tabs.get_active/memfs.read → audit.tail` executable skill 纵向证明已形成主链，但完整 Skill Studio/lifecycle UI、版本管理与更完整 product surface 仍未完成
-3. browser automation 的 cutover 前 active-tab Tier 1 路径已闭环，但旧仓更广的 automation parity 仍未完整迁入：`page.scroll/select_option/hover`、`tabs.create/close`、stealth/computer mode，以及 screenshot/download export composites 仍属 cutover 后范围；background lane 目前也只保留已验证的最小 baseline
-4. 以旧仓 full parity 为标准，diagnostics / provider / studio / automation 的更宽 breadth 仍未成体系；当前只证明了 cutover-critical 最小主链已成立
+1. AI-native product control plane 的 Gate G 最小主链已成立；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read`、descriptor-owned action projection、`model.routing` shared control-plane、最小 `audit.tail`，以及 `ISSUE-172` / `ISSUE-173` / `ISSUE-174` / `ISSUE-175` / `ISSUE-176` 的 `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke → JS runner → tabs.get_active/memfs.read → audit.tail` executable skill 纵向证明已形成主链。
+2. `ISSUE-177` 把上述证据映射到 Level 2 gates，并把 `old-product-replacement-loop` 记录为 shipped-with-deferred-scope；后续 planning 不应再把 `ISSUE-172` 到 `ISSUE-176` 拆成局部补票。
+3. 完整 Skill Studio/lifecycle UI、版本管理、旧 plugin 生态全迁移、Tier 2 / Tier 3 browser automation、download/export composites、bulk debug export 与 bridge-side MCP server 仍是 deferred breadth，不是当前代表性 old-product replacement proof 的 blocker。
+4. 正式 `Level 2 cutover ready` 仍需要外部 cutover decision / release acceptance；通过 `bun run check` 只能证明仓库质量门禁，不等于产品切换批准。
 
 ## Maintenance Rule
 
