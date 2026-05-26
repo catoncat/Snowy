@@ -1,6 +1,27 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T18:12:04.745Z",
+  "generated_at": "2026-05-26T18:14:57.085Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": []
+  "entries": [
+    {
+      "issue_id": "ISSUE-176",
+      "issue_path": "docs/backlog/2026-05-27-cutover-milestone-sidepanel-skills-catalog-does-not-consume-package-summary-items.md",
+      "title": "Cutover milestone: sidepanel Skills catalog does not consume package summary items",
+      "parallel_group": "mv3-shell",
+      "module_id": "old-product-replacement-loop",
+      "module_stage": "mainline",
+      "tracking_kind": "mainline",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "apps/mv3-shell/src/sidepanel/management.ts",
+        "apps/mv3-shell/src/sidepanel/App.vue",
+        "apps/mv3-shell/test/sidepanel-management.spec.ts",
+        "docs/ai-surface-index.md",
+        "docs/cutover-readiness-criteria.md",
+        "docs/migration-parity-dashboard.md",
+        "docs/legacy-to-vnext-migration-matrix.md"
+      ]
+    }
+  ]
 }
