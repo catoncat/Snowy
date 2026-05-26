@@ -222,10 +222,10 @@
     {
       "module_id": "old-product-replacement-loop",
       "title": "Old Product Replacement Loop",
-      "summary": "Mainline milestone for proving that the rewritten browser extension can replace one old product capability chain end-to-end, instead of only closing local review gaps.",
+      "summary": "Cutover-critical proof that the rewritten browser extension can replace one old Plugin/Skill capability chain end-to-end is shipped; broader Skill Studio, versioning, and legacy ecosystem breadth stays deferred.",
       "tracking_order": 12,
       "stage": "mainline",
-      "status": "in-progress",
+      "status": "shipped",
       "depends_on_modules": [
         "kernel",
         "ai-surface-control-plane",
@@ -250,7 +250,21 @@
       ],
       "cutover_gate": "Level 2 product replacement proof",
       "default_parallel_group": "mv3-shell",
-      "milestone_rationale": "The previous issue workflow closed many small review findings while leaving the larger old-product replacement claim unproven. This module exists to group current work around one verifiable product loop such as install -> persist -> enable -> invoke -> observe."
+      "milestone_rationale": "The previous issue workflow closed many small review findings while leaving the larger old-product replacement claim unproven. This module grouped work around one verifiable product loop such as install -> persist -> enable -> invoke -> observe.",
+      "shipped_scope": [
+        "ISSUE-172 proved install -> persist/restart -> enable -> skills.invoke -> tabs.get_active -> audit.tail through the shared MV3 runtime",
+        "ISSUE-173 proved skills.install setupPlan materializes package files under canonical mem://skills/<skillId>/... storage and survives restart",
+        "ISSUE-174 proved installed skill.json manifests register persisted package handlers and invoke them through the JS runner",
+        "ISSUE-175 proved package actions, site metadata, permissions, tags, and active-tab requirements are discoverable through shared skills.summary/runtime.bootstrap",
+        "ISSUE-176 proved the sidepanel Skills catalog consumes the same shared skills.summary.items and operates package-backed skills through existing lifecycle actions",
+        "ISSUE-177 consolidated the gate proof and separated shipped cutover-critical proof from deferred product breadth"
+      ],
+      "deferred_scope": [
+        "full Skill Studio authoring and version/rollback UI",
+        "bulk migration of every old plugin ecosystem affordance",
+        "post-cutover product polish around package browsing, install sources, and studio workflows"
+      ],
+      "deferral_rationale": "ISSUE-172 through ISSUE-177 prove one representative old product capability loop end-to-end on the shared vNext runtime and product surface. Remaining items are broader product/ecosystem breadth and no longer block the cutover-critical replacement proof."
     },
     {
       "module_id": "browser-vfs",
