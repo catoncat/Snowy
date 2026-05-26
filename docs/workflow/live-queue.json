@@ -1,6 +1,24 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T21:28:08.011Z",
+  "generated_at": "2026-05-26T21:30:45.884Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": []
+  "entries": [
+    {
+      "issue_id": "ISSUE-186",
+      "issue_path": "docs/backlog/2026-05-26-cutover-decision-external-acceptance-packet-is-not-explicit.md",
+      "title": "Cutover decision: external acceptance packet is not explicit",
+      "parallel_group": "mv3-shell",
+      "module_id": "old-product-replacement-loop",
+      "module_stage": "mainline",
+      "tracking_kind": "mainline",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "docs/release-cutover-decision-packet-2026-05-27.md",
+        "docs/level-2-cutover-acceptance-2026-05-27.md",
+        "docs/cutover-readiness-criteria.md",
+        "docs/source-of-truth-map.md"
+      ]
+    }
+  ]
 }
