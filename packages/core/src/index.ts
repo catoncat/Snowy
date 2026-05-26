@@ -2191,11 +2191,40 @@ function cloneSkillSummaryAction(
   };
 }
 
+type SkillSummaryVersionSurface = NonNullable<
+  SkillsBootstrapSummary["items"][number]["versionSurface"]
+>;
+
+function cloneSkillVersionRef(version: SkillSummaryVersionSurface["activeVersion"]) {
+  return version ? { ...version } : null;
+}
+
+function cloneSkillVersionSurface(
+  surface: SkillsBootstrapSummary["items"][number]["versionSurface"],
+): SkillsBootstrapSummary["items"][number]["versionSurface"] {
+  if (!surface) {
+    return surface;
+  }
+  return {
+    ...surface,
+    lifecycle: { ...surface.lifecycle },
+    activeVersion: cloneSkillVersionRef(surface.activeVersion),
+    rollbackTarget: cloneSkillVersionRef(surface.rollbackTarget),
+    policy: {
+      ...surface.policy,
+      rollbackTriggers: [...surface.policy.rollbackTriggers],
+    },
+  };
+}
+
 function cloneSkillSummaryItem(
   item: SkillsBootstrapSummary["items"][number],
 ): SkillsBootstrapSummary["items"][number] {
   return {
     ...item,
+    ...(item.versionSurface
+      ? { versionSurface: cloneSkillVersionSurface(item.versionSurface) }
+      : {}),
     permissions: [...item.permissions],
     tags: [...item.tags],
     matches: [...item.matches],

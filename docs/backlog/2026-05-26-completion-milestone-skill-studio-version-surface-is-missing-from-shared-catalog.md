@@ -48,7 +48,7 @@ Promote Skill Studio/versioning from deferred breadth into the next completion m
 
 ## Acceptance
 
-- skill-runtime-sdk-studio module is no longer hidden as deferred; ledger records it as the active completion lane with rationale
+- module ledger records a new skill-studio-completion-loop as the active completion lane with rationale, without rewriting historical skill-runtime-sdk-studio backlog metadata
 - skills.summary items expose a shared version surface for package-backed skills
 - including active version identity
 - snapshot root

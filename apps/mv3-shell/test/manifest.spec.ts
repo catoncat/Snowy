@@ -3975,6 +3975,26 @@ describe("mv3-shell manifest", () => {
       packageUri: "mem://skills/skill.cutover.discoverable",
       entry: "handler.js",
       version: 3,
+      versionSurface: {
+        skillId: "skill.cutover.discoverable",
+        lifecycle: {
+          status: "enabled",
+          trusted: false,
+        },
+        activeVersion: {
+          versionId: "3",
+          uri: "mem://skills/skill.cutover.discoverable",
+          trusted: false,
+        },
+        rollbackTarget: null,
+        policy: {
+          snapshotRootUri: "mem://skills/skill.cutover.discoverable/@versions",
+          versionFormat: "iso-timestamp",
+          retention: 3,
+          rollbackTarget: "latest_trusted",
+          rollbackTriggers: ["verifier_failed_with_confirmation", "release_gate_failed"],
+        },
+      },
       kind: "site",
       description: "Discoverable manifest package",
       permissions: ["tabs.get_active"],
