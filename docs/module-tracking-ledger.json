@@ -267,6 +267,43 @@
       "deferral_rationale": "ISSUE-172 through ISSUE-177 prove one representative old product capability loop end-to-end on the shared vNext runtime and product surface. Remaining items are broader product/ecosystem breadth and no longer block the cutover-critical replacement proof."
     },
     {
+      "module_id": "skill-studio-completion-loop",
+      "title": "Skill Studio Completion Loop",
+      "summary": "Product-level Skill Studio, lifecycle, versioning, rollback readiness, and authoring surfaces required to move from representative old-product replacement proof toward full browser plugin refactor completion.",
+      "tracking_order": 14,
+      "stage": "mainline",
+      "status": "partial",
+      "depends_on_modules": [
+        "old-product-replacement-loop",
+        "skill-runtime-sdk-studio",
+        "ai-surface-control-plane"
+      ],
+      "code_roots": [
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
+        "packages/skill-sdk/",
+        "apps/mv3-shell/src/runtime-services.ts",
+        "apps/mv3-shell/src/background.ts",
+        "apps/mv3-shell/src/sidepanel/",
+        "apps/mv3-shell/test/"
+      ],
+      "source_docs": [
+        "docs/skill-lifecycle-version-engine-boundary.md",
+        "docs/skill-authoring-guide.md",
+        "docs/skill-package-convention.md",
+        "docs/migration-parity-dashboard.md",
+        "docs/legacy-to-vnext-migration-matrix.md"
+      ],
+      "cutover_gate": "Full product completion after Level 2 proof",
+      "default_parallel_group": "sdk-docs",
+      "milestone_rationale": "ISSUE-172 through ISSUE-177 proved the cutover-critical executable Skill replacement chain. Full browser plugin refactor completion now needs the product-level Skill Studio/versioning lane to consume the existing lifecycle/version engine through shared AI-surface resources instead of remaining hidden as deferred breadth.",
+      "completion_scope": [
+        "shared skills.summary version/rollback readiness surface for package-backed skills",
+        "sidepanel Skills catalog consumption of the shared version/rollback surface",
+        "authoring/studio workflow milestones that build on Skill package convention and lifecycle/version engine contracts"
+      ]
+    },
+    {
       "module_id": "browser-vfs",
       "title": "BrowserVFS",
       "summary": "mem:// semantics, IndexedDB persistence, package discovery, retention, and VFS error-path correctness.",
