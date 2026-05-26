@@ -15,7 +15,9 @@ import {
   buildManagementBootstrapRequests,
   createInitialManagementState,
   createManagementActionMessage,
+  listSkillCatalogItems,
   listPendingInterventions,
+  type SkillCatalogItem,
   type ManagementState,
 } from "./management";
 
@@ -80,6 +82,7 @@ const runtimeSummary = computed(() => managementState.value.runtime?.data ?? nul
 const configSummary = computed(() => managementState.value.config?.data ?? null);
 const skillsSummary = computed(() => managementState.value.skills?.data ?? null);
 const hostsSummary = computed(() => managementState.value.hosts?.data ?? null);
+const skillItems = computed(() => listSkillCatalogItems(skillsSummary.value));
 const hostItems = computed(() => hostsSummary.value?.items ?? []);
 const pendingInterventions = computed(() => listPendingInterventions(runtimeSummary.value));
 const activeTabId = computed(() => runtimeSummary.value?.activeTab?.tabId ?? null);
@@ -94,6 +97,16 @@ function readStringField(record: unknown, field: string): string {
 
 function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+function formatList(values: string[]): string {
+  return values.length > 0 ? values.join(", ") : "none";
+}
+
+function formatSkillActions(skill: SkillCatalogItem): string {
+  return skill.actions.length > 0
+    ? skill.actions.map((action) => action.title ?? action.name).join(", ")
+    : "none";
 }
 
 function syncConfigDraftsFromSummary() {
@@ -311,13 +324,17 @@ function saveConfig() {
   });
 }
 
-function submitSkillAction(kind: SkillActionKind) {
-  const skillId = skillIdDraft.value.trim();
+function submitSkillAction(kind: SkillActionKind, selectedSkillId = skillIdDraft.value) {
+  const skillId = selectedSkillId.trim();
   if (!skillId) {
     managementError.value = "Enter a skill id first.";
     return;
   }
   void runManagementAction(kind, { skillId });
+}
+
+function selectSkill(skillId: string) {
+  skillIdDraft.value = skillId;
 }
 
 function submitHostAction(kind: HostActionKind, hostId: string) {
@@ -599,6 +616,72 @@ onUnmounted(() => {
             recent {{ skillsSummary?.recentChange ?? 'none' }}
           </p>
           <div class="mt-3 space-y-3">
+            <div
+              v-if="skillItems.length === 0"
+              class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500"
+            >
+              No skill catalog items.
+            </div>
+            <article
+              v-for="skill in skillItems"
+              :key="skill.skillId"
+              class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="break-all text-sm font-medium text-slate-900">{{ skill.skillId }}</p>
+                  <p class="mt-1 text-xs text-slate-500">
+                    {{ skill.source }} · {{ skill.status }} · {{ skill.kind ?? 'unknown' }}
+                  </p>
+                </div>
+                <span
+                  class="shrink-0 rounded-full px-2 py-1 text-[11px] font-medium"
+                  :class="skill.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'"
+                >
+                  {{ skill.enabled ? 'enabled' : 'inactive' }}
+                </span>
+              </div>
+              <p v-if="skill.description" class="mt-3 text-sm leading-6 text-slate-700">
+                {{ skill.description }}
+              </p>
+              <div class="mt-3 grid gap-2 text-xs text-slate-600">
+                <p class="break-all">entry {{ skill.entry ?? 'none' }} · version {{ skill.version ?? 'none' }}</p>
+                <p class="break-all">actions {{ formatSkillActions(skill) }}</p>
+                <p class="break-all">matches {{ formatList(skill.matches) }}</p>
+                <p class="break-all">permissions {{ formatList(skill.permissions) }}</p>
+                <p class="break-all">tags {{ formatList(skill.tags) }} · active tab {{ skill.requiresActiveTab ? 'required' : 'not required' }}</p>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50"
+                  :disabled="managementBusy"
+                  @click="selectSkill(skill.skillId)"
+                >
+                  Select
+                </button>
+                <button
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50"
+                  :disabled="managementBusy || skill.enabled || skill.status === 'archived'"
+                  @click="submitSkillAction('skills.enable', skill.skillId)"
+                >
+                  Enable
+                </button>
+                <button
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50"
+                  :disabled="managementBusy || !skill.enabled"
+                  @click="submitSkillAction('skills.disable', skill.skillId)"
+                >
+                  Disable
+                </button>
+                <button
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50"
+                  :disabled="managementBusy || skill.status === 'archived'"
+                  @click="submitSkillAction('skills.uninstall', skill.skillId)"
+                >
+                  Uninstall
+                </button>
+              </div>
+            </article>
             <input
               v-model="skillIdDraft"
               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none"
