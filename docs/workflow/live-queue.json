@@ -1,6 +1,27 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T20:01:55.101Z",
+  "generated_at": "2026-05-26T20:05:20.303Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": []
+  "entries": [
+    {
+      "issue_id": "ISSUE-182",
+      "issue_path": "docs/backlog/2026-05-26-cutover-milestone-level-2-acceptance-pack-is-stale-after-event-hook-proof.md",
+      "title": "Cutover milestone: Level 2 acceptance pack is stale after event-hook proof",
+      "parallel_group": "mv3-shell",
+      "module_id": "old-product-replacement-loop",
+      "module_stage": "mainline",
+      "tracking_kind": "mainline",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "docs/cutover-readiness-criteria.md",
+        "docs/migration-parity-dashboard.md",
+        "docs/legacy-to-vnext-migration-matrix.md",
+        "docs/module-tracking-ledger.json",
+        "docs/source-of-truth-map.md",
+        "docs/agent-bootstrap-context-pack.md",
+        "docs/level-2-cutover-acceptance-2026-05-27.md"
+      ]
+    }
+  ]
 }
