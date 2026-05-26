@@ -1,11 +1,11 @@
 ---
 id: ISSUE-181
 title: "Completion milestone: legacy plugin event hooks have no Skill event subscription path"
-status: open
+status: done
 priority: p0
 source: "anti-fragmentation planning 2026-05-27"
 created: 2026-05-26
-assignee: unassigned
+assignee: codex-loop
 tags:
   - review
   - completion
@@ -35,6 +35,7 @@ write_scope:
   - docs/agent-bootstrap-context-pack.md
 acceptance_ref: docs/legacy-to-vnext-migration-matrix.md
 check_cmd: "bun run check"
+completed_at: 2026-05-26T20:01:55.041Z
 ---
 
 ## Goal
@@ -52,3 +53,18 @@ Migrate one real legacy hook-driven plugin behavior into the vNext executable Sk
 - The shared MV3 runtime dispatches a representative runtime event to enabled subscribed package-backed skills through the existing JS runner path, without a private Plugin registry or app-local package truth.
 - A migrated send-success-style package can be installed through shared `skills.install`, enabled, receive the event, emit observable result/evidence, and leave `audit.tail` or observability evidence for the event-triggered skill invocation.
 - Docs define the old plugin hook to Skill event subscription migration boundary and keep broader hook ecosystem/bulk migration in Not Now unless the pilot proves a blocker.
+
+## 工作总结
+
+### 实现了什么
+- 支持 package-backed Skill 在 skill.json 声明 eventSubscriptions；skills.summary/runtime.bootstrap 投影订阅 metadata；shared MV3 runtime 新增 runtime.event.dispatch，只投递给 enabled package Skill 并复用 skills.invoke + JS Runner + audit.tail 留证；文档同步旧 hook-driven plugin 到 Skill event subscription 的迁移边界。
+
+### 实际跑了什么检查
+- bun run test -- packages/contracts/test/contracts.spec.ts packages/core/test/core.spec.ts apps/mv3-shell/test/manifest.spec.ts; bun run typecheck; git diff --check; ./node_modules/.bin/biome check <touched files>; bun run check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `fd5347315a9b` feat(mv3): 支持 Skill 事件订阅触发
