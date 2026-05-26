@@ -112,6 +112,7 @@
 - `packages/core` 继续提供 `readAiSurfaceResource()` lookup path；`apps/mv3-shell` 继续通过统一 `resource.read` bridge 暴露 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail/audit.intervention/observability.replay/observability.timeline/observability.summary/observability.rawEventTail`
 - `runtime.bootstrap` 继续保留为 bootstrap bundle compatibility read path
 - `skills.summary` 现在包含 per-skill `items`。对 package-backed skills，items 会把 `skill.json` 的 `actions`、`matches`、`requiresActiveTab`、`entry`、`version`、`kind`、`description`、`permissions` 与 `tags` 暴露给 AI/product consumers；malformed packages 只保留 lifecycle record，不暴露无效 action catalog。sidepanel management 的 Skills catalog 消费同一份 `skills.summary.items`，不维护 app-local package registry。
+- package-backed `skills.summary.items` 现在还暴露 `versionSurface`，把 active manifest version、canonical snapshot root、rollback policy、latest trusted rollback target（若存在）接到 shared AI Surface；sidepanel Skills catalog 只消费该 shared surface，不维护 app-local version/rollback truth。
 - `audit.tail` 仍是当前 control-plane / execution evidence 主资源，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall`，并通过 `loop.step` 记录 `skills.invoke` 及其子 capability trace 的 operator-visible evidence
 - `runtime.summary` 现已包含 typed `interventions` summary；`audit.intervention` 是 intervention lifecycle 的 shared audit read path
 - `observability.replay` 负责把 loop telemetry、control-plane audit、intervention lifecycle 与 compaction continuity marker 按时间顺序 stitch 成统一 replay 文档

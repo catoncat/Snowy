@@ -109,6 +109,16 @@ function formatSkillActions(skill: SkillCatalogItem): string {
     : "none";
 }
 
+function formatSkillVersionSurface(skill: SkillCatalogItem): string {
+  const surface = skill.versionSurface;
+  if (!surface) {
+    return "none";
+  }
+  const active = surface.activeVersion?.versionId ?? "none";
+  const rollback = surface.rollbackTarget?.versionId ?? "none";
+  return `active ${active} · rollback ${rollback} · snapshots ${surface.policy.snapshotRootUri}`;
+}
+
 function syncConfigDraftsFromSummary() {
   configProviderDraft.value = readStringField(configSummary.value?.values.model, "provider");
   configModelDraft.value = readStringField(configSummary.value?.values.model, "model");
@@ -646,6 +656,7 @@ onUnmounted(() => {
               </p>
               <div class="mt-3 grid gap-2 text-xs text-slate-600">
                 <p class="break-all">entry {{ skill.entry ?? 'none' }} · version {{ skill.version ?? 'none' }}</p>
+                <p class="break-all">versions {{ formatSkillVersionSurface(skill) }}</p>
                 <p class="break-all">actions {{ formatSkillActions(skill) }}</p>
                 <p class="break-all">matches {{ formatList(skill.matches) }}</p>
                 <p class="break-all">permissions {{ formatList(skill.permissions) }}</p>

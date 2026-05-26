@@ -163,6 +163,31 @@ describe("sidepanel management state", () => {
           packageUri: "mem://skills/skill.cutover.catalog",
           entry: "handler.js",
           version: 3,
+          versionSurface: {
+            skillId: "skill.cutover.catalog",
+            lifecycle: {
+              status: "enabled",
+              trusted: false,
+            },
+            activeVersion: {
+              versionId: "3",
+              uri: "mem://skills/skill.cutover.catalog",
+              trusted: false,
+            },
+            rollbackTarget: {
+              versionId: "2026-05-27T00:00:00.000Z",
+              uri: "mem://skills/skill.cutover.catalog/@versions/2026-05-27T00:00:00.000Z",
+              createdAt: "2026-05-27T00:00:00.000Z",
+              trusted: true,
+            },
+            policy: {
+              snapshotRootUri: "mem://skills/skill.cutover.catalog/@versions",
+              versionFormat: "iso-timestamp",
+              retention: 3,
+              rollbackTarget: "latest_trusted",
+              rollbackTriggers: ["verifier_failed_with_confirmation", "release_gate_failed"],
+            },
+          },
           kind: "site",
           description: "Catalog package",
           permissions: ["tabs.get_active"],
@@ -213,6 +238,17 @@ describe("sidepanel management state", () => {
         packageUri: "mem://skills/skill.cutover.catalog",
         entry: "handler.js",
         version: 3,
+        versionSurface: expect.objectContaining({
+          policy: expect.objectContaining({
+            snapshotRootUri: "mem://skills/skill.cutover.catalog/@versions",
+          }),
+          activeVersion: expect.objectContaining({
+            versionId: "3",
+          }),
+          rollbackTarget: expect.objectContaining({
+            versionId: "2026-05-27T00:00:00.000Z",
+          }),
+        }),
         kind: "site",
         description: "Catalog package",
         permissions: ["tabs.get_active"],

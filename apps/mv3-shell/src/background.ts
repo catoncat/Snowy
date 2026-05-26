@@ -392,6 +392,55 @@ function toBootstrapActiveTab(activeTab, world = "main") {
   };
 }
 
+function normalizeSkillVersionRefInput(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  if (typeof value.versionId !== "string" || typeof value.uri !== "string") {
+    return null;
+  }
+  return {
+    versionId: value.versionId,
+    uri: value.uri,
+    ...(typeof value.createdAt === "string" ? { createdAt: value.createdAt } : {}),
+    trusted: value.trusted === true,
+  };
+}
+
+function normalizeSkillVersionSurfaceInput(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  if (typeof value.skillId !== "string" || !value.lifecycle || !value.policy) {
+    return null;
+  }
+  const lifecycle =
+    typeof value.lifecycle === "object" && !Array.isArray(value.lifecycle) ? value.lifecycle : {};
+  const policy =
+    typeof value.policy === "object" && !Array.isArray(value.policy) ? value.policy : {};
+  if (typeof lifecycle.status !== "string" || typeof policy.snapshotRootUri !== "string") {
+    return null;
+  }
+  return {
+    skillId: value.skillId,
+    lifecycle: {
+      status: lifecycle.status,
+      trusted: lifecycle.trusted === true,
+    },
+    activeVersion: normalizeSkillVersionRefInput(value.activeVersion),
+    rollbackTarget: normalizeSkillVersionRefInput(value.rollbackTarget),
+    policy: {
+      snapshotRootUri: policy.snapshotRootUri,
+      versionFormat: "iso-timestamp",
+      retention: Number.isInteger(policy.retention) ? policy.retention : 3,
+      rollbackTarget: "latest_trusted",
+      rollbackTriggers: Array.isArray(policy.rollbackTriggers)
+        ? policy.rollbackTriggers.filter((item) => typeof item === "string")
+        : [],
+    },
+  };
+}
+
 function normalizeSkillSummaryInput(entry) {
   if (typeof entry === "string") {
     return {
@@ -430,6 +479,7 @@ function normalizeSkillSummaryInput(entry) {
       : entry.enabled === true || entry.state === "enabled"
         ? "enabled"
         : "installed";
+  const versionSurface = normalizeSkillVersionSurfaceInput(entry.versionSurface);
   return {
     skillId: id,
     status,
@@ -442,6 +492,7 @@ function normalizeSkillSummaryInput(entry) {
     ...(typeof entry.packageUri === "string" ? { packageUri: entry.packageUri } : {}),
     ...(typeof entry.entry === "string" ? { entry: entry.entry } : {}),
     version: Number.isInteger(entry.version) ? entry.version : null,
+    ...(versionSurface ? { versionSurface } : {}),
     kind: typeof entry.kind === "string" ? entry.kind : null,
     description: typeof entry.description === "string" ? entry.description : null,
     permissions: Array.isArray(entry.permissions)

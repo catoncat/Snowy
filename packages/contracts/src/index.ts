@@ -472,6 +472,7 @@ export interface SkillBootstrapSummaryItem {
   packageUri?: string;
   entry?: string;
   version: number | null;
+  versionSurface?: SkillLifecycleVersionSurface | null;
   kind: string | null;
   description: string | null;
   permissions: string[];

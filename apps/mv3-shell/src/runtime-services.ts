@@ -1,6 +1,10 @@
 // @ts-nocheck
-import { BrowserVfs, resolveMemUri } from "@bbl-next/browser-vfs";
-import { CONFIG_RESOURCE_FIELDS, CapabilityError } from "@bbl-next/contracts";
+import { BrowserVfs, resolveMemUri, snapshotInfoToSkillVersionRef } from "@bbl-next/browser-vfs";
+import {
+  CONFIG_RESOURCE_FIELDS,
+  CapabilityError,
+  createSkillLifecycleVersionSurface,
+} from "@bbl-next/contracts";
 import type { ConfigBootstrapSummary, LlmProfileConfig } from "@bbl-next/contracts";
 import {
   BUILTIN_CAPABILITIES,
@@ -406,7 +410,36 @@ async function registerBrowserVfsSkillPackages({
   }
 }
 
-function packageManifestToSkillSummary(record, manifest) {
+async function buildPackageSkillVersionSurface(record, manifest, browserVfs) {
+  const packageUri = manifest.packageUri;
+  let versions = [];
+  try {
+    versions = (await browserVfs.listSnapshots(packageUri)).map((snapshot) =>
+      snapshotInfoToSkillVersionRef(snapshot),
+    );
+  } catch {
+    versions = [];
+  }
+
+  return createSkillLifecycleVersionSurface({
+    skillId: record.skillId,
+    lifecycle: {
+      status: record.status,
+      trusted: record.trusted === true,
+    },
+    activeVersion:
+      manifest.version == null
+        ? null
+        : {
+            versionId: String(manifest.version),
+            uri: packageUri,
+            trusted: record.trusted === true,
+          },
+    versions,
+  });
+}
+
+function packageManifestToSkillSummary(record, manifest, versionSurface = null) {
   return {
     skillId: record.skillId,
     status: record.status,
@@ -418,6 +451,7 @@ function packageManifestToSkillSummary(record, manifest) {
     packageUri: manifest.packageUri,
     entry: manifest.entry,
     version: manifest.version,
+    versionSurface,
     kind: manifest.kind,
     description: manifest.description || null,
     permissions: [...manifest.permissions],
@@ -2604,12 +2638,19 @@ export function createBackgroundRuntimeServices({
       skillInvocationService: services.skillInvocationService,
       packageCatalog: packageSkillManifests,
     });
-    return (await skillManager.list()).map((record) => {
-      const manifest = packageSkillManifests.get(record.skillId);
-      return manifest
-        ? packageManifestToSkillSummary(record, manifest)
-        : lifecycleRecordToSkillSummary(record);
-    });
+    return Promise.all(
+      (await skillManager.list()).map(async (record) => {
+        const manifest = packageSkillManifests.get(record.skillId);
+        if (!manifest) {
+          return lifecycleRecordToSkillSummary(record);
+        }
+        return packageManifestToSkillSummary(
+          record,
+          manifest,
+          await buildPackageSkillVersionSurface(record, manifest, services.browserVfs),
+        );
+      }),
+    );
   }
 
   async function ensureSkillInvokable(skillId) {

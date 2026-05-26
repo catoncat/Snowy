@@ -444,6 +444,31 @@ describe("contracts", () => {
             packageUri: "mem://skills/skill.twitter",
             entry: "handler.js",
             version: 1,
+            versionSurface: {
+              skillId: "skill.twitter",
+              lifecycle: {
+                status: "enabled",
+                trusted: true,
+              },
+              activeVersion: {
+                versionId: "1",
+                uri: "mem://skills/skill.twitter",
+                trusted: true,
+              },
+              rollbackTarget: {
+                versionId: "2026-03-30T00:00:00.000Z",
+                uri: "mem://skills/skill.twitter/@versions/2026-03-30T00:00:00.000Z",
+                createdAt: "2026-03-30T00:00:00.000Z",
+                trusted: true,
+              },
+              policy: {
+                snapshotRootUri: "mem://skills/skill.twitter/@versions",
+                versionFormat: "iso-timestamp",
+                retention: 3,
+                rollbackTarget: "latest_trusted",
+                rollbackTriggers: ["verifier_failed_with_confirmation", "release_gate_failed"],
+              },
+            },
             kind: "site",
             description: "Search posts on Twitter/X",
             permissions: ["site.fetch_with_session"],

@@ -96,6 +96,7 @@ export interface SkillCatalogItem {
   packageUri: string | null;
   entry: string | null;
   version: number | null;
+  versionSurface: SkillSummaryItem["versionSurface"] | null;
   kind: string | null;
   description: string | null;
   permissions: string[];
@@ -156,6 +157,7 @@ export function listSkillCatalogItems(
     packageUri: item.packageUri ?? null,
     entry: item.entry ?? null,
     version: item.version,
+    versionSurface: item.versionSurface ?? null,
     kind: item.kind,
     description: item.description,
     permissions: [...item.permissions],
