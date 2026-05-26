@@ -1,24 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T21:38:10.203Z",
+  "generated_at": "2026-05-26T21:41:10.214Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-187",
-      "issue_path": "docs/backlog/2026-05-27-cutover-status-gate-does-not-expose-delivery-blockers.md",
-      "title": "Cutover status gate does not expose delivery blockers",
-      "parallel_group": "mv3-shell",
-      "module_id": "old-product-replacement-loop",
-      "module_stage": "mainline",
-      "tracking_kind": "mainline",
-      "check_cmd": "bun run release:cutover:status",
-      "depends_on": [],
-      "write_scope": [
-        "package.json",
-        "scripts/release-cutover-status.ts",
-        "docs/release-cutover-decision-packet-2026-05-27.md",
-        "docs/source-of-truth-map.md"
-      ]
-    }
-  ]
+  "entries": []
 }
