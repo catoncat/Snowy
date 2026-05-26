@@ -6,6 +6,7 @@ import {
   BUILTIN_CAPABILITIES,
   CapabilityRegistry,
   FamilyProviderRegistry,
+  SkillInvocationService,
   createConfigCapabilityProvider,
   createConfigControlPlane,
   createTabsCapabilityProvider,
@@ -1748,6 +1749,7 @@ export function createBackgroundRuntimeServices({
   interventionEscalationMs = undefined,
   interventionSyncChannel = undefined,
   pageHookScriptPath = "src/page-hook.js",
+  skillDefinitions = [],
 }: any = {}): any {
   let servicesPromise = null;
   let sessionPromise = null;
@@ -1871,6 +1873,14 @@ export function createBackgroundRuntimeServices({
             }
           },
         });
+        const skillInvocationService = new SkillInvocationService({
+          registry,
+          providers,
+          manageSkill: async (request) => skillManager.manage(request),
+        });
+        for (const skillDefinition of Array.isArray(skillDefinitions) ? skillDefinitions : []) {
+          skillInvocationService.register(skillDefinition);
+        }
 
         const runnerHost = createBridgeRunnerHost({ invokeRunner });
         let kernelRef = null;
@@ -1989,6 +1999,7 @@ export function createBackgroundRuntimeServices({
           registry,
           providers,
           runnerHost,
+          skillInvocationService,
           kernel,
           llmProviderRegistry,
           profileConfig: managedProfileConfig,
@@ -2045,6 +2056,16 @@ export function createBackgroundRuntimeServices({
       permissions,
       listSkills: async () => skillManager.listActiveIds(),
       manageSkill: async (request) => skillManager.manage(request),
+      invokeSkill: async (request) => {
+        await ensureSkillInvokable(request.skillId);
+        return services.skillInvocationService.invoke({
+          sessionId: session.id,
+          skillId: request.skillId,
+          action: request.action,
+          args: request.args,
+          parentContext: request.parentContext,
+        });
+      },
     });
   }
 
@@ -2177,6 +2198,17 @@ export function createBackgroundRuntimeServices({
 
   async function listSkills() {
     return skillManager.list();
+  }
+
+  async function ensureSkillInvokable(skillId) {
+    const record = (await skillManager.list()).find((item) => item.skillId === skillId);
+    if (!record) {
+      throw new CapabilityError("E_PERMISSION_DENIED", `Skill is not installed: ${skillId}`);
+    }
+    if (record.status !== "enabled") {
+      throw new CapabilityError("E_PERMISSION_DENIED", `Skill is not enabled: ${skillId}`);
+    }
+    return record;
   }
 
   async function buildChatBootstrap() {

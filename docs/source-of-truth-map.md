@@ -268,6 +268,25 @@ planning 额外要做的不是“多读几份文档”，而是：
 6. deferred modules 只在前两层没有 live queue entry 时再进入
 7. 当 live queue 还有 entry 但全部已被 lease 时，可先做 planning preview；当 live queue 为空且没有 active lease 时，再进入 next-batch planning commit
 
+但这个顺序不能替代阶段判断。若 queue 为空、mainline/secondary 模块都显示 shipped，但 `docs/cutover-readiness-criteria.md` 仍不能证明 Level 2，planning 必须切换到 milestone-first：
+
+1. 先问哪个旧产品替代闭环还没有被端到端证明
+2. 再把它落成少数集成型 milestone issue
+3. 不为了让 queue 有活而继续把 review finding 切成细小 follow-up
+4. deferred 模块若已经成为旧产品重构完成的真实 blocker，应被提升为当前主线，而不是继续按 deferred 顺序等待
+
+当前需要特别警惕的反模式：
+
+- 把 `partial` / `yellow` / `red` row 逐条开成 review issue，却没有一个 issue 能证明旧产品的一条完整用户能力链已经被替代。
+- 把同一条能力链拆成 install、state、UI、audit、runtime 五个小票，导致每张票都能 done，但旧产品迁移状态不变。
+- 把 batch 文档或 review inventory 当作产出票机器，而不是用它们服务 cutover / product completion milestone。
+
+推荐的下一批形态是：
+
+- 1 个主 milestone issue：能把旧产品的一条关键能力链从入口到证据跑通
+- 最多 1-2 个必要支撑 issue：只在主 milestone acceptance 明确依赖且不能同票完成时才拆出
+- 每个 issue 都必须说明它如何让 `cutover-readiness-criteria` 或 migration parity 更接近“可替代旧主线”
+
 当前 dispatch 与规划要这样看：
 
 1. 当前可做什么：看 `docs/workflow/live-queue.json`

@@ -220,6 +220,39 @@
       "deferral_rationale": "The provider/profile routing mainline no longer lacks an executable live slice. ISSUE-150 resolved kernel-local taxonomy/reusable route resolution, ISSUE-159 exposed the shared control-plane update surface, and ISSUE-163/164 completed routing override management plus runtime-owned rehydrate. Remaining work is broader rollout and hardening, not a current mainline coverage gap."
     },
     {
+      "module_id": "old-product-replacement-loop",
+      "title": "Old Product Replacement Loop",
+      "summary": "Mainline milestone for proving that the rewritten browser extension can replace one old product capability chain end-to-end, instead of only closing local review gaps.",
+      "tracking_order": 12,
+      "stage": "mainline",
+      "status": "in-progress",
+      "depends_on_modules": [
+        "kernel",
+        "ai-surface-control-plane",
+        "site-runtime-browser-automation",
+        "execution-host-bridge",
+        "observability-audit",
+        "skill-runtime-sdk-studio"
+      ],
+      "code_roots": [
+        "packages/contracts/src/index.ts",
+        "packages/core/src/index.ts",
+        "packages/skill-sdk/",
+        "apps/mv3-shell/src/runtime-services.ts",
+        "apps/mv3-shell/src/background.ts",
+        "apps/mv3-shell/src/sidepanel/",
+        "apps/mv3-shell/test/"
+      ],
+      "source_docs": [
+        "docs/cutover-readiness-criteria.md",
+        "docs/migration-parity-dashboard.md",
+        "docs/legacy-to-vnext-migration-matrix.md"
+      ],
+      "cutover_gate": "Level 2 product replacement proof",
+      "default_parallel_group": "mv3-shell",
+      "milestone_rationale": "The previous issue workflow closed many small review findings while leaving the larger old-product replacement claim unproven. This module exists to group current work around one verifiable product loop such as install -> persist -> enable -> invoke -> observe."
+    },
+    {
       "module_id": "browser-vfs",
       "title": "BrowserVFS",
       "summary": "mem:// semantics, IndexedDB persistence, package discovery, retention, and VFS error-path correctness.",

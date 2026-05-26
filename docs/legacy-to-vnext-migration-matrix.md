@@ -27,12 +27,12 @@
 |---|---|---|---|---|---|
 | canonical tool / capability model | `tool-contract-registry.ts`, `tool-provider-registry.ts`, `loop-tool-dispatch.ts` | `packages/contracts`, `packages/core` | replace-with-descriptor | `v0-shipped` | descriptor / projection / registry / ctx / invoke 已有测试，且 action/resource/workflow 边界已显式锁定 |
 | skill permission / trace / nested invoke | orchestrator + skill runtime | `packages/core` | keep-and-tighten | `v0-shipped` | trace / nested invoke / permission clamp 已有测试 |
-| skill package install / metadata / content injection | `skill-registry.ts`, `skill-content-resolver.ts`, `skill-create.ts` | `packages/skill-sdk`, BrowserVFS, future Studio | replace-and-simplify | `partial` | SDK 和 authoring 有基础，完整管理面未完成 |
-| plugin runtime as extension model | `plugin-runtime.ts`, `plugin-sandbox.ts` | executable Skill + JS Runner | hard-cutover | `partial` | 方向已锁，完整收拢未完成 |
+| skill package install / metadata / content injection | `skill-registry.ts`, `skill-content-resolver.ts`, `skill-create.ts` | `packages/skill-sdk`, BrowserVFS, future Studio | replace-and-simplify | `partial` | SDK 和 authoring 有基础；`ISSUE-172` 已证明代表性 executable skill 可经 shared MV3 runtime 完成 install/persist/enable/invoke/observe，完整管理面与 studio 仍未完成 |
+| plugin runtime as extension model | `plugin-runtime.ts`, `plugin-sandbox.ts` | executable Skill + JS Runner | hard-cutover | `partial` | 方向已锁；`ISSUE-172` 已证明一条旧 plugin loop 可由 executable Skill 调用真实 `tabs.get_active` 能力并通过 `audit.tail` 留证，完整生态收拢仍未完成 |
 | Plugin Studio UI | `plugin-studio-main.ts` | future Skill Studio | replace | `not-started` | 只有方向，没有产品主链 |
 | browser sandbox shell / `browser_bash` | `lifo-adapter.ts`, prompt policy | BrowserVFS + JS Runner + capabilities | intentionally-drop-old-center | `intentionally-dropped` | 不再把 shell 当中心能力 |
 | host shell / `host_bash` | bridge + old tool contracts | execution host substrate + `hosts.*` control plane | promote-and-simplify | `partial` | `hosts.*` control plane、`host.read/write/edit/exec` contract、capability-aware host summary/default routing 已落地；默认 offscreen local adapter 的真实边界现已锁定为 browser-only file adapter：继续承担读写编辑与 offscreen diagnostics，而 true exec parity 由 exec-capable remote host path 承担（ISSUE-038 / ISSUE-073 / ISSUE-125 / ISSUE-126 / ISSUE-127 / ISSUE-134 / ISSUE-157 / ISSUE-165）。该 lane 在 parity matrix 里仍记为 `partial`，只是因为 vNext 刻意不再追求 old `host_bash` 的单一同质 host 幻觉；对应 planning ledger 已可按 cutover-critical shipped + deferred breadth 跟踪 |
-| settings / runtime / skill management UI | panel stores + settings / skills / plugins surfaces | AI-native product control plane (`runtime.*` / `config.*` / `skills.*` / `hosts.*` / `audit.*`) | replace-with-control-plane | `partial` | descriptor-owned action projection、bootstrap summary、`runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail` resource contract、`readAiSurfaceResource()` / MV3 `resource.read` 统一 lookup、`runtime.capture_diagnostics` / `runtime.clear_error`、最小本地 `hosts.*` / `config.update` / `skills.install/enable/disable/uninstall`、provider routing 的 `model.routing` shared control-plane，以及 `ISSUE-093` 的 shared management consumer 都已落地；该 row 保持 `partial` 仅因为完整 Skill Studio / lifecycle UI 仍是 cutover 后项，对应 planning ledger 已按 shipped-with-deferred-scope 追踪 |
+| settings / runtime / skill management UI | panel stores + settings / skills / plugins surfaces | AI-native product control plane (`runtime.*` / `config.*` / `skills.*` / `hosts.*` / `audit.*`) | replace-with-control-plane | `partial` | descriptor-owned action projection、bootstrap summary、`runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail` resource contract、`readAiSurfaceResource()` / MV3 `resource.read` 统一 lookup、`runtime.capture_diagnostics` / `runtime.clear_error`、最小本地 `hosts.*` / `config.update` / `skills.install/enable/disable/uninstall`、provider routing 的 `model.routing` shared control-plane、`ISSUE-093` 的 shared management consumer，以及 `ISSUE-172` 的 executable skill invoke 纵向证明都已落地；该 row 保持 `partial` 仅因为完整 Skill Studio / lifecycle UI 仍是 cutover 后项，对应 planning ledger 已按 shipped-with-deferred-scope 追踪 |
 | `mem://` virtual FS | `virtual-fs.browser.ts`, `lifo-adapter.ts` | `packages/browser-vfs` | keep-and-rebuild | `v0-shipped` | read/write/snapshot/quota/package discovery 已测 |
 | canonical skill package URI | old `mem://skills/...` path semantics | `packages/browser-vfs` | keep-and-tighten | `v0-shipped` | canonical `mem://skills/...` round-trip 已有测试 |
 | JS plugin sandbox / dynamic code execution | `plugin-sandbox.ts` | `packages/js-runner` + `apps/mv3-shell` | replace | `v0-shipped` | runner + health + cancel + offscreen bridge 已测 |
@@ -47,7 +47,7 @@
 | hooks system / extension points | `hook-runner.ts`, plugin hooks | future executable Skill setup hooks | replace-and-simplify | `partial` | `packages/skill-sdk` 已提供 install-only declarative setup hook contract 与 `runSkillSetupHooks()` 计划 runner；剩余 gap 是 authoring docs、runtime 接线与更丰富 phase 仍未定义 |
 | diagnostics / runtime debug / audit | debug snapshot + diagnostics HTTP | future observability layer | keep-and-rebuild | `partial` | Gate F 的最小 operability surface 已 landed：轻量 summary / `audit.tail` resource contract、runtime diagnostics action、以及覆盖 `hosts.*` / `config.update` / `skills.*` lifecycle 的统一 `audit.tail` app integration path 已落地，timeline / summary / rawEventTail 也已通过 shared MV3 read path 暴露；该 row 仍记 `partial`，只因为旧仓同等级 debug 面、bulk export/persistent store 与更宽 event breadth 仍未补齐 |
 | MCP export / external capability bridge | bridge + export plan | bridge-side MCP export | defer-but-required | `partial` | descriptor-derived handoff contract 已有代码和测试；真正 bridge-side MCP server/transport 仍未实现 |
-| Skill Studio / versions / lifecycle UI | old panel skills/plugins UI | future Skill Studio | keep-product-need | `not-started` | 生命周期模型有，产品 UI 没有；Soft Gate 1 已裁决为 cutover 后补；`ISSUE-093` 已完成 shared control-plane management consumer |
+| Skill Studio / versions / lifecycle UI | old panel skills/plugins UI | future Skill Studio | keep-product-need | `not-started` | 生命周期模型、shared management consumer 与 `ISSUE-172` 的 executable skill invoke proof 已有；完整产品 UI、版本管理与 studio 仍没有；Soft Gate 1 已裁决为 cutover 后补 |
 
 ## 明确不按旧仓原样迁的东西
 
@@ -63,7 +63,7 @@
 
 1. browser automation / screenshot / download 的剩余 runtime integration 与 intervention lifecycle 是否真正闭环
 2. provider policy / diagnostics / observability 主链
-3. Skill Studio / lifecycle / versioning 产品面
+3. Skill Studio / lifecycle / versioning 产品面，以及 executable Skill 旧产品替代链路的更广覆盖
 
 ## 如何使用本文件
 

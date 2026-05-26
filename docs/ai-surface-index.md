@@ -84,6 +84,7 @@
 
 ## 3. 当前已锁定的 skill lifecycle control-plane 边界
 
+- `skills.invoke` 是 runtime substrate action；在 MV3 shared runtime path 中，它只会调用已安装且已启用的 executable skill，并按 skill 声明权限触达真实 capability
 - `skills.install/enable/disable/uninstall` 现在都属于 northbound product control plane
 - `skills.uninstall` 的语义是把 skill 从 active product library 归档到 `archived`
 - `skills.uninstall` 不等于物理删除 `mem://skills/...` 包内容
@@ -110,7 +111,7 @@
 - metadata registry 已覆盖当前全部 resource id，并显式锁定 `audiences` / `projections` / `readOwner` / `bootstrapKey`
 - `packages/core` 继续提供 `readAiSurfaceResource()` lookup path；`apps/mv3-shell` 继续通过统一 `resource.read` bridge 暴露 `runtime.summary/config.summary/skills.summary/hosts.summary/audit.tail/audit.intervention/observability.replay/observability.timeline/observability.summary/observability.rawEventTail`
 - `runtime.bootstrap` 继续保留为 bootstrap bundle compatibility read path
-- `audit.tail` 仍是当前 control-plane audit 主资源，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall`
+- `audit.tail` 仍是当前 control-plane / execution evidence 主资源，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall`，并通过 `loop.step` 记录 `skills.invoke` 及其子 capability trace 的 operator-visible evidence
 - `runtime.summary` 现已包含 typed `interventions` summary；`audit.intervention` 是 intervention lifecycle 的 shared audit read path
 - `observability.replay` 负责把 loop telemetry、control-plane audit、intervention lifecycle 与 compaction continuity marker 按时间顺序 stitch 成统一 replay 文档
 - `observability.timeline` / `observability.summary` / `observability.rawEventTail` 现已通过 shared MV3 `resource.read` 暴露 runtime-owned observability export builder 的 operator-facing read path，并保持 `observability.replay` 作为更高层 stitched replay 文档

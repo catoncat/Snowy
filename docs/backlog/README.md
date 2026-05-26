@@ -199,6 +199,16 @@ bun run workflow:claim:json -- --name=<agent-name>
 6. 把新发现的问题落成 backlog issue
 7. 再重建 queue，并默认继续回到 claim / implement loop
 
+## Anti-fragmentation Planning Gate
+
+queue 为空时，不要默认把 review inventory 继续拆成更小的 issue。先做一次 milestone gate：
+
+1. 对照 `docs/cutover-readiness-criteria.md` 和 `docs/migration-parity-dashboard.md`，找仍阻止旧产品替代的大闭环。
+2. 优先新增 1-3 个集成型 milestone issue，而不是多个局部 review issue。
+3. milestone issue 应跨越真实产品链路，例如 install → persist → enable → invoke → observe，而不是只修一个类型、一个文档段落或一个 helper。
+4. review finding 只有在支撑 milestone acceptance 时才进入 queue；否则记录为 `Not Now` 或留在 review 文档，不要制造 dispatch 噪音。
+5. 若某个 `deferred` 模块已经成为旧产品重构完成的 blocker，先更新 module ledger 的 stage / rationale，再建 issue；不要让旧 stage 排序掩盖真实优先级。
+
 ## Completion Record
 
 - `done` issue 不能只改 frontmatter；必须同时追加 `## 工作总结` 和 `## 相关 commits`

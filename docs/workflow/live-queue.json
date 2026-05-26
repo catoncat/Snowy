@@ -1,6 +1,33 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-15T09:50:12.724Z",
+  "generated_at": "2026-05-26T16:49:49.113Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": []
+  "entries": [
+    {
+      "issue_id": "ISSUE-172",
+      "issue_path": "docs/backlog/2026-05-27-cutover-vertical-proof-pack-and-old-product-replacement-loop.md",
+      "title": "Cutover milestone: old-product replacement skill loop is not proven end-to-end",
+      "parallel_group": "mv3-shell",
+      "module_id": "old-product-replacement-loop",
+      "module_stage": "mainline",
+      "tracking_kind": "mainline",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/test/contracts.spec.ts",
+        "packages/core/src/index.ts",
+        "packages/core/test/core.spec.ts",
+        "packages/skill-sdk/src/index.ts",
+        "packages/skill-sdk/test/skill-sdk.spec.ts",
+        "apps/mv3-shell/src/runtime-services.ts",
+        "apps/mv3-shell/src/background.ts",
+        "apps/mv3-shell/src/sidepanel/",
+        "apps/mv3-shell/test/",
+        "docs/cutover-readiness-criteria.md",
+        "docs/migration-parity-dashboard.md",
+        "docs/legacy-to-vnext-migration-matrix.md"
+      ]
+    }
+  ]
 }

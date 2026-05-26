@@ -3382,6 +3382,174 @@ describe("mv3-shell manifest", () => {
     secondHarness.cleanup();
   });
 
+  it("invokes a rehydrated enabled executable skill through the shared MV3 runtime path", async () => {
+    const storageArea = createStorageAreaHarness();
+    const skillDefinitions = [
+      {
+        id: "skill.cutover.active-tab",
+        permissions: ["tabs.get_active"],
+        async handler(
+          ctx: {
+            call: (capabilityId: string, input: unknown) => Promise<unknown>;
+          },
+          action: string,
+        ) {
+          if (action !== "inspect") {
+            throw new Error(`Unsupported action: ${action}`);
+          }
+          const tab = await ctx.call("tabs.get_active", {});
+          return {
+            action,
+            tab,
+          };
+        },
+      },
+    ];
+    const firstHarness = createChromeHarness({
+      activeTab: {
+        id: 21,
+        url: "https://fixture.test/install",
+        title: "Install Tab",
+      },
+      storageArea,
+    });
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstHarness.chromeApi,
+      timeoutMs: 50,
+      skillDefinitions,
+    });
+    const disposeFirst = firstBridge.registerRuntimeListener();
+
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.install",
+      skillId: "skill.cutover.active-tab",
+    });
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.enable",
+      skillId: "skill.cutover.active-tab",
+    });
+
+    disposeFirst();
+    firstHarness.cleanup();
+
+    const secondHarness = createChromeHarness({
+      activeTab: {
+        id: 22,
+        url: "https://fixture.test/after-restart",
+        title: "Restarted Tab",
+      },
+      storageArea,
+    });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+      skillDefinitions,
+    });
+    const disposeSecond = secondBridge.registerRuntimeListener();
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.invoke",
+        skillId: "skill.cutover.active-tab",
+        action: "inspect",
+        args: {
+          source: "cutover-proof",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        result: {
+          action: "inspect",
+          tab: {
+            tabId: 22,
+            url: "https://fixture.test/after-restart",
+            active: true,
+            title: "Restarted Tab",
+          },
+        },
+        trace: [
+          {
+            capabilityId: "tabs.get_active",
+            status: "succeeded",
+          },
+        ],
+      },
+    });
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "skills.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "skills.summary",
+        data: {
+          installedCount: 1,
+          enabledCount: 1,
+          recentChange: "skills.enable",
+        },
+      },
+    });
+
+    const auditResult = (await secondHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "resource.read",
+      resourceId: "audit.tail",
+    })) as {
+      ok: boolean;
+      data: {
+        data: {
+          entries: Array<{
+            kind: string;
+            capabilityId?: string;
+            skillId?: string;
+            status: string;
+          }>;
+        };
+      };
+    };
+
+    expect(auditResult.ok).toBe(true);
+    expect(auditResult.data.data.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "skills.install",
+          skillId: "skill.cutover.active-tab",
+          status: "installed",
+        }),
+        expect.objectContaining({
+          kind: "skills.enable",
+          skillId: "skill.cutover.active-tab",
+          status: "enabled",
+        }),
+        expect.objectContaining({
+          kind: "loop.step",
+          capabilityId: "skills.invoke",
+          status: "executed",
+        }),
+        expect.objectContaining({
+          kind: "loop.step",
+          capabilityId: "tabs.get_active",
+          status: "executed",
+        }),
+      ]),
+    );
+    expect(secondHarness.tabsApi.query).toHaveBeenCalledWith({
+      active: true,
+      lastFocusedWindow: true,
+    });
+
+    disposeSecond();
+    secondHarness.cleanup();
+  });
+
   it("reads summary and audit resources through the unified resource.read path", async () => {
     const harness = createChromeHarness({
       host: {

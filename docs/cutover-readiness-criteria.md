@@ -65,6 +65,8 @@
 
 当前最小已落地口径：`audit.tail` 已覆盖 `config.update`、`skills.install/enable/disable/uninstall`、`hosts.connect/disconnect/set_default`。
 
+补充：`ISSUE-172` 已把旧产品替代判断从 lifecycle-only 推到一条纵向 Skill 证明链：代表性 executable skill 可经 shared MV3 runtime 完成 `install → persist/restart → enable → skills.invoke → tabs.get_active → audit.tail`。这证明新版共享运行面已经能替代旧 plugin loop 的一条最小用户能力链，但不等于完整 Skill Studio、版本管理、旧 plugin 生态迁移都已完成。
+
 ## Soft Gates
 
 ### Soft Gate 1: Skill Studio / Lifecycle Product Surface
@@ -79,6 +81,7 @@
 - Level 2 cutover 不以完整 Skill Studio / sidepanel management UI 为前置；Gate G 继续只要求 shared AI-surface summary/action 主链成立，而不是要求先补完整产品壳。
 - `ISSUE-085` 已交付 sidepanel chat shell，`ISSUE-093` 也已补齐 shared management consumer；但它们仍不等于完整 Skill Studio / lifecycle UI。
 - sidepanel management UI 的最小范围已锁定为：通过统一 `resource.read` 消费 `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary`，并通过 `runtime.capture_diagnostics` / `runtime.clear_error` / `config.update` / `skills.install|enable|disable|uninstall` / `hosts.connect|disconnect|set_default` 触发共享 control-plane 动作；不新增 app-local bootstrap truth。
+- `ISSUE-172` 补齐的是 executable skill 的 shared runtime invoke 纵向证明，不改变完整 Skill Studio / lifecycle product UI 仍为 cutover 后补的裁决。
 
 ### Soft Gate 2: Browser Automation Product Parity
 
@@ -119,7 +122,7 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 主要原因：
 
 1. 迁移控制面刚建立，还未长期维护
-2. AI-native product control plane 的 Gate G 最小主链已成立；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read`、descriptor-owned action projection、`model.routing` shared control-plane 与最小 `audit.tail` 已形成主链，但完整 resource metadata registry、Skill Studio/lifecycle UI 与更完整 product surface 仍未完成
+2. AI-native product control plane 的 Gate G 最小主链已成立；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read`、descriptor-owned action projection、`model.routing` shared control-plane、最小 `audit.tail`，以及 `ISSUE-172` 的 `install → persist/restart → enable → skills.invoke → tabs.get_active → audit.tail` executable skill 纵向证明已形成主链，但完整 Skill Studio/lifecycle UI、版本管理与更完整 product surface 仍未完成
 3. browser automation 的 cutover 前 active-tab Tier 1 路径已闭环，但旧仓更广的 automation parity 仍未完整迁入：`page.scroll/select_option/hover`、`tabs.create/close`、stealth/computer mode，以及 screenshot/download export composites 仍属 cutover 后范围；background lane 目前也只保留已验证的最小 baseline
 4. 以旧仓 full parity 为标准，diagnostics / provider / studio / automation 的更宽 breadth 仍未成体系；当前只证明了 cutover-critical 最小主链已成立
 
