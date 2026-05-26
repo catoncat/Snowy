@@ -1,11 +1,11 @@
 ---
 id: ISSUE-173
 title: "Cutover milestone: skill install setup plan does not materialize package files"
-status: open
+status: done
 priority: p0
 source: "anti-fragmentation planning 2026-05-27"
 created: 2026-05-27
-assignee: unassigned
+assignee: codex-loop
 tags:
   - cutover
   - milestone
@@ -30,6 +30,7 @@ write_scope:
   - docs/legacy-to-vnext-migration-matrix.md
 acceptance_ref: docs/legacy-to-vnext-migration-matrix.md
 check_cmd: "bun run check"
+completed_at: 2026-05-26T17:25:59.622Z
 ---
 
 ## Goal
@@ -60,3 +61,24 @@ This is intentionally one vertical milestone. Do not split it into separate setu
 - Version selection UI or rollback UI.
 - Runtime execution of setup hooks during normal skill invocation.
 - Physical deletion of archived skill package contents.
+
+## 工作总结
+
+### 实现了什么
+- shared MV3 runtime forwards skills.install setupPlan payloads and materializes valid writes into BrowserVFS before lifecycle state changes
+- registered BrowserVFS-backed memfs provider so restarted enabled skills can read setup-written package files through memfs.read
+- updated Skill authoring, cutover readiness, parity dashboard, and migration matrix docs with the exact ISSUE-173 proof scope and remaining product gaps
+
+### 实际跑了什么检查
+- RED: bun run test -- apps/mv3-shell/test/manifest.spec.ts --testNamePattern="install setup plan" failed before implementation
+- GREEN: bun run test -- apps/mv3-shell/test/manifest.spec.ts --testNamePattern="install setup plan"
+- GREEN: bun run test -- apps/mv3-shell/test/manifest.spec.ts
+- GREEN: git diff --check
+- GREEN: bun run check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `04c9986862b5` feat(mv3): 落地 Skill 安装包写入闭环
