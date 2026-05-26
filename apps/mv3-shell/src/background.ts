@@ -494,6 +494,7 @@ export function createBackgroundRunnerBridge({
   auditRetention = AUDIT_RETENTION_DEFAULTS,
   remoteTransport = undefined,
   remoteTransports = undefined,
+  skillDefinitions = [],
 }: any = {}): any {
   const effectivePageHookBridge =
     pageHookBridge ??
@@ -1133,6 +1134,7 @@ export function createBackgroundRunnerBridge({
         sessionStorage,
         profileConfig,
         interventionTimeoutMs,
+        skillDefinitions,
         onLoopTelemetry: async (entry) => {
           appendLoopTelemetry(entry);
           await appendAudit({
@@ -1327,14 +1329,14 @@ export function createBackgroundRunnerBridge({
     return value;
   }
 
-  async function routeRuntimeCapability(capabilityId, input = {}) {
+  async function routeRuntimeCapability(capabilityId, input = {}, options = {}) {
     try {
       const response = {
         ok: true,
         data: await getRuntimeServices().dispatchCapability({
           capabilityId,
           input,
-          permissions: [capabilityId],
+          permissions: options.permissions ?? [capabilityId],
         }),
       };
       appendObservabilityExportEvents(response.data);
@@ -1355,6 +1357,55 @@ export function createBackgroundRunnerBridge({
         await appendAudit(auditEntry);
       }
     }
+    return response;
+  }
+
+  function getTraceDurationMs(traceEntry) {
+    const startedAt = Date.parse(traceEntry?.startedAt ?? "");
+    const endedAt = Date.parse(traceEntry?.endedAt ?? "");
+    if (Number.isFinite(startedAt) && Number.isFinite(endedAt) && endedAt >= startedAt) {
+      return endedAt - startedAt;
+    }
+    return 0;
+  }
+
+  async function appendSkillInvocationAudit(response, durationMs) {
+    await appendAudit({
+      kind: "loop.step",
+      capabilityId: "skills.invoke",
+      status: response.ok ? "executed" : "failed",
+      durationMs,
+      ...(response.ok ? {} : { error: response.error?.message ?? response.error?.code }),
+    });
+    if (!response.ok || !Array.isArray(response.data?.trace)) {
+      return;
+    }
+    for (const traceEntry of response.data.trace) {
+      if (typeof traceEntry?.capabilityId !== "string") {
+        continue;
+      }
+      await appendAudit({
+        kind: "loop.step",
+        capabilityId: traceEntry.capabilityId,
+        status: traceEntry.status === "failed" ? "failed" : "executed",
+        durationMs: getTraceDurationMs(traceEntry),
+        ...(typeof traceEntry.errorCode === "string" ? { error: traceEntry.errorCode } : {}),
+      });
+    }
+  }
+
+  async function routeSkillInvocation({ skillId, action, args }) {
+    const startedAt = Date.now();
+    const response = await routeRuntimeCapability(
+      "skills.invoke",
+      {
+        skillId,
+        action,
+        args,
+      },
+      { permissions: ["*"] },
+    );
+    await appendSkillInvocationAudit(response, Date.now() - startedAt);
     return response;
   }
 
@@ -2496,6 +2547,12 @@ export function createBackgroundRunnerBridge({
         })();
       case "skills.list":
         return routeRuntimeCapability("skills.list");
+      case "skills.invoke":
+        return routeSkillInvocation({
+          skillId: message.skillId,
+          action: message.action,
+          args: message.args,
+        });
       case "skills.install":
       case "skills.enable":
       case "skills.disable":
