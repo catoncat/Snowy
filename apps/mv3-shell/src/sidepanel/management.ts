@@ -24,6 +24,8 @@ type ManagementResourceDocument =
   | HostsSummaryResource;
 
 type RuntimeSummary = RuntimeSummaryResource["data"];
+type SkillsSummary = SkillsSummaryResource["data"];
+type SkillSummaryItem = SkillsSummary["items"][number];
 
 type RuntimeDiagnosticsAction = {
   kind: "runtime.capture_diagnostics";
@@ -78,6 +80,31 @@ export interface ManagementState {
   hosts: HostsSummaryResource | null;
 }
 
+export interface SkillCatalogAction {
+  name: string;
+  title?: string;
+  description?: string;
+  verifier?: string;
+}
+
+export interface SkillCatalogItem {
+  skillId: string;
+  status: string;
+  enabled: boolean;
+  trusted: boolean;
+  source: SkillSummaryItem["source"];
+  packageUri: string | null;
+  entry: string | null;
+  version: number | null;
+  kind: string | null;
+  description: string | null;
+  permissions: string[];
+  tags: string[];
+  matches: string[];
+  requiresActiveTab: boolean;
+  actions: SkillCatalogAction[];
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -104,6 +131,39 @@ export function listPendingInterventions(
   return (runtimeSummary?.interventions.active ?? []).filter(
     (entry) => entry.status === "requested",
   );
+}
+
+function projectSkillCatalogAction(
+  action: SkillSummaryItem["actions"][number],
+): SkillCatalogAction {
+  return {
+    name: action.name,
+    ...(action.title ? { title: action.title } : {}),
+    ...(action.description ? { description: action.description } : {}),
+    ...(action.verifier ? { verifier: action.verifier } : {}),
+  };
+}
+
+export function listSkillCatalogItems(
+  skillsSummary: SkillsSummary | null | undefined,
+): SkillCatalogItem[] {
+  return (skillsSummary?.items ?? []).map((item) => ({
+    skillId: item.skillId,
+    status: item.status,
+    enabled: item.enabled,
+    trusted: item.trusted,
+    source: item.source,
+    packageUri: item.packageUri ?? null,
+    entry: item.entry ?? null,
+    version: item.version,
+    kind: item.kind,
+    description: item.description,
+    permissions: [...item.permissions],
+    tags: [...item.tags],
+    matches: [...item.matches],
+    requiresActiveTab: item.requiresActiveTab,
+    actions: item.actions.map((action) => projectSkillCatalogAction(action)),
+  }));
 }
 
 export function buildManagementBootstrapRequests(world: "main" | "content" = "main") {

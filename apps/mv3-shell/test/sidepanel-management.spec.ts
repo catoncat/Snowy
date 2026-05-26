@@ -9,6 +9,7 @@ import {
   createInitialManagementState,
   createManagementActionMessage,
   listPendingInterventions,
+  listSkillCatalogItems,
 } from "../src/sidepanel/management";
 
 describe("sidepanel management state", () => {
@@ -141,6 +142,97 @@ describe("sidepanel management state", () => {
         `${actionKind} must exist in BUILTIN_CAPABILITIES`,
       ).toBe(true);
     }
+  });
+
+  it("derives package-backed skill catalog items from shared skills summary items", () => {
+    const catalog = listSkillCatalogItems({
+      status: "healthy",
+      installedCount: 2,
+      enabledCount: 1,
+      trustedCount: 1,
+      recentChange: "skills.enable",
+      items: [
+        {
+          skillId: "skill.cutover.catalog",
+          status: "enabled",
+          enabled: true,
+          trusted: false,
+          source: "package",
+          recentChange: "skills.enable",
+          lastChangedAt: "2026-05-27T00:00:00.000Z",
+          packageUri: "mem://skills/skill.cutover.catalog",
+          entry: "handler.js",
+          version: 3,
+          kind: "site",
+          description: "Catalog package",
+          permissions: ["tabs.get_active"],
+          tags: ["cutover", "site"],
+          matches: ["https://fixture.test/*"],
+          requiresActiveTab: true,
+          actions: [
+            {
+              name: "inspect_active_tab",
+              verifier: "tab_visible",
+              description: "Inspect the visible tab",
+              injectionSteps: [
+                {
+                  world: "content",
+                  scriptId: "fixture.dom-helper",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          skillId: "skill.cutover.lifecycle",
+          status: "installed",
+          enabled: false,
+          trusted: false,
+          source: "lifecycle",
+          recentChange: "skills.install",
+          lastChangedAt: "2026-05-27T00:01:00.000Z",
+          version: null,
+          kind: null,
+          description: null,
+          permissions: [],
+          tags: [],
+          matches: [],
+          requiresActiveTab: false,
+          actions: [],
+        },
+      ],
+    });
+
+    expect(catalog).toEqual([
+      {
+        skillId: "skill.cutover.catalog",
+        status: "enabled",
+        enabled: true,
+        trusted: false,
+        source: "package",
+        packageUri: "mem://skills/skill.cutover.catalog",
+        entry: "handler.js",
+        version: 3,
+        kind: "site",
+        description: "Catalog package",
+        permissions: ["tabs.get_active"],
+        tags: ["cutover", "site"],
+        matches: ["https://fixture.test/*"],
+        requiresActiveTab: true,
+        actions: [
+          {
+            name: "inspect_active_tab",
+            verifier: "tab_visible",
+            description: "Inspect the visible tab",
+          },
+        ],
+      },
+      expect.objectContaining({
+        skillId: "skill.cutover.lifecycle",
+        source: "lifecycle",
+        actions: [],
+      }),
+    ]);
   });
 
   it("builds only approved control-plane action messages", () => {
