@@ -17,6 +17,7 @@ export const SIDEPANEL_MANAGEMENT_ACTION_KINDS: readonly [
   "skills.enable",
   "skills.disable",
   "skills.uninstall",
+  "skills.rollback",
   "hosts.connect",
   "hosts.disconnect",
   "hosts.set_default",

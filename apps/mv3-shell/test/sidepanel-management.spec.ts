@@ -282,6 +282,7 @@ describe("sidepanel management state", () => {
       "skills.enable",
       "skills.disable",
       "skills.uninstall",
+      "skills.rollback",
       "hosts.connect",
       "hosts.disconnect",
       "hosts.set_default",
@@ -336,6 +337,16 @@ describe("sidepanel management state", () => {
     expect(createManagementActionMessage("skills.install", { skillId: "skill.demo" })).toEqual({
       kind: "skills.install",
       skillId: "skill.demo",
+    });
+    expect(
+      createManagementActionMessage("skills.rollback", {
+        skillId: "skill.demo",
+        versionUri: "mem://skills/skill.demo/@versions/2026-05-27T00:00:00.000Z",
+      }),
+    ).toEqual({
+      kind: "skills.rollback",
+      skillId: "skill.demo",
+      versionUri: "mem://skills/skill.demo/@versions/2026-05-27T00:00:00.000Z",
     });
     expect(createManagementActionMessage("hosts.connect", { hostId: "local" })).toEqual({
       kind: "hosts.connect",

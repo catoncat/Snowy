@@ -176,6 +176,7 @@ export const SKILL_CONTROL_PLANE_ACTIONS = [
   "skills.enable",
   "skills.disable",
   "skills.uninstall",
+  "skills.rollback",
 ] as const;
 export type SkillControlPlaneAction = (typeof SKILL_CONTROL_PLANE_ACTIONS)[number];
 export const HOST_SUBSTRATE_ACTIONS = [
@@ -254,7 +255,13 @@ export type ConfigAuditStatus = (typeof CONFIG_AUDIT_STATUSES)[number];
 export const SKILL_AUDIT_KINDS = [...SKILL_CONTROL_PLANE_ACTIONS] as const;
 export type SkillAuditKind = (typeof SKILL_AUDIT_KINDS)[number];
 
-export const SKILL_AUDIT_STATUSES = ["installed", "enabled", "disabled", "archived"] as const;
+export const SKILL_AUDIT_STATUSES = [
+  "installed",
+  "enabled",
+  "disabled",
+  "archived",
+  "rolled_back",
+] as const;
 export type SkillAuditStatus = (typeof SKILL_AUDIT_STATUSES)[number];
 
 export const LOOP_AUDIT_KINDS = ["loop.step"] as const;
@@ -314,6 +321,8 @@ export interface SkillAuditEntry extends ControlPlaneAuditEntryBase {
   skillId: string;
   status: SkillAuditStatus;
   trusted?: boolean;
+  versionId?: string;
+  versionUri?: string;
 }
 
 export interface LoopStepAuditEntry extends ControlPlaneAuditEntryBase {

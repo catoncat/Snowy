@@ -10,6 +10,7 @@ import {
   LOOP_AUDIT_KINDS,
   LOOP_AUDIT_STATUSES,
   SKILL_AUDIT_KINDS,
+  SKILL_AUDIT_STATUSES,
 } from "@bbl-next/contracts";
 import { createBootstrapSummary, readAiSurfaceResource } from "@bbl-next/core";
 import { invokeSingleActionSiteSkill } from "@bbl-next/site-runtime";
@@ -122,16 +123,15 @@ function normalizeAuditEntry(value) {
   }
 
   if (SKILL_AUDIT_KINDS.includes(value.kind)) {
-    if (
-      !["installed", "enabled", "disabled", "archived"].includes(value.status) ||
-      typeof value.skillId !== "string"
-    ) {
+    if (!SKILL_AUDIT_STATUSES.includes(value.status) || typeof value.skillId !== "string") {
       return null;
     }
     const entry = {
       ...baseEntry,
       skillId: value.skillId,
       ...(typeof value.trusted === "boolean" ? { trusted: value.trusted } : {}),
+      ...(typeof value.versionId === "string" ? { versionId: value.versionId } : {}),
+      ...(typeof value.versionUri === "string" ? { versionUri: value.versionUri } : {}),
     };
     if (typeof value.error === "string" && value.error.length > 0) {
       entry.error = value.error;
@@ -2647,6 +2647,7 @@ export function createBackgroundRunnerBridge({
       case "skills.enable":
       case "skills.disable":
       case "skills.uninstall":
+      case "skills.rollback":
         return routeAuditedRuntimeCapability({
           capabilityId: message.kind,
           input: {
@@ -2657,12 +2658,17 @@ export function createBackgroundRunnerBridge({
             ...(message.kind === "skills.install" && "metadata" in message
               ? { metadata: message.metadata }
               : {}),
+            ...(message.kind === "skills.rollback" && "versionUri" in message
+              ? { versionUri: message.versionUri }
+              : {}),
           },
           buildAuditEntry: (data) => ({
             kind: message.kind,
             skillId: data?.skill?.skillId ?? message.skillId,
-            status: data?.skill?.status,
+            status: message.kind === "skills.rollback" ? "rolled_back" : data?.skill?.status,
             trusted: data?.skill?.trusted,
+            ...(data?.rollback?.versionId ? { versionId: data.rollback.versionId } : {}),
+            ...(data?.rollback?.versionUri ? { versionUri: data.rollback.versionUri } : {}),
           }),
         });
       case "page.press_key":

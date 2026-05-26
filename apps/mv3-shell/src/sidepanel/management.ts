@@ -55,8 +55,14 @@ type InterventionCancelAction = {
 };
 
 type SkillAction = {
-  kind: "skills.install" | "skills.enable" | "skills.disable" | "skills.uninstall";
+  kind:
+    | "skills.install"
+    | "skills.enable"
+    | "skills.disable"
+    | "skills.uninstall"
+    | "skills.rollback";
   skillId: string;
+  versionUri?: string;
 };
 
 type HostAction = {
@@ -244,9 +250,15 @@ export function createManagementActionMessage(
     case "skills.enable":
     case "skills.disable":
     case "skills.uninstall":
+    case "skills.rollback":
       return {
         kind,
         skillId: requireNonEmptyString(payload.skillId, `${kind} requires skillId`),
+        ...(kind === "skills.rollback" &&
+        typeof payload.versionUri === "string" &&
+        payload.versionUri.trim()
+          ? { versionUri: payload.versionUri.trim() }
+          : {}),
       };
     case "hosts.connect":
     case "hosts.disconnect":

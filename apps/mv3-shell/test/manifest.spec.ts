@@ -4053,6 +4053,242 @@ describe("mv3-shell manifest", () => {
     secondHarness.cleanup();
   });
 
+  it("rolls back an installed package through the shared skill management path", async () => {
+    const storageArea = createStorageAreaHarness();
+    const skillId = "skill.cutover.rollback";
+    const packageUri = `mem://skills/${skillId}`;
+    const trustedVersionId = "2026-05-27T00:00:00.000Z";
+    const setupPlan = (version: number) => ({
+      skillId,
+      phase: "install",
+      baseUri: packageUri,
+      writes: [
+        {
+          uri: `${packageUri}/SKILL.md`,
+          content: `# Rollback Package v${version}\n`,
+        },
+        {
+          uri: `${packageUri}/skill.json`,
+          content: JSON.stringify({
+            id: skillId,
+            version,
+            permissions: ["memfs.read"],
+            description: `Rollback package v${version}`,
+            entry: "handler.js",
+          }),
+        },
+        {
+          uri: `${packageUri}/handler.js`,
+          content: `
+            exports.default = async ({ ctx, input }) => ({
+              skillId: ctx.skillId,
+              action: input.action,
+              version: ${version},
+              packageVersion: ctx.manifest.version
+            });
+          `,
+        },
+      ],
+    });
+
+    const setupHarness = createChromeHarness({
+      activeTab: {
+        id: 61,
+        url: "https://fixture.test/setup-rollback",
+        title: "Setup Rollback",
+      },
+      storageArea,
+    });
+    const setupServices = createBackgroundRuntimeServices({
+      chromeApi: setupHarness.chromeApi,
+      invokeRunner: vi.fn(async () => ({
+        ok: true,
+        data: {
+          ok: true,
+          result: {},
+        },
+      })),
+    });
+
+    await setupServices.dispatchCapability({
+      capabilityId: "skills.install",
+      input: {
+        skillId,
+        setupPlan: setupPlan(1),
+      },
+      permissions: ["skills.install"],
+    });
+    await setupServices.dispatchCapability({
+      capabilityId: "skills.enable",
+      input: { skillId },
+      permissions: ["skills.enable"],
+    });
+    const { browserVfs } = await setupServices.ensureServices();
+    await browserVfs.snapshot(packageUri, `${packageUri}/@versions/${trustedVersionId}`, {
+      trusted: true,
+    });
+    await setupServices.dispatchCapability({
+      capabilityId: "skills.install",
+      input: {
+        skillId,
+        setupPlan: setupPlan(2),
+      },
+      permissions: ["skills.install"],
+    });
+    await setupServices.dispatchCapability({
+      capabilityId: "skills.enable",
+      input: { skillId },
+      permissions: ["skills.enable"],
+    });
+    setupHarness.cleanup();
+
+    const runtimeHarness = createChromeHarness({
+      activeTab: {
+        id: 62,
+        url: "https://fixture.test/rollback",
+        title: "Rollback Runtime",
+      },
+      storageArea,
+    });
+    const runtimeBridge = createBackgroundRunnerBridge({
+      chromeApi: runtimeHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeRuntime = runtimeBridge.registerRuntimeListener();
+
+    await expect(
+      runtimeHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "skills.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        data: {
+          items: [
+            expect.objectContaining({
+              skillId,
+              status: "enabled",
+              version: 2,
+              versionSurface: expect.objectContaining({
+                activeVersion: expect.objectContaining({ versionId: "2" }),
+                rollbackTarget: expect.objectContaining({
+                  versionId: trustedVersionId,
+                  uri: `${packageUri}/@versions/${trustedVersionId}`,
+                  trusted: true,
+                }),
+              }),
+            }),
+          ],
+        },
+      },
+    });
+
+    const rollbackResponse = await runtimeHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.rollback",
+      skillId,
+    });
+    expect(rollbackResponse).toMatchObject({
+      ok: true,
+      data: {
+        skill: {
+          skillId,
+          status: "enabled",
+          recentChange: "skills.rollback",
+        },
+        rollback: {
+          skillId,
+          versionId: trustedVersionId,
+          versionUri: `${packageUri}/@versions/${trustedVersionId}`,
+          targetUri: packageUri,
+        },
+      },
+    });
+
+    await expect(
+      runtimeHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "skills.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        data: {
+          recentChange: "skills.rollback",
+          items: [
+            expect.objectContaining({
+              skillId,
+              status: "enabled",
+              version: 1,
+              versionSurface: expect.objectContaining({
+                activeVersion: expect.objectContaining({ versionId: "1" }),
+                rollbackTarget: expect.objectContaining({ versionId: trustedVersionId }),
+              }),
+            }),
+          ],
+        },
+      },
+    });
+
+    await expect(
+      runtimeHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.invoke",
+        skillId,
+        action: "version",
+        args: {},
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        result: {
+          skillId,
+          action: "version",
+          version: 1,
+          packageVersion: 1,
+        },
+      },
+    });
+
+    const auditResult = (await runtimeHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "resource.read",
+      resourceId: "audit.tail",
+    })) as {
+      ok: boolean;
+      data: {
+        data: {
+          entries: Array<{
+            kind: string;
+            skillId?: string;
+            status: string;
+            versionId?: string;
+            versionUri?: string;
+          }>;
+        };
+      };
+    };
+
+    expect(auditResult.ok).toBe(true);
+    expect(auditResult.data.data.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "skills.rollback",
+          skillId,
+          status: "rolled_back",
+          versionId: trustedVersionId,
+          versionUri: `${packageUri}/@versions/${trustedVersionId}`,
+        }),
+      ]),
+    );
+
+    disposeRuntime();
+    runtimeHarness.cleanup();
+  });
+
   it("skips malformed installed package manifests without breaking runtime boot", async () => {
     const storageArea = createStorageAreaHarness();
     const firstHarness = createChromeHarness({
@@ -4824,6 +5060,7 @@ describe("mv3-shell manifest", () => {
       "skills.enable",
       "skills.disable",
       "skills.uninstall",
+      "skills.rollback",
       "hosts.connect",
       "hosts.disconnect",
       "hosts.set_default",

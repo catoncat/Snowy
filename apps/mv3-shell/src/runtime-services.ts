@@ -504,7 +504,7 @@ function createBrowserVfsMemfsTransport(vfs) {
   };
 }
 
-function createSkillLifecycleManager({ chromeApi, getVfs } = {}) {
+function createSkillLifecycleManager({ chromeApi, getVfs, refreshPackages } = {}) {
   const records = new Map();
   let loadPromise = null;
 
@@ -543,6 +543,67 @@ function createSkillLifecycleManager({ chromeApi, getVfs } = {}) {
     async manage({ action, skillId, input }) {
       await ensureLoaded();
       const previous = records.get(skillId);
+
+      if (action === "skills.rollback") {
+        if (!previous || previous.status === "archived") {
+          throw new CapabilityError(
+            "E_BAD_INPUT",
+            "skills.rollback requires an active installed skill",
+          );
+        }
+        const vfs = await getVfs?.();
+        if (!vfs) {
+          throw new CapabilityError("E_RUNTIME", "BrowserVFS is required for skills.rollback");
+        }
+
+        const packageUri = `mem://skills/${skillId}`;
+        const explicitVersionUri =
+          isPlainObject(input) && typeof input.versionUri === "string" && input.versionUri.trim()
+            ? input.versionUri.trim()
+            : null;
+        const target = explicitVersionUri
+          ? (await vfs.listSnapshots(packageUri)).find(
+              (snapshot) => snapshot.uri === explicitVersionUri,
+            )
+          : await vfs.selectRollbackTarget(packageUri);
+        if (!target) {
+          throw new CapabilityError(
+            "E_BAD_INPUT",
+            explicitVersionUri
+              ? `skills.rollback snapshot not found: ${explicitVersionUri}`
+              : `skills.rollback found no trusted rollback target for ${skillId}`,
+          );
+        }
+
+        await vfs.rehydrate(target.uri, packageUri);
+        const nextRecord = {
+          skillId,
+          status: previous.status,
+          trusted: previous.trusted,
+          recentChange: action,
+          lastChangedAt: new Date().toISOString(),
+        };
+        records.set(skillId, nextRecord);
+        await saveSkillLifecycleRecords(chromeApi, [...records.values()]);
+        await refreshPackages?.();
+
+        return {
+          skill: {
+            skillId,
+            status: nextRecord.status,
+            trusted: nextRecord.trusted,
+            recentChange: action,
+          },
+          rollback: {
+            skillId,
+            versionId: target.versionId,
+            versionUri: target.uri,
+            targetUri: packageUri,
+            trusted: target.trusted === true,
+          },
+        };
+      }
+
       const status = SKILL_STATUS_BY_ACTION[action];
       if (!status) {
         throw new CapabilityError("E_RUNTIME", `Unsupported skill lifecycle action: ${action}`);
@@ -2173,6 +2234,15 @@ export function createBackgroundRuntimeServices({
     getVfs: async () => {
       const { browserVfs } = await ensureServices();
       return browserVfs;
+    },
+    refreshPackages: async () => {
+      const { browserVfs, runnerHost, skillInvocationService } = await ensureServices();
+      await registerBrowserVfsSkillPackages({
+        browserVfs,
+        runnerHost,
+        skillInvocationService,
+        packageCatalog: packageSkillManifests,
+      });
     },
   });
   const packageSkillManifests = new Map();

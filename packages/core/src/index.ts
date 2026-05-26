@@ -142,6 +142,7 @@ export interface SkillRuntimeContext {
     enable(skillId: string): Promise<unknown>;
     disable(skillId: string): Promise<unknown>;
     uninstall(skillId: string): Promise<unknown>;
+    rollback(skillId: string, input?: Record<string, unknown>): Promise<unknown>;
   };
 }
 
@@ -1487,6 +1488,54 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
         required: ["skill"],
       },
     }),
+    catalogEntry({
+      id: "skills.rollback",
+      family: "skills",
+      operation: "rollback",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["skills.rollback"],
+      description: "Restore a package-backed skill from a trusted BrowserVFS snapshot",
+      inputSchema: {
+        type: "object",
+        properties: {
+          skillId: { type: "string" },
+          versionUri: {
+            type: "string",
+            description:
+              "Optional explicit mem://skills/<id>/@versions/<version> snapshot URI. Defaults to latest trusted rollback target.",
+          },
+        },
+        required: ["skillId"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          skill: {
+            type: "object",
+            properties: {
+              skillId: { type: "string" },
+              status: { type: "string" },
+              trusted: { type: "boolean" },
+              recentChange: { type: "string" },
+            },
+            required: ["skillId", "status", "trusted"],
+          },
+          rollback: {
+            type: "object",
+            properties: {
+              skillId: { type: "string" },
+              versionId: { type: "string" },
+              versionUri: { type: "string" },
+              targetUri: { type: "string" },
+              trusted: { type: "boolean" },
+            },
+            required: ["skillId", "versionId", "versionUri", "targetUri"],
+          },
+        },
+        required: ["skill", "rollback"],
+      },
+    }),
   ],
   runtime: [
     catalogEntry({
@@ -2620,6 +2669,7 @@ function controlPlaneAuditToReplayEntry(
     case "skills.enable":
     case "skills.disable":
     case "skills.uninstall":
+    case "skills.rollback":
       return {
         id: `audit:${entry.kind}:${entry.skillId}:${entry.timestamp}`,
         timestamp: entry.timestamp,
@@ -2632,6 +2682,8 @@ function controlPlaneAuditToReplayEntry(
         details: {
           status: entry.status,
           ...(typeof entry.trusted === "boolean" ? { trusted: entry.trusted } : {}),
+          ...(entry.versionId ? { versionId: entry.versionId } : {}),
+          ...(entry.versionUri ? { versionUri: entry.versionUri } : {}),
           ...(entry.error ? { error: entry.error } : {}),
         },
       };
@@ -3208,7 +3260,8 @@ export function createSkillRuntimeContext(
       case "install":
       case "enable":
       case "disable":
-      case "uninstall": {
+      case "uninstall":
+      case "rollback": {
         if (!options.manageSkill) {
           throw new CapabilityError("E_RUNTIME", "No skill manager configured for runtime context");
         }
@@ -3300,6 +3353,7 @@ export function createSkillRuntimeContext(
       enable: async (skillId) => call("skills.enable", { skillId }),
       disable: async (skillId) => call("skills.disable", { skillId }),
       uninstall: async (skillId) => call("skills.uninstall", { skillId }),
+      rollback: async (skillId, input = {}) => call("skills.rollback", { ...input, skillId }),
     },
   };
 
@@ -3463,6 +3517,7 @@ export interface BuiltinCapabilityMap {
     enable: CapabilityFn;
     disable: CapabilityFn;
     uninstall: CapabilityFn;
+    rollback: CapabilityFn;
   };
   runtime: {
     listCapabilities: CapabilityFn;
