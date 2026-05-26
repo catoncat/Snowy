@@ -8,10 +8,11 @@
 | 实现已认领 issue | 当前 issue → `acceptance_ref` → 对应 `src/` / `test/` | 聚焦验证；不要顺手修 write scope 外 |
 | 收口已完成 issue | 当前 issue → `docs/backlog/README.md` 的 Completion Record | code commit + `status: done` + `## 工作总结` + `## 相关 commits` |
 | queue / backlog 变了 | `docs/backlog/README.md` | `bun run workflow:queue:build` |
+| queue 为空且 cutover gate 绿 | `docs/release-cutover-decision-packet-2026-05-27.md` → `docs/cutover-readiness-criteria.md` | 推进 PR / CI / 外部验收决策；不要默认拆新小票 |
 | 规划下一批 | `docs/source-of-truth-map.md` → `docs/module-tracking-ledger.json` → `docs/backlog/README.md` | 先落 backlog，再重建 queue |
 | 改 architecture / public surface | `docs/locked-decisions-2026-03-29.md` → review report → kernel skeleton | 过 Doc Freshness Gate |
 
-- 一句话规则：先锁任务，再补最小上下文；完成任务不等于写完代码，必须完成 commit 和 issue 收口。
+- 一句话规则：先锁任务，再补最小上下文；完成任务不等于写完代码，必须完成 commit 和 issue 收口；如果已经进入 cutover 交付阶段，不要把 deferred breadth 自动拆成下一批 queue。
 
 ## 1. Repo Mission
 
@@ -20,11 +21,12 @@
 - 产品面只保留一个概念：`Skill`。
 - 产品对 AI 暴露统一 `AI Surface`；其中 invokable actions 继续通过 `Capability API` 暴露。
 - 默认不做 legacy/fallback 设计；旧仓只作行为和概念参考，不作兼容前提。
-- 当前阶段判断：v0 已完成的是 substrate foundation；当前主线是补回 browser-side kernel。
+- 当前阶段判断：repo-side Level 2 cutover evidence 已可由 `bun run release:acceptance` / `bun run release:cutover:status` 刷新；当前默认主线是 cutover delivery / 外部验收，而不是继续补零散 deferred breadth。
 - planning truth 是 `docs/module-tracking-ledger.json`。
 - dispatch truth 是 `docs/workflow/live-queue.json` + `~/.codex/workflow-leases/browser-brain-loop-next.json`。
 - planning 是 agent 原生的 reflection / recommendation 环节，不是脚本驱动的自动派工器。
 - queue / lease / metadata 校验可以脚本化，但“下一步做什么”必须由 agent 结合主线、代码、测试和当前上下文判断。
+- 当 queue 为空、lease 为空且 `release:cutover:status` 绿时，下一步是推动 review / CI / release acceptance / old-mainline cutover decision；只有该 gate 暴露真实产品缺口时，才回到 milestone planning。
 
 ## 1.1 Mandatory Onboarding
 
@@ -50,7 +52,7 @@
 - `JS Runner Host` 负责执行用户/skill 代码，不在 SW 直接跑动态模块。
 - `Site Runtime` 负责 active-tab match、按需注入、action、verifier。
 - 浏览器是控制中枢；`Execution Host` 是一等执行面，可本地也可远程。
-- 当前主线不是继续横向扩 substrate，而是补回 `packages/kernel` 这一层 browser-side brain。
+- 早期架构主线是补回 `packages/kernel` 这一层 browser-side brain；当前 cutover 交付阶段不要再用 deferred breadth 重新横向扩 substrate。
 - `packages/kernel` 负责 session / run / compaction / diagnostics / intervention 主层。
 - planning 默认按模块台账推进：module stage → module order → issue priority。
 - dispatch 默认按 live queue 推进：queue entry order → active lease exclusion。
@@ -347,15 +349,13 @@
 
 ## 8. Current Status
 
-- 当前 v0 已完成的范围见 `docs/v0-slice.md`。
-- v0 的准确定位：
-  - 已完成 substrate / control-plane primitive foundation
-  - 还没有达到 browser-side kernel parity
-- 当前主线：
-  - `packages/kernel`
-  - session / run / compaction 骨架
-  - diagnostics / intervention / browser automation 后续收口
-- secondary / deferred 的当前可做项以 `docs/workflow/live-queue.json` + `docs/module-tracking-ledger.json` 为准，不在本文件维护静态列表。
+- 当前 repo-side Level 2 cutover evidence 已完整，见 `docs/level-2-cutover-acceptance-2026-05-27.md`。
+- 当前交付入口是 `docs/release-cutover-decision-packet-2026-05-27.md`。
+- 默认刷新命令：
+  - `bun run release:acceptance`
+  - `bun run release:cutover:status`
+- 当前主线不是继续拆 issue 补 deferred breadth，而是推动外部 release acceptance / old-mainline cutover decision。
+- secondary / deferred 的当前可做项以 `docs/migration-parity-dashboard.md` / `docs/module-tracking-ledger.json` 为候选真相；只有被明确提升为产品主线时才进入 queue。
 
 ## 9. Workflow
 
@@ -374,7 +374,7 @@
 - `write_scope` 是协调提示，不是 dispatch 锁；除非 issue 之间存在真实前后依赖，否则不要只因为会改同一文件就阻止 claim
 - batch 文档只是历史 planning snapshot；当前 dispatch 只看 live queue + lease
 - backlog 变化后必须重建 live queue，至少包括：新增 issue、改 `done`、改 `depends_on`、改 `write_scope`
-- 若 live queue 返回空，先判断是否需要重建 queue；确认无票后再进入下一批规划
+- 若 live queue 返回空，先判断是否需要重建 queue；确认无票且无 active lease 后先运行 `bun run release:cutover:status`。gate 绿则进入 cutover delivery，不进入下一批规划；gate 暴露真实产品缺口时才规划 backlog。
 - issue 一旦明确或 claim 成功，默认直接推进到验证、commit、issue 收口，不要把“是否继续”当成中断点
 - planning commit 完成后默认继续 queue rebuild -> claim loop；只有遇到真实 blocker（缺失真相源、越权改动、外部输入、并行冲突无法自行化解）才停下来问
 - worker 默认只对自己当前 slice / `write_scope` 的聚焦验证负责；repo 级 gate 是补充，不是并行情况下的唯一完成依据
