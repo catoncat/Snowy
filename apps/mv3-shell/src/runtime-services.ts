@@ -259,6 +259,46 @@ function normalizePackageRelativePath(value) {
   return segments.join("/");
 }
 
+function normalizeManifestStringList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item) => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeManifestAction(value) {
+  if (!isPlainObject(value) || typeof value.name !== "string" || !value.name.trim()) {
+    return null;
+  }
+  const action = {
+    name: value.name.trim(),
+  };
+  if (typeof value.title === "string" && value.title.trim()) {
+    action.title = value.title.trim();
+  }
+  if (typeof value.description === "string" && value.description.trim()) {
+    action.description = value.description.trim();
+  }
+  if (typeof value.verifier === "string" && value.verifier.trim()) {
+    action.verifier = value.verifier.trim();
+  }
+  if (Array.isArray(value.injectionSteps)) {
+    action.injectionSteps = value.injectionSteps
+      .filter((step) => isPlainObject(step))
+      .map((step) => ({ ...step }));
+  }
+  if (isPlainObject(value.inputSchema)) {
+    action.inputSchema = { ...value.inputSchema };
+  }
+  if (isPlainObject(value.outputSchema)) {
+    action.outputSchema = { ...value.outputSchema };
+  }
+  return action;
+}
+
 function normalizeSkillPackageManifest(skillId, packageUri, content) {
   let manifest = null;
   try {
@@ -284,14 +324,26 @@ function normalizeSkillPackageManifest(skillId, packageUri, content) {
     packageUri,
     entry,
     permissions,
+    tags: normalizeManifestStringList(manifest.tags),
+    matches: normalizeManifestStringList(manifest.matches),
+    requiresActiveTab: manifest.requiresActiveTab === true,
+    actions: Array.isArray(manifest.actions)
+      ? manifest.actions.map((action) => normalizeManifestAction(action)).filter(Boolean)
+      : [],
     description: typeof manifest.description === "string" ? manifest.description : "",
     version: Number.isInteger(manifest.version) ? manifest.version : null,
     kind: typeof manifest.kind === "string" ? manifest.kind : "prompt",
   };
 }
 
-async function registerBrowserVfsSkillPackages({ browserVfs, runnerHost, skillInvocationService }) {
+async function registerBrowserVfsSkillPackages({
+  browserVfs,
+  runnerHost,
+  skillInvocationService,
+  packageCatalog,
+}) {
   const packages = await browserVfs.discoverPackages();
+  packageCatalog?.clear();
   for (const packageInfo of packages) {
     if (!packageInfo.hasMarker) {
       continue;
@@ -311,6 +363,7 @@ async function registerBrowserVfsSkillPackages({ browserVfs, runnerHost, skillIn
       continue;
     }
 
+    packageCatalog?.set(manifest.id, manifest);
     skillInvocationService.register({
       id: manifest.id,
       permissions: manifest.permissions,
@@ -351,6 +404,53 @@ async function registerBrowserVfsSkillPackages({ browserVfs, runnerHost, skillIn
       },
     });
   }
+}
+
+function packageManifestToSkillSummary(record, manifest) {
+  return {
+    skillId: record.skillId,
+    status: record.status,
+    enabled: record.status === "enabled",
+    trusted: record.trusted === true,
+    source: "package",
+    recentChange: record.recentChange ?? null,
+    lastChangedAt: record.lastChangedAt ?? null,
+    packageUri: manifest.packageUri,
+    entry: manifest.entry,
+    version: manifest.version,
+    kind: manifest.kind,
+    description: manifest.description || null,
+    permissions: [...manifest.permissions],
+    tags: [...manifest.tags],
+    matches: [...manifest.matches],
+    requiresActiveTab: manifest.requiresActiveTab === true,
+    actions: manifest.actions.map((action) => ({
+      ...action,
+      ...(action.injectionSteps
+        ? { injectionSteps: action.injectionSteps.map((step) => ({ ...step })) }
+        : {}),
+    })),
+  };
+}
+
+function lifecycleRecordToSkillSummary(record) {
+  return {
+    skillId: record.skillId,
+    status: record.status,
+    enabled: record.status === "enabled",
+    trusted: record.trusted === true,
+    source: "lifecycle",
+    recentChange: record.recentChange ?? null,
+    lastChangedAt: record.lastChangedAt ?? null,
+    version: null,
+    kind: null,
+    description: null,
+    permissions: [],
+    tags: [],
+    matches: [],
+    requiresActiveTab: false,
+    actions: [],
+  };
 }
 
 function createBrowserVfsMemfsTransport(vfs) {
@@ -2041,6 +2141,7 @@ export function createBackgroundRuntimeServices({
       return browserVfs;
     },
   });
+  const packageSkillManifests = new Map();
   const resolvedInterventionSyncChannel = createInterventionSyncChannel(interventionSyncChannel);
   const interventionSyncSourceId = crypto.randomUUID();
 
@@ -2179,6 +2280,7 @@ export function createBackgroundRuntimeServices({
           browserVfs,
           runnerHost,
           skillInvocationService,
+          packageCatalog: packageSkillManifests,
         });
         let kernelRef = null;
         const executeRunnerStep = async ({ step }) => {
@@ -2495,7 +2597,19 @@ export function createBackgroundRuntimeServices({
   }
 
   async function listSkills() {
-    return skillManager.list();
+    const services = await ensureServices();
+    await registerBrowserVfsSkillPackages({
+      browserVfs: services.browserVfs,
+      runnerHost: services.runnerHost,
+      skillInvocationService: services.skillInvocationService,
+      packageCatalog: packageSkillManifests,
+    });
+    return (await skillManager.list()).map((record) => {
+      const manifest = packageSkillManifests.get(record.skillId);
+      return manifest
+        ? packageManifestToSkillSummary(record, manifest)
+        : lifecycleRecordToSkillSummary(record);
+    });
   }
 
   async function ensureSkillInvokable(skillId) {

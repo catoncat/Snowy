@@ -836,6 +836,32 @@ describe("core", () => {
         enabledCount: 1,
         trustedCount: 1,
         recentChange: "skill.twitter enabled",
+        items: [
+          {
+            skillId: "skill.twitter",
+            status: "enabled",
+            enabled: true,
+            trusted: true,
+            source: "package",
+            recentChange: "skill.twitter enabled",
+            lastChangedAt: "2026-03-29T00:00:00.000Z",
+            packageUri: "mem://skills/skill.twitter",
+            entry: "handler.js",
+            version: 2,
+            kind: "site",
+            description: "Search posts on Twitter/X",
+            permissions: ["site.fetch_with_session"],
+            tags: ["social"],
+            matches: ["https://x.com/*"],
+            requiresActiveTab: true,
+            actions: [
+              {
+                name: "search_posts",
+                verifier: "results_visible",
+              },
+            ],
+          },
+        ],
       },
       hosts: {
         items: [
@@ -872,6 +898,19 @@ describe("core", () => {
         installedCount: 2,
         enabledCount: 1,
         trustedCount: 1,
+        items: [
+          {
+            skillId: "skill.twitter",
+            source: "package",
+            kind: "site",
+            actions: [
+              {
+                name: "search_posts",
+                verifier: "results_visible",
+              },
+            ],
+          },
+        ],
       },
       hosts: {
         status: "healthy",

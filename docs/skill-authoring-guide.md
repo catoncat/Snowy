@@ -108,6 +108,9 @@ BrowserVFS and register enabled package handlers as executable skills, so
 `skills.invoke` can load the package `entry` file through the existing JS runner
 without a test-only `skillDefinitions` injection. Malformed manifests are
 skipped during boot and fail invocation with a structured capability error.
+Valid manifests are projected into `skills.summary` and `runtime.bootstrap` as
+per-skill `items`, including action names, site matches, active-tab requirement,
+entry, version, kind, description, permissions, and tags.
 Normal skill invocation still never executes setup hooks.
 
 ### Recommended File Layout for Setup Writes

@@ -88,6 +88,7 @@ describe("sidepanel management state", () => {
         enabledCount: 1,
         trustedCount: 1,
         recentChange: "skills.enable",
+        items: [],
       },
     });
     state = applyManagementResourceDocument(state, {

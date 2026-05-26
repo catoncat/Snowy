@@ -121,6 +121,13 @@ are skipped during boot. If lifecycle state says such a skill is enabled but no
 valid handler was registered, `skills.invoke` returns a structured capability
 error instead of breaking runtime startup.
 
+Valid package manifests are also projected into the shared AI surface. After
+restart, `resource.read skills.summary` and `runtime.bootstrap` include per-skill
+`items` with lifecycle state plus manifest metadata: `entry`, `version`, `kind`,
+`description`, `permissions`, `tags`, `matches`, `requiresActiveTab`, and
+`actions`. Malformed packages remain lifecycle-visible but do not expose bogus
+action metadata.
+
 ### Install-Only Setup Hooks
 
 Skill packages may declare setup hooks in `handler.ts`:

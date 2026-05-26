@@ -395,12 +395,21 @@ function toBootstrapActiveTab(activeTab, world = "main") {
 function normalizeSkillSummaryInput(entry) {
   if (typeof entry === "string") {
     return {
-      id: entry,
+      skillId: entry,
       status: "installed",
       enabled: false,
       trusted: false,
+      source: "lifecycle",
       recentChange: null,
       lastChangedAt: null,
+      version: null,
+      kind: null,
+      description: null,
+      permissions: [],
+      tags: [],
+      matches: [],
+      requiresActiveTab: false,
+      actions: [],
     };
   }
   if (!entry || typeof entry !== "object") {
@@ -422,12 +431,41 @@ function normalizeSkillSummaryInput(entry) {
         ? "enabled"
         : "installed";
   return {
-    id,
+    skillId: id,
     status,
     enabled: status === "enabled",
     trusted: entry.trusted === true,
+    source:
+      entry.source === "package" || entry.source === "definition" ? entry.source : "lifecycle",
     recentChange: typeof entry.recentChange === "string" ? entry.recentChange : null,
     lastChangedAt: typeof entry.lastChangedAt === "string" ? entry.lastChangedAt : null,
+    ...(typeof entry.packageUri === "string" ? { packageUri: entry.packageUri } : {}),
+    ...(typeof entry.entry === "string" ? { entry: entry.entry } : {}),
+    version: Number.isInteger(entry.version) ? entry.version : null,
+    kind: typeof entry.kind === "string" ? entry.kind : null,
+    description: typeof entry.description === "string" ? entry.description : null,
+    permissions: Array.isArray(entry.permissions)
+      ? entry.permissions.filter((item) => typeof item === "string")
+      : [],
+    tags: Array.isArray(entry.tags) ? entry.tags.filter((item) => typeof item === "string") : [],
+    matches: Array.isArray(entry.matches)
+      ? entry.matches.filter((item) => typeof item === "string")
+      : [],
+    requiresActiveTab: entry.requiresActiveTab === true,
+    actions: Array.isArray(entry.actions)
+      ? entry.actions
+          .filter((action) => action && typeof action === "object")
+          .map((action) => ({
+            ...action,
+            ...(Array.isArray(action.injectionSteps)
+              ? {
+                  injectionSteps: action.injectionSteps
+                    .filter((step) => step && typeof step === "object" && !Array.isArray(step))
+                    .map((step) => ({ ...step })),
+                }
+              : {}),
+          }))
+      : [],
   };
 }
 
@@ -2341,6 +2379,7 @@ export function createBackgroundRunnerBridge({
         enabledCount: activeSkillEntries.filter((entry) => entry.enabled).length,
         trustedCount: activeSkillEntries.filter((entry) => entry.trusted).length,
         recentChange: latestSkillChange?.recentChange ?? null,
+        items: activeSkillEntries.map((entry) => ({ ...entry })),
       },
       hosts: {
         status: hostItems.some((entry) => entry.state === "degraded")
