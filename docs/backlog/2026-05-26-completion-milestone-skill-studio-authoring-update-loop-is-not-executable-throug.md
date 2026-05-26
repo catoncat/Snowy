@@ -1,11 +1,11 @@
 ---
 id: ISSUE-180
 title: "Completion milestone: Skill Studio authoring/update loop is not executable through shared surface"
-status: open
+status: done
 priority: p0
 source: "anti-fragmentation planning 2026-05-27"
 created: 2026-05-26
-assignee: unassigned
+assignee: codex-loop
 tags:
   - review
   - completion
@@ -37,6 +37,7 @@ write_scope:
   - docs/module-tracking-ledger.json
 acceptance_ref: docs/skill-package-convention.md
 check_cmd: "bun run check"
+completed_at: 2026-05-26T19:43:18.338Z
 ---
 
 ## Goal
@@ -56,3 +57,18 @@ Turn the existing package convention and setup-plan runtime into a visible produ
 - updated package can be enabled invoked through skills.invoke and observed through skills.summary and audit.tail
 - sidepanel Skills or Studio surface drives the same shared management path instead of a private registry
 - docs keep this as a single authoring/update milestone and explicitly leave richer editor polish for Not Now
+
+## 工作总结
+
+### 实现了什么
+- shared skills.install now creates/updates package-backed skills from Studio setupPlan, snapshots previous package state, refreshes package registry, exposes rollback target, and proves invoke/summary/audit/rollback
+
+### 实际跑了什么检查
+- bun run check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `e8fec825b491` feat(studio): 打通 Skill Studio 更新闭环
