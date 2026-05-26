@@ -20,6 +20,8 @@ bun run release:acceptance
 
 This command verifies the acceptance pack, UAT scenario, cutover readiness text, and module ledger freshness, then runs `bun run build`, the real Chromium MV3 smoke, and `bun run check`. A passing command means the repo-side evidence pack is current; it still does not make the external product cutover decision by itself.
 
+The external decision entrypoint is `docs/release-cutover-decision-packet-2026-05-27.md`.
+
 ## Gate Evidence
 
 | Gate | Status | Evidence |
@@ -73,5 +75,7 @@ There should be at most one next planning boundary after this pack:
 3. Explicitly promote one deferred breadth item to mainline with a named product reason.
 
 Run `bun run release:acceptance` immediately before making this decision so the evidence is refreshed from current code and docs.
+
+Use `docs/release-cutover-decision-packet-2026-05-27.md` to record or hand off the selected option.
 
 Do not reopen version-selection rows, diff/preview rows, audit rows, or manifest metadata rows as default implementation issues unless they are selected through that decision boundary.

@@ -4,7 +4,7 @@
 
 什么时候新仓可以从“重构实验仓”进入“可替代旧主线”的状态。
 
-当前 repo-side 判定见 `docs/level-2-cutover-acceptance-2026-05-27.md`：Level 2 gate evidence 已经完整；是否正式切换旧主线仍是外部 release / product acceptance 决策。做该决策前，先运行 `bun run release:acceptance` 刷新当前代码、文档和真实 Chromium MV3 smoke 证据。
+当前 repo-side 判定见 `docs/level-2-cutover-acceptance-2026-05-27.md`：Level 2 gate evidence 已经完整；是否正式切换旧主线仍是外部 release / product acceptance 决策。做该决策前，先运行 `bun run release:acceptance` 刷新当前代码、文档和真实 Chromium MV3 smoke 证据；决策交接入口是 `docs/release-cutover-decision-packet-2026-05-27.md`。
 
 ## Cutover Levels
 
@@ -85,7 +85,7 @@
 
 - 完整 Skill Studio、版本选择、rollback、authoring studio 与旧 plugin 生态批量迁移仍属 post-cutover product breadth。
 - Tier 2 / Tier 3 browser automation、download/export composites、bulk debug export、bridge-side MCP server 等仍按各自 deferred scope 跟踪。
-- 是否把新仓正式切成旧主线替代，需要一次外部 cutover decision / release acceptance；本文件只提供 gate evidence，不自动执行切换。
+- 是否把新仓正式切成旧主线替代，需要一次外部 cutover decision / release acceptance；本文件只提供 gate evidence，不自动执行切换。决策应从 `docs/release-cutover-decision-packet-2026-05-27.md` 开始。
 
 ## Soft Gates
 

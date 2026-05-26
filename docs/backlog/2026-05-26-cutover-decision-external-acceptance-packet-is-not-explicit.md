@@ -20,6 +20,7 @@ epic: EPIC-cutover-product-completion
 parallel_group: mv3-shell
 depends_on: []
 write_scope:
+  - scripts/release-acceptance.ts
   - docs/release-cutover-decision-packet-2026-05-27.md
   - docs/level-2-cutover-acceptance-2026-05-27.md
   - docs/cutover-readiness-criteria.md

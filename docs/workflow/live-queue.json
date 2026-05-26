@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T21:30:45.884Z",
+  "generated_at": "2026-05-26T21:32:36.416Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
@@ -14,6 +14,7 @@
       "check_cmd": "bun run check",
       "depends_on": [],
       "write_scope": [
+        "scripts/release-acceptance.ts",
         "docs/release-cutover-decision-packet-2026-05-27.md",
         "docs/level-2-cutover-acceptance-2026-05-27.md",
         "docs/cutover-readiness-criteria.md",
