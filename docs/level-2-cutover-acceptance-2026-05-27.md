@@ -8,7 +8,7 @@
 
 The repository now has current repo-side evidence for Level 2 cutover readiness. The old-product replacement proof is no longer missing a representative executable Skill path: `ISSUE-172` through `ISSUE-181` cover install, package persistence, restart discovery, package execution, shared discoverability, visible management, rollback, author/update, runtime event subscription, and audit evidence.
 
-This document does not approve a product release or switch the old mainline by itself. The remaining decision is external release acceptance: either accept this proof pack as the Level 2 cutover basis, request a concrete UAT scenario, or explicitly promote one deferred breadth item into the current milestone.
+This document does not approve a product release or switch the old mainline by itself. The representative UAT readout is captured in `docs/level-2-uat-scenario-2026-05-27.md`. The remaining decision is external release acceptance: either accept this proof pack as the Level 2 cutover basis, request another concrete UAT scenario, or explicitly promote one deferred breadth item into the current milestone.
 
 ## Gate Evidence
 
@@ -58,8 +58,8 @@ These items remain deliberately outside the current Level 2 proof. They should n
 
 There should be at most one next planning boundary after this pack:
 
-1. Accept this repository state as the Level 2 cutover evidence basis and move to external release / product UAT.
-2. Request one concrete UAT scenario that exercises the representative loop above.
+1. Accept this repository state plus `docs/level-2-uat-scenario-2026-05-27.md` as the Level 2 cutover evidence basis and move to external release / product cutover.
+2. Request one additional concrete UAT scenario that exercises a human-selected real browser/profile workflow.
 3. Explicitly promote one deferred breadth item to mainline with a named product reason.
 
 Do not reopen version-selection rows, diff/preview rows, audit rows, or manifest metadata rows as default implementation issues unless they are selected through that decision boundary.
