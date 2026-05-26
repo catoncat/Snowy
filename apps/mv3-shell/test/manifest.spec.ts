@@ -3550,6 +3550,277 @@ describe("mv3-shell manifest", () => {
     secondHarness.cleanup();
   });
 
+  it("materializes install setup plan files and reads them after restart through an executable skill", async () => {
+    const storageArea = createStorageAreaHarness();
+    const skillDefinitions = [
+      {
+        id: "skill.cutover.package",
+        permissions: ["memfs.read"],
+        async handler(
+          ctx: {
+            call: (capabilityId: string, input: unknown) => Promise<unknown>;
+          },
+          action: string,
+        ) {
+          if (action !== "read-package") {
+            throw new Error(`Unsupported action: ${action}`);
+          }
+          const content = await ctx.call("memfs.read", {
+            uri: "mem://skills/skill.cutover.package/SKILL.md",
+          });
+          return {
+            action,
+            content,
+          };
+        },
+      },
+    ];
+
+    const firstHarness = createChromeHarness({
+      activeTab: {
+        id: 31,
+        url: "https://fixture.test/install-package",
+        title: "Install Package",
+      },
+      storageArea,
+    });
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstHarness.chromeApi,
+      timeoutMs: 50,
+      skillDefinitions,
+    });
+    const disposeFirst = firstBridge.registerRuntimeListener();
+
+    await expect(
+      firstHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.install",
+        skillId: "skill.cutover.package",
+        setupPlan: {
+          skillId: "skill.cutover.package",
+          phase: "install",
+          baseUri: "mem://skills/skill.cutover.package",
+          writes: [
+            {
+              uri: "mem://skills/skill.cutover.package/SKILL.md",
+              content: "# Cutover Package\n\nInstalled from setup plan.\n",
+            },
+          ],
+          notes: ["materialized"],
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skill: {
+          skillId: "skill.cutover.package",
+          status: "installed",
+        },
+      },
+    });
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.enable",
+      skillId: "skill.cutover.package",
+    });
+
+    disposeFirst();
+    firstHarness.cleanup();
+
+    const secondHarness = createChromeHarness({
+      activeTab: {
+        id: 32,
+        url: "https://fixture.test/read-package",
+        title: "Read Package",
+      },
+      storageArea,
+    });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+      skillDefinitions,
+    });
+    const disposeSecond = secondBridge.registerRuntimeListener();
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.invoke",
+        skillId: "skill.cutover.package",
+        action: "read-package",
+        args: {},
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        result: {
+          action: "read-package",
+          content: "# Cutover Package\n\nInstalled from setup plan.\n",
+        },
+        trace: [
+          {
+            capabilityId: "memfs.read",
+            status: "succeeded",
+          },
+        ],
+      },
+    });
+
+    const auditResult = (await secondHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "resource.read",
+      resourceId: "audit.tail",
+    })) as {
+      ok: boolean;
+      data: {
+        data: {
+          entries: Array<{
+            kind: string;
+            capabilityId?: string;
+            skillId?: string;
+            status: string;
+          }>;
+        };
+      };
+    };
+
+    expect(auditResult.ok).toBe(true);
+    expect(auditResult.data.data.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "skills.install",
+          skillId: "skill.cutover.package",
+          status: "installed",
+        }),
+        expect.objectContaining({
+          kind: "skills.enable",
+          skillId: "skill.cutover.package",
+          status: "enabled",
+        }),
+        expect.objectContaining({
+          kind: "loop.step",
+          capabilityId: "skills.invoke",
+          status: "executed",
+        }),
+        expect.objectContaining({
+          kind: "loop.step",
+          capabilityId: "memfs.read",
+          status: "executed",
+        }),
+      ]),
+    );
+
+    disposeSecond();
+    secondHarness.cleanup();
+  });
+
+  it("rejects invalid install setup plans before lifecycle state is updated", async () => {
+    const invalidCases = [
+      [
+        "mismatched skill id",
+        {
+          skillId: "skill.other",
+          phase: "install",
+          baseUri: "mem://skills/skill.invalid",
+          writes: [
+            {
+              uri: "mem://skills/skill.invalid/SKILL.md",
+              content: "# Invalid\n",
+            },
+          ],
+        },
+      ],
+      [
+        "unsupported setup phase",
+        {
+          skillId: "skill.invalid",
+          phase: "enable",
+          baseUri: "mem://skills/skill.invalid",
+          writes: [
+            {
+              uri: "mem://skills/skill.invalid/SKILL.md",
+              content: "# Invalid\n",
+            },
+          ],
+        },
+      ],
+      [
+        "malformed writes",
+        {
+          skillId: "skill.invalid",
+          phase: "install",
+          baseUri: "mem://skills/skill.invalid",
+          writes: [{ uri: "mem://skills/skill.invalid/SKILL.md" }],
+        },
+      ],
+      [
+        "write outside package root",
+        {
+          skillId: "skill.invalid",
+          phase: "install",
+          baseUri: "mem://skills/skill.invalid",
+          writes: [
+            {
+              uri: "mem://skills/other/SKILL.md",
+              content: "# Invalid\n",
+            },
+          ],
+        },
+      ],
+    ] as const;
+
+    for (const [name, setupPlan] of invalidCases) {
+      const storageArea = createStorageAreaHarness();
+      const harness = createChromeHarness({
+        activeTab: {
+          id: 41,
+          url: `https://fixture.test/${name.replaceAll(" ", "-")}`,
+          title: name,
+        },
+        storageArea,
+      });
+      const bridge = createBackgroundRunnerBridge({
+        chromeApi: harness.chromeApi,
+        timeoutMs: 50,
+      });
+      const dispose = bridge.registerRuntimeListener();
+
+      await expect(
+        harness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "skills.install",
+          skillId: "skill.invalid",
+          setupPlan,
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: {
+          code: "E_BAD_INPUT",
+        },
+      });
+
+      await expect(
+        harness.runtimeApi.sendMessage({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "resource.read",
+          resourceId: "skills.summary",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          id: "skills.summary",
+          data: {
+            installedCount: 0,
+            enabledCount: 0,
+          },
+        },
+      });
+
+      dispose();
+      harness.cleanup();
+    }
+  });
+
   it("reads summary and audit resources through the unified resource.read path", async () => {
     const harness = createChromeHarness({
       host: {

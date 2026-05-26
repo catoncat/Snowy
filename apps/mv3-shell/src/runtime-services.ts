@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { BrowserVfs } from "@bbl-next/browser-vfs";
+import { BrowserVfs, resolveMemUri } from "@bbl-next/browser-vfs";
 import { CONFIG_RESOURCE_FIELDS, CapabilityError } from "@bbl-next/contracts";
 import type { ConfigBootstrapSummary, LlmProfileConfig } from "@bbl-next/contracts";
 import {
@@ -9,6 +9,7 @@ import {
   SkillInvocationService,
   createConfigCapabilityProvider,
   createConfigControlPlane,
+  createMemfsCapabilityProvider,
   createTabsCapabilityProvider,
   dispatchCapabilityCall,
 } from "@bbl-next/core";
@@ -56,6 +57,7 @@ const SKILL_STATUS_BY_ACTION = {
 };
 const SKILL_LIFECYCLE_STORAGE_KEY = "bbl-next.skills.lifecycle.v1";
 const SKILL_LIFECYCLE_STATUSES = new Set(Object.values(SKILL_STATUS_BY_ACTION));
+const BROWSER_VFS_STORAGE_KEY = "bbl-next.browser-vfs.nodes.v1";
 
 function createInterventionSyncChannel(explicitChannel) {
   if (explicitChannel) {
@@ -102,7 +104,159 @@ async function saveSkillLifecycleRecords(chromeApi, records) {
   });
 }
 
-function createSkillLifecycleManager({ chromeApi } = {}) {
+function normalizeStoredVfsRecord(record) {
+  if (
+    !isPlainObject(record) ||
+    typeof record.key !== "string" ||
+    typeof record.scope !== "string" ||
+    typeof record.path !== "string" ||
+    typeof record.kind !== "string"
+  ) {
+    return null;
+  }
+  if (!["workspace", "library"].includes(record.scope)) {
+    return null;
+  }
+  if (!["file", "dir"].includes(record.kind)) {
+    return null;
+  }
+  return {
+    key: record.key,
+    scope: record.scope,
+    ...(typeof record.workspaceId === "string" ? { workspaceId: record.workspaceId } : {}),
+    path: record.path,
+    kind: record.kind,
+    ...(record.kind === "file" ? { content: String(record.content ?? "") } : {}),
+    size: typeof record.size === "number" ? record.size : 0,
+    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : new Date().toISOString(),
+    ...(isPlainObject(record.snapshot) ? { snapshot: record.snapshot } : {}),
+  };
+}
+
+async function loadStoredVfsRecords(storageArea) {
+  const result = await storageArea.get(BROWSER_VFS_STORAGE_KEY);
+  const stored = result?.[BROWSER_VFS_STORAGE_KEY];
+  const records = Array.isArray(stored) ? stored : [];
+  return records.map((record) => normalizeStoredVfsRecord(record)).filter(Boolean);
+}
+
+async function saveStoredVfsRecords(storageArea, records) {
+  await storageArea.set({
+    [BROWSER_VFS_STORAGE_KEY]: records.map((record) => ({ ...record })),
+  });
+}
+
+function createChromeStorageVfsStore(chromeApi) {
+  const storageArea = chromeApi?.storage?.local;
+  if (typeof storageArea?.get !== "function" || typeof storageArea?.set !== "function") {
+    return undefined;
+  }
+  return {
+    async load(scope, workspaceId) {
+      const records = await loadStoredVfsRecords(storageArea);
+      return records.filter(
+        (record) =>
+          record.scope === scope && (scope === "library" || record.workspaceId === workspaceId),
+      );
+    },
+    async put(record) {
+      const records = await loadStoredVfsRecords(storageArea);
+      const next = records.filter((item) => item.key !== record.key);
+      next.push({ ...record });
+      await saveStoredVfsRecords(storageArea, next);
+    },
+    async delete(key) {
+      const records = await loadStoredVfsRecords(storageArea);
+      await saveStoredVfsRecords(
+        storageArea,
+        records.filter((record) => record.key !== key),
+      );
+    },
+  };
+}
+
+async function createRuntimeBrowserVfs({ chromeApi, workspaceId }) {
+  const store = createChromeStorageVfsStore(chromeApi);
+  return BrowserVfs.create({
+    workspaceId,
+    ...(store ? { store } : {}),
+  });
+}
+
+function normalizeInstallSetupPlan({ skillId, input }) {
+  const setupPlan = isPlainObject(input) ? input.setupPlan : undefined;
+  if (setupPlan === undefined) {
+    return [];
+  }
+  if (!isPlainObject(setupPlan)) {
+    throw new CapabilityError("E_BAD_INPUT", "skills.install setupPlan must be an object");
+  }
+  const baseUri = `mem://skills/${skillId}`;
+  if (setupPlan.skillId !== skillId) {
+    throw new CapabilityError("E_BAD_INPUT", "skills.install setupPlan skillId mismatch");
+  }
+  if (setupPlan.phase !== "install") {
+    throw new CapabilityError("E_BAD_INPUT", "skills.install only supports install setup phase");
+  }
+  if (setupPlan.baseUri !== baseUri) {
+    throw new CapabilityError("E_BAD_INPUT", "skills.install setupPlan baseUri mismatch");
+  }
+  if (!Array.isArray(setupPlan.writes)) {
+    throw new CapabilityError("E_BAD_INPUT", "skills.install setupPlan writes must be an array");
+  }
+
+  const root = resolveMemUri(baseUri);
+  return setupPlan.writes.map((write, index) => {
+    if (
+      !isPlainObject(write) ||
+      typeof write.uri !== "string" ||
+      !write.uri.trim() ||
+      typeof write.content !== "string"
+    ) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        `skills.install setupPlan writes[${index}] requires uri and content strings`,
+      );
+    }
+    const uri = write.uri.trim();
+    if (!uri.startsWith(`${baseUri}/`)) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        `skills.install setupPlan write is outside ${baseUri}: ${uri}`,
+      );
+    }
+    const target = resolveMemUri(uri);
+    if (target.scope !== root.scope || !target.path.startsWith(`${root.path}/`)) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        `skills.install setupPlan write is outside ${baseUri}: ${uri}`,
+      );
+    }
+    return {
+      uri,
+      content: write.content,
+    };
+  });
+}
+
+function createBrowserVfsMemfsTransport(vfs) {
+  return {
+    read: (uri) => vfs.read(uri),
+    write: (uri, content) => vfs.write(uri, content),
+    edit: (uri, editor) => vfs.edit(uri, editor),
+    stat: (uri) => vfs.stat(uri),
+    list: (uri) => vfs.list(uri),
+    mkdir: (uri) => vfs.mkdir(uri),
+    rm: (uri) => vfs.rm(uri),
+    mv: (fromUri, toUri) => vfs.mv(fromUri, toUri),
+    copy: (fromUri, toUri) => vfs.copy(fromUri, toUri),
+    stage: (entries) => vfs.stage(entries),
+    snapshot: (sourceUri, targetUri, options) => vfs.snapshot(sourceUri, targetUri, options),
+    rehydrate: (snapshotUri, targetUri) => vfs.rehydrate(snapshotUri, targetUri),
+  };
+}
+
+function createSkillLifecycleManager({ chromeApi, getVfs } = {}) {
   const records = new Map();
   let loadPromise = null;
 
@@ -138,12 +292,23 @@ function createSkillLifecycleManager({ chromeApi } = {}) {
         .filter((record) => record.status !== "archived")
         .map((record) => record.skillId);
     },
-    async manage({ action, skillId }) {
+    async manage({ action, skillId, input }) {
       await ensureLoaded();
       const previous = records.get(skillId);
       const status = SKILL_STATUS_BY_ACTION[action];
       if (!status) {
         throw new CapabilityError("E_RUNTIME", `Unsupported skill lifecycle action: ${action}`);
+      }
+
+      if (action === "skills.install") {
+        const setupWrites = normalizeInstallSetupPlan({ skillId, input });
+        if (setupWrites.length > 0) {
+          const vfs = await getVfs?.();
+          if (!vfs) {
+            throw new CapabilityError("E_RUNTIME", "BrowserVFS is required for skill setupPlan");
+          }
+          await vfs.stage(setupWrites);
+        }
       }
 
       const nextRecord = {
@@ -1755,7 +1920,13 @@ export function createBackgroundRuntimeServices({
   let sessionPromise = null;
   let chatRunStatus = "idle";
   let activeChatRun = null;
-  const skillManager = createSkillLifecycleManager({ chromeApi });
+  const skillManager = createSkillLifecycleManager({
+    chromeApi,
+    getVfs: async () => {
+      const { browserVfs } = await ensureServices();
+      return browserVfs;
+    },
+  });
   const resolvedInterventionSyncChannel = createInterventionSyncChannel(interventionSyncChannel);
   const interventionSyncSourceId = crypto.randomUUID();
 
@@ -1839,6 +2010,10 @@ export function createBackgroundRuntimeServices({
           sessionStorage,
           workspaceId,
         });
+        const browserVfs = await createRuntimeBrowserVfs({
+          chromeApi,
+          workspaceId,
+        });
         const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
         const providers = new FamilyProviderRegistry();
         const managedProfileConfig: LlmProfileConfig | null = await loadManagedProfileConfig({
@@ -1858,6 +2033,9 @@ export function createBackgroundRuntimeServices({
         });
 
         providers.register(createTabsCapabilityProvider(createChromeTabsTransport({ chromeApi })));
+        providers.register(
+          createMemfsCapabilityProvider(createBrowserVfsMemfsTransport(browserVfs)),
+        );
         providers.register(createConfigCapabilityProvider(configControlPlane));
         providers.register({
           family: "site",
@@ -1998,6 +2176,7 @@ export function createBackgroundRuntimeServices({
           storage,
           registry,
           providers,
+          browserVfs,
           runnerHost,
           skillInvocationService,
           kernel,

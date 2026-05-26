@@ -2561,6 +2561,12 @@ export function createBackgroundRunnerBridge({
           capabilityId: message.kind,
           input: {
             skillId: message.skillId,
+            ...(message.kind === "skills.install" && "setupPlan" in message
+              ? { setupPlan: message.setupPlan }
+              : {}),
+            ...(message.kind === "skills.install" && "metadata" in message
+              ? { metadata: message.metadata }
+              : {}),
           },
           buildAuditEntry: (data) => ({
             kind: message.kind,
