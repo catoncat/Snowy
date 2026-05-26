@@ -152,6 +152,16 @@ const documentChecks: DocumentCheck[] = [
     "sandboxed JS Runner package handler under MV3 CSP",
     "## Next Decision Boundary",
   ]),
+  checkIncludes(
+    "release cutover decision packet",
+    "docs/release-cutover-decision-packet-2026-05-27.md",
+    [
+      "> status: ready for external release acceptance",
+      "Accept the current repo-side Level 2 evidence pack",
+      "## Allowed Decision Options",
+      "## Post-Decision Actions",
+    ],
+  ),
   checkIncludes("level 2 uat scenario", "docs/level-2-uat-scenario-2026-05-27.md", [
     "> status: executed against current repo state and real Chromium MV3 extension",
     "Real Chromium MV3 release smoke",
