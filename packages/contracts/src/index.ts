@@ -448,6 +448,37 @@ export interface SkillsBootstrapSummary {
   enabledCount: number;
   trustedCount: number;
   recentChange: string | null;
+  items: SkillBootstrapSummaryItem[];
+}
+
+export interface SkillActionSummary {
+  name: string;
+  title?: string;
+  description?: string;
+  verifier?: string;
+  injectionSteps?: Array<Record<string, unknown>>;
+  inputSchema?: JsonSchema;
+  outputSchema?: JsonSchema;
+}
+
+export interface SkillBootstrapSummaryItem {
+  skillId: string;
+  status: string;
+  enabled: boolean;
+  trusted: boolean;
+  source: "lifecycle" | "package" | "definition";
+  recentChange: string | null;
+  lastChangedAt: string | null;
+  packageUri?: string;
+  entry?: string;
+  version: number | null;
+  kind: string | null;
+  description: string | null;
+  permissions: string[];
+  tags: string[];
+  matches: string[];
+  requiresActiveTab: boolean;
+  actions: SkillActionSummary[];
 }
 
 export interface HostBootstrapSummaryItem {

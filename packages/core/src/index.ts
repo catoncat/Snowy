@@ -1985,6 +1985,7 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
     enabledCount: input.skills?.enabledCount ?? 0,
     trustedCount: input.skills?.trustedCount ?? 0,
     recentChange: input.skills?.recentChange ?? null,
+    items: (input.skills?.items ?? []).map((item) => cloneSkillSummaryItem(item)),
   };
 
   const hostItems = (input.hosts?.items ?? []).map((entry) => {
@@ -2175,6 +2176,31 @@ function resolveObservabilityGeneratedAt(input: {
     return lastRawEvent.timestamp;
   }
   return new Date().toISOString();
+}
+
+function cloneSkillSummaryAction(
+  action: SkillsBootstrapSummary["items"][number]["actions"][number],
+): SkillsBootstrapSummary["items"][number]["actions"][number] {
+  return {
+    ...action,
+    ...(action.injectionSteps
+      ? { injectionSteps: action.injectionSteps.map((step) => ({ ...step })) }
+      : {}),
+    ...(action.inputSchema ? { inputSchema: { ...action.inputSchema } } : {}),
+    ...(action.outputSchema ? { outputSchema: { ...action.outputSchema } } : {}),
+  };
+}
+
+function cloneSkillSummaryItem(
+  item: SkillsBootstrapSummary["items"][number],
+): SkillsBootstrapSummary["items"][number] {
+  return {
+    ...item,
+    permissions: [...item.permissions],
+    tags: [...item.tags],
+    matches: [...item.matches],
+    actions: item.actions.map((action) => cloneSkillSummaryAction(action)),
+  };
 }
 
 function mapCapabilityTraceStatusToObservabilityStatus(

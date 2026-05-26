@@ -3877,6 +3877,162 @@ describe("mv3-shell manifest", () => {
     secondHarness.cleanup();
   });
 
+  it("exposes installed package manifest actions through the shared skills summary", async () => {
+    const storageArea = createStorageAreaHarness();
+    const firstHarness = createChromeHarness({
+      activeTab: {
+        id: 51,
+        url: "https://fixture.test/install-discoverable-package",
+        title: "Install Discoverable Package",
+      },
+      storageArea,
+    });
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeFirst = firstBridge.registerRuntimeListener();
+
+    await expect(
+      firstHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.install",
+        skillId: "skill.cutover.discoverable",
+        setupPlan: {
+          skillId: "skill.cutover.discoverable",
+          phase: "install",
+          baseUri: "mem://skills/skill.cutover.discoverable",
+          writes: [
+            {
+              uri: "mem://skills/skill.cutover.discoverable/SKILL.md",
+              content: "# Discoverable Package\n",
+            },
+            {
+              uri: "mem://skills/skill.cutover.discoverable/skill.json",
+              content: JSON.stringify({
+                id: "skill.cutover.discoverable",
+                version: 3,
+                permissions: ["tabs.get_active"],
+                description: "Discoverable manifest package",
+                kind: "site",
+                entry: "handler.js",
+                tags: ["cutover", "site"],
+                matches: ["https://fixture.test/*"],
+                requiresActiveTab: true,
+                actions: [
+                  {
+                    name: "inspect_active_tab",
+                    verifier: "tab_visible",
+                    injectionSteps: [
+                      {
+                        world: "content",
+                        scriptId: "fixture.dom-helper",
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+            {
+              uri: "mem://skills/skill.cutover.discoverable/handler.js",
+              content: "exports.default = async () => ({ ok: true });",
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+    });
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.enable",
+      skillId: "skill.cutover.discoverable",
+    });
+
+    disposeFirst();
+    firstHarness.cleanup();
+
+    const secondHarness = createChromeHarness({
+      activeTab: {
+        id: 52,
+        url: "https://fixture.test/discover-package",
+        title: "Discover Package",
+      },
+      storageArea,
+    });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeSecond = secondBridge.registerRuntimeListener();
+
+    const expectedSkillSummary = {
+      skillId: "skill.cutover.discoverable",
+      status: "enabled",
+      enabled: true,
+      trusted: false,
+      source: "package",
+      packageUri: "mem://skills/skill.cutover.discoverable",
+      entry: "handler.js",
+      version: 3,
+      kind: "site",
+      description: "Discoverable manifest package",
+      permissions: ["tabs.get_active"],
+      tags: ["cutover", "site"],
+      matches: ["https://fixture.test/*"],
+      requiresActiveTab: true,
+      actions: [
+        {
+          name: "inspect_active_tab",
+          verifier: "tab_visible",
+          injectionSteps: [
+            {
+              world: "content",
+              scriptId: "fixture.dom-helper",
+            },
+          ],
+        },
+      ],
+    };
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "skills.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "skills.summary",
+        data: {
+          installedCount: 1,
+          enabledCount: 1,
+          items: [expectedSkillSummary],
+        },
+      },
+    });
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.bootstrap",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skills: {
+          installedCount: 1,
+          enabledCount: 1,
+          items: [expectedSkillSummary],
+        },
+      },
+    });
+
+    disposeSecond();
+    secondHarness.cleanup();
+  });
+
   it("skips malformed installed package manifests without breaking runtime boot", async () => {
     const storageArea = createStorageAreaHarness();
     const firstHarness = createChromeHarness({
@@ -3960,6 +4116,15 @@ describe("mv3-shell manifest", () => {
           installedCount: 1,
           enabledCount: 1,
           recentChange: "skills.enable",
+          items: [
+            {
+              skillId: "skill.cutover.malformed",
+              source: "lifecycle",
+              actions: [],
+              matches: [],
+              requiresActiveTab: false,
+            },
+          ],
         },
       },
     });

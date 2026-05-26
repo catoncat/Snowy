@@ -432,6 +432,32 @@ describe("contracts", () => {
         enabledCount: 1,
         trustedCount: 1,
         recentChange: "skills.enable",
+        items: [
+          {
+            skillId: "skill.twitter",
+            status: "enabled",
+            enabled: true,
+            trusted: true,
+            source: "package",
+            recentChange: "skills.enable",
+            lastChangedAt: "2026-03-30T00:00:04.000Z",
+            packageUri: "mem://skills/skill.twitter",
+            entry: "handler.js",
+            version: 1,
+            kind: "site",
+            description: "Search posts on Twitter/X",
+            permissions: ["site.fetch_with_session"],
+            tags: ["social"],
+            matches: ["https://x.com/*"],
+            requiresActiveTab: true,
+            actions: [
+              {
+                name: "search_posts",
+                verifier: "results_visible",
+              },
+            ],
+          },
+        ],
       },
     } satisfies SkillsSummaryResource;
 
