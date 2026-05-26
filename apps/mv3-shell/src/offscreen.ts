@@ -4,6 +4,9 @@ import { RUNNER_BACKGROUND_TARGET, RUNNER_OFFSCREEN_TARGET } from "./background.
 import { createLocalHostAdapter } from "./local-host-adapter.js";
 
 const LOCAL_HOST_ID = "local";
+const RUNNER_SANDBOX_TARGET = "bbl-next.runner.sandbox";
+const RUNNER_SANDBOX_RESULT_TARGET = "bbl-next.runner.sandbox.result";
+const RUNNER_SANDBOX_PAGE_PATH = "runner-sandbox.html";
 
 function isRemoteHostId(hostId) {
   return typeof hostId === "string" && hostId.trim().length > 0 && hostId !== LOCAL_HOST_ID;
@@ -94,6 +97,173 @@ function createBackgroundRemoteExecAdapter({ runtimeApi, target = RUNNER_BACKGRO
   };
 }
 
+function canUseSandboxedRunner() {
+  return (
+    typeof globalThis.document?.createElement === "function" &&
+    typeof globalThis.window?.addEventListener === "function" &&
+    typeof globalThis.location?.href === "string"
+  );
+}
+
+function toSandboxValue(value, seen = new WeakSet()) {
+  if (value == null || typeof value !== "object") {
+    return typeof value === "function" ? undefined : value;
+  }
+  if (seen.has(value)) {
+    return undefined;
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => toSandboxValue(item, seen));
+  }
+  const next = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === "function") {
+      continue;
+    }
+    const normalized = toSandboxValue(item, seen);
+    if (normalized !== undefined) {
+      next[key] = normalized;
+    }
+  }
+  return next;
+}
+
+function createSandboxedModuleRunner({
+  runtimeApi = globalThis.chrome?.runtime,
+  sandboxPath = RUNNER_SANDBOX_PAGE_PATH,
+  backgroundTarget = RUNNER_BACKGROUND_TARGET,
+} = {}) {
+  if (!canUseSandboxedRunner()) {
+    return null;
+  }
+
+  let iframePromise = null;
+  const pendingInvocations = new Map();
+
+  function sandboxUrl() {
+    return new URL(sandboxPath, globalThis.location.href).toString();
+  }
+
+  function resolvePending(message) {
+    const pending = pendingInvocations.get(message.requestId);
+    if (!pending) {
+      return;
+    }
+    pendingInvocations.delete(message.requestId);
+    if (message.ok === true) {
+      pending.resolve(message);
+      return;
+    }
+    pending.resolve(message);
+  }
+
+  async function routeCapabilityCall(message, source) {
+    let response = null;
+    try {
+      if (!runtimeApi?.sendMessage) {
+        response = {
+          ok: false,
+          error: {
+            code: "E_RUNTIME",
+            message: "Runtime messaging is unavailable for sandbox capability calls",
+          },
+        };
+      } else {
+        response = await runtimeApi.sendMessage({
+          target: backgroundTarget,
+          kind: "runner.capability_call",
+          gatewayId: message.gatewayId,
+          capabilityId: message.capabilityId,
+          input: message.input,
+        });
+      }
+    } catch (error) {
+      response = {
+        ok: false,
+        error: toBridgeError(error),
+      };
+    }
+    source?.postMessage(
+      {
+        target: RUNNER_SANDBOX_TARGET,
+        kind: "runner.capability_result",
+        callId: message.callId,
+        response,
+      },
+      "*",
+    );
+  }
+
+  function handleSandboxMessage(event) {
+    const message = event.data;
+    if (!message || typeof message !== "object") {
+      return;
+    }
+    if (message.target === RUNNER_SANDBOX_RESULT_TARGET) {
+      resolvePending(message);
+      return;
+    }
+    if (message.target === RUNNER_OFFSCREEN_TARGET && message.kind === "runner.capability_call") {
+      void routeCapabilityCall(message, event.source);
+    }
+  }
+
+  globalThis.window.addEventListener("message", handleSandboxMessage);
+
+  function ensureIframe() {
+    if (!iframePromise) {
+      iframePromise = new Promise((resolve, reject) => {
+        const iframe = globalThis.document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.src = sandboxUrl();
+        iframe.addEventListener("load", () => resolve(iframe), { once: true });
+        iframe.addEventListener("error", () => reject(new Error("Runner sandbox failed to load")), {
+          once: true,
+        });
+        globalThis.document.body.appendChild(iframe);
+      });
+    }
+    return iframePromise;
+  }
+
+  async function invoke(requestId, invocation) {
+    const iframe = await ensureIframe();
+    if (!iframe.contentWindow) {
+      return {
+        ok: false,
+        error: {
+          code: "E_RUNTIME",
+          message: "Runner sandbox iframe is not ready",
+        },
+      };
+    }
+    const sandboxedInvocation = {
+      module: invocation.module,
+      input: toSandboxValue(invocation.input),
+      ctx: toSandboxValue(invocation.ctx ?? {}),
+    };
+    const response = new Promise((resolve) => {
+      pendingInvocations.set(requestId, { resolve });
+    });
+    iframe.contentWindow.postMessage(
+      {
+        target: RUNNER_SANDBOX_TARGET,
+        kind: "runner.invoke",
+        requestId,
+        invocation: sandboxedInvocation,
+        gatewayId: invocation.gatewayId ?? null,
+      },
+      "*",
+    );
+    return response;
+  }
+
+  return {
+    invoke,
+  };
+}
+
 export function createDefaultOffscreenRunnerHost({
   runtimeApi = globalThis.chrome?.runtime,
   remoteHostAdapter,
@@ -129,7 +299,45 @@ export function createDefaultOffscreenRunnerHost({
       return createOperationNotSupportedError(request, "exec");
     },
   };
-  return createRunnerHostCore({ hostAdapter });
+  const core = createRunnerHostCore({ hostAdapter });
+  const sandboxedRunner = createSandboxedModuleRunner({ runtimeApi });
+  return {
+    async dispatch(request) {
+      if (request.kind === "invoke" && sandboxedRunner) {
+        try {
+          const response = await sandboxedRunner.invoke(request.requestId, request.invocation);
+          if (response?.ok === true) {
+            return {
+              kind: "invoke_result",
+              requestId: request.requestId,
+              ok: true,
+              result: response.result,
+            };
+          }
+          return {
+            kind: "invoke_result",
+            requestId: request.requestId,
+            ok: false,
+            error: response?.error ?? {
+              code: "E_RUNTIME",
+              message: "Runner sandbox invocation failed",
+            },
+          };
+        } catch (error) {
+          return {
+            kind: "invoke_result",
+            requestId: request.requestId,
+            ok: false,
+            error: toBridgeError(error),
+          };
+        }
+      }
+      return core.dispatch(request);
+    },
+    getHealth() {
+      return core.getHealth();
+    },
+  };
 }
 
 export function createOffscreenRunnerBridge({
