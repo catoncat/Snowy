@@ -158,6 +158,14 @@ Current contract:
 
 This means setup hooks may scaffold package-local files, but they must not behave like runtime lifecycle hooks or app-global extension points.
 
+### Shared Authoring And Update Path
+
+`skills.install` is also the shared product authoring/update action for package-backed skills. Skill Studio and other AI-surface consumers submit a package setup plan with convention files such as `SKILL.md`, `skill.json`, and the manifest `entry` file. The shared MV3 runtime writes those files under `mem://skills/<skillId>/...`, refreshes the package registry immediately, and records lifecycle/audit evidence through the same `skills.*` control-plane path.
+
+When `skills.install` updates an already-active package root, the runtime snapshots the previous package state into `mem://skills/<skillId>/@versions/<iso timestamp>` before writing the new files. That snapshot is exposed through `skills.summary.items[].versionSurface.rollbackTarget`, and `skills.rollback` can rehydrate it, refresh the package registry, and make the rolled-back handler invokable again through `skills.invoke`.
+
+Not Now: richer editor polish, diff/preview, rollback confirmation, interactive version selection, and bulk legacy plugin migration. Those should extend this shared path instead of introducing a private Studio registry.
+
 ### SkillRuntimeContext
 
 The `ctx` object provides:

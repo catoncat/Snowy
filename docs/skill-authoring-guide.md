@@ -113,6 +113,20 @@ per-skill `items`, including action names, site matches, active-tab requirement,
 entry, version, kind, description, permissions, and tags.
 Normal skill invocation still never executes setup hooks.
 
+The same shared management path now covers Studio authoring and updates. A
+caller can submit `skills.install` with a setup plan that writes `SKILL.md`,
+`skill.json`, and the package handler into `mem://skills/<skillId>/...`; the
+runtime refreshes package discovery immediately, so the updated package can be
+enabled and invoked without waiting for a restart. If the package root already
+exists, the previous package files are snapshotted before the update and exposed
+through `skills.summary.items[].versionSurface.rollbackTarget`; `skills.rollback`
+can restore that snapshot and make the previous handler invokable again.
+
+The sidepanel Skill surface consumes the same path: its package editor builds a
+setup plan from manifest JSON, handler source, and `SKILL.md`, then sends
+`skills.install` with `metadata.source = "sidepanel.studio"`. It does not keep a
+private Studio registry.
+
 ### Recommended File Layout for Setup Writes
 
 - `SKILL.md` — author-facing instructions or packaged behavior contract

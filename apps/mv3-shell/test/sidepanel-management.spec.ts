@@ -8,6 +8,7 @@ import {
   buildManagementBootstrapRequests,
   createInitialManagementState,
   createManagementActionMessage,
+  createSkillPackageSetupPlan,
   listPendingInterventions,
   listSkillCatalogItems,
 } from "../src/sidepanel/management";
@@ -271,6 +272,66 @@ describe("sidepanel management state", () => {
     ]);
   });
 
+  it("builds package setup plans from Skill Studio package convention fields", () => {
+    expect(
+      createSkillPackageSetupPlan("skill.demo", {
+        manifest: {
+          version: 2,
+          permissions: ["memfs.read"],
+          description: "Demo package",
+          entry: "src/handler.js",
+        },
+        skillMarkdown: "# Demo Skill\n",
+        handlerSource: "exports.default = async () => ({ ok: true });",
+        readme: "# Demo README\n",
+        files: [
+          {
+            path: "scripts/bootstrap.js",
+            content: "export const ready = true;\n",
+          },
+        ],
+        notes: ["from-studio"],
+      }),
+    ).toEqual({
+      skillId: "skill.demo",
+      phase: "install",
+      baseUri: "mem://skills/skill.demo",
+      writes: [
+        {
+          uri: "mem://skills/skill.demo/SKILL.md",
+          content: "# Demo Skill\n",
+        },
+        {
+          uri: "mem://skills/skill.demo/skill.json",
+          content: `${JSON.stringify(
+            {
+              version: 2,
+              permissions: ["memfs.read"],
+              description: "Demo package",
+              entry: "src/handler.js",
+              id: "skill.demo",
+            },
+            null,
+            2,
+          )}\n`,
+        },
+        {
+          uri: "mem://skills/skill.demo/src/handler.js",
+          content: "exports.default = async () => ({ ok: true });",
+        },
+        {
+          uri: "mem://skills/skill.demo/README.md",
+          content: "# Demo README\n",
+        },
+        {
+          uri: "mem://skills/skill.demo/scripts/bootstrap.js",
+          content: "export const ready = true;\n",
+        },
+      ],
+      notes: ["from-studio"],
+    });
+  });
+
   it("builds only approved control-plane action messages", () => {
     expect(SIDEPANEL_MANAGEMENT_ACTION_KINDS).toEqual([
       "runtime.capture_diagnostics",
@@ -337,6 +398,44 @@ describe("sidepanel management state", () => {
     expect(createManagementActionMessage("skills.install", { skillId: "skill.demo" })).toEqual({
       kind: "skills.install",
       skillId: "skill.demo",
+    });
+    expect(
+      createManagementActionMessage("skills.install", {
+        skillId: "skill.demo",
+        setupPlan: {
+          skillId: "skill.demo",
+          phase: "install",
+          baseUri: "mem://skills/skill.demo",
+          writes: [
+            {
+              uri: "mem://skills/skill.demo/SKILL.md",
+              content: "# Demo\n",
+            },
+          ],
+          notes: ["from-studio"],
+        },
+        metadata: {
+          source: "studio",
+        },
+      }),
+    ).toEqual({
+      kind: "skills.install",
+      skillId: "skill.demo",
+      setupPlan: {
+        skillId: "skill.demo",
+        phase: "install",
+        baseUri: "mem://skills/skill.demo",
+        writes: [
+          {
+            uri: "mem://skills/skill.demo/SKILL.md",
+            content: "# Demo\n",
+          },
+        ],
+        notes: ["from-studio"],
+      },
+      metadata: {
+        source: "studio",
+      },
     });
     expect(
       createManagementActionMessage("skills.rollback", {

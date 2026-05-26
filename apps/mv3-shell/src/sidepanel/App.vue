@@ -15,6 +15,7 @@ import {
   buildManagementBootstrapRequests,
   createInitialManagementState,
   createManagementActionMessage,
+  createSkillPackageSetupPlan,
   listSkillCatalogItems,
   listPendingInterventions,
   type SkillCatalogItem,
@@ -68,6 +69,21 @@ const diagnosticsPayload = ref<string | null>(null);
 const configProviderDraft = ref("");
 const configModelDraft = ref("");
 const skillIdDraft = ref("");
+const skillManifestDraft = ref(
+  JSON.stringify(
+    {
+      version: 1,
+      permissions: [],
+      description: "Sidepanel authored skill",
+      kind: "prompt",
+      entry: "handler.js",
+    },
+    null,
+    2,
+  ),
+);
+const skillHandlerDraft = ref("exports.default = async ({ input }) => ({ action: input.action, args: input.args });");
+const skillMarkdownDraft = ref("# Sidepanel Authored Skill\n");
 
 const isRunning = computed(() => chatState.value.status === "running");
 const isStopped = computed(() => chatState.value.status === "stopped");
@@ -342,6 +358,38 @@ function submitSkillAction(kind: SkillActionKind, selectedSkillId = skillIdDraft
     return;
   }
   void runManagementAction(kind, { skillId });
+}
+
+function submitSkillPackageInstall() {
+  const skillId = skillIdDraft.value.trim();
+  if (!skillId) {
+    managementError.value = "Enter a skill id first.";
+    return;
+  }
+  let manifest: Record<string, unknown>;
+  try {
+    manifest = JSON.parse(skillManifestDraft.value || "{}") as Record<string, unknown>;
+  } catch (error) {
+    managementError.value = error instanceof Error ? error.message : String(error);
+    return;
+  }
+  try {
+    const setupPlan = createSkillPackageSetupPlan(skillId, {
+      manifest,
+      handlerSource: skillHandlerDraft.value,
+      skillMarkdown: skillMarkdownDraft.value,
+      notes: ["sidepanel-studio"],
+    });
+    void runManagementAction("skills.install", {
+      skillId,
+      setupPlan,
+      metadata: {
+        source: "sidepanel.studio",
+      },
+    });
+  } catch (error) {
+    managementError.value = error instanceof Error ? error.message : String(error);
+  }
 }
 
 function submitSkillRollback(skill: SkillCatalogItem) {
@@ -717,6 +765,34 @@ onUnmounted(() => {
               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none"
               placeholder="skill id"
             />
+            <label class="block text-xs text-slate-600">
+              Manifest JSON
+              <textarea
+                v-model="skillManifestDraft"
+                class="mt-1 min-h-36 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs leading-5 text-slate-900 outline-none"
+              />
+            </label>
+            <label class="block text-xs text-slate-600">
+              Handler JS
+              <textarea
+                v-model="skillHandlerDraft"
+                class="mt-1 min-h-28 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs leading-5 text-slate-900 outline-none"
+              />
+            </label>
+            <label class="block text-xs text-slate-600">
+              SKILL.md
+              <textarea
+                v-model="skillMarkdownDraft"
+                class="mt-1 min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs leading-5 text-slate-900 outline-none"
+              />
+            </label>
+            <button
+              class="w-full rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+              :disabled="managementBusy"
+              @click="submitSkillPackageInstall"
+            >
+              Save package
+            </button>
             <div class="grid grid-cols-2 gap-2">
               <button class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700" :disabled="managementBusy" @click="submitSkillAction('skills.install')">Install</button>
               <button class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700" :disabled="managementBusy" @click="submitSkillAction('skills.enable')">Enable</button>
