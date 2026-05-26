@@ -1,11 +1,11 @@
 ---
 id: ISSUE-174
 title: "Cutover milestone: installed package manifest is not an executable runtime source"
-status: open
+status: done
 priority: p0
 source: "anti-fragmentation planning 2026-05-27"
 created: 2026-05-27
-assignee: unassigned
+assignee: codex-loop
 tags:
   - cutover
   - milestone
@@ -31,6 +31,7 @@ write_scope:
   - docs/legacy-to-vnext-migration-matrix.md
 acceptance_ref: docs/skill-package-convention.md
 check_cmd: "bun run check"
+completed_at: 2026-05-26T17:46:02.549Z
 ---
 
 ## Goal
@@ -63,3 +64,24 @@ This is intentionally one vertical milestone. It should prove a package can be i
 - Version selection UI or rollback UI.
 - Loading every historical plugin format from the old repo.
 - Bridge-side MCP export.
+
+## 工作总结
+
+### 实现了什么
+- Shared MV3 runtime boot now discovers BrowserVFS skill packages from mem://skills, reads skill.json, registers valid handler.js entries, and invokes them through the existing JS runner path.
+- Added restart tests for valid package-backed invocation, audit.tail package-loading evidence, and malformed manifest structured failure.
+- Updated skill package, authoring, cutover, parity, migration, batch, and live queue docs for the ISSUE-174 proof scope.
+
+### 实际跑了什么检查
+- bun run test -- apps/mv3-shell/test/manifest.spec.ts -t installed package manifest
+- bun run test -- apps/mv3-shell/test/manifest.spec.ts
+- ./node_modules/.bin/biome check apps/mv3-shell/src/runtime-services.ts apps/mv3-shell/test/manifest.spec.ts docs/skill-package-convention.md docs/skill-authoring-guide.md docs/cutover-readiness-criteria.md docs/migration-parity-dashboard.md docs/legacy-to-vnext-migration-matrix.md docs/backlog/2026-05-27-skill-package-manifest-registers-executable-skill.md docs/next-development-slices-2026-05-26-batch-16.md docs/workflow/live-queue.json
+- git diff --check
+- bun run check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `4e14beb8b8b9` feat(mv3): 执行 Skill package manifest

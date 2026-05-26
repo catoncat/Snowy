@@ -1,28 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T17:33:46.438Z",
+  "generated_at": "2026-05-26T17:46:02.554Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-174",
-      "issue_path": "docs/backlog/2026-05-27-skill-package-manifest-registers-executable-skill.md",
-      "title": "Cutover milestone: installed package manifest is not an executable runtime source",
-      "parallel_group": "mv3-shell",
-      "module_id": "old-product-replacement-loop",
-      "module_stage": "mainline",
-      "tracking_kind": "mainline",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "apps/mv3-shell/src/runtime-services.ts",
-        "apps/mv3-shell/src/background.ts",
-        "apps/mv3-shell/test/manifest.spec.ts",
-        "docs/skill-package-convention.md",
-        "docs/skill-authoring-guide.md",
-        "docs/cutover-readiness-criteria.md",
-        "docs/migration-parity-dashboard.md",
-        "docs/legacy-to-vnext-migration-matrix.md"
-      ]
-    }
-  ]
+  "entries": []
 }
