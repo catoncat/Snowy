@@ -31,6 +31,16 @@ The command must pass. It verifies:
 
 The latest run in this session passed with `ok: true`, including build, real Chromium MV3 smoke, and `bun run check`.
 
+Then run the cutover status gate:
+
+```bash
+bun run release:cutover:status
+```
+
+This command reruns the repo-side acceptance gate and adds delivery state: Git branch, upstream, ahead/behind count, worktree cleanliness, live queue entries, and active workflow leases. It may fail even when `release:acceptance` is green. In that case, treat the failure as a cutover delivery blocker, not as permission to reopen deferred implementation rows.
+
+The current local delivery blocker is that `main` contains local commits that are not on `origin/main`. External cutover therefore needs an explicit release branch / PR / push decision before claiming the old-mainline replacement is externally accepted.
+
 ## Repo-Side Evidence Summary
 
 - Gate A: contracts, descriptor projection, ctx permissions, trace, nested invoke, lifecycle, package action catalog, and event subscription summaries are test-covered.
@@ -86,7 +96,7 @@ These are post-cutover or explicitly promoted product breadth. They are not bloc
 If the decision is accepted:
 
 - record the external decision outcome next to this packet
-- decide the release branch / PR / deployment path explicitly
+- decide the release branch / PR / deployment path explicitly, then rerun `bun run release:cutover:status`
 - keep `bun run release:acceptance` as the pre-cutover repo-side gate
 - move old-mainline work to maintenance / follow-up planning
 

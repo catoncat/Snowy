@@ -20,6 +20,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "release:acceptance": "bun scripts/release-acceptance.ts",
+    "release:cutover:status": "bun scripts/release-cutover-status.ts",
     "release:smoke:mv3": "bun scripts/release-smoke-mv3-real-browser.ts",
     "workflow:claim": "bun .agents/skills/auto-claim-issues-next/scripts/claim-issue.ts",
     "workflow:claim:preview": "bun .agents/skills/auto-claim-issues-next/scripts/claim-issue.ts --dry-run",
