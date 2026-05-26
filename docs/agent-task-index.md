@@ -82,6 +82,14 @@
 
 ### D. Queue 为空，或要做下一批规划
 
+先判断是否已经进入 cutover delivery mode：
+
+- 如果 `docs/release-cutover-decision-packet-2026-05-27.md` 显示 repo-side Level 2 evidence ready
+- 且 `docs/workflow/live-queue.json` 为空、lease 为空
+- 先运行 `bun run release:cutover:status`
+
+如果 gate 绿，不要进入下一批规划；当前动作是推进 PR / CI / 外部 release acceptance / old-mainline cutover decision。只有 gate 暴露真实产品能力缺口，或用户明确提升某个 deferred breadth，才继续规划 backlog issue。
+
 读：
 
 1. `docs/source-of-truth-map.md`
@@ -152,7 +160,9 @@
 - queue 空了进入 planning commit；queue 被 lease 占满时可先做 planning preview：
   - `bun run workflow:plan:preview`
   - `bun run workflow:plan`
+- queue 空且 cutover delivery 可能已 ready：
+  - `bun run release:cutover:status`
 
 ## One-Line Rule
 
-先锁任务，再补上下文；实现看 issue 和代码，收口看 Completion Record，再读大文档。
+先锁任务，再补上下文；实现看 issue 和代码，收口看 Completion Record；queue 空时先判断 cutover delivery 是否已经 ready，不要默认继续拆小 issue。

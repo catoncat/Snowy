@@ -39,7 +39,15 @@ bun run release:cutover:status
 
 This command reruns the repo-side acceptance gate and adds delivery state: Git branch, upstream, ahead/behind count, worktree cleanliness, live queue entries, and active workflow leases. It may fail even when `release:acceptance` is green. In that case, treat the failure as a cutover delivery blocker, not as permission to reopen deferred implementation rows.
 
-The current local delivery blocker is that `main` contains local commits that are not on `origin/main`. External cutover therefore needs an explicit release branch / PR / push decision before claiming the old-mainline replacement is externally accepted.
+Current delivery state as of this packet refresh:
+
+- release branch: `codex/browser-plugin-cutover`
+- review handoff: PR #2, `[codex] 推进浏览器插件重构 cutover`
+- local `bun run release:cutover:status`: passing, with no blockers
+- GitHub PR CI: passing
+- remaining boundary: external release acceptance / old-mainline switch decision
+
+Do not interpret an empty queue after this point as permission to create more default implementation slices. If the status gate stays green, continue through review, acceptance, and explicit release/cutover decision handling. If the gate fails, fix the concrete delivery blocker it reports before reopening product scope.
 
 ## Repo-Side Evidence Summary
 

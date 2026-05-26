@@ -16,6 +16,7 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 - ticket machine 只负责 lease
 - planning 是 agent 原生的 reflection / recommendation 环节，不是 helper 命令的别名
 - claim / planning commit 后默认连续推进，不把“是否开始做”“是否继续收口”当成暂停点
+- queue 为空时先判断是否已经进入 cutover delivery；如果 release gate 绿，继续推进 PR / CI / 外部验收决策，不默认拆 deferred 小票
 - 只有遇到真实 blocker（缺失真相源、越权改动、共享 contract/schema/root config 需确认、外部输入、并行冲突无法自行化解）才停下来问
 
 ## 先读
@@ -61,7 +62,8 @@ description: 当 Agent 需要判断“现在该继续哪个 issue”“认领下
 3. live queue 是否还有可取 entry
 4. live queue 是否存在，但全部 entry 都已被 lease
 5. 若 queue 为空，是否只是 queue 过期未重建
-6. 若 queue 为空且无 active lease，是否该进入 next-batch planning commit
+6. 若 queue 为空且无 active lease，`bun run release:cutover:status` 是否已经证明 cutover delivery ready
+7. 若 release gate 未 ready，是否该进入 next-batch planning commit
 
 ## 动作选择
 
@@ -103,7 +105,18 @@ bun run workflow:queue:build
 
 - 再重新判断
 
-### 状态 F：queue 为空，且没有 active lease
+### 状态 F：queue 为空，且没有 active lease，release gate 绿
+
+- 不要把 queue 为空自动解释成“继续规划下一批”
+- 当前动作是 cutover delivery / external acceptance：
+  - 确认 `bun run release:cutover:status` 绿
+  - 若已有 PR，修复具体 PR / CI blocker 并推送
+  - 若没有 PR，根据当前 release packet 走 review/cutover handoff
+  - 停在 merge / release / old-mainline switch 边界，除非用户明确授权
+- 不要把 Not Now / deferred breadth 作为默认 queue filler
+- 只有 release gate 暴露真实产品能力缺口，或用户明确提升某个 deferred breadth，才转入 planning commit
+
+### 状态 G：queue 为空，且没有 active lease，release gate 未 ready
 
 - 使用 `next-batch-planner`
 - 对照 locked decisions / recovery report / kernel skeleton / 当前实现和测试做 review
