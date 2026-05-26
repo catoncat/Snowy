@@ -25,6 +25,7 @@ write_scope:
   - docs/cutover-readiness-criteria.md
   - docs/level-2-cutover-acceptance-2026-05-27.md
   - docs/level-2-uat-scenario-2026-05-27.md
+  - docs/module-tracking-ledger.json
   - docs/source-of-truth-map.md
 acceptance_ref: docs/level-2-cutover-acceptance-2026-05-27.md
 check_cmd: "bun run check"

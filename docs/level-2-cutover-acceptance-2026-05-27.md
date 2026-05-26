@@ -10,6 +10,16 @@ The repository now has current repo-side evidence for Level 2 cutover readiness.
 
 This document does not approve a product release or switch the old mainline by itself. The representative UAT readout is captured in `docs/level-2-uat-scenario-2026-05-27.md`. The remaining decision is external release acceptance: either accept this proof pack as the Level 2 cutover basis, request another concrete UAT scenario, or explicitly promote one deferred breadth item into the current milestone.
 
+## Evidence Refresh Command
+
+Before external release acceptance, refresh the repo-side evidence with:
+
+```bash
+bun run release:acceptance
+```
+
+This command verifies the acceptance pack, UAT scenario, cutover readiness text, and module ledger freshness, then runs `bun run build`, the real Chromium MV3 smoke, and `bun run check`. A passing command means the repo-side evidence pack is current; it still does not make the external product cutover decision by itself.
+
 ## Gate Evidence
 
 | Gate | Status | Evidence |
@@ -61,5 +71,7 @@ There should be at most one next planning boundary after this pack:
 1. Accept this repository state plus the real Chromium MV3 smoke in `docs/level-2-uat-scenario-2026-05-27.md` as the Level 2 cutover evidence basis and move to external release / product cutover.
 2. Request one additional concrete UAT scenario that exercises a human-selected real browser/profile workflow.
 3. Explicitly promote one deferred breadth item to mainline with a named product reason.
+
+Run `bun run release:acceptance` immediately before making this decision so the evidence is refreshed from current code and docs.
 
 Do not reopen version-selection rows, diff/preview rows, audit rows, or manifest metadata rows as default implementation issues unless they are selected through that decision boundary.

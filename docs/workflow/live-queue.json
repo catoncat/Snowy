@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T21:25:01.394Z",
+  "generated_at": "2026-05-26T21:27:38.379Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
   "entries": [
     {
@@ -19,6 +19,7 @@
         "docs/cutover-readiness-criteria.md",
         "docs/level-2-cutover-acceptance-2026-05-27.md",
         "docs/level-2-uat-scenario-2026-05-27.md",
+        "docs/module-tracking-ledger.json",
         "docs/source-of-truth-map.md"
       ]
     }

@@ -4,7 +4,7 @@
 
 什么时候新仓可以从“重构实验仓”进入“可替代旧主线”的状态。
 
-当前 repo-side 判定见 `docs/level-2-cutover-acceptance-2026-05-27.md`：Level 2 gate evidence 已经完整；是否正式切换旧主线仍是外部 release / product acceptance 决策。
+当前 repo-side 判定见 `docs/level-2-cutover-acceptance-2026-05-27.md`：Level 2 gate evidence 已经完整；是否正式切换旧主线仍是外部 release / product acceptance 决策。做该决策前，先运行 `bun run release:acceptance` 刷新当前代码、文档和真实 Chromium MV3 smoke 证据。
 
 ## Cutover Levels
 
@@ -138,6 +138,7 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 - 已经超过空壳
 - 已达到 cutover-critical substrate foundation + representative old-product replacement loop 的 repo-side Level 2 gate evidence complete 状态
 - 仍未由本文自动执行旧主线切换，因为正式切主线还需要外部 release / product acceptance
+- 外部 release / product acceptance 前的当前 repo-side refresh 入口是 `bun run release:acceptance`
 
 主要原因：
 

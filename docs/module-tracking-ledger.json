@@ -261,7 +261,9 @@
         "ISSUE-178 exposed package lifecycle/version readiness through shared skills.summary and sidepanel catalog",
         "ISSUE-179 connected shared skills.rollback to BrowserVFS rehydrate, package registry refresh, summary/invoke readback, and audit.tail evidence",
         "ISSUE-180 proved shared Studio/package authoring data can create/update package-backed skills, auto-snapshot prior package state, refresh registry, invoke updated code, rollback, and read audit evidence",
-        "ISSUE-181 proved enabled package-backed skills can declare runtime event subscriptions and receive runtime.route.after through runtime.event.dispatch using the existing skills.invoke, JS Runner, and audit.tail path"
+        "ISSUE-181 proved enabled package-backed skills can declare runtime event subscriptions and receive runtime.route.after through runtime.event.dispatch using the existing skills.invoke, JS Runner, and audit.tail path",
+        "ISSUE-184 proved the release-facing path in real Chromium MV3: package handlers execute in a sandbox runner under CSP and can call back into shared capabilities such as memfs.read with audit.tail evidence",
+        "ISSUE-185 made the Level 2 release acceptance evidence refresh one-command reproducible through bun run release:acceptance"
       ],
       "deferred_scope": [
         "interactive version selection UI",
@@ -270,7 +272,7 @@
         "bulk migration of every old plugin ecosystem affordance",
         "post-cutover product polish around package browsing, install sources, and studio workflows"
       ],
-      "deferral_rationale": "ISSUE-172 through ISSUE-181 prove one representative old product capability loop end-to-end on the shared vNext runtime and product surface, including authoring, install, update, package persistence, discovery, sidepanel management, invocation, rollback, event subscription, and audit evidence. Remaining items are broader product/ecosystem breadth and no longer block the cutover-critical replacement proof."
+      "deferral_rationale": "ISSUE-172 through ISSUE-181 prove one representative old product capability loop end-to-end on the shared vNext runtime and product surface, including authoring, install, update, package persistence, discovery, sidepanel management, invocation, rollback, event subscription, and audit evidence. ISSUE-184 adds real Chromium MV3 CSP proof, and ISSUE-185 provides the one-command release acceptance evidence refresh. Remaining items are broader product/ecosystem breadth and no longer block the cutover-critical replacement proof."
     },
     {
       "module_id": "skill-studio-completion-loop",
