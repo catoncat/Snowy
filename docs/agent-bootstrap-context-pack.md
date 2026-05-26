@@ -54,6 +54,7 @@
 - minimal product control-plane actions: `hosts.*`, `config.update`, `skills.install/enable/disable/uninstall`, `runtime.capture_diagnostics`, `runtime.clear_error`
 - representative executable Skill old-product loop: `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions/eventSubscriptions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke/runtime.event.dispatch → JS Runner → tabs.get_active/memfs.read/event handler result → audit.tail`
 - `ISSUE-177` 已把 `ISSUE-172` 到 `ISSUE-176` 的 old-product replacement proof 收口成 shipped-with-deferred-scope；后续不要把这条链重新拆成局部小票
+- `docs/level-2-cutover-acceptance-2026-05-27.md` 已把 `ISSUE-172` 到 `ISSUE-181` 映射为 repo-side Level 2 gate evidence complete；后续默认进入外部 release acceptance / UAT / 显式 deferred breadth 提升决策，不再自动产小票
 
 注意：
 
@@ -65,10 +66,8 @@
 ## 5. 当前最重要的未收口区
 
 1. 外部 cutover decision / release acceptance
-2. 完整 Skill Studio / lifecycle / versioning 产品面
-3. Tier 2 / Tier 3 browser automation 与 download/export composites
-4. diagnostics / debug bulk export breadth
-5. bridge-side MCP server 与更广 provider policy hardening
+2. 如果 release acceptance 要求补证，只接受一个明确 UAT 场景或一个被显式提升的 deferred breadth
+3. 完整 Skill Studio / lifecycle / versioning 产品面、Tier 2 / Tier 3 browser automation、download/export composites、diagnostics/debug bulk export、bridge-side MCP server 与更广 provider policy hardening 都默认属于后置 breadth，不再自动拆票
 
 ## 6. 新 Agent 默认 operating loop
 

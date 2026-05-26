@@ -287,7 +287,7 @@ planning 额外要做的不是“多读几份文档”，而是：
 - 最多 1-2 个必要支撑 issue：只在主 milestone acceptance 明确依赖且不能同票完成时才拆出
 - 每个 issue 都必须说明它如何让 `cutover-readiness-criteria` 或 migration parity 更接近“可替代旧主线”
 
-`ISSUE-177` 之后，`ISSUE-172` 到 `ISSUE-176` 代表的 Skill package / old plugin loop 已经作为 cutover-critical proof 收口。后续 planning 不应把这些已完成 proof 重新拆成 install、manifest、catalog、sidepanel 字段小票；如果 queue 再次为空，应先看 Level 2 proof pack 里的剩余 blocker，而不是回到 review inventory 产票。
+`ISSUE-181` 之后，`ISSUE-172` 到 `ISSUE-181` 代表的 Skill package / old plugin loop 已经作为 cutover-critical proof 收口，并由 `docs/level-2-cutover-acceptance-2026-05-27.md` 汇总为 repo-side Level 2 gate evidence complete。后续 planning 不应把这些已完成 proof 重新拆成 install、manifest、catalog、sidepanel、event、audit 字段小票；如果 queue 再次为空，应只在一个下一步决策边界内继续：外部 release acceptance、一个明确 UAT 场景，或显式提升某个 deferred breadth。
 
 当前 dispatch 与规划要这样看：
 

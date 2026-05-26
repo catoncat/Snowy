@@ -35,6 +35,8 @@
 
 ## Current Gate View
 
+当前 repo-side Level 2 gate evidence 已由 `docs/level-2-cutover-acceptance-2026-05-27.md` 汇总为 complete。下列 `yellow` 行不再自动代表当前 cutover blocker；它们表示被显式后置的 product breadth、生态 breadth 或外部桥接范围。
+
 ### 已基本稳定的基础层
 
 - descriptor / contract
@@ -45,13 +47,16 @@
 - site runtime baseline
 - cutover-critical old-product replacement loop
 
-### 仍不能宣称“已完成迁移”的关键层
+### 后置或需外部决策的关键层
 
 - AI-native product control plane
 - provider / profile policy hardening
 - 完整 browser automation breadth
 - diagnostics / observability export breadth
 - Skill Studio 的 diff/preview、interactive version selection 与 legacy plugin 生态批量迁移 breadth
+- bridge-side MCP server/transport
+
+这些项只有在外部 release acceptance 明确要求时，才应提升为新的 mainline milestone；默认不要逐行拆成 queue filler。
 
 ## 文档维护规则
 

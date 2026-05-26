@@ -59,11 +59,13 @@
 | `<all_urls>` + 宽松站点权限默认 | 与 active-tab-only 北极星冲突 | active-tab metadata only + explicit invoke |
 | 旧工具名全集直接平移 | 新仓优先收敛 public capability namespace | `page.*`, `tabs.*`, `site.*`, `memfs.*`, `skills.*`, `runtime.*` |
 
-## 对完整迁移最关键的未收口区域
+## 对完整生态迁移仍后置的区域
 
-1. browser automation / screenshot / download 的剩余 runtime integration 与 intervention lifecycle 是否真正闭环
-2. provider policy / diagnostics / observability 主链
-3. Skill Studio 的 diff/preview、interactive version selection、rollback confirmation 与旧 plugin 生态更广 breadth；executable Skill 旧产品替代链路已由 `ISSUE-172` 到 `ISSUE-180` 收口到 author/install/update/persist/discover/manage/invoke/rollback/observe，不应再拆成孤立 UI/字段小票
+1. Tier 2 / Tier 3 browser automation、screenshot/download export composites 与更广 intervention/operator polish。
+2. provider policy hardening、bulk diagnostics / observability export 与 bridge-side MCP server/transport。
+3. Skill Studio 的 diff/preview、interactive version selection、rollback confirmation 与旧 plugin 生态更广 breadth；executable Skill 旧产品替代链路已由 `ISSUE-172` 到 `ISSUE-181` 收口到 author/install/update/persist/discover/manage/invoke/rollback/event/observe，不应再拆成孤立 UI/字段小票。
+
+这些后置项不是当前代表性旧产品替代 proof 的 blocker。若要把任一项提升为当前主线，必须先通过 `docs/level-2-cutover-acceptance-2026-05-27.md` 的下一步决策边界。
 
 ## 如何使用本文件
 
