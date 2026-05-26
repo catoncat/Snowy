@@ -1,11 +1,11 @@
 ---
 id: ISSUE-186
 title: "Cutover decision: external acceptance packet is not explicit"
-status: open
+status: done
 priority: p0
 source: "external cutover decision boundary 2026-05-27"
 created: 2026-05-26
-assignee: unassigned
+assignee: codex-cutover-decision
 tags:
   - review
   - cutover
@@ -27,6 +27,7 @@ write_scope:
   - docs/source-of-truth-map.md
 acceptance_ref: docs/level-2-cutover-acceptance-2026-05-27.md
 check_cmd: "bun run check"
+completed_at: 2026-05-26T21:33:10.415Z
 ---
 
 ## Goal
@@ -43,3 +44,22 @@ check_cmd: "bun run check"
 - 新增 release cutover decision packet，包含推荐决策、fresh evidence command、repo-side evidence summary、allowed decision options、not-now/deferred 列表和 post-decision actions
 - Level 2 acceptance 与 cutover readiness 文档指向该 decision packet 作为外部 release acceptance 入口
 - source-of-truth map 明确 queue 为空且 release:acceptance 通过后，不再生成默认 implementation queue，而是走 decision packet 的三分支
+
+## 工作总结
+
+### 实现了什么
+- 新增 release cutover decision packet，集中记录推荐接受当前 repo-side Level 2 evidence、fresh evidence command、gate summary、允许的三种后续分支、Not Now deferred breadth 和 post-decision actions
+- Level 2 acceptance、cutover readiness、source-of-truth map 指向 decision packet；release:acceptance 也校验该 packet freshness
+
+### 实际跑了什么检查
+- bun run release:acceptance
+- ./node_modules/.bin/biome check scripts/release-acceptance.ts
+- git diff --check
+- git diff --cached --check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `27c4322baced` docs(cutover): 增加外部验收决策包
