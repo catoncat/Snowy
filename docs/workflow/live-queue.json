@@ -1,22 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T20:13:44.879Z",
+  "generated_at": "2026-05-26T20:16:01.064Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-183",
-      "issue_path": "docs/backlog/2026-05-26-release-uat-representative-old-plugin-replacement-scenario-is-not-recorded.md",
-      "title": "Release UAT: representative old-plugin replacement scenario is not recorded",
-      "parallel_group": "mv3-shell",
-      "module_id": "old-product-replacement-loop",
-      "module_stage": "mainline",
-      "tracking_kind": "mainline",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "docs/level-2-uat-scenario-2026-05-27.md",
-        "docs/level-2-cutover-acceptance-2026-05-27.md"
-      ]
-    }
-  ]
+  "entries": []
 }
