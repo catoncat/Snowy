@@ -1,11 +1,11 @@
 ---
 id: ISSUE-178
 title: "Completion milestone: Skill Studio version surface is missing from shared catalog"
-status: open
+status: done
 priority: p0
 source: "completion planning 2026-05-27"
 created: 2026-05-27
-assignee: unassigned
+assignee: codex-loop
 tags:
   - review
   - completion
@@ -33,6 +33,7 @@ write_scope:
   - docs/ai-surface-index.md
 acceptance_ref: docs/skill-lifecycle-version-engine-boundary.md
 check_cmd: "bun run check"
+completed_at: 2026-05-26T18:46:21.208Z
 ---
 
 ## Goal
@@ -58,3 +59,22 @@ Promote Skill Studio/versioning from deferred breadth into the next completion m
 - migration matrix/dashboard/docs distinguish this milestone from full authoring studio and old plugin ecosystem migration
 - focused contracts/core/MV3 sidepanel/runtime tests pass
 - plus git diff --check
+
+## 工作总结
+
+### 实现了什么
+- 新增 shared skills.summary versionSurface，package-backed skill 会暴露 active manifest version、snapshot root、rollback policy 与 rollback target；sidepanel Skills catalog 从同一 shared summary 渲染 versions 信息；迁移矩阵/dashboard/AI Surface 文档同步 Skill Studio completion lane 状态
+
+### 实际跑了什么检查
+- bun run test -- packages/contracts/test/contracts.spec.ts packages/core/test/core.spec.ts apps/mv3-shell/test/sidepanel-management.spec.ts apps/mv3-shell/test/manifest.spec.ts
+- bun run typecheck
+- ./node_modules/.bin/biome check touched files
+- git diff --check
+- bun run check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `e181503fb966` feat(studio): 暴露 Skill 版本面
