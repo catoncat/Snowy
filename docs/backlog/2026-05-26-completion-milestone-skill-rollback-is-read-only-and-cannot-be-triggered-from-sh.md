@@ -1,11 +1,11 @@
 ---
 id: ISSUE-179
 title: "Completion milestone: Skill rollback is read-only and cannot be triggered from shared Studio surface"
-status: open
+status: done
 priority: p0
 source: "completion planning 2026-05-27"
 created: 2026-05-26
-assignee: unassigned
+assignee: codex-loop
 tags:
   - review
   - completion
@@ -34,6 +34,7 @@ write_scope:
   - docs/module-tracking-ledger.json
 acceptance_ref: docs/skill-lifecycle-version-engine-boundary.md
 check_cmd: "bun run check"
+completed_at: 2026-05-26T19:10:26.661Z
 ---
 
 ## Goal
@@ -58,3 +59,25 @@ Turn Skill Studio version readiness into an executable product loop: inspect rol
 - docs distinguish rollback action from full version-selection UI and authoring studio
 - focused contracts/core/MV3 sidepanel/runtime tests pass
 - plus bun run check and git diff --check
+
+## 工作总结
+
+### 实现了什么
+- 将 skills.rollback 纳入 contracts/core/shared MV3 management surface，并让 runtime 通过 BrowserVFS rehydrate 还原 latest trusted 或显式 versionUri
+- sidepanel Skills catalog 仅根据 shared versionSurface.rollbackTarget 启用 rollback，并通过 shared management action 发送 versionUri
+- 同步 AI surface、version boundary、migration dashboard/matrix 与 module ledger，把本轮口径固定为旧产品替代闭环推进而非小票碎片化
+
+### 实际跑了什么检查
+- bunx vitest run apps/mv3-shell/test/manifest.spec.ts -t 'rolls back an installed package' --reporter=verbose
+- bun run test -- packages/contracts/test/contracts.spec.ts packages/core/test/core.spec.ts apps/mv3-shell/test/sidepanel-management.spec.ts apps/mv3-shell/test/manifest.spec.ts
+- bun run typecheck
+- ./node_modules/.bin/biome check <touched files>
+- git diff --check
+- bun run check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `a9a7867c9318` feat(studio): 支持 Skill 回滚
