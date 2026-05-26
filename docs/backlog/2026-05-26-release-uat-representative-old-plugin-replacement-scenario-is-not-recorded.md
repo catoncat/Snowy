@@ -1,11 +1,11 @@
 ---
 id: ISSUE-183
 title: "Release UAT: representative old-plugin replacement scenario is not recorded"
-status: open
+status: done
 priority: p0
 source: "Level 2 release acceptance boundary 2026-05-27"
 created: 2026-05-26
-assignee: unassigned
+assignee: codex-loop
 tags:
   - review
   - release
@@ -23,6 +23,7 @@ write_scope:
   - docs/level-2-cutover-acceptance-2026-05-27.md
 acceptance_ref: docs/level-2-cutover-acceptance-2026-05-27.md
 check_cmd: "bun run check"
+completed_at: 2026-05-26T20:16:01.005Z
 ---
 
 ## Goal
@@ -38,3 +39,18 @@ Record one concrete release UAT scenario for the representative old-plugin repla
 - A UAT document defines the representative old plugin replacement scenario from install through event dispatch and audit evidence.
 - The UAT document lists exact commands and observed results from the current run including build and check evidence.
 - The Level 2 acceptance pack points to the UAT scenario as the next evidence artifact without reopening deferred breadth.
+
+## 工作总结
+
+### 实现了什么
+- 新增 Level 2 UAT scenario 文档，记录 representative old-plugin replacement loop：skills.install 写入 package、skills.enable、skills.summary/runtime.bootstrap 暴露 eventSubscriptions、runtime.event.dispatch 触发 package-backed Skill、JS Runner 返回 notify_success、audit.tail 留下证据；Level 2 acceptance pack 已指向该 UAT readout，并继续把下一步限制为外部 release acceptance、真实浏览器 UAT 或显式 deferred breadth 提升。
+
+### 实际跑了什么检查
+- bun run test -- apps/mv3-shell/test/manifest.spec.ts -t 'dispatches runtime events to enabled package-backed skill subscriptions'; bun run build; git diff --check; bun run check
+
+### 残留风险
+- 无
+
+## 相关 commits
+
+- `fc449fc4e336` docs(cutover): 记录 Level 2 UAT 场景
