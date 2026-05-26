@@ -6,6 +6,7 @@ priority: p0
 source: "anti-fragmentation release acceptance gate 2026-05-27"
 created: 2026-05-26
 assignee: codex-release
+claimed_at: 2026-05-26T21:28:08.002Z
 tags:
   - review
   - cutover

@@ -6,6 +6,7 @@ priority: p0
 source: "anti-fragmentation planning 2026-05-27"
 created: 2026-05-27
 assignee: codex-loop
+claimed_at: 2026-05-26T17:25:59.622Z
 tags:
   - cutover
   - milestone

@@ -6,6 +6,7 @@ priority: p0
 source: "anti-fragmentation planning 2026-05-27"
 created: 2026-05-26
 assignee: codex-loop
+claimed_at: 2026-05-26T19:43:18.338Z
 tags:
   - review
   - completion

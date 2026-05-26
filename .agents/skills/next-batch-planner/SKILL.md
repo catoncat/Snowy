@@ -19,9 +19,6 @@ description: 当当前 backlog claim 队列为空、当前 live queue 全部 ent
 - helper 命令不负责替代对主线、腐坏、阶段目标的判断
 - 参考文档默认都可能腐坏；文档只提供候选真相，不能绕过对当前代码、测试和最近 landed 事实的验证
 - 如果当前动作更像“planning / backlog 整理”，可以临时叠加 `.agents/prompts/coordinator.md`
-
-## Anti-fragmentation Rule
-
 - queue 为空时，下一批 planning 的首要问题是“哪个旧产品替代里程碑还能明显推进 cutover / product completion”，不是“还有哪些小 gap 可以开票”。
 - 禁止把同一条旧产品能力链拆成一串只能局部收口的 review issue；优先落 1-3 个能证明端到端能力的 milestone issue。
 - review finding 只有在服务于某个 milestone acceptance 时才进入下一批；否则放入 `Not Now`，不要为了填 queue 继续碎片化。
