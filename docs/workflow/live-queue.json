@@ -1,32 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T21:17:45.070Z",
+  "generated_at": "2026-05-26T21:21:26.532Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-184",
-      "issue_path": "docs/backlog/2026-05-26-cutover-milestone-real-mv3-package-backed-skill-execution-is-blocked-by-csp.md",
-      "title": "Cutover milestone: real MV3 package-backed skill execution is blocked by CSP",
-      "parallel_group": "mv3-shell",
-      "module_id": "old-product-replacement-loop",
-      "module_stage": "mainline",
-      "tracking_kind": "mainline",
-      "check_cmd": "bun run check",
-      "depends_on": [],
-      "write_scope": [
-        "package.json",
-        "scripts/release-smoke-mv3-real-browser.ts",
-        "apps/mv3-shell/manifest.json",
-        "apps/mv3-shell/vite.config.ts",
-        "apps/mv3-shell/src/runner-sandbox.html",
-        "apps/mv3-shell/src/runner-sandbox.ts",
-        "apps/mv3-shell/src/runtime-services.ts",
-        "apps/mv3-shell/src/offscreen.ts",
-        "apps/mv3-shell/test/manifest.spec.ts",
-        "docs/cutover-readiness-criteria.md",
-        "docs/level-2-uat-scenario-2026-05-27.md",
-        "docs/level-2-cutover-acceptance-2026-05-27.md"
-      ]
-    }
-  ]
+  "entries": []
 }
