@@ -36,7 +36,8 @@ export default defineSkill({
   "version": 1,
   "permissions": ["memfs.read"],
   "description": "A simple greeting skill",
-  "kind": "prompt"
+  "kind": "prompt",
+  "entry": "handler.js"
 }
 ```
 
@@ -101,12 +102,19 @@ the complete input payload to the runtime manager. The shared MV3 runtime
 materializes valid setup-plan writes into BrowserVFS under
 `mem://skills/<skillId>/...` before updating lifecycle state; invalid plans
 are rejected before a skill is recorded as installed. Restarted runtimes can
-read those package files through the normal `memfs.*` capability path. Normal
-skill invocation still never executes setup hooks.
+read those package files through the normal `memfs.*` capability path.
+Restarted shared MV3 runtimes also discover valid `skill.json` manifests from
+BrowserVFS and register enabled package handlers as executable skills, so
+`skills.invoke` can load the package `entry` file through the existing JS runner
+without a test-only `skillDefinitions` injection. Malformed manifests are
+skipped during boot and fail invocation with a structured capability error.
+Normal skill invocation still never executes setup hooks.
 
 ### Recommended File Layout for Setup Writes
 
 - `SKILL.md` — author-facing instructions or packaged behavior contract
+- `skill.json` — manifest with `id`, `version`, `permissions`, and optional `entry`
+- `handler.js` — packaged runtime entry loaded by the shared MV3 runtime
 - `scripts/*.js` — helper scripts that ship with the skill package
 - `assets/*` — static package assets needed after install
 

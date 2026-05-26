@@ -7,7 +7,8 @@ A minimal skill package follows this structure:
 ```
 my-skill/
 ├── skill.json        # manifest: id, permissions, matches, metadata
-├── handler.ts        # skill handler entry point
+├── handler.js        # runtime handler entry point
+├── handler.ts        # optional authoring source before packaging
 ├── SKILL.md          # packaged authoring/behavior notes (optional, setup-generated is OK)
 ├── scripts/          # install-time generated helpers (optional)
 └── README.md         # human-readable description (optional)
@@ -35,6 +36,7 @@ The manifest declares identity, permissions, and optional site bindings.
   "permissions": ["memfs.read", "memfs.write"],
   "description": "A brief description of what this skill does",
   "kind": "prompt",
+  "entry": "handler.js",
   "tags": ["utility"]
 }
 ```
@@ -52,6 +54,7 @@ The manifest declares identity, permissions, and optional site bindings.
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `entry` | `string` | Runtime handler file relative to package root. Default: `handler.js` |
 | `kind` | `"prompt" \| "site" \| "mcp" \| "hybrid"` | Skill type. Default: `"prompt"` |
 | `tags` | `string[]` | Discovery tags |
 | `matches` | `string[]` | URL patterns for site skills |
@@ -92,6 +95,31 @@ export default defineSkill({
   }
 });
 ```
+
+### Runtime Handler Discovery
+
+Shared MV3 runtime now treats installed BrowserVFS packages as executable
+runtime sources. On boot it scans `mem://skills/<skillId>/...` package roots
+with a `SKILL.md` marker, reads `skill.json`, and registers valid manifests
+whose `id` matches the package directory. Enabled packages can then be invoked
+with `skills.invoke` without passing constructor-time `skillDefinitions`.
+
+The discovered handler is loaded from the package `entry` file, defaults to
+`handler.js`, and runs through the existing JS runner bridge. The runtime passes
+the runner module:
+
+```javascript
+exports.default = async ({ ctx, input }) => ({
+  skillId: ctx.skillId,
+  action: input.action,
+  args: input.args,
+});
+```
+
+Malformed manifests, missing `skill.json`, unsafe entry paths, or id mismatches
+are skipped during boot. If lifecycle state says such a skill is enabled but no
+valid handler was registered, `skills.invoke` returns a structured capability
+error instead of breaking runtime startup.
 
 ### Install-Only Setup Hooks
 

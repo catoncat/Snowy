@@ -3714,6 +3714,275 @@ describe("mv3-shell manifest", () => {
     secondHarness.cleanup();
   });
 
+  it("discovers an installed package manifest and invokes its handler after restart", async () => {
+    const storageArea = createStorageAreaHarness();
+    const firstHarness = createChromeHarness({
+      activeTab: {
+        id: 41,
+        url: "https://fixture.test/install-manifest-package",
+        title: "Install Manifest Package",
+      },
+      storageArea,
+    });
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeFirst = firstBridge.registerRuntimeListener();
+
+    await expect(
+      firstHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.install",
+        skillId: "skill.cutover.manifest",
+        setupPlan: {
+          skillId: "skill.cutover.manifest",
+          phase: "install",
+          baseUri: "mem://skills/skill.cutover.manifest",
+          writes: [
+            {
+              uri: "mem://skills/skill.cutover.manifest/SKILL.md",
+              content: "# Manifest Package\n",
+            },
+            {
+              uri: "mem://skills/skill.cutover.manifest/skill.json",
+              content: JSON.stringify({
+                id: "skill.cutover.manifest",
+                version: 1,
+                permissions: ["memfs.read"],
+                description: "Manifest-discovered executable package",
+                entry: "handler.js",
+              }),
+            },
+            {
+              uri: "mem://skills/skill.cutover.manifest/handler.js",
+              content: `
+                exports.default = async ({ ctx, input }) => ({
+                  skillId: ctx.skillId,
+                  entry: ctx.package.entry,
+                  action: input.action,
+                  message: input.args.message
+                });
+              `,
+            },
+          ],
+          notes: ["manifest package"],
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skill: {
+          skillId: "skill.cutover.manifest",
+          status: "installed",
+        },
+      },
+    });
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.enable",
+      skillId: "skill.cutover.manifest",
+    });
+
+    disposeFirst();
+    firstHarness.cleanup();
+
+    const secondHarness = createChromeHarness({
+      activeTab: {
+        id: 42,
+        url: "https://fixture.test/invoke-manifest-package",
+        title: "Invoke Manifest Package",
+      },
+      storageArea,
+    });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeSecond = secondBridge.registerRuntimeListener();
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.invoke",
+        skillId: "skill.cutover.manifest",
+        action: "echo",
+        args: {
+          message: "from-package",
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        result: {
+          skillId: "skill.cutover.manifest",
+          entry: "handler.js",
+          action: "echo",
+          message: "from-package",
+        },
+        trace: [
+          {
+            capabilityId: "memfs.read",
+            status: "succeeded",
+          },
+        ],
+      },
+    });
+
+    const auditResult = (await secondHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "resource.read",
+      resourceId: "audit.tail",
+    })) as {
+      ok: boolean;
+      data: {
+        data: {
+          entries: Array<{
+            kind: string;
+            capabilityId?: string;
+            skillId?: string;
+            status: string;
+          }>;
+        };
+      };
+    };
+
+    expect(auditResult.ok).toBe(true);
+    expect(auditResult.data.data.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "skills.install",
+          skillId: "skill.cutover.manifest",
+          status: "installed",
+        }),
+        expect.objectContaining({
+          kind: "skills.enable",
+          skillId: "skill.cutover.manifest",
+          status: "enabled",
+        }),
+        expect.objectContaining({
+          kind: "loop.step",
+          capabilityId: "skills.invoke",
+          status: "executed",
+        }),
+        expect.objectContaining({
+          kind: "loop.step",
+          capabilityId: "memfs.read",
+          status: "executed",
+        }),
+      ]),
+    );
+
+    disposeSecond();
+    secondHarness.cleanup();
+  });
+
+  it("skips malformed installed package manifests without breaking runtime boot", async () => {
+    const storageArea = createStorageAreaHarness();
+    const firstHarness = createChromeHarness({
+      activeTab: {
+        id: 43,
+        url: "https://fixture.test/install-malformed-package",
+        title: "Install Malformed Package",
+      },
+      storageArea,
+    });
+    const firstBridge = createBackgroundRunnerBridge({
+      chromeApi: firstHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeFirst = firstBridge.registerRuntimeListener();
+
+    await expect(
+      firstHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.install",
+        skillId: "skill.cutover.malformed",
+        setupPlan: {
+          skillId: "skill.cutover.malformed",
+          phase: "install",
+          baseUri: "mem://skills/skill.cutover.malformed",
+          writes: [
+            {
+              uri: "mem://skills/skill.cutover.malformed/SKILL.md",
+              content: "# Malformed Package\n",
+            },
+            {
+              uri: "mem://skills/skill.cutover.malformed/skill.json",
+              content: "{not-json",
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skill: {
+          skillId: "skill.cutover.malformed",
+          status: "installed",
+        },
+      },
+    });
+    await firstHarness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "skills.enable",
+      skillId: "skill.cutover.malformed",
+    });
+
+    disposeFirst();
+    firstHarness.cleanup();
+
+    const secondHarness = createChromeHarness({
+      activeTab: {
+        id: 44,
+        url: "https://fixture.test/malformed-after-restart",
+        title: "Malformed After Restart",
+      },
+      storageArea,
+    });
+    const secondBridge = createBackgroundRunnerBridge({
+      chromeApi: secondHarness.chromeApi,
+      timeoutMs: 50,
+    });
+    const disposeSecond = secondBridge.registerRuntimeListener();
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "skills.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "skills.summary",
+        data: {
+          installedCount: 1,
+          enabledCount: 1,
+          recentChange: "skills.enable",
+        },
+      },
+    });
+
+    await expect(
+      secondHarness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.invoke",
+        skillId: "skill.cutover.malformed",
+        action: "echo",
+        args: {},
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "E_CAPABILITY_NOT_FOUND",
+      },
+    });
+
+    disposeSecond();
+    secondHarness.cleanup();
+  });
+
   it("rejects invalid install setup plans before lifecycle state is updated", async () => {
     const invalidCases = [
       [
