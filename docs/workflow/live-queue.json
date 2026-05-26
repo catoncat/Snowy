@@ -1,6 +1,33 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-26T19:43:18.399Z",
+  "generated_at": "2026-05-26T19:45:53.071Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": []
+  "entries": [
+    {
+      "issue_id": "ISSUE-181",
+      "issue_path": "docs/backlog/2026-05-26-completion-milestone-legacy-plugin-event-hooks-have-no-skill-event-subscription-.md",
+      "title": "Completion milestone: legacy plugin event hooks have no Skill event subscription path",
+      "parallel_group": "mv3-shell",
+      "module_id": "old-product-replacement-loop",
+      "module_stage": "mainline",
+      "tracking_kind": "mainline",
+      "check_cmd": "bun run check",
+      "depends_on": [],
+      "write_scope": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/test/contracts.spec.ts",
+        "packages/core/src/index.ts",
+        "packages/core/test/core.spec.ts",
+        "apps/mv3-shell/src/runtime-services.ts",
+        "apps/mv3-shell/src/background.ts",
+        "apps/mv3-shell/test/manifest.spec.ts",
+        "docs/skill-package-convention.md",
+        "docs/ai-surface-index.md",
+        "docs/legacy-to-vnext-migration-matrix.md",
+        "docs/migration-parity-dashboard.md",
+        "docs/cutover-readiness-criteria.md",
+        "docs/agent-bootstrap-context-pack.md"
+      ]
+    }
+  ]
 }
