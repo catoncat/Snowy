@@ -52,7 +52,7 @@
 - MV3 shell baseline
 - lightweight resource contracts/builders + lookup: `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary` / `audit.tail` / `audit.intervention` + `readAiSurfaceResource()` / MV3 `resource.read`
 - minimal product control-plane actions: `hosts.*`, `config.update`, `skills.install/enable/disable/uninstall`, `runtime.capture_diagnostics`, `runtime.clear_error`
-- representative executable Skill old-product loop: `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke → JS runner → tabs.get_active/memfs.read → audit.tail`
+- representative executable Skill old-product loop: `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions/eventSubscriptions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke/runtime.event.dispatch → JS Runner → tabs.get_active/memfs.read/event handler result → audit.tail`
 - `ISSUE-177` 已把 `ISSUE-172` 到 `ISSUE-176` 的 old-product replacement proof 收口成 shipped-with-deferred-scope；后续不要把这条链重新拆成局部小票
 
 注意：

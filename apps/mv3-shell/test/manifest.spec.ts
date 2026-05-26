@@ -4053,6 +4053,207 @@ describe("mv3-shell manifest", () => {
     secondHarness.cleanup();
   });
 
+  it("dispatches runtime events to enabled package-backed skill subscriptions", async () => {
+    const storageArea = createStorageAreaHarness();
+    const skillId = "skill.legacy.send-success";
+    const packageUri = `mem://skills/${skillId}`;
+    const setupPlan = {
+      skillId,
+      phase: "install",
+      baseUri: packageUri,
+      writes: [
+        {
+          uri: `${packageUri}/SKILL.md`,
+          content: "# Send Success\n",
+        },
+        {
+          uri: `${packageUri}/skill.json`,
+          content: JSON.stringify({
+            id: skillId,
+            version: 1,
+            permissions: ["memfs.read"],
+            description: "Migrated send-success runtime event subscriber",
+            kind: "runtime",
+            entry: "handler.js",
+            eventSubscriptions: [
+              {
+                event: "runtime.route.after",
+                action: "notify_success",
+                description: "Emit success evidence after a successful brain run start route",
+              },
+            ],
+          }),
+        },
+        {
+          uri: `${packageUri}/handler.js`,
+          content: `
+            exports.default = async ({ ctx, input }) => {
+              if (input.action !== "notify_success") {
+                throw new Error("Unsupported action: " + input.action);
+              }
+              const event = input.args.event || {};
+              const routeResult = event.result || {};
+              if (event.type !== "brain.run.start" || routeResult.ok !== true) {
+                return { action: "continue" };
+              }
+              return {
+                kind: "success",
+                message: "发送成功",
+                source: ctx.skillId,
+                sessionId: routeResult.data && routeResult.data.sessionId
+              };
+            };
+          `,
+        },
+      ],
+    };
+
+    const harness = createChromeHarness({
+      activeTab: {
+        id: 57,
+        url: "https://fixture.test/event-subscription",
+        title: "Event Subscription",
+      },
+      storageArea,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+    const send = (message: Record<string, unknown>) =>
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        ...message,
+      });
+
+    await expect(send({ kind: "skills.install", skillId, setupPlan })).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skill: {
+          skillId,
+          status: "installed",
+        },
+      },
+    });
+    await send({ kind: "skills.enable", skillId });
+
+    const expectedSubscription = {
+      event: "runtime.route.after",
+      action: "notify_success",
+      description: "Emit success evidence after a successful brain run start route",
+    };
+
+    await expect(
+      send({ kind: "resource.read", resourceId: "skills.summary" }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        data: {
+          items: [
+            expect.objectContaining({
+              skillId,
+              eventSubscriptions: [expectedSubscription],
+            }),
+          ],
+        },
+      },
+    });
+
+    await expect(send({ kind: "runtime.bootstrap" })).resolves.toMatchObject({
+      ok: true,
+      data: {
+        skills: {
+          items: [
+            expect.objectContaining({
+              skillId,
+              eventSubscriptions: [expectedSubscription],
+            }),
+          ],
+        },
+      },
+    });
+
+    await expect(
+      send({
+        kind: "runtime.event.dispatch",
+        event: {
+          name: "runtime.route.after",
+          type: "brain.run.start",
+          message: {
+            prompt: "send success",
+          },
+          result: {
+            ok: true,
+            data: {
+              sessionId: "session-success",
+            },
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        event: "runtime.route.after",
+        dispatchedCount: 1,
+        invocations: [
+          {
+            skillId,
+            action: "notify_success",
+            ok: true,
+            result: {
+              kind: "success",
+              message: "发送成功",
+              source: skillId,
+              sessionId: "session-success",
+            },
+          },
+        ],
+      },
+    });
+
+    const auditResult = (await send({
+      kind: "resource.read",
+      resourceId: "audit.tail",
+    })) as {
+      ok: boolean;
+      data: {
+        data: {
+          entries: Array<{
+            kind: string;
+            capabilityId?: string;
+            skillId?: string;
+            status: string;
+          }>;
+        };
+      };
+    };
+
+    expect(auditResult.ok).toBe(true);
+    expect(auditResult.data.data.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "skills.install",
+          skillId,
+          status: "installed",
+        }),
+        expect.objectContaining({
+          kind: "skills.enable",
+          skillId,
+          status: "enabled",
+        }),
+        expect.objectContaining({
+          kind: "loop.step",
+          capabilityId: "skills.invoke",
+          status: "executed",
+        }),
+      ]),
+    );
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("rolls back an installed package through the shared skill management path", async () => {
     const storageArea = createStorageAreaHarness();
     const skillId = "skill.cutover.rollback";
