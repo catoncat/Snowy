@@ -47,6 +47,15 @@ Current delivery state as of this packet refresh:
 - GitHub PR CI: passing
 - remaining boundary: external release acceptance / old-mainline switch decision
 
+## External Acceptance Decision
+
+- accepted_at: 2026-05-27T01:08:27Z
+- accepted_by: human merge of PR #2
+- merged_pr: https://github.com/catoncat/Snowy/pull/2
+- merge_commit: `89034b63b5be03fd2965af3e44a41e6eb6c7be17`
+- decision: accept the repo-side Level 2 evidence pack as the release / old-mainline cutover basis
+- remaining_boundary: old-mainline switch / release execution still requires its own explicit execution step
+
 Do not interpret an empty queue after this point as permission to create more default implementation slices. If the status gate stays green, continue through review, acceptance, and explicit release/cutover decision handling. If the gate fails, fix the concrete delivery blocker it reports before reopening product scope.
 
 ## Repo-Side Evidence Summary
