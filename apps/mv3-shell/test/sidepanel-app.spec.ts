@@ -151,6 +151,15 @@ function textContent(node: MemoryNode | null): string {
   return `${node.text}${node.children.map((child) => textContent(child)).join("")}`;
 }
 
+function expectIconOnlyButton(node: MemoryNode | null, visibleLabels: string[]) {
+  expect(node).not.toBeNull();
+  expect(findFirst(node as MemoryNode, (child) => child.type === "svg")).not.toBeNull();
+  const text = textContent(node);
+  for (const label of visibleLabels) {
+    expect(text).not.toContain(label);
+  }
+}
+
 describe("sidepanel chat transcript component", () => {
   it("renders assistant markdown and keeps plain fallback in transcript html", async () => {
     const items: ChatItem[] = [
@@ -1234,6 +1243,82 @@ describe("sidepanel chat transcript component", () => {
     (submitButton?.props.onClick as () => void)();
 
     expect(editSubmitted).toEqual([{ id: "user-1", text: "编辑后的问题" }]);
+  });
+
+  it("inherits old-product icon-only message action buttons", () => {
+    const items: ChatItem[] = [
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "请总结当前页面",
+        state: "complete",
+      },
+      {
+        id: "assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "页面要点已经整理。",
+        state: "complete",
+      },
+    ];
+
+    const idleTree = mountInMemory({
+      loading: false,
+      items,
+      copiedMessageId: "assistant-1",
+    });
+
+    expectIconOnlyButton(
+      findFirst(
+        idleTree,
+        (node) => node.type === "button" && node.props["aria-label"] === "已复制",
+      ),
+      ["已复制", "复制"],
+    );
+    expectIconOnlyButton(
+      findFirst(
+        idleTree,
+        (node) => node.type === "button" && node.props["aria-label"] === "重新回答",
+      ),
+      ["重试中", "重答"],
+    );
+    expectIconOnlyButton(
+      findFirst(
+        idleTree,
+        (node) => node.type === "button" && node.props["aria-label"] === "在新对话中分叉",
+      ),
+      ["分叉中", "分叉"],
+    );
+    expectIconOnlyButton(
+      findFirst(
+        idleTree,
+        (node) => node.type === "button" && node.props["aria-label"] === "编辑并重跑",
+      ),
+      ["编辑"],
+    );
+
+    const editingTree = mountInMemory({
+      loading: false,
+      items,
+      editingMessageId: "user-1",
+      editDraft: "编辑后的问题",
+    });
+
+    expectIconOnlyButton(
+      findFirst(
+        editingTree,
+        (node) => node.type === "button" && node.props["aria-label"] === "取消编辑",
+      ),
+      ["取消"],
+    );
+    expectIconOnlyButton(
+      findFirst(
+        editingTree,
+        (node) => node.type === "button" && node.props["aria-label"] === "提交编辑并重跑",
+      ),
+      ["提交中", "提交"],
+    );
   });
 
   it("exports conversation markdown like the old product without tool traces", () => {

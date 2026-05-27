@@ -440,6 +440,51 @@ function renderSystemMessageArticle(
   );
 }
 
+type MessageActionIconName = "check" | "copy" | "fork" | "loader" | "pencil" | "retry" | "x";
+
+function renderMessageActionIcon(name: MessageActionIconName, className = "") {
+  const sharedProps = {
+    class: ["h-3.5 w-3.5", className].filter(Boolean).join(" "),
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    "stroke-width": "2",
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round",
+    "aria-hidden": "true",
+  };
+  const paths = {
+    check: [h("path", { d: "M20 6 9 17l-5-5" })],
+    copy: [
+      h("rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2" }),
+      h("path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }),
+    ],
+    fork: [
+      h("line", { x1: "6", x2: "6", y1: "3", y2: "15" }),
+      h("circle", { cx: "18", cy: "6", r: "3" }),
+      h("circle", { cx: "6", cy: "18", r: "3" }),
+      h("path", { d: "M18 9a9 9 0 0 1-9 9" }),
+    ],
+    loader: [h("path", { d: "M21 12a9 9 0 1 1-6.219-8.56" })],
+    pencil: [
+      h("path", {
+        d: "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z",
+      }),
+      h("path", { d: "m15 5 4 4" }),
+    ],
+    retry: [
+      h("path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" }),
+      h("path", { d: "M3 3v5h5" }),
+    ],
+    x: [h("path", { d: "M18 6 6 18" }), h("path", { d: "m6 6 12 12" })],
+  } satisfies Record<MessageActionIconName, ReturnType<typeof h>[]>;
+
+  return h("svg", sharedProps, paths[name]);
+}
+
+const messageActionButtonClass =
+  "inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500";
+
 function renderMessageArticle(
   item: RenderedMessageItem,
   options: {
@@ -498,8 +543,7 @@ function renderMessageArticle(
                     "button",
                     {
                       type: "button",
-                      class:
-                        "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      class: messageActionButtonClass,
                       "aria-label": "取消编辑",
                       title: "取消编辑",
                       disabled: options.editSubmitting,
@@ -509,14 +553,13 @@ function renderMessageArticle(
                           text: draft,
                         }),
                     },
-                    "取消",
+                    renderMessageActionIcon("x"),
                   ),
                   h(
                     "button",
                     {
                       type: "button",
-                      class:
-                        "rounded-md px-2 py-1 text-[12px] font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      class: messageActionButtonClass,
                       "aria-label": "提交编辑并重跑",
                       title: "提交编辑并重跑",
                       disabled: options.editSubmitting || !draft.trim(),
@@ -526,7 +569,9 @@ function renderMessageArticle(
                           text: draft,
                         }),
                     },
-                    options.editSubmitting ? "提交中" : "提交",
+                    options.editSubmitting
+                      ? renderMessageActionIcon("loader", "animate-spin text-blue-600")
+                      : renderMessageActionIcon("check"),
                   ),
                 ]),
               ],
@@ -544,8 +589,7 @@ function renderMessageArticle(
               "button",
               {
                 type: "button",
-                class:
-                  "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 opacity-0 transition-opacity hover:bg-slate-100 hover:text-slate-950 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                class: `${messageActionButtonClass} opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100`,
                 "aria-label": "编辑并重跑",
                 title: "编辑并重跑",
                 disabled: options.editSubmitting || options.forking || options.retrying,
@@ -555,7 +599,7 @@ function renderMessageArticle(
                     text: item.text,
                   }),
               },
-              "编辑",
+              renderMessageActionIcon("pencil"),
             )
           : null,
       ],
@@ -614,8 +658,7 @@ function renderMessageArticle(
                 "button",
                 {
                   type: "button",
-                  class:
-                    "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                  class: messageActionButtonClass,
                   "aria-label": options.copied ? "已复制" : "复制内容",
                   title: options.copied ? "已复制" : "复制内容",
                   onClick: () =>
@@ -625,15 +668,16 @@ function renderMessageArticle(
                       text: item.text,
                     }),
                 },
-                options.copied ? "已复制" : "复制",
+                options.copied
+                  ? renderMessageActionIcon("check", "text-green-600")
+                  : renderMessageActionIcon("copy"),
               ),
               options.retryable
                 ? h(
                     "button",
                     {
                       type: "button",
-                      class:
-                        "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      class: messageActionButtonClass,
                       "aria-label": "重新回答",
                       title: "重新回答",
                       disabled: options.retrying || options.forking,
@@ -642,7 +686,10 @@ function renderMessageArticle(
                           id: item.id,
                         }),
                     },
-                    options.retrying ? "重试中" : "重答",
+                    renderMessageActionIcon(
+                      "retry",
+                      options.retrying ? "animate-spin text-blue-600" : "",
+                    ),
                   )
                 : null,
               options.forkable
@@ -650,8 +697,7 @@ function renderMessageArticle(
                     "button",
                     {
                       type: "button",
-                      class:
-                        "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      class: messageActionButtonClass,
                       "aria-label": "在新对话中分叉",
                       title: "在新对话中分叉",
                       disabled: options.retrying || options.forking,
@@ -660,7 +706,10 @@ function renderMessageArticle(
                           id: item.id,
                         }),
                     },
-                    options.forking ? "分叉中" : "分叉",
+                    renderMessageActionIcon(
+                      "fork",
+                      options.forking ? "animate-pulse text-blue-600" : "",
+                    ),
                   )
                 : null,
             ],
