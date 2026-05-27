@@ -1264,6 +1264,26 @@ function toSessionMessageEntry(entry) {
   };
 }
 
+function toSessionInfoEntry(entry) {
+  if (
+    !entry ||
+    entry.type !== "session_info" ||
+    !entry.payload ||
+    typeof entry.payload !== "object"
+  ) {
+    return null;
+  }
+  const payload = entry.payload;
+  if (typeof payload.key !== "string") {
+    return null;
+  }
+  return {
+    timestamp: String(entry.timestamp ?? ""),
+    key: payload.key,
+    value: payload.value,
+  };
+}
+
 function trimSessionPreview(text) {
   const normalized = String(text ?? "")
     .replace(/\s+/g, " ")
@@ -1274,7 +1294,32 @@ function trimSessionPreview(text) {
   return normalized.length > 96 ? `${normalized.slice(0, 93)}...` : normalized;
 }
 
-function deriveSessionTitle(header, messages) {
+function normalizeSessionTitleInput(value) {
+  const normalized = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
+}
+
+function extractSessionInfoTitle(entries) {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const info = toSessionInfoEntry(entries[index]);
+    if (info?.key !== "title") {
+      continue;
+    }
+    const title = normalizeSessionTitleInput(info.value);
+    if (title) {
+      return title;
+    }
+  }
+  return "";
+}
+
+function deriveSessionTitle(header, messages, sessionInfoTitle = "") {
+  const customTitle = normalizeSessionTitleInput(sessionInfoTitle);
+  if (customTitle) {
+    return customTitle;
+  }
   const explicitTitle = String(header?.title ?? "").trim();
   if (
     explicitTitle &&
@@ -1291,10 +1336,14 @@ function deriveSessionTitle(header, messages) {
 function toChatSessionSummary(header, entries, activeSessionId) {
   const messages = entries.map((entry) => toSessionMessageEntry(entry)).filter(Boolean);
   const lastMessage = [...messages].reverse().find((message) => message.text.trim()) ?? null;
-  const updatedAt = String(lastMessage?.timestamp || header?.createdAt || "");
+  const sessionInfoEntries = entries.map((entry) => toSessionInfoEntry(entry)).filter(Boolean);
+  const lastInfo = sessionInfoEntries[sessionInfoEntries.length - 1] ?? null;
+  const updatedAt = String(
+    lastInfo?.timestamp || lastMessage?.timestamp || header?.createdAt || "",
+  );
   return {
     id: header.id,
-    title: deriveSessionTitle(header, messages),
+    title: deriveSessionTitle(header, messages, extractSessionInfoTitle(entries)),
     createdAt: header.createdAt,
     updatedAt,
     messageCount: messages.length,
@@ -3214,6 +3263,36 @@ export function createBackgroundRuntimeServices({
     };
   }
 
+  async function updateChatSessionTitle({ sessionId, title } = {}) {
+    const id = typeof sessionId === "string" ? sessionId.trim() : "";
+    const normalizedTitle = normalizeSessionTitleInput(title);
+    if (!id) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        "runtime.chat.session.update_title requires sessionId",
+      );
+    }
+    if (!normalizedTitle) {
+      throw new CapabilityError("E_BAD_INPUT", "runtime.chat.session.update_title requires title");
+    }
+
+    const [{ kernel }, session] = await Promise.all([ensureServices(), ensureSession()]);
+    const header = (await kernel.listSessions()).find((item) => item.id === id);
+    if (!header) {
+      throw new CapabilityError("E_NOT_FOUND", `Session not found: ${id}`);
+    }
+
+    await kernel.appendEntry(id, "session_info", {
+      key: "title",
+      value: normalizedTitle,
+    });
+
+    const entries = await kernel.sessions.getEntries(id);
+    return {
+      item: toChatSessionSummary(header, entries, session.id),
+    };
+  }
+
   async function emitChatRunState(sessionId, status) {
     chatRunStatus = normalizeChatRunStatus(status);
     await emitRuntimeChatEvent(chromeApi, {
@@ -3690,6 +3769,7 @@ export function createBackgroundRuntimeServices({
     selectChatSession,
     sendChatPrompt,
     stopChatRun,
+    updateChatSessionTitle,
     updateLlmConfig,
   };
 }

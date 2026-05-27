@@ -112,6 +112,8 @@ const sessionsLoading = ref(false);
 const sessionsError = ref<string | null>(null);
 const sessionSearch = ref("");
 const pendingDeleteSessionId = ref("");
+const renamingSessionId = ref("");
+const sessionRenameDraft = ref("");
 let pendingDeleteTimer: ReturnType<typeof setTimeout> | null = null;
 
 const managementState = ref<ManagementState>(createInitialManagementState());
@@ -303,6 +305,7 @@ function selectPane(pane: SidepanelPane) {
 function closePanelOverlay() {
   activePane.value = "chat";
   moreMenuOpen.value = false;
+  cancelSessionRename();
 }
 
 function formatSessionDate(value: string | undefined): string {
@@ -727,6 +730,42 @@ async function deleteChatSession(sessionId: string) {
     sessionsError.value = error instanceof Error ? error.message : String(error);
   } finally {
     loading.value = false;
+  }
+}
+
+function startSessionRename(session: ChatSessionSummary) {
+  pendingDeleteSessionId.value = "";
+  renamingSessionId.value = session.id;
+  sessionRenameDraft.value = session.title || "新对话";
+}
+
+function cancelSessionRename() {
+  renamingSessionId.value = "";
+  sessionRenameDraft.value = "";
+}
+
+async function saveSessionRename(sessionId: string) {
+  const title = sessionRenameDraft.value.trim();
+  if (!title) {
+    sessionsError.value = "会话标题不能为空。";
+    return;
+  }
+  try {
+    const payload = await callRuntime<{ item: ChatSessionSummary }>(
+      "runtime.chat.session.update_title",
+      {
+        sessionId,
+        title,
+      },
+    );
+    const updated = payload.item;
+    chatSessions.value = chatSessions.value.map((session) =>
+      session.id === updated.id ? { ...session, ...updated } : session,
+    );
+    sessionsError.value = null;
+    cancelSessionRename();
+  } catch (error) {
+    sessionsError.value = error instanceof Error ? error.message : String(error);
   }
 }
 
@@ -1456,20 +1495,67 @@ onUnmounted(() => {
           :class="session.id === chatState.sessionId ? 'border-slate-300 bg-slate-50 shadow-sm' : 'border-transparent hover:bg-slate-50'"
         >
           <button
+            v-if="renamingSessionId !== session.id"
             type="button"
-            class="flex min-w-0 flex-1 items-start gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            class="flex min-w-0 flex-1 items-start gap-3 pr-16 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             :aria-current="session.id === chatState.sessionId ? 'true' : 'false'"
             :aria-label="`选择会话: ${session.title || '新对话'}`"
             @click="selectChatSession(session.id)"
           >
             <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-[13px] text-slate-500">□</span>
-            <span class="min-w-0 flex-1 pr-10">
+            <span class="min-w-0 flex-1">
               <span class="block truncate text-[14px] font-semibold text-slate-950">{{ session.title || "新对话" }}</span>
               <span class="mt-1 block truncate text-[12px] text-slate-500">{{ session.preview || "暂无消息" }}</span>
               <span class="mt-1.5 block text-[11px] text-slate-400">{{ formatSessionDate(session.updatedAt) }} · {{ session.messageCount ?? 0 }} messages</span>
             </span>
           </button>
+          <div v-else class="flex min-w-0 flex-1 items-start gap-3 pr-20">
+            <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-[13px] text-slate-500">□</span>
+            <span class="min-w-0 flex-1">
+              <input
+                v-model="sessionRenameDraft"
+                type="text"
+                class="w-full min-w-0 rounded-md border border-blue-300 bg-white px-2 py-1 text-[14px] font-semibold text-slate-950 outline-none focus:ring-2 focus:ring-blue-100"
+                aria-label="编辑会话标题"
+                @keydown.enter.stop.prevent="saveSessionRename(session.id)"
+                @keydown.esc.stop.prevent="cancelSessionRename"
+                @click.stop
+              />
+              <span class="mt-1.5 block text-[11px] text-slate-400">{{ formatSessionDate(session.updatedAt) }} · {{ session.messageCount ?? 0 }} messages</span>
+            </span>
+          </div>
+          <div
+            v-if="renamingSessionId === session.id"
+            class="absolute right-3 top-1/2 flex -translate-y-1/2 gap-1"
+          >
+            <button
+              type="button"
+              class="grid h-8 w-8 place-items-center rounded-lg border border-blue-200 bg-blue-50 text-[13px] font-bold text-blue-700"
+              :aria-label="`保存会话标题: ${session.title || '新对话'}`"
+              @click.stop="saveSessionRename(session.id)"
+            >
+              ✓
+            </button>
+            <button
+              type="button"
+              class="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-[13px] text-slate-500 hover:text-slate-900"
+              aria-label="取消重命名"
+              @click.stop="cancelSessionRename"
+            >
+              ×
+            </button>
+          </div>
           <button
+            v-if="renamingSessionId !== session.id"
+            type="button"
+            class="absolute right-12 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg border border-slate-200 bg-white text-[13px] text-slate-500 opacity-0 transition-opacity hover:text-blue-700 group-hover:opacity-100 focus:opacity-100"
+            :aria-label="`重命名会话: ${session.title || '新对话'}`"
+            @click.stop="startSessionRename(session)"
+          >
+            ✎
+          </button>
+          <button
+            v-if="renamingSessionId !== session.id"
             type="button"
             class="absolute right-3 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg border text-[14px] opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
             :class="pendingDeleteSessionId === session.id ? 'border-rose-300 bg-rose-50 text-rose-600 opacity-100' : 'border-slate-200 bg-white text-slate-500 hover:text-rose-600'"

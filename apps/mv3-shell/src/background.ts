@@ -2988,6 +2988,13 @@ export function createBackgroundRunnerBridge({
             sessionId: message.sessionId,
           }),
         );
+      case "runtime.chat.session.update_title":
+        return routeRuntimeService(() =>
+          getRuntimeServices().updateChatSessionTitle({
+            sessionId: message.sessionId,
+            title: message.title,
+          }),
+        );
       case "runtime.chat.send":
         return routeRuntimeService(() =>
           getRuntimeServices().sendChatPrompt({

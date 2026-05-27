@@ -197,8 +197,12 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain('"runtime.chat.session.create"');
     expect(source).toContain('"runtime.chat.session.select"');
     expect(source).toContain('"runtime.chat.session.delete"');
+    expect(source).toContain('"runtime.chat.session.update_title"');
     expect(source).toContain("chatSessions");
     expect(source).toContain("sessionSearch");
+    expect(source).toContain("renamingSessionId");
+    expect(source).toContain("sessionRenameDraft");
+    expect(source).toContain("saveSessionRename");
   });
 
   it("keeps old-product composer behaviors wired to real runtime input", () => {

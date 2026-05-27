@@ -341,6 +341,32 @@ describe("mv3-shell runtime chat bridge", () => {
     expect(userMessages[0]?.text).toBe("Selected skills: page.summary");
   });
 
+  it("renames chat sessions through persisted session metadata", async () => {
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+    });
+
+    const bootstrap = await services.bootstrapChat();
+    expect(bootstrap.sessionId).toBeTypeOf("string");
+
+    const renamed = await services.updateChatSessionTitle({
+      sessionId: bootstrap.sessionId,
+      title: "产品验收清单",
+    });
+
+    expect(renamed.item).toMatchObject({
+      id: bootstrap.sessionId,
+      title: "产品验收清单",
+      active: true,
+    });
+
+    const sessions = await services.listChatSessions();
+    expect(
+      sessions.items.find((item: { id: string; title?: string }) => item.id === bootstrap.sessionId)
+        ?.title,
+    ).toBe("产品验收清单");
+  });
+
   it("routes runtime.chat.* messages through runtime services", async () => {
     const runtimeServices = {
       bootstrapChat: vi.fn(async () => ({
@@ -361,6 +387,9 @@ describe("mv3-shell runtime chat bridge", () => {
         sessionId,
         messages: [],
         runState: { status: "idle" },
+      })),
+      updateChatSessionTitle: vi.fn(async ({ sessionId, title }) => ({
+        item: { id: sessionId, title },
       })),
       deleteChatSession: vi.fn(async ({ sessionId }) => ({
         deletedSessionId: sessionId,
@@ -417,6 +446,22 @@ describe("mv3-shell runtime chat bridge", () => {
     ).resolves.toMatchObject({
       ok: true,
       data: { deletedSessionId: "s-2", sessionId: "s-1" },
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.chat.session.update_title",
+        sessionId: "s-1",
+        title: "重命名后的会话",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { item: { id: "s-1", title: "重命名后的会话" } },
+    });
+    expect(runtimeServices.updateChatSessionTitle).toHaveBeenCalledWith({
+      sessionId: "s-1",
+      title: "重命名后的会话",
     });
 
     await expect(
