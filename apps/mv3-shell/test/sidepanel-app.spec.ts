@@ -182,7 +182,7 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("会话历史");
     expect(source).toContain("模型设置");
     expect(source).toContain("技能管理");
-    expect(source).toContain("调试面板");
+    expect(source).toContain("系统设置");
     expect(source).not.toContain("Control Plane");
     expect(source).not.toContain("Chat Shell");
     expect(source).not.toContain("Shared control plane + chat shell");
@@ -233,9 +233,10 @@ describe("sidepanel chat transcript component", () => {
   it("surfaces pending interventions through shared management actions", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
-    expect(source).toContain("Pending interventions");
-    expect(source).toContain("Approve");
-    expect(source).toContain("Reject");
+    expect(source).toContain("人工接管");
+    expect(source).toContain("待处理请求");
+    expect(source).toContain("恢复运行");
+    expect(source).toContain("拒绝");
     expect(source).toContain('runManagementAction("intervention.resolve"');
     expect(source).toContain('runManagementAction("intervention.cancel"');
     expect(source).toContain("listPendingInterventions");
@@ -261,6 +262,29 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("skills.uninstall");
     expect(source).toContain("skills.rollback");
     expect(source).toContain("createSkillPackageSetupPlan");
+  });
+
+  it("keeps system settings shaped like the old product while using real runtime surfaces", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("系统设置");
+    expect(source).toContain("运行策略");
+    expect(source).toContain("人工接管");
+    expect(source).toContain("桥接连接");
+    expect(source).toContain("运行诊断");
+    expect(source).toContain("捕获诊断");
+    expect(source).toContain("清除错误");
+    expect(source).toContain("恢复运行");
+    expect(source).toContain("设为默认");
+    expect(source).toContain("runtimeStatusLabel");
+    expect(source).toContain("hostStatusLabel");
+    expect(source).toContain('runManagementAction("runtime.capture_diagnostics"');
+    expect(source).toContain('runManagementAction("runtime.clear_error"');
+    expect(source).toContain("submitHostAction('hosts.connect'");
+    expect(source).toContain("submitHostAction('hosts.disconnect'");
+    expect(source).toContain("submitHostAction('hosts.set_default'");
+    expect(source).not.toContain("微信通道");
+    expect(source).not.toContain("导出备份");
   });
 
   it("exposes complete provider configuration fields without echoing stored API keys", () => {

@@ -1357,6 +1357,49 @@ function confirmSkillUninstall(skill: SkillCatalogItem) {
   submitSkillAction("skills.uninstall", skill.skillId);
 }
 
+function runtimeStatusLabel(status: string | null | undefined): string {
+  if (status === "healthy") {
+    return "运行正常";
+  }
+  if (status === "degraded") {
+    return "需要处理";
+  }
+  if (status === "empty") {
+    return "未就绪";
+  }
+  return "未知状态";
+}
+
+function runtimeStatusClass(status: string | null | undefined): string {
+  if (status === "healthy") {
+    return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+  }
+  if (status === "degraded") {
+    return "bg-amber-50 text-amber-800 ring-1 ring-amber-200";
+  }
+  return "bg-slate-100 text-slate-500 ring-1 ring-slate-200";
+}
+
+function hostStatusLabel(host: { connected?: boolean; state?: string }): string {
+  if (host.connected) {
+    return "已连接";
+  }
+  if (host.state === "error") {
+    return "连接异常";
+  }
+  return "未连接";
+}
+
+function hostStatusClass(host: { connected?: boolean; state?: string }): string {
+  if (host.connected) {
+    return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+  }
+  if (host.state === "error") {
+    return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
+  }
+  return "bg-slate-100 text-slate-500 ring-1 ring-slate-200";
+}
+
 function selectSkill(skillId: string) {
   skillIdDraft.value = skillId;
 }
@@ -1535,7 +1578,7 @@ onUnmounted(() => {
                 技能管理
               </button>
               <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('runtime')">
-                调试面板
+                系统设置
               </button>
             </div>
           </div>
@@ -2300,78 +2343,122 @@ onUnmounted(() => {
       </footer>
     </section>
 
-    <section v-if="activePane === 'runtime'" class="absolute inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="调试面板" @keydown.esc="closePanelOverlay">
+    <section v-if="activePane === 'runtime'" class="absolute inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="系统设置" @keydown.esc="closePanelOverlay">
       <header class="flex h-12 shrink-0 items-center border-b border-slate-200 px-2">
         <button type="button" class="grid h-9 w-9 place-items-center rounded-sm text-[20px] text-slate-600 hover:bg-slate-100" aria-label="返回" @click="closePanelOverlay">‹</button>
-        <h2 class="ml-2 text-[14px] font-bold tracking-normal">调试面板</h2>
+        <h2 class="ml-2 text-[14px] font-bold tracking-normal">系统设置</h2>
       </header>
       <main class="min-h-0 flex-1 overflow-y-auto p-4 sidepanel-scrollbar">
-        <section v-if="managementLoading" class="rounded-md border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">正在加载 runtime...</section>
-        <section v-else class="space-y-3">
+        <section v-if="managementLoading" class="rounded-md border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">正在加载系统设置...</section>
+        <section v-else class="space-y-8">
           <div v-if="managementError" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">{{ managementError }}</div>
           <div v-if="managementNotice" class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700">{{ managementNotice }}</div>
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <h3 class="text-[16px] font-semibold tracking-normal">Runtime</h3>
-              <p class="text-[12px] text-slate-500">{{ runtimeSummary?.status ?? 'empty' }} · {{ runtimeSummary?.mode ?? 'active-tab-only' }}</p>
+
+          <section class="space-y-4">
+            <div class="flex items-center gap-2 text-slate-500 opacity-70">
+              <span class="text-[13px]" aria-hidden="true">●</span>
+              <h3 class="text-[10px] font-bold uppercase tracking-normal">运行策略</h3>
             </div>
-            <div class="flex gap-2">
-              <button type="button" class="rounded-sm border border-slate-300 px-2.5 py-1.5 text-[12px] font-medium text-slate-700 disabled:opacity-50" :disabled="managementBusy" @click="captureDiagnostics">Capture diagnostics</button>
-              <button type="button" class="rounded-sm border border-slate-300 px-2.5 py-1.5 text-[12px] font-medium text-slate-700 disabled:opacity-50" :disabled="managementBusy || !runtimeSummary?.lastError" @click="clearRuntimeError">Clear error</button>
-            </div>
-          </div>
-          <div class="divide-y divide-slate-200 rounded-sm border border-slate-200">
-            <div class="px-3 py-3 text-[13px]">
-              <p class="font-medium">Active tab</p>
-              <p class="mt-1 break-all text-slate-600">{{ runtimeSummary?.activeTab?.title ?? 'No active tab' }}</p>
-              <p class="break-all text-[12px] text-slate-500">{{ runtimeSummary?.activeTab?.url ?? 'Unavailable' }}</p>
-            </div>
-            <div class="px-3 py-3 text-[13px]">
-              <p class="font-medium">Session</p>
-              <p class="mt-1 text-slate-600">{{ runtimeSummary?.sessionId ?? 'none' }} · loop {{ runtimeSummary?.loopState ?? 'idle' }}</p>
-            </div>
-            <div class="px-3 py-3 text-[13px]">
-              <p class="font-medium">Last error</p>
-              <p class="mt-1 break-all text-slate-600">{{ runtimeSummary?.lastError?.code ?? 'none' }}<span v-if="runtimeSummary?.lastError"> · {{ runtimeSummary.lastError.message }}</span></p>
-            </div>
-          </div>
-          <section class="rounded-sm border border-slate-200 px-3 py-3">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <h3 class="text-[13px] font-semibold">Pending interventions</h3>
-                <p class="text-[12px] text-slate-500">{{ pendingInterventions.length }} waiting</p>
+            <div class="space-y-3 rounded-sm border border-slate-200 bg-slate-50/50 px-3 py-3">
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0 space-y-0.5">
+                  <p class="text-[13px] font-semibold text-slate-950">运行状态</p>
+                  <p class="truncate text-[11px] text-slate-500">{{ runtimeSummary?.mode ?? 'active-tab-only' }}</p>
+                </div>
+                <span class="shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold" :class="runtimeStatusClass(runtimeSummary?.status)">
+                  {{ runtimeStatusLabel(runtimeSummary?.status) }}
+                </span>
               </div>
-              <span class="rounded-full px-2 py-1 text-[11px] font-medium" :class="pendingInterventions.length > 0 ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'">
-                {{ pendingInterventions.length > 0 ? 'attention' : 'idle' }}
-              </span>
-            </div>
-            <div v-if="pendingInterventions.length === 0" class="mt-3 rounded-md border border-dashed border-slate-200 px-3 py-3 text-[13px] text-slate-500">No pending intervention requests.</div>
-            <article v-for="intervention in pendingInterventions" v-else :key="intervention.id" class="mt-3 rounded-sm border border-slate-200 bg-slate-50 px-3 py-3">
-              <p class="text-[13px] font-semibold text-slate-950">{{ intervention.title }}</p>
-              <p class="mt-1 text-[12px] text-slate-500">{{ intervention.kind }} · {{ intervention.trigger }} · {{ intervention.requestedAt }}</p>
-              <p class="mt-3 text-[13px] leading-5 text-slate-700">{{ intervention.message }}</p>
-              <div class="mt-3 flex flex-wrap gap-2">
-                <button type="button" class="rounded-sm bg-slate-950 px-3 py-2 text-[12px] font-medium text-white disabled:opacity-50" :disabled="managementBusy" @click="approveIntervention(intervention.id)">Approve</button>
-                <button type="button" class="rounded-sm border border-slate-300 px-3 py-2 text-[12px] font-medium text-slate-700 disabled:opacity-50" :disabled="managementBusy" @click="rejectIntervention(intervention.id)">Reject</button>
+              <div class="divide-y divide-slate-200 rounded-sm border border-slate-200 bg-white">
+                <div class="px-3 py-3 text-[13px]">
+                  <p class="font-semibold text-slate-950">当前标签页</p>
+                  <p class="mt-1 break-all text-slate-600">{{ runtimeSummary?.activeTab?.title ?? '未连接当前标签页' }}</p>
+                  <p class="break-all text-[12px] text-slate-500">{{ runtimeSummary?.activeTab?.url ?? '不可用' }}</p>
+                </div>
+                <div class="px-3 py-3 text-[13px]">
+                  <p class="font-semibold text-slate-950">当前会话</p>
+                  <p class="mt-1 text-slate-600">{{ runtimeSummary?.sessionId ?? 'none' }} · loop {{ runtimeSummary?.loopState ?? 'idle' }}</p>
+                </div>
+                <div class="px-3 py-3 text-[13px]">
+                  <p class="font-semibold text-slate-950">最近错误</p>
+                  <p class="mt-1 break-all text-slate-600">{{ runtimeSummary?.lastError?.code ?? 'none' }}<span v-if="runtimeSummary?.lastError"> · {{ runtimeSummary.lastError.message }}</span></p>
+                </div>
               </div>
-            </article>
+            </div>
           </section>
-          <section class="rounded-sm border border-slate-200 px-3 py-3">
-            <h3 class="text-[13px] font-semibold">Hosts</h3>
-            <p class="text-[12px] text-slate-500">default {{ hostsSummary?.defaultHostId ?? 'none' }} · connected {{ hostsSummary?.connectedCount ?? 0 }}/{{ hostsSummary?.totalCount ?? 0 }}</p>
-            <article v-for="host in hostItems" :key="host.hostId" class="mt-3 rounded-sm border border-slate-200 px-3 py-3">
-              <p class="text-[13px] font-medium text-slate-950">{{ host.hostId }}</p>
-              <p class="mt-1 text-[12px] text-slate-500">{{ host.kind }} · {{ host.state }} · {{ host.connected ? 'connected' : 'disconnected' }}</p>
-              <div class="mt-3 flex flex-wrap gap-2">
-                <button type="button" class="rounded-sm border border-slate-300 px-2.5 py-1.5 text-[12px] font-medium text-slate-700" :disabled="managementBusy || host.connected" @click="submitHostAction('hosts.connect', host.hostId)">Connect</button>
-                <button type="button" class="rounded-sm border border-slate-300 px-2.5 py-1.5 text-[12px] font-medium text-slate-700" :disabled="managementBusy || !host.connected" @click="submitHostAction('hosts.disconnect', host.hostId)">Disconnect</button>
-                <button type="button" class="rounded-sm border border-slate-300 px-2.5 py-1.5 text-[12px] font-medium text-slate-700" :disabled="managementBusy || host.isDefault" @click="submitHostAction('hosts.set_default', host.hostId)">Set default</button>
+
+          <section class="space-y-4">
+            <div class="flex items-center gap-2 text-slate-500 opacity-70">
+              <span class="text-[13px]" aria-hidden="true">●</span>
+              <h3 class="text-[10px] font-bold uppercase tracking-normal">人工接管</h3>
+            </div>
+            <div class="rounded-sm border border-slate-200 bg-slate-50/50 px-3 py-3">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="text-[13px] font-semibold text-slate-950">待处理请求</p>
+                  <p class="text-[12px] text-slate-500">{{ pendingInterventions.length }} 个等待处理</p>
+                </div>
+                <span class="rounded-full px-2 py-1 text-[11px] font-semibold" :class="pendingInterventions.length > 0 ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'">
+                  {{ pendingInterventions.length > 0 ? '需要处理' : '空闲' }}
+                </span>
               </div>
-            </article>
+              <div v-if="pendingInterventions.length === 0" class="mt-3 rounded-md border border-dashed border-slate-200 bg-white px-3 py-3 text-[13px] text-slate-500">当前没有等待人工接管的请求。</div>
+              <article v-for="intervention in pendingInterventions" v-else :key="intervention.id" class="mt-3 rounded-sm border border-slate-200 bg-white px-3 py-3">
+                <p class="text-[13px] font-semibold text-slate-950">{{ intervention.title }}</p>
+                <p class="mt-1 text-[12px] text-slate-500">{{ intervention.kind }} · {{ intervention.trigger }} · {{ intervention.requestedAt }}</p>
+                <p class="mt-3 text-[13px] leading-5 text-slate-700">{{ intervention.message }}</p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button type="button" class="rounded-sm bg-slate-950 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50" :disabled="managementBusy" @click="approveIntervention(intervention.id)">恢复运行</button>
+                  <button type="button" class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 disabled:opacity-50" :disabled="managementBusy" @click="rejectIntervention(intervention.id)">拒绝</button>
+                </div>
+              </article>
+            </div>
           </section>
-          <section v-if="diagnosticsPayload" class="rounded-sm border border-slate-200 px-3 py-3">
-            <h3 class="text-[13px] font-semibold">Last diagnostics</h3>
-            <pre class="mt-3 overflow-x-auto rounded-md bg-slate-950 px-3 py-3 text-[11px] leading-5 text-slate-100"><code>{{ diagnosticsPayload }}</code></pre>
+
+          <section class="space-y-4">
+            <div class="flex items-center gap-2 text-slate-500 opacity-70">
+              <span class="text-[13px]" aria-hidden="true">●</span>
+              <h3 class="text-[10px] font-bold uppercase tracking-normal">桥接连接</h3>
+            </div>
+            <div class="space-y-3 rounded-sm border border-slate-200 bg-slate-50/50 px-3 py-3">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="text-[13px] font-semibold text-slate-950">执行主机</p>
+                  <p class="text-[12px] text-slate-500">默认 {{ hostsSummary?.defaultHostId ?? 'none' }} · 已连接 {{ hostsSummary?.connectedCount ?? 0 }}/{{ hostsSummary?.totalCount ?? 0 }}</p>
+                </div>
+              </div>
+              <div v-if="hostItems.length === 0" class="rounded-md border border-dashed border-slate-200 bg-white px-3 py-3 text-[13px] text-slate-500">当前没有可管理的执行主机。</div>
+              <article v-for="host in hostItems" v-else :key="host.hostId" class="rounded-sm border border-slate-200 bg-white px-3 py-3">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="truncate text-[13px] font-semibold text-slate-950">{{ host.hostId }}</p>
+                    <p class="mt-1 text-[12px] text-slate-500">{{ host.kind }} · {{ host.state }}</p>
+                  </div>
+                  <span class="shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold" :class="hostStatusClass(host)">{{ hostStatusLabel(host) }}</span>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button type="button" class="rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 disabled:opacity-50" :disabled="managementBusy || host.connected" @click="submitHostAction('hosts.connect', host.hostId)">连接</button>
+                  <button type="button" class="rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 disabled:opacity-50" :disabled="managementBusy || !host.connected" @click="submitHostAction('hosts.disconnect', host.hostId)">断开</button>
+                  <button type="button" class="rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 disabled:opacity-50" :disabled="managementBusy || host.isDefault" @click="submitHostAction('hosts.set_default', host.hostId)">设为默认</button>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="space-y-4">
+            <div class="flex items-center gap-2 text-slate-500 opacity-70">
+              <span class="text-[13px]" aria-hidden="true">●</span>
+              <h3 class="text-[10px] font-bold uppercase tracking-normal">运行诊断</h3>
+            </div>
+            <div class="space-y-3 rounded-sm border border-slate-200 bg-slate-50/50 px-3 py-3">
+              <p class="text-[13px] font-semibold text-slate-950">诊断快照</p>
+              <p class="text-[12px] leading-5 text-slate-500">捕获当前 runtime、host、site 和最近错误状态，排查完成后可清除错误状态。</p>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="rounded-sm bg-slate-950 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50" :disabled="managementBusy" @click="captureDiagnostics">捕获诊断</button>
+                <button type="button" class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 disabled:opacity-50" :disabled="managementBusy || !runtimeSummary?.lastError" @click="clearRuntimeError">清除错误</button>
+              </div>
+              <pre v-if="diagnosticsPayload" class="mt-3 max-h-72 overflow-auto rounded-md bg-slate-950 px-3 py-3 text-[11px] leading-5 text-slate-100"><code>{{ diagnosticsPayload }}</code></pre>
+            </div>
           </section>
         </section>
       </main>
