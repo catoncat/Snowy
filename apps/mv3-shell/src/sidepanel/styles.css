@@ -3,6 +3,12 @@
 :root {
   color: #111827;
   background: #ffffff;
+  --bg: #ffffff;
+  --surface: #f8fafc;
+  --text: #111827;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --accent: #2563eb;
   font-family:
     Inter,
     ui-sans-serif,
@@ -23,6 +29,162 @@ body,
 body {
   min-height: 100vh;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.composer-shell {
+  border: 1px solid color-mix(in oklab, var(--border) 88%, transparent);
+  border-radius: 1.45rem;
+  background: color-mix(in oklab, var(--surface) 90%, var(--bg) 10%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.64),
+    0 1px 3px rgba(15, 23, 42, 0.07);
+  transition-property: border-color, box-shadow;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
+}
+
+.composer-shell:focus-within {
+  border-color: color-mix(in oklab, var(--accent) 44%, var(--border) 56%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.68),
+    0 0 0 2px color-mix(in oklab, var(--accent) 18%, transparent),
+    0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.composer-textarea {
+  transition-property: color;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
+}
+
+.composer-textarea::-webkit-scrollbar {
+  display: none;
+}
+
+.composer-action-btn {
+  width: 2.65rem;
+  height: 2.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--border) 84%, transparent);
+  background: color-mix(in oklab, var(--surface) 88%, var(--bg) 12%);
+  color: color-mix(in oklab, var(--text-muted) 80%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 2px 6px rgba(15, 23, 42, 0.12);
+  transition-property: transform, background, border-color, box-shadow, color;
+  transition-duration: 140ms, 180ms, 180ms, 180ms, 180ms;
+  transition-timing-function: ease;
+}
+
+.composer-action-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.composer-action-btn:focus-visible {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.68),
+    0 0 0 2px color-mix(in oklab, var(--accent) 28%, transparent);
+}
+
+.composer-actions-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--surface) 84%, var(--bg) 16%) 0%,
+    color-mix(in oklab, var(--bg) 72%, var(--surface) 28%) 100%
+  );
+  border: 1px solid color-mix(in oklab, var(--border) 74%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.composer-send-btn {
+  color: #ffffff;
+}
+
+.composer-send-btn-ready {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--accent) 82%, #ffffff 18%) 0%,
+    color-mix(in oklab, var(--accent) 96%, #0f172a 4%) 100%
+  );
+  border-color: color-mix(in oklab, var(--accent) 68%, #0f172a 32%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 8px 18px color-mix(in oklab, var(--accent) 24%, transparent);
+}
+
+.composer-send-btn-ready:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 10px 20px color-mix(in oklab, var(--accent) 28%, transparent);
+}
+
+.composer-send-btn-disabled {
+  background: color-mix(in oklab, var(--surface) 90%, var(--bg) 10%);
+  color: color-mix(in oklab, var(--text-muted) 68%, transparent);
+  border-color: color-mix(in oklab, var(--border) 90%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.composer-send-btn:disabled {
+  cursor: not-allowed;
+  transform: none;
+}
+
+.composer-send-btn:disabled:hover {
+  transform: none;
+}
+
+.composer-stop-btn {
+  color: #e11d48;
+  background: color-mix(in oklab, #fff1f2 68%, var(--bg) 32%);
+  border-color: color-mix(in oklab, #fb7185 38%, var(--border) 62%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 6px 14px rgba(15, 23, 42, 0.16);
+}
+
+.composer-stop-btn:hover {
+  transform: translateY(-1px);
+  background: color-mix(in oklab, #ffe4e6 72%, var(--bg) 28%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 8px 16px rgba(15, 23, 42, 0.18);
+}
+
+.shortcut-kbd {
+  display: inline-flex;
+  min-width: 1.3em;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.35em;
+  border: 1px solid color-mix(in oklab, var(--border) 85%, transparent);
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--surface) 92%, var(--bg) 8%);
+  color: color-mix(in oklab, var(--text) 70%, transparent);
+  font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.shortcut-hint-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .sidepanel-rich-text,

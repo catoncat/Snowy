@@ -103,6 +103,8 @@ const composerRef = ref<HTMLTextAreaElement | null>(null);
 const moreMenuOpen = ref(false);
 const conversationNotice = ref<{ type: "success" | "error"; message: string } | null>(null);
 const copiedMessageId = ref("");
+const composerContextExpanded = ref(false);
+const composerHintDismissed = ref(false);
 const selectedTabs = ref<BrowserTabSummary[]>([]);
 const availableTabs = ref<BrowserTabSummary[]>([]);
 const mentionFilter = ref("");
@@ -125,6 +127,8 @@ const sessionRenameDraft = ref("");
 let pendingDeleteTimer: ReturnType<typeof setTimeout> | null = null;
 let conversationNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 let copiedMessageTimer: ReturnType<typeof setTimeout> | null = null;
+
+const COMPOSER_HINT_STORAGE_KEY = "snowy_input_hint_dismissed";
 
 const managementState = ref<ManagementState>(createInitialManagementState());
 const managementLoading = ref(true);
@@ -171,6 +175,10 @@ const hasComposerPayload = computed(
   () => draft.value.trim().length > 0 || selectedTabs.value.length > 0 || selectedSkills.value.length > 0,
 );
 const canSend = computed(() => !loading.value && !sending.value && hasComposerPayload.value);
+const hasSelectedComposerContext = computed(
+  () => selectedTabs.value.length > 0 || selectedSkills.value.length > 0,
+);
+const showComposerHint = computed(() => !composerHintDismissed.value && !isRunning.value);
 const statusTone = computed(() =>
   isRunning.value
     ? "bg-blue-50 text-blue-700 border-blue-200"
@@ -654,6 +662,29 @@ function useSuggestion(text: string) {
   void focusComposer();
 }
 
+function loadComposerHintPreference() {
+  try {
+    composerHintDismissed.value = globalThis.localStorage?.getItem(COMPOSER_HINT_STORAGE_KEY) === "1";
+  } catch {
+    composerHintDismissed.value = false;
+  }
+}
+
+function dismissComposerHint() {
+  composerHintDismissed.value = true;
+  try {
+    globalThis.localStorage?.setItem(COMPOSER_HINT_STORAGE_KEY, "1");
+  } catch {
+    // localStorage can be unavailable in extension test harnesses.
+  }
+}
+
+function collapseComposerContextIfEmpty() {
+  if (selectedTabs.value.length === 0 && selectedSkills.value.length === 0) {
+    composerContextExpanded.value = false;
+  }
+}
+
 async function refreshTabs() {
   if (typeof tabsApi?.query !== "function") {
     availableTabs.value = [];
@@ -688,11 +719,13 @@ function insertComposerToken(token: string) {
 
 function removeSelectedTab(tabId: number) {
   selectedTabs.value = selectedTabs.value.filter((tab) => tab.id !== tabId);
+  collapseComposerContextIfEmpty();
 }
 
 function clearSelectedContext() {
   selectedTabs.value = [];
   selectedSkills.value = [];
+  composerContextExpanded.value = false;
 }
 
 function selectMentionedTab(tab = filteredTabs.value[focusedMentionIndex.value]) {
@@ -788,6 +821,7 @@ function setSkillActionPending(skillId: string, pending: boolean) {
 
 function removeSelectedSkill(skillId: string) {
   selectedSkills.value = selectedSkills.value.filter((skill) => skill.skillId !== skillId);
+  collapseComposerContextIfEmpty();
 }
 
 function addSelectedSkill(skill: SkillCatalogItem) {
@@ -1189,6 +1223,7 @@ async function sendPrompt(mode: ChatSendMode = isRunning.value ? "steer" : "norm
   draft.value = "";
   selectedTabs.value = [];
   selectedSkills.value = [];
+  composerContextExpanded.value = false;
   showMentionList.value = false;
   showSkillList.value = false;
   sending.value = true;
@@ -1633,6 +1668,7 @@ function onComposerKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
+  loadComposerHintPreference();
   runtimeApi?.onMessage?.addListener(onRuntimeMessage);
   void Promise.all([bootstrapChat(), bootstrapManagement()]);
 });
@@ -1812,7 +1848,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <footer class="z-20 shrink-0 bg-white px-3 pb-4 pt-2">
+      <footer class="z-20 shrink-0 bg-white px-3 pb-3 pt-2">
         <div v-if="showSkillList" class="mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl" role="listbox" aria-label="选择 skill">
           <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2">
             <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Skills</span>
@@ -1875,39 +1911,140 @@ onUnmounted(() => {
           </template>
         </div>
 
-        <div class="overflow-hidden rounded-[22px] border border-slate-300 bg-white shadow-sm focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
-          <div v-if="selectedTabs.length > 0 || selectedSkills.length > 0" class="border-b border-slate-100 bg-slate-50/70 px-3 py-2">
-            <div class="flex items-center justify-between gap-2">
-              <div class="min-w-0 text-[11px] font-semibold text-slate-500">
-                已选择 {{ selectedTabs.length + selectedSkills.length }} 个上下文
+        <div class="composer-shell flex flex-col overflow-hidden">
+          <div
+            v-if="hasSelectedComposerContext"
+            class="flex flex-col border-b border-slate-200/70 bg-slate-50/70"
+          >
+            <div class="flex h-9 items-center justify-between gap-2 overflow-hidden px-2.5">
+              <div class="flex min-w-0 items-center gap-2 overflow-hidden">
+                <div
+                  v-if="selectedTabs.length > 0"
+                  class="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200/70 bg-white/70 px-1.5 py-0.5"
+                >
+                  <div class="flex -space-x-1">
+                    <span
+                      v-for="(tab, index) in selectedTabs.slice(0, 2)"
+                      :key="tab.id"
+                      class="grid h-4 w-4 place-items-center overflow-hidden rounded border border-slate-200 bg-white text-[9px] text-slate-500"
+                      :style="{ zIndex: 10 - index }"
+                      aria-hidden="true"
+                    >
+                      <img v-if="tab.favIconUrl" :src="tab.favIconUrl" class="h-full w-full object-contain" alt="" />
+                      <span v-else>□</span>
+                    </span>
+                    <span
+                      v-if="selectedTabs.length > 2"
+                      class="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-slate-200 bg-white px-1 text-[9px] text-slate-500"
+                    >
+                      +{{ selectedTabs.length - 2 }}
+                    </span>
+                  </div>
+                  <span class="max-w-[190px] truncate text-[10px] font-bold text-slate-800">
+                    {{ selectedTabs.length === 1 ? selectedTabs[0].title : `${selectedTabs.length} 个标签页` }}
+                  </span>
+                </div>
+
+                <div
+                  v-if="selectedSkills.length > 0"
+                  class="flex shrink-0 items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-1.5 py-0.5"
+                >
+                  <span class="text-[10px] font-black text-blue-600" aria-hidden="true">/</span>
+                  <span class="max-w-[190px] truncate text-[10px] font-bold text-blue-700">
+                    {{ selectedSkills.length === 1 ? skillDisplayName(selectedSkills[0]) : `${selectedSkills.length} 个技能` }}
+                  </span>
+                </div>
               </div>
-              <button type="button" class="rounded-md px-2 py-1 text-[11px] text-slate-500 hover:bg-white" @click="clearSelectedContext">清除</button>
+
+              <div class="flex shrink-0 items-center gap-0.5">
+                <button
+                  type="button"
+                  class="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-slate-500 hover:bg-white hover:text-slate-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                  :aria-label="composerContextExpanded ? '收起上下文详情' : '管理上下文详情'"
+                  :aria-expanded="composerContextExpanded"
+                  @click="composerContextExpanded = !composerContextExpanded"
+                >
+                  <span>{{ composerContextExpanded ? "收起" : "管理" }}</span>
+                  <span aria-hidden="true">{{ composerContextExpanded ? "⌃" : "⌄" }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="grid h-6 w-6 place-items-center rounded-md text-[13px] text-slate-400 hover:bg-rose-50 hover:text-rose-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500"
+                  aria-label="清除所有上下文"
+                  title="清除所有上下文"
+                  @click="clearSelectedContext"
+                >
+                  ×
+                </button>
+              </div>
             </div>
-            <div class="mt-1.5 flex flex-wrap gap-1.5">
-              <span
-                v-for="skill in selectedSkills"
-                :key="skill.skillId"
-                class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2 py-1 text-[11px] text-indigo-700"
-              >
-                <span class="max-w-[210px] truncate">/{{ skill.skillId }}</span>
-                <button type="button" class="text-indigo-400 hover:text-rose-500" :aria-label="`移除 ${skill.skillId}`" @click="removeSelectedSkill(skill.skillId)">×</button>
-              </span>
-              <span
-                v-for="tab in selectedTabs"
-                :key="tab.id"
-                class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600"
-              >
-                <span class="max-w-[210px] truncate">{{ tab.title }}</span>
-                <button type="button" class="text-slate-400 hover:text-rose-500" :aria-label="`移除 ${tab.title}`" @click="removeSelectedTab(tab.id)">×</button>
-              </span>
+
+            <div v-if="composerContextExpanded" class="space-y-2 px-2.5 pb-2.5" role="list">
+              <div v-if="selectedTabs.length > 0" class="space-y-1">
+                <div class="px-1 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Tabs</div>
+                <div
+                  v-for="tab in selectedTabs"
+                  :key="tab.id"
+                  class="flex h-7 items-center justify-between rounded-md border border-slate-200/80 bg-white/70 px-2 hover:border-slate-300"
+                  role="listitem"
+                >
+                  <div class="flex min-w-0 items-center gap-2">
+                    <img v-if="tab.favIconUrl" :src="tab.favIconUrl" class="h-3 w-3 shrink-0 rounded-sm" alt="" />
+                    <span v-else class="grid h-3 w-3 shrink-0 place-items-center rounded-sm bg-slate-100 text-[8px] text-slate-500" aria-hidden="true">□</span>
+                    <span class="truncate text-[11px] text-slate-700">{{ tab.title }}</span>
+                  </div>
+                  <button type="button" class="grid h-5 w-5 place-items-center rounded-sm text-slate-400 hover:text-rose-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500" :aria-label="`移除 ${tab.title}`" @click="removeSelectedTab(tab.id)">
+                    ×
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="selectedSkills.length > 0" class="space-y-1">
+                <div class="px-1 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Skills</div>
+                <div
+                  v-for="skill in selectedSkills"
+                  :key="skill.skillId"
+                  class="flex h-7 items-center justify-between rounded-md border border-blue-100 bg-blue-50/60 px-2 hover:border-blue-200"
+                  role="listitem"
+                >
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="shrink-0 text-[10px] font-black text-blue-600" aria-hidden="true">/</span>
+                    <span class="truncate text-[11px] font-medium text-blue-700">{{ skillDisplayName(skill) }}</span>
+                  </div>
+                  <button type="button" class="grid h-5 w-5 place-items-center rounded-sm text-blue-400 hover:text-rose-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500" :aria-label="`移除 ${skillDisplayName(skill)}`" @click="removeSelectedSkill(skill.skillId)">
+                    ×
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div v-if="composerQueueItems.length > 0" class="border-b border-slate-100 bg-amber-50/70 px-3 py-2">
-            <div class="text-[11px] font-semibold text-amber-800">运行中已排队</div>
-            <div class="mt-1 space-y-1">
-              <div v-for="item in composerQueueItems" :key="item.id" class="truncate text-[11px] text-amber-800">
-                {{ item.behavior === "followUp" ? "Follow-up" : "Steer" }} · {{ item.text }}
+          <div
+            v-if="isRunning && composerQueueItems.length > 0"
+            class="flex flex-col border-b border-slate-200/70 bg-slate-50/70"
+            role="region"
+            aria-label="排队消息"
+            title="运行中已排队"
+          >
+            <div class="px-4 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500" role="status" aria-live="polite">
+              Queue {{ composerQueueItems.length }} 条
+            </div>
+            <div class="space-y-1.5 px-3 pb-2 pt-1">
+              <div
+                v-for="item in composerQueueItems"
+                :key="item.id"
+                class="flex items-start gap-2 rounded-lg border border-slate-200/80 bg-white/85 px-2.5 py-2"
+                role="listitem"
+                :aria-label="`排队消息：${item.behavior === 'steer' ? 'steer' : 'followUp'}`"
+              >
+                <div class="min-w-0 flex-1">
+                  <div class="text-[10px] font-semibold text-slate-500">
+                    {{ item.behavior === "steer" ? "Steer" : "FollowUp" }}
+                  </div>
+                  <div class="mt-1 whitespace-pre-wrap break-words text-[12px] leading-snug text-slate-700">
+                    {{ item.text }}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1915,27 +2052,42 @@ onUnmounted(() => {
           <textarea
             ref="composerRef"
             v-model="draft"
-            class="max-h-44 min-h-20 w-full resize-none bg-transparent px-4 py-3 text-[15px] leading-6 text-slate-950 outline-none placeholder:text-slate-400"
+            class="composer-textarea max-h-44 min-h-20 w-full resize-none bg-transparent px-4 pb-2 pt-4 text-[15px] leading-6 text-slate-950 outline-none placeholder:text-slate-400"
             :placeholder="isRunning ? '运行中输入可追加：Enter 发送 steer，Alt+Enter 作为 follow-up' : '告诉白雪你想做什么...'"
             :disabled="loading || sending"
             aria-label="消息输入框"
             @keydown="onComposerKeydown"
           />
-          <div class="flex items-center justify-between gap-2 border-t border-slate-200 px-2 py-2">
-            <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-              <span class="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500">前台</span>
-              <button type="button" class="rounded-md px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-100" @click="insertComposerToken('@')">
-                @ tab
+          <div class="flex items-center justify-between px-3 pb-3">
+            <div class="flex min-w-0 items-center gap-1">
+              <button
+                type="button"
+                class="grid h-10 w-10 place-items-center rounded-lg text-[20px] leading-none text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                aria-label="引用标签页"
+                aria-haspopup="listbox"
+                :aria-expanded="showMentionList"
+                title="引用标签页"
+                @click="insertComposerToken('@')"
+              >
+                +
               </button>
-              <button type="button" class="rounded-md px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-100" @click="insertComposerToken('/skill')">
-                / skill
+              <button
+                type="button"
+                class="grid h-10 w-10 place-items-center rounded-lg text-[18px] font-semibold leading-none text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                aria-label="使用技能"
+                aria-haspopup="listbox"
+                :aria-expanded="showSkillList"
+                title="使用技能"
+                @click="insertComposerToken('/skill')"
+              >
+                /
               </button>
             </div>
-            <div class="flex shrink-0 items-center gap-1">
+            <div class="composer-actions-cluster">
               <button
                 v-if="isRunning"
                 type="button"
-                class="grid h-8 w-8 place-items-center rounded-full border border-slate-300 bg-white text-[12px] text-slate-700 hover:bg-slate-50"
+                class="composer-action-btn composer-stop-btn focus-visible:outline-none"
                 aria-label="停止生成"
                 @click="stopRun"
               >
@@ -1943,7 +2095,8 @@ onUnmounted(() => {
               </button>
               <button
                 type="button"
-                class="grid h-8 w-8 place-items-center rounded-full bg-slate-950 text-[14px] text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                class="composer-action-btn composer-send-btn focus-visible:outline-none"
+                :class="canSend ? 'composer-send-btn-ready' : 'composer-send-btn-disabled'"
                 :disabled="!canSend"
                 :aria-label="isRunning ? '追加发送（默认 steer，Alt+Enter 为 follow-up）' : '发送消息'"
                 @click="sendPrompt(isRunning ? 'steer' : 'normal')"
@@ -1953,9 +2106,28 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <div class="mt-1 flex items-center justify-between px-1 text-[10px] text-slate-400">
-          <span>输入 @ 引用标签页 · 输入 / 使用技能</span>
-          <span>{{ isRunning ? "Enter steer · Alt+Enter follow-up" : "Shift+Enter 换行" }}</span>
+        <div
+          v-if="showComposerHint"
+          class="flex items-center justify-between px-4 pb-1 pt-1 text-[10px] text-slate-400"
+          :title="isRunning ? 'Enter steer · Alt+Enter follow-up' : 'Shift+Enter 换行'"
+        >
+          <span class="shortcut-hint-item">
+            <span>输入</span>
+            <kbd class="shortcut-kbd">@</kbd>
+            <span>引用标签页 · 输入</span>
+            <kbd class="shortcut-kbd">/</kbd>
+            <span>使用技能 ·</span>
+            <kbd class="shortcut-kbd">Shift+Enter</kbd>
+            <span>换行</span>
+          </span>
+          <button
+            type="button"
+            class="ml-2 grid h-5 w-5 shrink-0 place-items-center rounded text-[12px] text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+            aria-label="关闭提示"
+            @click="dismissComposerHint"
+          >
+            ×
+          </button>
         </div>
       </footer>
     </main>

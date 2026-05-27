@@ -332,6 +332,34 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain(':disabled="loading || sending"');
   });
 
+  it("inherits the old-product ChatInput shell instead of a debug composer strip", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+    const styles = readFileSync("apps/mv3-shell/src/sidepanel/styles.css", "utf8");
+
+    expect(source).toContain("composerContextExpanded");
+    expect(source).toContain("snowy_input_hint_dismissed");
+    expect(source).toContain(':aria-expanded="composerContextExpanded"');
+    expect(source).toContain('aria-label="排队消息"');
+    expect(source).toContain("Queue {{ composerQueueItems.length }} 条");
+    expect(source).toContain("whitespace-pre-wrap break-words");
+    expect(source).toContain("composer-shell");
+    expect(source).toContain("composer-actions-cluster");
+    expect(source).toContain("composer-action-btn");
+    expect(source).toContain("composer-send-btn-ready");
+    expect(source).toContain("composer-stop-btn");
+    expect(source).toContain("shortcut-kbd");
+    expect(source).toContain("关闭提示");
+    expect(source).not.toContain("前台</span>");
+    expect(source).not.toContain('aria-label="添加附件或引用标签页"');
+
+    expect(styles).toContain(".composer-shell");
+    expect(styles).toContain(".composer-actions-cluster");
+    expect(styles).toContain(".composer-send-btn-ready");
+    expect(styles).toContain(".composer-stop-btn");
+    expect(styles).toContain(".shortcut-kbd");
+    expect(styles).not.toContain("transition: all");
+  });
+
   it("surfaces pending interventions through shared management actions", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
