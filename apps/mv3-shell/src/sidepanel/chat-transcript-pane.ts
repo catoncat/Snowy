@@ -5,7 +5,7 @@ import {
   renderMessageRichText,
   renderToolTrace,
 } from "./renderers";
-import type { ChatItem, ChatMessageItem, ChatToolItem } from "./state";
+import type { ChatItem, ChatMessageContentBlock, ChatMessageItem, ChatToolItem } from "./state";
 
 type RenderedMessageItem = ChatMessageItem & {
   rendered: RichTextRenderResult;
@@ -16,6 +16,25 @@ type RenderedToolItem = ChatToolItem & {
 };
 
 type RenderedChatItem = RenderedMessageItem | RenderedToolItem;
+
+type RenderedAssistantTextBlock = {
+  key: string;
+  type: "text";
+  text: string;
+  rendered: RichTextRenderResult;
+};
+
+type RenderedAssistantToolCallBlock = {
+  key: string;
+  type: "toolCall";
+  id: string;
+  name: string;
+  arguments: string;
+  resultContent: string;
+  rendered: ToolTraceRenderResult | null;
+};
+
+type RenderedAssistantBlock = RenderedAssistantTextBlock | RenderedAssistantToolCallBlock;
 
 export interface ChatMessageCopyPayload {
   id: string;
@@ -80,7 +99,7 @@ export function isCopyableAssistantMessage(items: ChatItem[], id: string): boole
     if (candidate.state === "streaming") {
       continue;
     }
-    if (!candidate.text.trim()) {
+    if (!assistantMessageText(candidate).trim()) {
       continue;
     }
     return candidate.id === id;
@@ -97,21 +116,88 @@ export function collectAssistantTurnText(items: ChatItem[], id: string): string 
   return items
     .slice(bounds.start, bounds.end + 1)
     .filter((item): item is ChatMessageItem => item.kind === "message" && item.role === "assistant")
-    .map((item) => item.text.trim())
+    .map((item) => assistantMessageText(item).trim())
     .filter(Boolean)
     .join("\n\n");
 }
 
-function renderMessageContent(
-  item: RenderedMessageItem,
+function assistantMessageText(item: ChatMessageItem): string {
+  if (Array.isArray(item.contentBlocks) && item.contentBlocks.length > 0) {
+    return item.contentBlocks
+      .filter((block): block is Extract<ChatMessageContentBlock, { type: "text" }> => {
+        return block.type === "text";
+      })
+      .map((block) => block.text)
+      .join("");
+  }
+  return item.text;
+}
+
+function normalizeMarkdownSegment(text: string): string {
+  const value = String(text || "");
+  if (!value.trim()) {
+    return "";
+  }
+  return `${value.replace(/\s+$/u, "")}\n\n`;
+}
+
+function renderableAssistantBlocks(item: ChatMessageItem): RenderedAssistantBlock[] | null {
+  if (!Array.isArray(item.contentBlocks) || item.contentBlocks.length === 0) {
+    return null;
+  }
+
+  const blocks: RenderedAssistantBlock[] = [];
+  let textIndex = 0;
+
+  for (const block of item.contentBlocks) {
+    if (block.type === "text") {
+      const text = normalizeMarkdownSegment(block.text);
+      if (!text) {
+        continue;
+      }
+      const previous = blocks[blocks.length - 1];
+      if (previous?.type === "text") {
+        previous.text = `${previous.text}${text}`;
+        previous.rendered = renderMessageRichText(previous.text);
+      } else {
+        blocks.push({
+          key: `text-${textIndex}`,
+          type: "text",
+          text,
+          rendered: renderMessageRichText(text),
+        });
+        textIndex += 1;
+      }
+      continue;
+    }
+
+    const resultContent = item.toolResults?.[block.id] ?? "";
+    blocks.push({
+      key: `tool-${block.id}`,
+      type: "toolCall",
+      id: block.id,
+      name: block.name,
+      arguments: block.arguments,
+      resultContent,
+      rendered: resultContent ? renderToolTrace(block.name, resultContent) : null,
+    });
+  }
+
+  return blocks.length > 0 ? blocks : null;
+}
+
+function renderRichTextContent(
+  messageId: string,
+  text: string,
+  rendered: RichTextRenderResult,
   options?: {
     onCopyCode?: (payload: ChatCodeCopyPayload) => void;
   },
 ) {
-  if (item.role === "assistant" && item.rendered.mode === "rich") {
+  if (rendered.mode === "rich") {
     return h("div", {
       class: "sidepanel-rich-text text-[14px] leading-6",
-      innerHTML: item.rendered.html,
+      innerHTML: rendered.html,
       onClick: (event: { target: unknown; preventDefault?: () => void }) => {
         const target = event.target as {
           closest?: (selector: string) => { getAttribute?: (name: string) => string | null } | null;
@@ -122,7 +208,7 @@ function renderMessageContent(
           return;
         }
         const index = Number.parseInt(indexValue, 10);
-        const codeBlock = item.rendered.codeBlocks[index];
+        const codeBlock = rendered.codeBlocks[index];
         if (!codeBlock) {
           return;
         }
@@ -130,10 +216,84 @@ function renderMessageContent(
         options?.onCopyCode?.({
           code: codeBlock.code,
           language: codeBlock.language,
-          messageId: item.id,
+          messageId,
         });
       },
     });
+  }
+  return h("p", { class: "whitespace-pre-wrap text-[14px] leading-6" }, text);
+}
+
+function renderInlineToolCallBlock(block: RenderedAssistantToolCallBlock) {
+  const previewLine = block.rendered?.preview.filter(Boolean).join(" · ") ?? "";
+  const hasResult = block.resultContent.trim().length > 0;
+
+  return h(
+    "div",
+    {
+      class: "rounded-lg border border-slate-200/70 bg-slate-50/80 px-3 py-2 shadow-sm",
+      role: "group",
+      "aria-label": `工具调用：${block.name}`,
+      "data-testid": "assistant-tool-call-inline",
+    },
+    [
+      h("div", { class: "flex min-w-0 items-center gap-2" }, [
+        h(
+          "div",
+          {
+            class:
+              "flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-[10px] font-bold text-emerald-600",
+            "aria-hidden": "true",
+          },
+          hasResult ? "✓" : "{}",
+        ),
+        h(
+          "p",
+          { class: "truncate text-[12px] font-semibold leading-snug text-slate-800" },
+          block.name,
+        ),
+        h(
+          "span",
+          { class: "ml-auto shrink-0 text-[11px] text-slate-500" },
+          hasResult ? "已完成" : "等待工具结果",
+        ),
+      ]),
+      previewLine
+        ? h("p", { class: "mt-1 truncate text-[11px] leading-snug text-slate-500" }, previewLine)
+        : null,
+      block.rendered
+        ? h("div", {
+            class:
+              "sidepanel-tool-trace mt-2 max-h-[160px] overflow-auto rounded-md bg-white/70 p-2 font-mono text-[10px] leading-snug text-slate-700",
+            innerHTML: block.rendered.html,
+          })
+        : null,
+    ],
+  );
+}
+
+function renderMessageContent(
+  item: RenderedMessageItem,
+  options?: {
+    onCopyCode?: (payload: ChatCodeCopyPayload) => void;
+  },
+) {
+  if (item.role === "assistant") {
+    const blocks = renderableAssistantBlocks(item);
+    if (blocks) {
+      return h(
+        "div",
+        { class: "sidepanel-assistant-content-blocks flex flex-col gap-3" },
+        blocks.map((block) =>
+          block.type === "text"
+            ? h("div", { key: block.key, class: "max-w-none text-slate-950" }, [
+                renderRichTextContent(item.id, block.text, block.rendered, options),
+              ])
+            : h("div", { key: block.key }, [renderInlineToolCallBlock(block)]),
+        ),
+      );
+    }
+    return renderRichTextContent(item.id, item.text, item.rendered, options);
   }
   return h("p", { class: "whitespace-pre-wrap text-[14px] leading-6" }, item.text);
 }

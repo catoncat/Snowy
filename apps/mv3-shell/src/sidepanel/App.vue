@@ -59,6 +59,9 @@ interface ComposerQueueItem {
   behavior: "steer" | "followUp";
   text: string;
 }
+interface BootstrapChatOptions {
+  showLoading?: boolean;
+}
 type HostActionKind = "hosts.connect" | "hosts.disconnect" | "hosts.set_default";
 type SkillActionKind =
   | "skills.install"
@@ -1040,8 +1043,11 @@ async function refreshChatSessions() {
   }
 }
 
-async function bootstrapChat() {
-  loading.value = true;
+async function bootstrapChat(options: BootstrapChatOptions = {}) {
+  const showLoading = options.showLoading !== false;
+  if (showLoading) {
+    loading.value = true;
+  }
   try {
     const payload = await callRuntime<{
       sessionId: string | null;
@@ -1055,7 +1061,9 @@ async function bootstrapChat() {
       error: error instanceof Error ? error.message : String(error),
     };
   } finally {
-    loading.value = false;
+    if (showLoading) {
+      loading.value = false;
+    }
   }
 }
 
@@ -1193,6 +1201,9 @@ function onRuntimeMessage(message: unknown) {
     payload.event.type === "run.error"
   ) {
     void refreshChatSessions();
+  }
+  if (payload.event.type === "assistant.done") {
+    void bootstrapChat({ showLoading: false });
   }
 }
 

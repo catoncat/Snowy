@@ -1,11 +1,17 @@
 export type ChatRunStatus = "idle" | "running" | "stopped";
 
+export type ChatMessageContentBlock =
+  | { type: "text"; text: string }
+  | { type: "toolCall"; id: string; name: string; arguments: string };
+
 export interface ChatMessageItem {
   id: string;
   kind: "message";
   role: "user" | "assistant";
   text: string;
   state: "complete" | "streaming" | "stopped" | "error";
+  contentBlocks?: ChatMessageContentBlock[];
+  toolResults?: Record<string, string>;
 }
 
 export interface ChatToolItem {
@@ -39,10 +45,17 @@ export interface ChatEventBase {
 export type ChatEvent =
   | ({ type: "run.state"; status?: ChatRunStatus | string } & ChatEventBase)
   | ({ type: "assistant.delta"; messageId: string; chunk?: string } & ChatEventBase)
-  | ({ type: "assistant.done"; messageId: string; text?: string } & ChatEventBase)
+  | ({
+      type: "assistant.done";
+      messageId: string;
+      text?: string;
+      contentBlocks?: ChatMessageContentBlock[];
+      toolResults?: Record<string, string>;
+    } & ChatEventBase)
   | ({
       type: "tool.result";
       messageId: string;
+      toolCallId?: string;
       toolName: string;
       summary: string;
       detail: string;
@@ -61,6 +74,38 @@ function updateStreamingItems(items: ChatItem[], nextState: ChatMessageItem["sta
   );
 }
 
+function cloneContentBlocks(
+  blocks: ChatMessageContentBlock[] | undefined,
+): ChatMessageContentBlock[] | undefined {
+  return Array.isArray(blocks) ? blocks.map((block) => ({ ...block })) : undefined;
+}
+
+function cloneToolResults(
+  toolResults: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  return toolResults ? { ...toolResults } : undefined;
+}
+
+function cloneChatItem(item: ChatItem): ChatItem {
+  if (item.kind === "message") {
+    return {
+      ...item,
+      ...(item.contentBlocks ? { contentBlocks: cloneContentBlocks(item.contentBlocks) } : {}),
+      ...(item.toolResults ? { toolResults: cloneToolResults(item.toolResults) } : {}),
+    };
+  }
+  return { ...item };
+}
+
+function messageReferencesToolCall(item: ChatItem, toolCallId: string): item is ChatMessageItem {
+  return (
+    item.kind === "message" &&
+    item.role === "assistant" &&
+    Array.isArray(item.contentBlocks) &&
+    item.contentBlocks.some((block) => block.type === "toolCall" && block.id === toolCallId)
+  );
+}
+
 export function createInitialChatState(): ChatState {
   return {
     sessionId: null,
@@ -75,7 +120,9 @@ export function applyBootstrapState(state: ChatState, payload: ChatBootstrapPayl
     ...state,
     sessionId: payload.sessionId ?? null,
     status: normalizeStatus(payload.runState?.status),
-    items: Array.isArray(payload.messages) ? payload.messages.map((item) => ({ ...item })) : [],
+    items: Array.isArray(payload.messages)
+      ? payload.messages.map((item) => cloneChatItem(item))
+      : [],
     error: null,
   };
 }
@@ -130,9 +177,17 @@ export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState {
       const existingIndex = items.findIndex(
         (item) => item.kind === "message" && item.id === event.messageId,
       );
+      const contentBlocks = cloneContentBlocks(event.contentBlocks);
+      const toolResults = cloneToolResults(event.toolResults);
       if (existingIndex >= 0) {
         const existing = items[existingIndex] as ChatMessageItem;
-        items[existingIndex] = { ...existing, text, state: "complete" };
+        items[existingIndex] = {
+          ...existing,
+          text,
+          state: "complete",
+          ...(contentBlocks ? { contentBlocks } : {}),
+          ...(toolResults ? { toolResults } : {}),
+        };
       } else {
         items.push({
           id: event.messageId,
@@ -140,12 +195,30 @@ export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState {
           role: "assistant",
           text,
           state: "complete",
+          ...(contentBlocks ? { contentBlocks } : {}),
+          ...(toolResults ? { toolResults } : {}),
         });
       }
       return { ...state, sessionId: nextSessionId, items };
     }
     case "tool.result": {
       const items = [...state.items];
+      const toolCallId =
+        typeof event.toolCallId === "string" && event.toolCallId.trim()
+          ? event.toolCallId.trim()
+          : event.messageId;
+      const assistantIndex = items.findIndex((item) => messageReferencesToolCall(item, toolCallId));
+      if (assistantIndex >= 0) {
+        const assistant = items[assistantIndex] as ChatMessageItem;
+        items[assistantIndex] = {
+          ...assistant,
+          toolResults: {
+            ...(assistant.toolResults ?? {}),
+            [toolCallId]: event.detail,
+          },
+        };
+        return { ...state, sessionId: nextSessionId, items };
+      }
       const toolItem: ChatToolItem = {
         id: event.messageId,
         kind: "tool",

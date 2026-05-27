@@ -843,6 +843,79 @@ describe("mv3-shell end-to-end loop integration", () => {
     }
   });
 
+  it("preserves assistant content blocks and absorbs matching tool results in chat bootstrap", async () => {
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        runtime: {
+          sendMessage: vi.fn(async () => undefined),
+        },
+      },
+    });
+
+    const initial = await services.bootstrapChat();
+    const sessionId = initial.sessionId as string;
+    const { kernel } = await services.ensureServices();
+
+    await kernel.appendMessage(sessionId, {
+      role: "user",
+      text: "检查当前页面标题",
+    });
+    await kernel.appendMessage(sessionId, {
+      role: "assistant",
+      text: "我先读取页面。页面标题是 Example Domain。",
+      contentBlocks: [
+        { type: "text", text: "我先读取页面。" },
+        {
+          type: "toolCall",
+          id: "tc_snapshot_1",
+          name: "page_snapshot",
+          arguments: '{"includeText":true}',
+        },
+        { type: "text", text: "页面标题是 Example Domain。" },
+      ],
+    });
+    await kernel.appendMessage(sessionId, {
+      role: "assistant",
+      text: '{"status":"ok","data":{"title":"Example Domain"}}',
+      toolCallId: "tc_snapshot_1",
+      toolName: "page_snapshot",
+    });
+
+    const bootstrap = await services.bootstrapChat();
+
+    expect(bootstrap.messages).toEqual([
+      {
+        id: expect.any(String),
+        kind: "message",
+        role: "user",
+        text: "检查当前页面标题",
+        state: "complete",
+      },
+      {
+        id: expect.any(String),
+        kind: "message",
+        role: "assistant",
+        text: "我先读取页面。页面标题是 Example Domain。",
+        state: "complete",
+        contentBlocks: [
+          { type: "text", text: "我先读取页面。" },
+          {
+            type: "toolCall",
+            id: "tc_snapshot_1",
+            name: "page_snapshot",
+            arguments: '{"includeText":true}',
+          },
+          { type: "text", text: "页面标题是 Example Domain。" },
+        ],
+        toolResults: {
+          tc_snapshot_1: '{"status":"ok","data":{"title":"Example Domain"}}',
+        },
+      },
+    ]);
+    expect(bootstrap.messages.some((item: { kind?: string }) => item.kind === "tool")).toBe(false);
+  });
+
   it("uses kernel-managed provider/profile state on the runtime chat path", async () => {
     const sentMessages: unknown[] = [];
     const originalFetch = globalThis.fetch;

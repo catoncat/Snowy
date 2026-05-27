@@ -1192,13 +1192,15 @@ function normalizeChatRunStatus(status) {
   return status === "running" || status === "stopped" ? status : "idle";
 }
 
-function createChatMessageItem({ id, role, text, state = "complete" }) {
+function createChatMessageItem({ id, role, text, state = "complete", contentBlocks, toolResults }) {
   return {
     id,
     kind: "message",
     role,
     text,
     state,
+    ...(contentBlocks ? { contentBlocks } : {}),
+    ...(toolResults ? { toolResults } : {}),
   };
 }
 
@@ -1223,7 +1225,86 @@ function summarizeChatToolDetail(detail) {
   return normalized.length > 96 ? `${normalized.slice(0, 93)}...` : normalized;
 }
 
-function toChatTranscriptItem(message) {
+function normalizeChatContentBlocks(blocks) {
+  if (!Array.isArray(blocks)) {
+    return undefined;
+  }
+
+  const normalized = [];
+  for (const block of blocks) {
+    if (!block || typeof block !== "object") {
+      continue;
+    }
+    if (block.type === "text" && typeof block.text === "string") {
+      normalized.push({ type: "text", text: block.text });
+      continue;
+    }
+    if (
+      block.type === "toolCall" &&
+      typeof block.id === "string" &&
+      typeof block.name === "string" &&
+      typeof block.arguments === "string"
+    ) {
+      normalized.push({
+        type: "toolCall",
+        id: block.id,
+        name: block.name,
+        arguments: block.arguments,
+      });
+    }
+  }
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function collectAbsorbedToolCallIds(messages) {
+  const absorbed = new Set();
+  for (const message of messages) {
+    if (!message || message.role !== "assistant") {
+      continue;
+    }
+    const blocks = normalizeChatContentBlocks(message.contentBlocks);
+    if (!blocks) {
+      continue;
+    }
+    for (const block of blocks) {
+      if (block.type === "toolCall" && block.id) {
+        absorbed.add(block.id);
+      }
+    }
+  }
+  return absorbed;
+}
+
+function buildToolResultMap(messages, absorbedToolCallIds) {
+  const results = new Map();
+  for (const message of messages) {
+    const toolCallId = typeof message?.toolCallId === "string" ? message.toolCallId : "";
+    const toolName = typeof message?.toolName === "string" ? message.toolName : "";
+    if (!toolCallId || !toolName || !absorbedToolCallIds.has(toolCallId)) {
+      continue;
+    }
+    results.set(toolCallId, String(message.content ?? ""));
+  }
+  return results;
+}
+
+function toolResultsForContentBlocks(contentBlocks, toolResultMap) {
+  if (!contentBlocks) {
+    return undefined;
+  }
+  const toolResults = {};
+  let hasResult = false;
+  for (const block of contentBlocks) {
+    if (block.type !== "toolCall" || !toolResultMap.has(block.id)) {
+      continue;
+    }
+    toolResults[block.id] = toolResultMap.get(block.id);
+    hasResult = true;
+  }
+  return hasResult ? toolResults : undefined;
+}
+
+function toChatTranscriptItem(message, toolResultMap = new Map()) {
   if (!message || typeof message !== "object") {
     return null;
   }
@@ -1236,13 +1317,29 @@ function toChatTranscriptItem(message) {
         detail: message.content,
       });
     }
+    const contentBlocks = normalizeChatContentBlocks(message.contentBlocks);
     return createChatMessageItem({
       id: message.entryId,
       role: message.role,
       text: message.content,
+      contentBlocks,
+      toolResults: toolResultsForContentBlocks(contentBlocks, toolResultMap),
     });
   }
   return null;
+}
+
+function toChatTranscriptItems(messages) {
+  const absorbedToolCallIds = collectAbsorbedToolCallIds(messages);
+  const toolResultMap = buildToolResultMap(messages, absorbedToolCallIds);
+  return messages
+    .filter((message) => {
+      const toolCallId = typeof message?.toolCallId === "string" ? message.toolCallId : "";
+      const toolName = typeof message?.toolName === "string" ? message.toolName : "";
+      return !(toolCallId && toolName && absorbedToolCallIds.has(toolCallId));
+    })
+    .map((message) => toChatTranscriptItem(message, toolResultMap))
+    .filter(Boolean);
 }
 
 function toSessionMessageEntry(entry) {
@@ -3183,7 +3280,7 @@ export function createBackgroundRuntimeServices({
 
     return {
       sessionId: session.id,
-      messages: context.messages.map((message) => toChatTranscriptItem(message)).filter(Boolean),
+      messages: toChatTranscriptItems(context.messages),
       runState: {
         status: normalizeChatRunStatus(chatRunStatus),
       },

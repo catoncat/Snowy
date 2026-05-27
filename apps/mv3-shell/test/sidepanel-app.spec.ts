@@ -21,7 +21,7 @@ import {
   filterAndSortSessions,
   formatSessionDate,
 } from "../src/sidepanel/session-history-pane";
-import type { ChatItem } from "../src/sidepanel/state";
+import { type ChatItem, applyChatEvent, createInitialChatState } from "../src/sidepanel/state";
 
 interface MemoryNode {
   type: string;
@@ -251,6 +251,85 @@ describe("sidepanel chat transcript component", () => {
         messageId: "assistant-code",
       },
     ]);
+  });
+
+  it("renders assistant content blocks with inline tool calls in old-product order", async () => {
+    const items: ChatItem[] = [
+      {
+        id: "assistant-blocks",
+        kind: "message",
+        role: "assistant",
+        text: "fallback text should not render when ordered blocks exist",
+        state: "complete",
+        contentBlocks: [
+          { type: "text", text: "我先读取页面。" },
+          {
+            type: "toolCall",
+            id: "tc_snapshot_1",
+            name: "page_snapshot",
+            arguments: '{"includeText":true}',
+          },
+          { type: "text", text: "页面标题是 Example Domain。" },
+        ],
+        toolResults: {
+          tc_snapshot_1: '{"status":"ok","data":{"title":"Example Domain"}}',
+        },
+      },
+    ];
+
+    const html = await renderToString(createSSRApp(ChatTranscriptPane, { items, loading: false }));
+
+    const firstTextIndex = html.indexOf("我先读取页面。");
+    const toolIndex = html.indexOf("page_snapshot");
+    const resultIndex = html.indexOf("Example Domain");
+    const finalTextIndex = html.indexOf("页面标题是 Example Domain。");
+
+    expect(html).toContain('data-testid="assistant-tool-call-inline"');
+    expect(firstTextIndex).toBeGreaterThanOrEqual(0);
+    expect(toolIndex).toBeGreaterThan(firstTextIndex);
+    expect(resultIndex).toBeGreaterThan(toolIndex);
+    expect(finalTextIndex).toBeGreaterThan(resultIndex);
+    expect(html).not.toContain("fallback text should not render");
+  });
+
+  it("absorbs matching tool result events into assistant content blocks", () => {
+    let state = createInitialChatState();
+
+    state = applyChatEvent(state, {
+      type: "assistant.done",
+      sessionId: "s-1",
+      messageId: "assistant-1",
+      text: "我先读取页面。页面标题是 Example Domain。",
+      contentBlocks: [
+        { type: "text", text: "我先读取页面。" },
+        {
+          type: "toolCall",
+          id: "tc_snapshot_1",
+          name: "page_snapshot",
+          arguments: '{"includeText":true}',
+        },
+        { type: "text", text: "页面标题是 Example Domain。" },
+      ],
+    });
+    state = applyChatEvent(state, {
+      type: "tool.result",
+      sessionId: "s-1",
+      messageId: "tool-event-1",
+      toolCallId: "tc_snapshot_1",
+      toolName: "page_snapshot",
+      summary: "Example Domain",
+      detail: '{"status":"ok","data":{"title":"Example Domain"}}',
+    });
+
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0]).toMatchObject({
+      id: "assistant-1",
+      kind: "message",
+      role: "assistant",
+      toolResults: {
+        tc_snapshot_1: '{"status":"ok","data":{"title":"Example Domain"}}',
+      },
+    });
   });
 
   it("inherits old-product session history shell and list row chrome", () => {
@@ -593,6 +672,13 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain(':copied-message-id="copiedMessageId"');
     expect(source).toContain('@copy-message="handleCopyMessage"');
     expect(source).toContain("__BRAIN_E2E_CLIPBOARD_WRITE");
+  });
+
+  it("silently rehydrates persisted chat transcript after assistant completion", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("interface BootstrapChatOptions");
+    expect(source).toContain("bootstrapChat({ showLoading: false })");
   });
 
   it("uses product sidepanel views instead of a debug-first split", () => {
