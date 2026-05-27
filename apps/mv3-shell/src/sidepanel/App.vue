@@ -241,7 +241,6 @@ const activeSessionTitle = computed(() =>
     ? `Session ${shortId(chatState.value.sessionId)}`
     : "新对话"),
 );
-const activeTabTitle = computed(() => runtimeSummary.value?.activeTab?.title ?? "当前标签页未连接");
 const lastMessagePreview = computed(() => {
   if (activeSession.value?.preview?.trim()) {
     return activeSession.value.preview.trim();
@@ -1698,10 +1697,13 @@ onUnmounted(() => {
 <template>
   <div class="relative flex h-screen min-h-0 flex-col overflow-hidden bg-white text-slate-950">
     <main class="relative flex min-h-0 flex-1 flex-col bg-white">
-      <header class="z-30 flex h-12 shrink-0 items-center border-b border-slate-200 bg-white px-3">
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-[15px] font-bold leading-5 tracking-normal">{{ activeSessionTitle }}</p>
-          <p class="truncate text-[11px] leading-4 text-slate-500">{{ activeTabTitle }}</p>
+      <header class="z-30 flex h-12 shrink-0 items-center border-b border-slate-200 bg-white px-3" role="banner">
+        <div class="flex min-w-0 flex-1 items-center gap-2">
+          <div class="ml-1 flex min-w-0 flex-1 flex-col justify-center">
+            <h1 class="truncate text-[15px] font-bold leading-5 tracking-normal text-slate-950">
+              {{ activeSessionTitle }}
+            </h1>
+          </div>
         </div>
 
         <div class="flex shrink-0 items-center gap-0.5" role="toolbar" aria-label="会话操作">
@@ -1726,13 +1728,12 @@ onUnmounted(() => {
           </button>
           <button
             type="button"
-            class="grid h-9 w-9 place-items-center rounded-full text-[15px] leading-none text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            title="停止运行"
-            aria-label="停止运行"
-            :disabled="!isRunning"
-            @click="stopRun"
+            class="grid h-9 w-9 place-items-center rounded-full text-[17px] leading-none text-slate-800 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            title="设置"
+            aria-label="打开系统设置"
+            @click="selectPane('runtime')"
           >
-            ■
+            ⚙
           </button>
           <div class="relative">
             <button
@@ -1751,23 +1752,25 @@ onUnmounted(() => {
               class="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl"
               role="menu"
             >
-              <button type="button" role="menuitem" class="w-full px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleCopyMarkdown">
-                复制 Markdown
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleCopyMarkdown">
+                <span class="w-4 text-center text-[13px]" aria-hidden="true">⧉</span>
+                <span>复制 Markdown</span>
               </button>
-              <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleExportMarkdown('download')">
-                下载 MD 文件
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleExportMarkdown('download')">
+                <span class="w-4 text-center text-[13px]" aria-hidden="true">↓</span>
+                <span>下载 MD 文件</span>
               </button>
-              <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleExportMarkdown('open')">
-                在标签页打开
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleExportMarkdown('open')">
+                <span class="w-4 text-center text-[13px]" aria-hidden="true">↗</span>
+                <span>在标签页打开</span>
               </button>
-              <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('provider')">
-                模型设置
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('provider')">
+                <span class="w-4 text-center text-[13px]" aria-hidden="true">◎</span>
+                <span>模型路由</span>
               </button>
-              <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('skills')">
-                技能管理
-              </button>
-              <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('runtime')">
-                系统设置
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('skills')">
+                <span class="w-4 text-center text-[13px]" aria-hidden="true">⌘</span>
+                <span>Skills 管理</span>
               </button>
             </div>
           </div>

@@ -536,6 +536,23 @@ describe("sidepanel chat transcript component", () => {
     expect(source).not.toContain("暂无其它会话");
   });
 
+  it("inherits the old-product chat header and menu shape", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain('role="banner"');
+    expect(source).toContain('role="toolbar" aria-label="会话操作"');
+    expect(source).toContain('aria-label="开始新对话"');
+    expect(source).toContain('aria-label="查看会话历史列表"');
+    expect(source).toContain('aria-label="打开系统设置"');
+    expect(source).toContain("@click=\"selectPane('runtime')\"");
+    expect(source).toContain("模型路由");
+    expect(source).toContain("Skills 管理");
+    expect(source).toContain('class="flex w-full items-center gap-2');
+    expect(source).not.toContain("activeTabTitle");
+    expect(source).not.toContain('aria-label="停止运行"');
+    expect(source).not.toContain("当前标签页未连接");
+  });
+
   it("uses real chat session routes for old-product history UX", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
