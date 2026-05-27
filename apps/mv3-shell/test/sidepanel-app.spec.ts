@@ -970,6 +970,17 @@ describe("sidepanel chat transcript component", () => {
     expect(source).not.toContain(':items="chatState.items"');
   });
 
+  it("keeps old-product title refresh in the more menu with a runtime-backed route", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+    const backgroundSource = readFileSync("apps/mv3-shell/src/background.ts", "utf8");
+
+    expect(source).toContain("refreshSessionTitle");
+    expect(source).toContain('"runtime.chat.session.refresh_title"');
+    expect(source).toContain("重新生成标题");
+    expect(source).toContain("titleRefreshing");
+    expect(backgroundSource).toContain('case "runtime.chat.session.refresh_title"');
+  });
+
   it("exposes only runtime-backed message fork action and keeps retry hidden", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/chat-transcript-pane.ts", "utf8");
     const appSource = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");

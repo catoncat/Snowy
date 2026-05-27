@@ -367,6 +367,76 @@ describe("mv3-shell runtime chat bridge", () => {
     ).toBe("产品验收清单");
   });
 
+  it("refreshes chat session titles through the title LLM lane", async () => {
+    const originalFetch = globalThis.fetch;
+    const requestBodies: Array<Record<string, unknown>> = [];
+    globalThis.fetch = vi.fn(async (_url, options) => {
+      requestBodies.push(JSON.parse(String((options as { body?: unknown })?.body ?? "{}")));
+      return sseResponse([
+        chatChunk("产品验收清单"),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const services = createBackgroundRuntimeServices({
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: {
+          profiles: [
+            {
+              id: "default",
+              providerId: "openai_compatible",
+              llmBase: "https://test.api/v1",
+              llmKey: "test-key",
+              llmModel: "test-model",
+            },
+          ],
+          defaultProfile: "default",
+        },
+      });
+
+      const bootstrap = await services.bootstrapChat();
+      const { kernel } = await services.ensureServices();
+      await kernel.appendMessage(bootstrap.sessionId as string, {
+        role: "user",
+        text: "帮我整理产品验收清单",
+      });
+      await kernel.appendMessage(bootstrap.sessionId as string, {
+        role: "assistant",
+        text: "我会按功能、配置和浏览器验证来整理。",
+      });
+
+      const refreshed = await services.refreshChatSessionTitle({
+        sessionId: bootstrap.sessionId,
+      });
+
+      expect(refreshed.item).toMatchObject({
+        id: bootstrap.sessionId,
+        title: "产品验收清单",
+        active: true,
+      });
+      expect(requestBodies[0]).toMatchObject({
+        model: "test-model",
+        input: expect.arrayContaining([
+          expect.objectContaining({
+            role: "system",
+            content: expect.stringContaining("非常简短"),
+          }),
+        ]),
+      });
+
+      const sessions = await services.listChatSessions();
+      expect(
+        sessions.items.find(
+          (item: { id: string; title?: string }) => item.id === bootstrap.sessionId,
+        )?.title,
+      ).toBe("产品验收清单");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("routes runtime.chat.* messages through runtime services", async () => {
     const runtimeServices = {
       bootstrapChat: vi.fn(async () => ({
@@ -390,6 +460,9 @@ describe("mv3-shell runtime chat bridge", () => {
       })),
       updateChatSessionTitle: vi.fn(async ({ sessionId, title }) => ({
         item: { id: sessionId, title },
+      })),
+      refreshChatSessionTitle: vi.fn(async ({ sessionId }) => ({
+        item: { id: sessionId, title: "重新生成后的标题" },
       })),
       forkAssistantMessage: vi.fn(async ({ messageId }) => ({
         sessionId: "s-fork",
@@ -468,6 +541,20 @@ describe("mv3-shell runtime chat bridge", () => {
     expect(runtimeServices.updateChatSessionTitle).toHaveBeenCalledWith({
       sessionId: "s-1",
       title: "重命名后的会话",
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.chat.session.refresh_title",
+        sessionId: "s-1",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { item: { id: "s-1", title: "重新生成后的标题" } },
+    });
+    expect(runtimeServices.refreshChatSessionTitle).toHaveBeenCalledWith({
+      sessionId: "s-1",
     });
 
     await expect(

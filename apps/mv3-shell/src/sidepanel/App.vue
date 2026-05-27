@@ -143,6 +143,7 @@ const listRef = ref<HTMLElement | null>(null);
 const composerRef = ref<HTMLTextAreaElement | null>(null);
 const moreMenuOpen = ref(false);
 const showToolHistory = ref(true);
+const titleRefreshing = ref(false);
 const conversationNotice = ref<{ type: "success" | "error"; message: string } | null>(null);
 const copiedMessageId = ref("");
 const forkingMessageId = ref("");
@@ -1207,6 +1208,35 @@ async function saveSessionRename(sessionId: string) {
   }
 }
 
+async function refreshSessionTitle(sessionId = chatState.value.sessionId ?? "") {
+  const id = String(sessionId || "").trim();
+  if (!id || titleRefreshing.value) {
+    return;
+  }
+  titleRefreshing.value = true;
+  moreMenuOpen.value = false;
+  try {
+    const payload = await callRuntime<{ item: ChatSessionSummary }>(
+      "runtime.chat.session.refresh_title",
+      { sessionId: id },
+    );
+    const updated = payload.item;
+    chatSessions.value = chatSessions.value.some((session) => session.id === updated.id)
+      ? chatSessions.value.map((session) =>
+          session.id === updated.id ? { ...session, ...updated } : session,
+        )
+      : [updated, ...chatSessions.value];
+    sessionsError.value = null;
+    showConversationNotice("success", "已重新生成标题");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sessionsError.value = message;
+    showConversationNotice("error", message);
+  } finally {
+    titleRefreshing.value = false;
+  }
+}
+
 async function bootstrapManagement() {
   managementLoading.value = true;
   try {
@@ -1829,6 +1859,10 @@ onUnmounted(() => {
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleExportMarkdown('open')">
                 <span class="w-4 text-center text-[13px]" aria-hidden="true">↗</span>
                 <span>在标签页打开</span>
+              </button>
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!chatState.sessionId || titleRefreshing" @click="refreshSessionTitle()">
+                <span class="w-4 text-center text-[13px]" aria-hidden="true">↻</span>
+                <span>{{ titleRefreshing ? "正在重新生成标题" : "重新生成标题" }}</span>
               </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="showToolHistory = !showToolHistory; moreMenuOpen = false">
                 <span class="w-4 text-center text-[13px]" aria-hidden="true">⌁</span>

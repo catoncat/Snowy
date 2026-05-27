@@ -1398,6 +1398,40 @@ function normalizeSessionTitleInput(value) {
   return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
 }
 
+function normalizeGeneratedSessionTitle(value) {
+  const firstLine =
+    String(value ?? "")
+      .split(/\r?\n/)
+      .find((line) => line.trim()) ?? "";
+  const normalized = firstLine
+    .replace(/^#+\s*/g, "")
+    .replace(/^(会话)?标题\s*[:：]\s*/i, "")
+    .replace(/^[`"'“”‘’\s]+|[`"'“”‘’\s]+$/g, "")
+    .replace(/[。.!！?？]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.length > 40 ? `${normalized.slice(0, 37)}...` : normalized;
+}
+
+function buildSessionTitleMessages(entries) {
+  return entries
+    .map((entry) => toSessionMessageEntry(entry))
+    .filter((message) => {
+      if (!message?.text?.trim()) {
+        return false;
+      }
+      return message.role === "user" || message.role === "assistant";
+    })
+    .slice(0, 8)
+    .map((message) => ({
+      role: message.role,
+      content: trimSessionPreview(message.text),
+    }));
+}
+
 function cloneSessionPayload(value) {
   if (typeof structuredClone === "function") {
     return structuredClone(value);
@@ -3432,6 +3466,65 @@ export function createBackgroundRuntimeServices({
     };
   }
 
+  async function refreshChatSessionTitle({ sessionId } = {}) {
+    const id = typeof sessionId === "string" ? sessionId.trim() : "";
+    if (!id) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        "runtime.chat.session.refresh_title requires sessionId",
+      );
+    }
+
+    const [{ kernel, llmProviderRegistry, profileConfig: managedProfileConfig }, session] =
+      await Promise.all([ensureServices(), ensureSession()]);
+    const header = (await kernel.listSessions()).find((item) => item.id === id);
+    if (!header) {
+      throw new CapabilityError("E_NOT_FOUND", `Session not found: ${id}`);
+    }
+
+    const entries = await kernel.sessions.getEntries(id);
+    const messages = buildSessionTitleMessages(entries);
+    if (messages.length === 0) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        "runtime.chat.session.refresh_title requires at least one message",
+      );
+    }
+    if (!managedProfileConfig) {
+      throw new CapabilityError(
+        "E_RUNTIME",
+        "No LLM provider is configured. Please set an API key via config.update to refresh session titles.",
+      );
+    }
+
+    const titleLlm = createKernelLlmFromProvider(
+      llmProviderRegistry,
+      managedProfileConfig,
+      undefined,
+      { lane: "title", role: "worker" },
+    );
+    const generated = await titleLlm.complete({
+      systemPrompt:
+        "你是浏览器助理的会话标题生成器。请根据对话生成一个非常简短的中文标题，最多 12 个汉字或 24 个英文字符。只输出标题本身，不要引号、前缀、解释或标点。",
+      messages,
+      maxTokens: 30,
+    });
+    const normalizedTitle = normalizeGeneratedSessionTitle(generated);
+    if (!normalizedTitle) {
+      throw new CapabilityError("E_RUNTIME", "LLM returned an empty session title");
+    }
+
+    await kernel.appendEntry(id, "session_info", {
+      key: "title",
+      value: normalizedTitle,
+    });
+
+    const refreshedEntries = await kernel.sessions.getEntries(id);
+    return {
+      item: toChatSessionSummary(header, refreshedEntries, session.id),
+    };
+  }
+
   function findAssistantForkContext(entries, messageId) {
     const id = typeof messageId === "string" ? messageId.trim() : "";
     if (!id) {
@@ -4009,6 +4102,7 @@ export function createBackgroundRuntimeServices({
     listInterventions,
     readInterventionAudit,
     readReplayContinuityMarkers,
+    refreshChatSessionTitle,
     resolveIntervention,
     cancelIntervention,
     selectChatSession,
