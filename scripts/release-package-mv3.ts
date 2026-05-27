@@ -2,7 +2,16 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  utimesSync,
+} from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +35,7 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const extensionDir = resolve(repoRoot, "apps/mv3-shell/dist");
 const manifestPath = resolve(extensionDir, "manifest.json");
 const defaultArtifactDir = resolve(repoRoot, ".ml-cache/release-artifacts");
+const stableZipTimestamp = new Date("2020-01-01T00:00:00.000Z");
 const requiredEntries = [
   "manifest.json",
   "src/background.js",
@@ -129,6 +139,26 @@ function sha256(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
+function normalizeTimestamps(dir: string): void {
+  for (const entry of readdirSync(dir)) {
+    const fullPath = join(dir, entry);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) {
+      normalizeTimestamps(fullPath);
+    }
+    utimesSync(fullPath, stableZipTimestamp, stableZipTimestamp);
+  }
+  utimesSync(dir, stableZipTimestamp, stableZipTimestamp);
+}
+
+function createDeterministicStagingDir(): string {
+  const stagingDir = resolve(defaultArtifactDir, `.stage-${process.pid}`);
+  rmSync(stagingDir, { recursive: true, force: true });
+  cpSync(extensionDir, stagingDir, { recursive: true });
+  normalizeTimestamps(stagingDir);
+  return stagingDir;
+}
+
 const startedAt = Date.now();
 const outputPath =
   parseOutputPath() ??
@@ -137,30 +167,38 @@ const outputPath =
 mkdirSync(resolve(outputPath, ".."), { recursive: true });
 rmSync(outputPath, { force: true });
 
-assertCommand("bun", ["run", "build"]);
+let stagingDir: string | null = null;
+try {
+  assertCommand("bun", ["run", "build"]);
 
-const manifest = readManifest();
-const manifestErrors = validateManifest(manifest);
-if (manifestErrors.length > 0) {
-  throw new Error(manifestErrors.join("; "));
+  const manifest = readManifest();
+  const manifestErrors = validateManifest(manifest);
+  if (manifestErrors.length > 0) {
+    throw new Error(manifestErrors.join("; "));
+  }
+
+  stagingDir = createDeterministicStagingDir();
+  assertCommand("zip", ["-X", "-qry", outputPath, "."], stagingDir);
+
+  const output = {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    durationMs: Date.now() - startedAt,
+    command: "bun scripts/release-package-mv3.ts",
+    artifact: relative(repoRoot, outputPath),
+    sha256: sha256(outputPath),
+    manifest: {
+      name: manifest.name,
+      version: manifest.version,
+      manifest_version: manifest.manifest_version,
+      service_worker: manifest.background?.service_worker,
+    },
+    files: listFiles(extensionDir),
+  };
+
+  console.log(JSON.stringify(output, null, 2));
+} finally {
+  if (stagingDir) {
+    rmSync(stagingDir, { recursive: true, force: true });
+  }
 }
-
-assertCommand("zip", ["-qry", outputPath, "."], extensionDir);
-
-const output = {
-  ok: true,
-  generatedAt: new Date().toISOString(),
-  durationMs: Date.now() - startedAt,
-  command: "bun scripts/release-package-mv3.ts",
-  artifact: relative(repoRoot, outputPath),
-  sha256: sha256(outputPath),
-  manifest: {
-    name: manifest.name,
-    version: manifest.version,
-    manifest_version: manifest.manifest_version,
-    service_worker: manifest.background?.service_worker,
-  },
-  files: listFiles(extensionDir),
-};
-
-console.log(JSON.stringify(output, null, 2));

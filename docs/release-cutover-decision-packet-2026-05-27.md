@@ -46,9 +46,12 @@ Current delivery state as of this packet refresh:
 - follow-up delivery blocker fix: PR #3, `[codex] 修复 cutover 回滚验收时间戳漂移`
 - release execution evidence record: PR #4, `docs(cutover): 记录 release 执行证据`
 - release package command: PR #5, `feat(release): 固化 MV3 打包命令`
-- current accepted main commit: `afeb54e2430df0ecdf9cf47fecb8d8697987e2c2`
+- cutover final state record: PR #7, `docs(cutover): 记录最终执行状态`
+- cutover status final next action: PR #8, `fix(release): 收敛 cutover 状态下一步`
+- current accepted main commit: `ea0443fe0e99465d1723899fa864b4e93516d42d`
 - `bun run release:cutover:status`: passing on `origin/main` with no blockers
-- remaining boundary: external store/deployment submission or a human-defined real-profile UAT, if required
+- external submission packet: `docs/external-release-submission-packet-2026-05-27.md`
+- remaining boundary: external store/deployment submission or the single real-profile UAT scenario in the external submission packet, if required
 
 ## External Acceptance Decision
 
@@ -61,7 +64,8 @@ Current delivery state as of this packet refresh:
 - old_mainline_switch_pr: https://github.com/catoncat/browsir/pull/3
 - old_mainline_switch_commit: `a2a0164c965361b546a00defb28cf0cb4a9e8d18`
 - old_mainline_status: maintenance / reference mode; replacement work defaults to `catoncat/Snowy`
-- remaining_boundary: external store/deployment submission or exactly one human-defined real-profile UAT, if required
+- external_submission_packet: `docs/external-release-submission-packet-2026-05-27.md`
+- remaining_boundary: external store/deployment submission or the single real-profile UAT scenario in the external submission packet, if required
 
 Do not interpret an empty queue after this point as permission to create more default implementation slices. If the status gate stays green, continue through review, acceptance, and explicit release/cutover decision handling. If the gate fails, fix the concrete delivery blocker it reports before reopening product scope.
 
@@ -82,18 +86,25 @@ bun run release:package:mv3
 - release_package_command_merged_at: 2026-05-27T02:26:24Z
 - release_package_command_pr: https://github.com/catoncat/Snowy/pull/5
 - release_package_command_merge_commit: `afeb54e2430df0ecdf9cf47fecb8d8697987e2c2`
-- refreshed_cutover_gate_at: 2026-05-27T02:28:39.617Z
+- cutover_final_state_record_merged_at: 2026-05-27T02:40:06Z
+- cutover_final_state_record_pr: https://github.com/catoncat/Snowy/pull/7
+- cutover_final_state_record_merge_commit: `9689f5453e9517003621809e928851f0d359367e`
+- cutover_status_final_boundary_merged_at: 2026-05-27T02:56:26Z
+- cutover_status_final_boundary_pr: https://github.com/catoncat/Snowy/pull/8
+- cutover_status_final_boundary_merge_commit: `ea0443fe0e99465d1723899fa864b4e93516d42d`
+- refreshed_cutover_gate_at: 2026-05-27T02:58:45.680Z
 - refreshed_cutover_gate_command: `bun run release:cutover:status`
 - refreshed_cutover_gate_result: `ok: true`
-- refreshed_cutover_gate_branch: `codex/post-merge-verify-afeb54e` tracking `origin/main`
+- refreshed_cutover_gate_branch: `codex/verify-origin-main` tracking `origin/main`
 - refreshed_cutover_gate_upstream: `origin/main`
-- refreshed_cutover_gate_head: `afeb54e2430df0ecdf9cf47fecb8d8697987e2c2`
+- refreshed_cutover_gate_head: `ea0443fe0e99465d1723899fa864b4e93516d42d`
 - refreshed_cutover_gate_coverage: acceptance docs, extension build, real Chromium MV3 smoke, repo-wide `bun run check`, live queue, active leases
 - live_queue_entries: 0
 - active_leases: 0
 - blockers: 0
-- local_release_artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-afeb54e.zip`
-- local_release_artifact_sha256: `82477b982d33ab0a755e7cd20028119cba99d2b5d97100332220ed6c160b0443`
+- local_release_artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
+- local_release_artifact_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
+- local_release_artifact_deterministic_rerun_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
 - artifact_manifest: `Browser Brain Loop Next`, MV3, version `0.0.1`
 
 The old repository at `/Users/envvar/work/repos/snowy/browser-brain-loop` was checked read-only during this execution pass. Its current worktree has unrelated dirty and untracked changes, but `catoncat/browsir` PR #3 is merged and `origin/main` now marks that repository as maintenance / reference mode for replacement work. Do not perform further old-mainline writes in that dirty worktree; use an isolated worktree or coordinate ownership first.
@@ -153,7 +164,7 @@ These are post-cutover or explicitly promoted product breadth. They are not bloc
 If the decision is accepted:
 
 - record the external decision outcome next to this packet
-- decide the release branch / PR / deployment path explicitly, then rerun `bun run release:cutover:status`
+- use `docs/external-release-submission-packet-2026-05-27.md` for the selected store/deployment path, then rerun `bun run release:cutover:status`
 - keep `bun run release:acceptance` as the pre-cutover repo-side gate
 - move old-mainline work to maintenance / follow-up planning
 

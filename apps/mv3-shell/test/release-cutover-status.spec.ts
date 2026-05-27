@@ -15,7 +15,8 @@ const acceptedPacket = [
   "- old_mainline_switch_pr: https://github.com/catoncat/browsir/pull/3",
   "- old_mainline_switch_commit: `a2a0164c965361b546a00defb28cf0cb4a9e8d18`",
   "- old_mainline_status: maintenance / reference mode; replacement work defaults to `catoncat/Snowy`",
-  "- remaining_boundary: external store/deployment submission or exactly one human-defined real-profile UAT, if required",
+  "- external_submission_packet: `docs/external-release-submission-packet-2026-05-27.md`",
+  "- remaining_boundary: external store/deployment submission or the single real-profile UAT scenario in the external submission packet, if required",
   "- current accepted main commit: `afeb54e2430df0ecdf9cf47fecb8d8697987e2c2`",
 ].join("\n");
 
@@ -28,7 +29,7 @@ describe("release cutover status next actions", () => {
     expect(state.mergeCommit).toBe("89034b63b5be03fd2965af3e44a41e6eb6c7be17");
 
     expect(buildReadyNextActions(state)).toEqual([
-      "continue only through external store/deployment submission, or define exactly one human real-profile UAT if required",
+      "use docs/external-release-submission-packet-2026-05-27.md for external store/deployment submission, or its single real-profile UAT if required",
       "keep bun run release:acceptance and bun run release:cutover:status as the pre-submission gates",
       "do not create default deferred implementation issues while the repo-side gate stays green",
     ]);
