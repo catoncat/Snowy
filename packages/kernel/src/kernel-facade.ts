@@ -118,6 +118,7 @@ export interface Kernel {
   pause(sessionId: string): RunState;
   resume(sessionId: string): RunState;
   stop(sessionId: string): RunState;
+  resetRun(sessionId: string): RunState;
   getRunState(sessionId: string): RunState;
   getRuntimeSummary(sessionId: string): KernelRuntimeSummary;
   captureDiagnostics(sessionId: string): Promise<KernelDiagnosticsSnapshot>;
@@ -480,6 +481,7 @@ export function createKernel(opts: KernelOptions): Kernel {
     pause: (id) => runs.transition(id, "pause"),
     resume: (id) => runs.transition(id, "resume"),
     stop: (id) => runs.transition(id, "stop"),
+    resetRun: (id) => runs.transition(id, "reset"),
     getRunState: (id) => runs.getState(id),
     getRuntimeSummary,
     captureDiagnostics,

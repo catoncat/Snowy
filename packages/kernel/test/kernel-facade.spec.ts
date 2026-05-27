@@ -151,6 +151,17 @@ describe("KernelFacade (createKernel)", () => {
       const state = kernel.getRunState(s.id);
       expect(state.phase).toBe("running");
     });
+
+    it("resets a stopped run before reuse", async () => {
+      const s = await kernel.createSession();
+      kernel.startRun(s.id);
+      kernel.stop(s.id);
+
+      const reset = kernel.resetRun(s.id);
+
+      expect(reset.phase).toBe("idle");
+      expect(kernel.startRun(s.id).phase).toBe("running");
+    });
   });
 
   describe("queue", () => {

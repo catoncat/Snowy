@@ -67,7 +67,10 @@ const managementError = ref<string | null>(null);
 const managementNotice = ref<string | null>(null);
 const diagnosticsPayload = ref<string | null>(null);
 const configProviderDraft = ref("");
+const configApiDraft = ref("responses");
 const configModelDraft = ref("");
+const configBaseUrlDraft = ref("");
+const configApiKeyDraft = ref("");
 const skillIdDraft = ref("");
 const skillManifestDraft = ref(
   JSON.stringify(
@@ -138,7 +141,10 @@ function formatSkillVersionSurface(skill: SkillCatalogItem): string {
 
 function syncConfigDraftsFromSummary() {
   configProviderDraft.value = readStringField(configSummary.value?.values.model, "provider");
+  configApiDraft.value = readStringField(configSummary.value?.values.model, "api") || "responses";
   configModelDraft.value = readStringField(configSummary.value?.values.model, "model");
+  configBaseUrlDraft.value = readStringField(configSummary.value?.values.model, "baseUrl");
+  configApiKeyDraft.value = "";
 }
 
 async function scrollToBottom() {
@@ -335,13 +341,19 @@ function clearRuntimeError() {
 
 function saveConfig() {
   const provider = configProviderDraft.value.trim();
+  const api = configApiDraft.value.trim();
   const model = configModelDraft.value.trim();
+  const baseUrl = configBaseUrlDraft.value.trim();
+  const apiKey = configApiKeyDraft.value.trim();
   const modelPatch: Record<string, unknown> = {
     ...(provider ? { provider } : {}),
+    ...(api ? { api } : {}),
     ...(model ? { model } : {}),
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(apiKey ? { apiKey } : {}),
   };
   if (Object.keys(modelPatch).length === 0) {
-    managementError.value = "Enter at least one model setting before updating config.";
+    managementError.value = "Enter at least one provider setting before saving.";
     return;
   }
   void runManagementAction("config.update", {
@@ -652,18 +664,48 @@ onUnmounted(() => {
           <div class="mt-3 space-y-3">
             <label class="block text-xs text-slate-600">
               Provider
-              <input
+              <select
                 v-model="configProviderDraft"
                 class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none"
-                placeholder="openai"
-              />
+              >
+                <option value="openai">OpenAI-compatible</option>
+              </select>
+            </label>
+            <label class="block text-xs text-slate-600">
+              API
+              <select
+                v-model="configApiDraft"
+                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none"
+              >
+                <option value="responses">Responses API</option>
+                <option value="chat_completions">Chat Completions</option>
+              </select>
             </label>
             <label class="block text-xs text-slate-600">
               Model
               <input
                 v-model="configModelDraft"
                 class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none"
-                placeholder="gpt-5.4"
+                placeholder="gpt-4o"
+              />
+            </label>
+            <label class="block text-xs text-slate-600">
+              Base URL
+              <input
+                v-model="configBaseUrlDraft"
+                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none"
+                placeholder="https://api.openai.com/v1"
+              />
+            </label>
+            <label class="block text-xs text-slate-600">
+              API Key
+              <input
+                v-model="configApiKeyDraft"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none"
+                placeholder="Leave blank to keep saved key"
               />
             </label>
             <button
@@ -671,7 +713,7 @@ onUnmounted(() => {
               :disabled="managementBusy"
               @click="saveConfig"
             >
-              Update config via config.update
+              Save provider
             </button>
             <pre class="overflow-x-auto rounded-xl bg-slate-950 px-3 py-3 text-[11px] leading-5 text-slate-100"><code>{{ formatJson(configSummary?.values ?? {}) }}</code></pre>
           </div>

@@ -50,6 +50,68 @@ describe("readLlmMessageFromSseStream", () => {
     expect(result.packetCount).toBe(3);
   });
 
+  it("parses Responses API text delta events", async () => {
+    const stream = rawSseStream(
+      [
+        "event: response.output_text.delta",
+        `data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Hello" })}`,
+        "",
+        "event: response.output_text.delta",
+        `data: ${JSON.stringify({ type: "response.output_text.delta", delta: ", responses!" })}`,
+        "",
+        "event: response.completed",
+        `data: ${JSON.stringify({ type: "response.completed", response: { status: "completed" } })}`,
+        "",
+      ].join("\n"),
+    );
+
+    const deltas: string[] = [];
+    const result = await readLlmMessageFromSseStream(stream, (chunk) => deltas.push(chunk));
+
+    expect(result.message.content).toBe("Hello, responses!");
+    expect(result.message.stop_reason).toBe("stop");
+    expect(result.packetCount).toBe(3);
+    expect(deltas).toEqual(["Hello", ", responses!"]);
+  });
+
+  it("parses Responses API function call items", async () => {
+    const stream = rawSseStream(
+      [
+        "event: response.output_item.added",
+        `data: ${JSON.stringify({
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "function_call", call_id: "call_1", name: "get_weather" },
+        })}`,
+        "",
+        "event: response.function_call_arguments.delta",
+        `data: ${JSON.stringify({
+          type: "response.function_call_arguments.delta",
+          output_index: 0,
+          delta: '{"city":"SF"}',
+        })}`,
+        "",
+        "event: response.completed",
+        `data: ${JSON.stringify({ type: "response.completed", response: { status: "completed" } })}`,
+        "",
+      ].join("\n"),
+    );
+
+    const result = await readLlmMessageFromSseStream(stream);
+
+    expect(result.message.content).toBeNull();
+    expect(result.message.tool_calls).toEqual([
+      {
+        id: "call_1",
+        type: "function",
+        function: {
+          name: "get_weather",
+          arguments: '{"city":"SF"}',
+        },
+      },
+    ]);
+  });
+
   it("parses tool calls across multiple chunks", async () => {
     const stream = sseStream([
       sseChunk(undefined, [{ index: 0, id: "call_1", function: { name: "get_", arguments: "" } }]),

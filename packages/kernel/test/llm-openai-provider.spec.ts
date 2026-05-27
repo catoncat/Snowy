@@ -50,12 +50,29 @@ describe("createOpenAiCompatibleProvider", () => {
     const provider = createOpenAiCompatibleProvider();
     const route = makeRoute({ llmBase: "https://api.example.com/v1" });
 
-    expect(provider.resolveRequestUrl(route)).toBe("https://api.example.com/v1/chat/completions");
+    expect(provider.resolveRequestUrl(route)).toBe("https://api.example.com/v1/responses");
   });
 
   it("strips trailing slashes from base URL", () => {
     const provider = createOpenAiCompatibleProvider();
     const route = makeRoute({ llmBase: "https://api.example.com/v1///" });
+
+    expect(provider.resolveRequestUrl(route)).toBe("https://api.example.com/v1/responses");
+  });
+
+  it("rewrites a pasted chat completions endpoint to the responses endpoint by default", () => {
+    const provider = createOpenAiCompatibleProvider();
+    const route = makeRoute({ llmBase: "https://api.example.com/v1/chat/completions" });
+
+    expect(provider.resolveRequestUrl(route)).toBe("https://api.example.com/v1/responses");
+  });
+
+  it("can still target chat completions when explicitly configured", () => {
+    const provider = createOpenAiCompatibleProvider();
+    const route = makeRoute({
+      llmBase: "https://api.example.com/v1",
+      providerOptions: { api: "chat_completions" },
+    });
 
     expect(provider.resolveRequestUrl(route)).toBe("https://api.example.com/v1/chat/completions");
   });
@@ -75,11 +92,14 @@ describe("createOpenAiCompatibleProvider", () => {
 
     expect(fetchSpy).toHaveBeenCalledOnce();
     const [url, opts] = fetchSpy.mock.calls[0];
-    expect(url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(url).toBe("https://api.openai.com/v1/responses");
     expect(opts.method).toBe("POST");
     expect(opts.headers["content-type"]).toBe("application/json");
     expect(opts.headers.authorization).toBe("Bearer sk-test-key");
-    expect(JSON.parse(opts.body)).toEqual(payload);
+    expect(JSON.parse(opts.body)).toEqual({
+      model: "gpt-4",
+      input: [],
+    });
   });
 
   it("omits authorization header when llmKey is empty", async () => {

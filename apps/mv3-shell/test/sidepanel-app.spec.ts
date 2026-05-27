@@ -185,4 +185,21 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain('runManagementAction("intervention.cancel"');
     expect(source).toContain("listPendingInterventions");
   });
+
+  it("exposes complete provider configuration fields without echoing stored API keys", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("configProviderDraft");
+    expect(source).toContain("configApiDraft");
+    expect(source).toContain("configModelDraft");
+    expect(source).toContain("configBaseUrlDraft");
+    expect(source).toContain("configApiKeyDraft");
+    expect(source).toContain("OpenAI-compatible");
+    expect(source).toContain("Responses API");
+    expect(source).toContain('type="password"');
+    expect(source).toContain("api");
+    expect(source).toContain("apiKey");
+    expect(source).toContain("baseUrl");
+    expect(source).toContain("Save provider");
+  });
 });

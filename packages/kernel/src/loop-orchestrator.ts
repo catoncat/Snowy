@@ -692,6 +692,9 @@ export async function runLoop(
     }
     kernel.resume(input.sessionId);
   } else {
+    if (initialRunState.phase === "stopped") {
+      kernel.resetRun(input.sessionId);
+    }
     kernel.startRun(input.sessionId);
   }
 

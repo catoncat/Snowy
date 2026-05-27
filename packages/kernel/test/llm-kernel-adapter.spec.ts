@@ -66,11 +66,11 @@ describe("createKernelLlmFromProvider", () => {
     expect(result).toBe("Hello from GPT-4!");
 
     const [url, opts] = fetchSpy.mock.calls[0];
-    expect(url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(url).toBe("https://api.openai.com/v1/responses");
     const body = JSON.parse(opts.body);
     expect(body.model).toBe("gpt-4");
     expect(body.stream).toBe(true);
-    expect(body.messages).toEqual([
+    expect(body.input).toEqual([
       { role: "system", content: "You are helpful." },
       { role: "user", content: "Hi" },
     ]);
@@ -92,7 +92,7 @@ describe("createKernelLlmFromProvider", () => {
     });
 
     const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
-    expect(body.max_tokens).toBe(100);
+    expect(body.max_output_tokens).toBe(100);
   });
 
   it("defaults kernel adapter routing to the compaction lane when auxProfile is configured", async () => {

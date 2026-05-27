@@ -1904,7 +1904,12 @@ function cloneLlmProfileConfig(config) {
         )
       : undefined,
     profiles: Array.isArray(config.profiles)
-      ? config.profiles.map((profile) => ({ ...profile }))
+      ? config.profiles.map((profile) => ({
+          ...profile,
+          providerOptions: isPlainObject(profile.providerOptions)
+            ? { ...profile.providerOptions }
+            : undefined,
+        }))
       : [],
   };
 }
@@ -1944,7 +1949,7 @@ function cloneConfigSummary(summary) {
   const sourceValues = isPlainObject(summary.values) ? summary.values : {};
   for (const field of CONFIG_RESOURCE_FIELDS) {
     if (isPlainObject(sourceValues[field])) {
-      values[field] = { ...sourceValues[field] };
+      values[field] = redactConfigSummaryField(field, sourceValues[field]);
     }
   }
 
@@ -1961,6 +1966,42 @@ function cloneConfigSummary(summary) {
           : "Config control plane is not implemented yet.",
     updatedAt: typeof summary.updatedAt === "string" ? summary.updatedAt : null,
   };
+}
+
+function redactConfigSummaryField(field, value) {
+  if (field === "model") {
+    const entries = Object.entries(value)
+      .filter(([key]) => key !== "apiKey")
+      .map(([key, entryValue]) => [
+        key,
+        key === "provider" && typeof entryValue === "string"
+          ? toConfigModelProvider(toProfileProviderId(entryValue))
+          : entryValue,
+      ]);
+    const redacted = Object.fromEntries(entries);
+    const api = normalizeOpenAiApiMode(redacted.api);
+    return {
+      ...redacted,
+      ...(typeof redacted.baseUrl === "string"
+        ? { baseUrl: normalizeLlmBaseForApi(redacted.baseUrl, api) }
+        : {}),
+      api,
+    };
+  }
+  return { ...value };
+}
+
+function redactConfigPatchForSummary(patch) {
+  if (!isPlainObject(patch)) {
+    return patch;
+  }
+
+  return Object.fromEntries(
+    Object.entries(patch).map(([field, value]) => [
+      field,
+      isPlainObject(value) ? redactConfigSummaryField(field, value) : value,
+    ]),
+  );
 }
 
 function normalizeSupportedConfigPatch(patch) {
@@ -2012,11 +2053,47 @@ async function saveConfigControlPlaneSummary(
 }
 
 function toConfigModelProvider(providerId) {
-  return providerId === "openai_compatible" ? "openai" : providerId;
+  return normalizeOpenAiProviderAlias(providerId) === "openai_compatible"
+    ? "openai"
+    : String(providerId || "").trim();
 }
 
 function toProfileProviderId(provider) {
-  return provider === "openai" ? "openai_compatible" : provider;
+  return normalizeOpenAiProviderAlias(provider);
+}
+
+function normalizeOpenAiProviderAlias(provider) {
+  const normalized = String(provider || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  return normalized === "openai" || normalized === "openai_compatible"
+    ? "openai_compatible"
+    : String(provider || "").trim();
+}
+
+function normalizeOpenAiApiMode(api) {
+  const normalized = String(api || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.\s-]+/g, "_");
+  if (normalized === "chat" || normalized === "chat_completions" || normalized === "completions") {
+    return "chat_completions";
+  }
+  return "responses";
+}
+
+function normalizeLlmBaseForApi(baseUrl, api) {
+  const normalized = String(baseUrl || "")
+    .trim()
+    .replace(/\/+$/, "");
+  if (!normalized) {
+    return "";
+  }
+  if (api === "responses") {
+    return normalized.replace(/\/chat\/completions$/i, "/responses");
+  }
+  return normalized.replace(/\/responses$/i, "/chat/completions");
 }
 
 function createDefaultLlmProfile(profileId = "default") {
@@ -2026,6 +2103,9 @@ function createDefaultLlmProfile(profileId = "default") {
     llmBase: "https://api.openai.com/v1",
     llmKey: "",
     llmModel: "",
+    providerOptions: {
+      api: "responses",
+    },
   };
 }
 
@@ -2092,9 +2172,14 @@ function buildConfigModelValues(profileConfig) {
   if (typeof activeProfile.providerId === "string" && activeProfile.providerId.trim()) {
     model.provider = toConfigModelProvider(activeProfile.providerId.trim());
   }
+  const apiMode = normalizeOpenAiApiMode(activeProfile.providerOptions?.api);
   if (typeof activeProfile.llmModel === "string" && activeProfile.llmModel.trim()) {
     model.model = activeProfile.llmModel.trim();
   }
+  if (typeof activeProfile.llmBase === "string" && activeProfile.llmBase.trim()) {
+    model.baseUrl = normalizeLlmBaseForApi(activeProfile.llmBase, apiMode);
+  }
+  model.api = apiMode;
   model.routing = {
     defaultProfile:
       typeof normalized.defaultProfile === "string" && normalized.defaultProfile.trim()
@@ -2175,6 +2260,20 @@ function applyConfigModelPatchToProfileConfig(currentConfig, modelPatch) {
       changed = true;
     }
   }
+  if (!isPlainObject(profile.providerOptions)) {
+    profile.providerOptions = {};
+  }
+  const apiMode =
+    typeof modelPatch.api === "string" && modelPatch.api.trim()
+      ? normalizeOpenAiApiMode(modelPatch.api)
+      : normalizeOpenAiApiMode(profile.providerOptions.api);
+  if (profile.providerOptions.api !== apiMode) {
+    profile.providerOptions = {
+      ...profile.providerOptions,
+      api: apiMode,
+    };
+    changed = true;
+  }
   if (typeof modelPatch.model === "string" && modelPatch.model.trim()) {
     const llmModel = modelPatch.model.trim();
     if (profile.llmModel !== llmModel) {
@@ -2183,7 +2282,7 @@ function applyConfigModelPatchToProfileConfig(currentConfig, modelPatch) {
     }
   }
   if (typeof modelPatch.baseUrl === "string" && modelPatch.baseUrl.trim()) {
-    const llmBase = modelPatch.baseUrl.trim();
+    const llmBase = normalizeLlmBaseForApi(modelPatch.baseUrl, apiMode);
     if (profile.llmBase !== llmBase) {
       profile.llmBase = llmBase;
       changed = true;
@@ -2191,6 +2290,23 @@ function applyConfigModelPatchToProfileConfig(currentConfig, modelPatch) {
   } else if (!profile.llmBase) {
     profile.llmBase = "https://api.openai.com/v1";
     changed = true;
+  } else {
+    const normalizedBase = normalizeLlmBaseForApi(profile.llmBase, apiMode);
+    if (profile.llmBase !== normalizedBase) {
+      profile.llmBase = normalizedBase;
+      changed = true;
+    }
+  }
+  if (typeof modelPatch.apiKey === "string") {
+    const llmKey = modelPatch.apiKey.trim();
+    if (profile.llmKey !== llmKey) {
+      profile.llmKey = llmKey;
+      changed = true;
+    }
+    if (llmKey && !profile.llmModel) {
+      profile.llmModel = "gpt-4o";
+      changed = true;
+    }
   }
 
   const routingPatch = isPlainObject(modelPatch.routing) ? modelPatch.routing : null;
@@ -2621,7 +2737,7 @@ export function createBackgroundRuntimeServices({
         validatedPatch,
       );
       await syncProfileConfigFromConfigPatch(validatedPatch, services);
-      return services.configControlPlane.update(sanitizedPatch);
+      return services.configControlPlane.update(redactConfigPatchForSummary(sanitizedPatch));
     }
 
     const { registry, providers } = services;
@@ -3214,12 +3330,22 @@ export function createBackgroundRuntimeServices({
         llmBase: "",
         llmKey: "",
         llmModel: "",
+        providerOptions: {
+          api: "responses",
+        },
+      };
+      const apiMode = normalizeOpenAiApiMode(patch.api);
+      defaultProfile.providerOptions = {
+        ...(isPlainObject(defaultProfile.providerOptions) ? defaultProfile.providerOptions : {}),
+        api: apiMode,
       };
       defaultProfile.llmKey = patch.apiKey;
       if (typeof patch.baseUrl === "string") {
-        defaultProfile.llmBase = patch.baseUrl;
+        defaultProfile.llmBase = normalizeLlmBaseForApi(patch.baseUrl, apiMode);
       } else if (!defaultProfile.llmBase) {
         defaultProfile.llmBase = "https://api.openai.com/v1";
+      } else {
+        defaultProfile.llmBase = normalizeLlmBaseForApi(defaultProfile.llmBase, apiMode);
       }
       if (typeof patch.model === "string") {
         defaultProfile.llmModel = patch.model;

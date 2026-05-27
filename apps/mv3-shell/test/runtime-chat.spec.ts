@@ -472,6 +472,79 @@ describe("mv3-shell end-to-end loop integration", () => {
     }
   });
 
+  it("can send a second chat prompt after the first response completes", async () => {
+    const sentMessages: unknown[] = [];
+    let fetchCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      fetchCallCount += 1;
+      return sseResponse([
+        chatChunk(fetchCallCount === 1 ? "First response" : "Second response"),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const services = createBackgroundRuntimeServices({
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: TEST_PROFILE_CONFIG,
+        chromeApi: {
+          runtime: {
+            sendMessage: vi.fn(async (message) => {
+              sentMessages.push(message);
+              return undefined;
+            }),
+          },
+        },
+      });
+
+      await expect(services.sendChatPrompt({ text: "First" })).resolves.toMatchObject({
+        accepted: true,
+      });
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string; text?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string; text?: string } }).event?.type ===
+                "assistant.done" &&
+              (msg as { event?: { text?: string } }).event?.text === "First response",
+          ),
+        2000,
+      );
+
+      await expect(services.sendChatPrompt({ text: "Second" })).resolves.toMatchObject({
+        accepted: true,
+      });
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string; text?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string; text?: string } }).event?.type ===
+                "assistant.done" &&
+              (msg as { event?: { text?: string } }).event?.text === "Second response",
+          ),
+        2000,
+      );
+
+      expect(fetchCallCount).toBe(2);
+      expect(
+        sentMessages.some(
+          (msg) =>
+            (msg as { type?: string; event?: { type?: string } }).type ===
+              "bbl-next.runtime.chat.event" &&
+            (msg as { event?: { type?: string } }).event?.type === "run.error",
+        ),
+      ).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("uses kernel-managed provider/profile state on the runtime chat path", async () => {
     const sentMessages: unknown[] = [];
     const originalFetch = globalThis.fetch;
@@ -791,6 +864,7 @@ describe("mv3-shell end-to-end loop integration", () => {
         patch: {
           model: {
             provider: "openai",
+            api: "responses",
             model: "gpt-5.4",
           },
           automation: {
@@ -806,6 +880,7 @@ describe("mv3-shell end-to-end loop integration", () => {
         values: {
           model: {
             provider: "openai",
+            api: "responses",
             model: "gpt-5.4",
           },
           automation: {
@@ -839,6 +914,7 @@ describe("mv3-shell end-to-end loop integration", () => {
       values: {
         model: {
           provider: "openai",
+          api: "responses",
           model: "gpt-5.4",
         },
         automation: {
@@ -856,6 +932,310 @@ describe("mv3-shell end-to-end loop integration", () => {
         llmModel: "gpt-5.4",
       }),
     });
+  });
+
+  it("stores provider credentials through config.update while redacting API keys from summaries", async () => {
+    const storedData: Record<string, unknown> = {};
+    const createStorageArea = () => ({
+      get: vi.fn(async (keys) => {
+        const result: Record<string, unknown> = {};
+        for (const key of Array.isArray(keys) ? keys : [keys]) {
+          if (storedData[key]) {
+            result[key] = storedData[key];
+          }
+        }
+        return result;
+      }),
+      set: vi.fn(async (items) => {
+        Object.assign(storedData, items);
+      }),
+    });
+
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        ...createFixtureChromeApi(),
+        storage: {
+          local: createStorageArea(),
+        },
+      },
+    });
+
+    const updated = await services.dispatchCapability({
+      capabilityId: "config.update",
+      input: {
+        patch: {
+          model: {
+            provider: "openai",
+            model: "gpt-4o",
+            baseUrl: "https://api.openai.com/v1",
+            apiKey: "sk-config-update",
+          },
+        },
+      },
+    });
+
+    expect(updated).toMatchObject({
+      config: {
+        status: "ready",
+        values: {
+          model: {
+            provider: "openai",
+            api: "responses",
+            model: "gpt-4o",
+            baseUrl: "https://api.openai.com/v1",
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(updated.config)).not.toContain("sk-config-update");
+    expect(storedData["bbl-next.llm.config.v1"]).toMatchObject({
+      profiles: [
+        expect.objectContaining({
+          id: "default",
+          providerId: "openai_compatible",
+          providerOptions: { api: "responses" },
+          llmBase: "https://api.openai.com/v1",
+          llmKey: "sk-config-update",
+          llmModel: "gpt-4o",
+        }),
+      ],
+      defaultProfile: "default",
+    });
+    expect(JSON.stringify(storedData["bbl-next.config.control-plane.v1"])).not.toContain(
+      "sk-config-update",
+    );
+
+    const runtimeState = await services.getKernelRuntimeState();
+    expect(runtimeState.activeProfile).toMatchObject({
+      ok: true,
+      route: expect.objectContaining({
+        profile: "default",
+        llmBase: "https://api.openai.com/v1",
+        llmKey: "sk-config-update",
+        llmModel: "gpt-4o",
+        providerOptions: { api: "responses" },
+      }),
+    });
+
+    const restartedServices = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        ...createFixtureChromeApi(),
+        storage: {
+          local: createStorageArea(),
+        },
+      },
+    });
+    const restartedSummary = await restartedServices.getConfigBootstrapSummary();
+
+    expect(restartedSummary).toMatchObject({
+      status: "ready",
+      values: {
+        model: {
+          provider: "openai",
+          api: "responses",
+          model: "gpt-4o",
+          baseUrl: "https://api.openai.com/v1",
+        },
+      },
+      updatedAt: expect.any(String),
+    });
+    expect(JSON.stringify(restartedSummary)).not.toContain("sk-config-update");
+  });
+
+  it("uses freshly saved config.update provider on the background chat path", async () => {
+    const sentMessages: unknown[] = [];
+    let fetchCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      fetchCallCount += 1;
+      return sseResponse([
+        chatChunk("Hello from saved provider"),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const bridge = createBackgroundRunnerBridge({
+        chromeApi: {
+          ...createFixtureChromeApi(),
+          runtime: {
+            getURL: (path: string) => path,
+            sendMessage: vi.fn(async (message) => {
+              sentMessages.push(message);
+              return undefined;
+            }),
+          },
+        },
+        sessionStorage: new InMemorySessionStorage(),
+      });
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "config.update",
+          patch: {
+            model: {
+              provider: "openai",
+              model: "gpt-4o",
+              baseUrl: "https://api.openai.com/v1/chat/completions",
+              apiKey: "sk-background-chat",
+            },
+          },
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          config: {
+            values: {
+              model: {
+                provider: "openai",
+                api: "responses",
+                model: "gpt-4o",
+                baseUrl: "https://api.openai.com/v1/responses",
+              },
+            },
+          },
+        },
+      });
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "runtime.chat.send",
+          text: "Use saved provider",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          accepted: true,
+        },
+      });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      const doneEvent = sentMessages.find(
+        (msg): msg is { type: string; event: { type: string; text?: string } } =>
+          (msg as { type?: string }).type === "bbl-next.runtime.chat.event" &&
+          (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+      );
+
+      expect(fetchCallCount).toBeGreaterThan(0);
+      const [requestUrl, requestOptions] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+        .calls[0];
+      expect(requestUrl).toBe("https://api.openai.com/v1/responses");
+      expect(JSON.parse(String(requestOptions.body))).toMatchObject({
+        model: "gpt-4o",
+        input: expect.arrayContaining([{ role: "user", content: "Use saved provider" }]),
+      });
+      expect(doneEvent?.event.text).toBe("Hello from saved provider");
+      expect(doneEvent?.event.text).not.toContain("No LLM provider is configured");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("normalizes human-entered OpenAI provider aliases before chat routing", async () => {
+    const sentMessages: unknown[] = [];
+    let fetchCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      fetchCallCount += 1;
+      return sseResponse([
+        chatChunk("Hello from provider alias"),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const bridge = createBackgroundRunnerBridge({
+        chromeApi: {
+          ...createFixtureChromeApi(),
+          runtime: {
+            getURL: (path: string) => path,
+            sendMessage: vi.fn(async (message) => {
+              sentMessages.push(message);
+              return undefined;
+            }),
+          },
+        },
+        sessionStorage: new InMemorySessionStorage(),
+      });
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "config.update",
+          patch: {
+            model: {
+              provider: "OpenAI Compatible",
+              model: "gpt-4o",
+              baseUrl: "https://api.openai.com/v1",
+              apiKey: "sk-provider-alias",
+            },
+          },
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          config: {
+            values: {
+              model: {
+                provider: "openai",
+              },
+            },
+          },
+        },
+      });
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "runtime.chat.send",
+          text: "Use provider alias",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: {
+          accepted: true,
+        },
+      });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      const doneEvent = sentMessages.find(
+        (msg): msg is { type: string; event: { type: string; text?: string } } =>
+          (msg as { type?: string }).type === "bbl-next.runtime.chat.event" &&
+          (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+      );
+
+      expect(fetchCallCount).toBeGreaterThan(0);
+      expect(doneEvent?.event.text).toBe("Hello from provider alias");
+      expect(doneEvent?.event.text).not.toContain("No LLM provider is configured");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("applies shared model.routing overrides to the active kernel route without explicit per-call overrides", async () => {

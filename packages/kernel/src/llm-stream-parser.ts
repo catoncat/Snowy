@@ -21,14 +21,137 @@ export async function readLlmMessageFromSseStream(
   let rawBody = "";
   let buffer = "";
   let packetCount = 0;
+  let currentEvent: string | undefined;
 
   let accumulatedText = "";
   const toolByIndex = new Map<number, ToolCallAccumulator>();
   let stopReason: string | undefined;
 
+  function appendText(chunk: string): void {
+    if (!chunk) {
+      return;
+    }
+    accumulatedText += chunk;
+    onDeltaText?.(chunk);
+  }
+
+  function toolAccumulator(index: number): ToolCallAccumulator {
+    let acc = toolByIndex.get(index);
+    if (!acc) {
+      acc = {
+        index,
+        id: "",
+        type: "function",
+        function: { name: "", arguments: "" },
+      };
+      toolByIndex.set(index, acc);
+    }
+    return acc;
+  }
+
+  function responseToolIndex(parsed: Record<string, unknown>, item?: Record<string, unknown>) {
+    if (typeof parsed.output_index === "number") {
+      return parsed.output_index;
+    }
+    if (typeof item?.output_index === "number") {
+      return item.output_index;
+    }
+    return toolByIndex.size;
+  }
+
+  function processResponsesOutputItem(
+    item: Record<string, unknown> | undefined,
+    index: number,
+  ): void {
+    if (!item) {
+      return;
+    }
+
+    if (item.type === "function_call") {
+      const acc = toolAccumulator(index);
+      if (typeof item.call_id === "string") {
+        acc.id = item.call_id;
+      } else if (typeof item.id === "string") {
+        acc.id = item.id;
+      }
+      if (typeof item.name === "string") {
+        acc.function.name = item.name;
+      }
+      if (typeof item.arguments === "string") {
+        acc.function.arguments = item.arguments;
+      }
+      return;
+    }
+
+    if (item.type === "message" && !accumulatedText) {
+      const content = Array.isArray(item.content) ? item.content : [];
+      for (const block of content) {
+        if (!block || typeof block !== "object" || Array.isArray(block)) {
+          continue;
+        }
+        const text = (block as Record<string, unknown>).text;
+        if (typeof text === "string") {
+          appendText(text);
+        }
+      }
+    }
+  }
+
+  function processResponsesPacket(parsed: Record<string, unknown>, eventType?: string): boolean {
+    const type = typeof parsed.type === "string" ? parsed.type : eventType;
+    if (!type?.startsWith("response.")) {
+      return false;
+    }
+
+    if (type === "response.output_text.delta" && typeof parsed.delta === "string") {
+      appendText(parsed.delta);
+    }
+
+    if (type === "response.function_call_arguments.delta") {
+      const acc = toolAccumulator(responseToolIndex(parsed));
+      if (typeof parsed.item_id === "string" && !acc.id) {
+        acc.id = parsed.item_id;
+      }
+      if (typeof parsed.delta === "string") {
+        acc.function.arguments += parsed.delta;
+      }
+    }
+
+    if (type === "response.output_item.added" || type === "response.output_item.done") {
+      const item = parsed.item as Record<string, unknown> | undefined;
+      processResponsesOutputItem(item, responseToolIndex(parsed, item));
+    }
+
+    if (type === "response.completed") {
+      stopReason = "stop";
+      const response = parsed.response as Record<string, unknown> | undefined;
+      if (!accumulatedText && response) {
+        if (typeof response.output_text === "string") {
+          appendText(response.output_text);
+        }
+        const output = Array.isArray(response.output) ? response.output : [];
+        output.forEach((item, index) => {
+          if (item && typeof item === "object" && !Array.isArray(item)) {
+            processResponsesOutputItem(item as Record<string, unknown>, index);
+          }
+        });
+      }
+    }
+
+    return true;
+  }
+
   function processLine(line: string): void {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith(":")) return;
+    if (!trimmed) {
+      currentEvent = undefined;
+      return;
+    }
+    if (trimmed.startsWith(":")) return;
+    if (trimmed.startsWith("event: ")) {
+      currentEvent = trimmed.slice(7).trim();
+      return;
+    }
     if (trimmed === "data: [DONE]") return;
     if (!trimmed.startsWith("data: ")) return;
 
@@ -40,6 +163,10 @@ export async function readLlmMessageFromSseStream(
       return;
     }
     packetCount++;
+
+    if (processResponsesPacket(parsed, currentEvent)) {
+      return;
+    }
 
     const choices = parsed.choices as Array<Record<string, unknown>> | undefined;
     if (!choices?.length) return;
@@ -55,24 +182,14 @@ export async function readLlmMessageFromSseStream(
     if (!delta) return;
 
     if (typeof delta.content === "string" && delta.content) {
-      accumulatedText += delta.content;
-      onDeltaText?.(delta.content);
+      appendText(delta.content);
     }
 
     const deltaToolCalls = delta.tool_calls as Array<Record<string, unknown>> | undefined;
     if (deltaToolCalls) {
       for (const tc of deltaToolCalls) {
         const idx = (tc.index as number) ?? 0;
-        let acc = toolByIndex.get(idx);
-        if (!acc) {
-          acc = {
-            index: idx,
-            id: "",
-            type: "function",
-            function: { name: "", arguments: "" },
-          };
-          toolByIndex.set(idx, acc);
-        }
+        const acc = toolAccumulator(idx);
         if (typeof tc.id === "string") acc.id += tc.id;
         const fn = tc.function as Record<string, unknown> | undefined;
         if (fn) {
