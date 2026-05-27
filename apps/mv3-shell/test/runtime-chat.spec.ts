@@ -154,6 +154,193 @@ describe("mv3-shell runtime chat bridge", () => {
     );
   });
 
+  it("queues running chat input as steer or follow-up", async () => {
+    const originalFetch = globalThis.fetch;
+    let failStream = (_error: unknown) => {};
+    globalThis.fetch = vi.fn(async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          failStream = (error: unknown) => controller.error(error);
+        },
+      });
+      return new Response(stream, { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const services = createBackgroundRuntimeServices({
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: {
+          profiles: [
+            {
+              id: "default",
+              providerId: "openai_compatible",
+              llmBase: "https://test.api",
+              llmKey: "test-key",
+              llmModel: "test-model",
+            },
+          ],
+          defaultProfile: "default",
+        },
+      });
+
+      await expect(services.sendChatPrompt({ text: "Start long run" })).resolves.toMatchObject({
+        accepted: true,
+      });
+
+      const steer = await services.sendChatPrompt({ text: "Use the visible button" });
+      expect(steer).toMatchObject({
+        accepted: true,
+        queued: true,
+        behavior: "steer",
+        runState: { status: "running" },
+      });
+
+      const followUp = await services.sendChatPrompt({
+        text: "Then summarize",
+        mode: "followUp",
+      });
+      expect(followUp).toMatchObject({
+        accepted: true,
+        queued: true,
+        behavior: "followUp",
+      });
+
+      const runtime = await services.getKernelRuntimeState();
+      expect(runtime.runState.queue.steer).toHaveLength(1);
+      expect(runtime.runState.queue.followUp).toHaveLength(1);
+      failStream(new Error("done"));
+      await services.stopChatRun();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("expands selected tabs and skills for the LLM while storing the original user prompt", async () => {
+    const sentMessages: unknown[] = [];
+    const requestBodies: Array<Record<string, unknown>> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (_url, options) => {
+      requestBodies.push(JSON.parse(String((options as { body?: unknown })?.body ?? "{}")));
+      return sseResponse([
+        chatChunk("Context accepted"),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const services = createBackgroundRuntimeServices({
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: {
+          profiles: [
+            {
+              id: "default",
+              providerId: "openai_compatible",
+              llmBase: "https://test.api/v1",
+              llmKey: "test-key",
+              llmModel: "test-model",
+            },
+          ],
+          defaultProfile: "default",
+        },
+        chromeApi: {
+          runtime: {
+            sendMessage: vi.fn(async (message) => {
+              sentMessages.push(message);
+              return undefined;
+            }),
+          },
+        },
+      });
+
+      await expect(
+        services.sendChatPrompt({
+          text: "Summarize this page",
+          context: {
+            tabs: [{ id: 11, title: "Docs", url: "https://docs.example" }],
+            skills: [{ id: "page.summary", description: "Summarize the active page" }],
+            skillIds: ["page.translate"],
+          },
+        }),
+      ).resolves.toMatchObject({ accepted: true });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      const llmInput = JSON.stringify(requestBodies[0]);
+      expect(llmInput).toContain("Summarize this page");
+      expect(llmInput).toContain("Selected skills");
+      expect(llmInput).toContain("page.summary");
+      expect(llmInput).toContain("page.translate");
+      expect(llmInput).toContain("Referenced browser tabs");
+      expect(llmInput).toContain("Docs");
+
+      const bootstrap = await services.bootstrapChat();
+      const userMessages = bootstrap.messages.filter(
+        (item: { kind?: string; role?: string; text?: string }): item is {
+          kind: "message";
+          role: "user";
+          text: string;
+        } => item.kind === "message" && item.role === "user",
+      );
+      expect(userMessages[0]?.text).toBe("Summarize this page");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("accepts selected skills without extra prompt text", async () => {
+    const sentMessages: unknown[] = [];
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        runtime: {
+          sendMessage: vi.fn(async (message) => {
+            sentMessages.push(message);
+            return undefined;
+          }),
+        },
+      },
+    });
+
+    await expect(
+      services.sendChatPrompt({
+        context: {
+          skillIds: ["page.summary"],
+        },
+      }),
+    ).resolves.toMatchObject({ accepted: true });
+
+    await waitFor(
+      () =>
+        sentMessages.some(
+          (msg) =>
+            (msg as { type?: string; event?: { type?: string } }).type ===
+              "bbl-next.runtime.chat.event" &&
+            (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+        ),
+      2000,
+    );
+
+    const bootstrap = await services.bootstrapChat();
+    const userMessages = bootstrap.messages.filter(
+      (item: { kind?: string; role?: string; text?: string }): item is {
+        kind: "message";
+        role: "user";
+        text: string;
+      } => item.kind === "message" && item.role === "user",
+    );
+    expect(userMessages[0]?.text).toBe("Selected skills: page.summary");
+  });
+
   it("routes runtime.chat.* messages through runtime services", async () => {
     const runtimeServices = {
       bootstrapChat: vi.fn(async () => ({
@@ -233,8 +420,27 @@ describe("mv3-shell runtime chat bridge", () => {
     });
 
     await expect(
-      bridge.route({ target: RUNNER_BACKGROUND_TARGET, kind: "runtime.chat.send", text: "hello" }),
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.chat.send",
+        text: "hello",
+        mode: "followUp",
+        context: {
+          tabs: [{ id: 11, title: "Docs", url: "https://docs.example" }],
+          skills: [{ id: "page.summary", description: "Summarize" }],
+          skillIds: ["page.summary"],
+        },
+      }),
     ).resolves.toMatchObject({ ok: true, data: { accepted: true, echoedText: "hello" } });
+    expect(runtimeServices.sendChatPrompt).toHaveBeenCalledWith({
+      text: "hello",
+      mode: "followUp",
+      context: {
+        tabs: [{ id: 11, title: "Docs", url: "https://docs.example" }],
+        skills: [{ id: "page.summary", description: "Summarize" }],
+        skillIds: ["page.summary"],
+      },
+    });
 
     await expect(
       bridge.route({ target: RUNNER_BACKGROUND_TARGET, kind: "runtime.chat.stop" }),

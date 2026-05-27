@@ -46,6 +46,7 @@ export interface LoopOrchestratorOptions {
 export interface RunLoopInput {
   sessionId: string;
   prompt: string;
+  historyText?: string;
   onDelta?: (chunk: string) => void;
   onToolCall?: (toolName: string, args: unknown) => void;
   onToolResult?: (toolName: string, result: unknown) => void;
@@ -65,6 +66,8 @@ export interface RunLoopResult {
   stepCount: number;
   telemetry: LoopTelemetryEntry[];
 }
+
+type QueuedPromptBehavior = "steer" | "followUp";
 
 export interface LoopInterventionContext {
   sessionId: string;
@@ -100,6 +103,49 @@ function defaultSystemPromptMessages(
   promptOptions?: PromptBuilderOptions,
 ): string[] {
   return buildSystemPromptMessages(tools, promptOptions);
+}
+
+function formatQueuedPromptText(behavior: QueuedPromptBehavior, text: string): string {
+  const label = behavior === "steer" ? "User steering update" : "User follow-up";
+  return `[${label}]\n${text}`;
+}
+
+function applyInitialPromptOverride(
+  messages: Array<Record<string, unknown>>,
+  input: RunLoopInput,
+  llmStepCount: number,
+): Array<Record<string, unknown>> {
+  if (!input.historyText || input.historyText === input.prompt || llmStepCount !== 0) {
+    return messages;
+  }
+  const next = [...messages];
+  for (let index = next.length - 1; index >= 0; index--) {
+    const message = next[index];
+    if (message?.role !== "user") {
+      continue;
+    }
+    next[index] = {
+      ...message,
+      content: input.prompt,
+    };
+    return next;
+  }
+  return next;
+}
+
+async function appendQueuedPrompts(
+  kernel: Kernel,
+  sessionId: string,
+  behavior: QueuedPromptBehavior,
+): Promise<number> {
+  const prompts = kernel.dequeue(sessionId, behavior);
+  for (const prompt of prompts) {
+    await kernel.appendMessage(sessionId, {
+      role: "user",
+      text: formatQueuedPromptText(behavior, prompt.text),
+    });
+  }
+  return prompts.length;
 }
 
 function toolContractsToOpenAiTools(tools: ToolContract[]): Array<Record<string, unknown>> {
@@ -701,7 +747,7 @@ export async function runLoop(
   // Append user message
   await kernel.appendMessage(input.sessionId, {
     role: "user",
-    text: input.prompt,
+    text: input.historyText ?? input.prompt,
   });
 
   let terminalStatus: LoopTerminalStatus | null = null;
@@ -718,10 +764,16 @@ export async function runLoop(
         break;
       }
 
+      await appendQueuedPrompts(kernel, input.sessionId, "steer");
+
       // Build context
       const context = await kernel.buildContext(input.sessionId);
       const llmMessages = contextMessagesToLlmMessages(context.messages);
-      const apiMessages = llmMessagesToApiPayload(llmMessages);
+      const apiMessages = applyInitialPromptOverride(
+        llmMessagesToApiPayload(llmMessages),
+        input,
+        llmStepCount,
+      );
       const runState = kernel.getRunState(input.sessionId);
       const progressPrompt = buildTaskProgressMessage({
         llmStep: llmStepCount + 1,
@@ -803,6 +855,10 @@ export async function runLoop(
 
       // No tool calls → done
       if (toolCalls.length === 0) {
+        const followUpCount = await appendQueuedPrompts(kernel, input.sessionId, "followUp");
+        if (followUpCount > 0) {
+          continue;
+        }
         terminalStatus = "done";
         break;
       }

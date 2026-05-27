@@ -201,6 +201,31 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("sessionSearch");
   });
 
+  it("keeps old-product composer behaviors wired to real runtime input", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("selectedTabs");
+    expect(source).toContain("availableTabs");
+    expect(source).toContain("showMentionList");
+    expect(source).toContain("selectedSkills");
+    expect(source).toContain("showSkillList");
+    expect(source).toContain("skillFilter");
+    expect(source).toContain("SkillCommandMode");
+    expect(source).toContain("composerQueueItems");
+    expect(source).toContain("extractSlashContext");
+    expect(source).toContain("mode: sendMode");
+    expect(source).toContain("context: {");
+    expect(source).toContain("tabs: tabContext");
+    expect(source).toContain("skills: skillContext");
+    expect(source).toContain("skillIds: skillContext.map");
+    expect(source).toContain("Enter steer · Alt+Enter follow-up");
+    expect(source).toContain("运行中已排队");
+    expect(source).toContain("insertComposerToken('/skill')");
+    expect(source).toContain('"/skills"');
+    expect(source).toContain("stopRun");
+    expect(source).toContain(':disabled="loading || sending"');
+  });
+
   it("surfaces pending interventions through shared management actions", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 

@@ -2992,6 +2992,8 @@ export function createBackgroundRunnerBridge({
         return routeRuntimeService(() =>
           getRuntimeServices().sendChatPrompt({
             text: message.text,
+            mode: message.mode,
+            context: message.context,
           }),
         );
       case "runtime.chat.stop":

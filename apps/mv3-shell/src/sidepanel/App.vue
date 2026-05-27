@@ -31,6 +31,8 @@ type RuntimeEnvelope = {
 };
 
 type SidepanelPane = "chat" | "sessions" | "provider" | "skills" | "runtime";
+type ChatSendMode = "normal" | "steer" | "followUp";
+type SkillCommandMode = "select" | "manage";
 interface ChatSessionSummary {
   id: string;
   title: string;
@@ -40,6 +42,17 @@ interface ChatSessionSummary {
   preview?: string;
   active?: boolean;
 }
+interface BrowserTabSummary {
+  id: number;
+  title: string;
+  url: string;
+  favIconUrl?: string;
+}
+interface ComposerQueueItem {
+  id: string;
+  behavior: "steer" | "followUp";
+  text: string;
+}
 type HostActionKind = "hosts.connect" | "hosts.disconnect" | "hosts.set_default";
 type SkillActionKind =
   | "skills.install"
@@ -48,7 +61,7 @@ type SkillActionKind =
   | "skills.uninstall"
   | "skills.rollback";
 
-const runtimeApi = (
+const chromeApi = (
   globalThis as {
     chrome?: {
       runtime?: {
@@ -58,9 +71,21 @@ const runtimeApi = (
           removeListener: (listener: (message: unknown) => void) => void;
         };
       };
+      tabs?: {
+        query?: (queryInfo: Record<string, unknown>) => Promise<
+          Array<{
+            id?: number;
+            title?: string;
+            url?: string;
+            favIconUrl?: string;
+          }>
+        >;
+      };
     };
   }
-).chrome?.runtime;
+).chrome;
+const runtimeApi = chromeApi?.runtime;
+const tabsApi = chromeApi?.tabs;
 
 const activePane = ref<SidepanelPane>("chat");
 const chatState = ref<ChatState>(createInitialChatState());
@@ -70,6 +95,18 @@ const sending = ref(false);
 const listRef = ref<HTMLElement | null>(null);
 const composerRef = ref<HTMLTextAreaElement | null>(null);
 const moreMenuOpen = ref(false);
+const selectedTabs = ref<BrowserTabSummary[]>([]);
+const availableTabs = ref<BrowserTabSummary[]>([]);
+const mentionFilter = ref("");
+const showMentionList = ref(false);
+const focusedMentionIndex = ref(0);
+const selectedSkills = ref<SkillCatalogItem[]>([]);
+const skillFilter = ref("");
+const showSkillList = ref(false);
+const focusedSkillIndex = ref(0);
+const skillCommandMode = ref<SkillCommandMode>("select");
+const skillActionPendingIds = ref<Set<string>>(new Set());
+const composerQueueItems = ref<ComposerQueueItem[]>([]);
 const chatSessions = ref<ChatSessionSummary[]>([]);
 const sessionsLoading = ref(false);
 const sessionsError = ref<string | null>(null);
@@ -107,7 +144,10 @@ const skillMarkdownDraft = ref("# Sidepanel Authored Skill\n");
 
 const isRunning = computed(() => chatState.value.status === "running");
 const isStopped = computed(() => chatState.value.status === "stopped");
-const canSend = computed(() => !loading.value && !sending.value && !isRunning.value);
+const hasComposerPayload = computed(
+  () => draft.value.trim().length > 0 || selectedTabs.value.length > 0 || selectedSkills.value.length > 0,
+);
+const canSend = computed(() => !loading.value && !sending.value && hasComposerPayload.value);
 const statusTone = computed(() =>
   isRunning.value
     ? "bg-blue-50 text-blue-700 border-blue-200"
@@ -163,6 +203,41 @@ const filteredChatSessions = computed(() => {
     ),
   );
 });
+const filteredTabs = computed(() => {
+  const query = mentionFilter.value.trim().toLowerCase();
+  const selectedIds = new Set(selectedTabs.value.map((tab) => tab.id));
+  return availableTabs.value
+    .filter((tab) => !selectedIds.has(tab.id))
+    .filter((tab) => {
+      if (!query) {
+        return true;
+      }
+      return [tab.title, tab.url].some((value) => value.toLowerCase().includes(query));
+    });
+});
+const filteredSkills = computed(() => {
+  const query = skillFilter.value.trim().toLowerCase();
+  const selectedIds = new Set(selectedSkills.value.map((skill) => skill.skillId));
+  const options = skillItems.value
+    .filter((skill) =>
+      skillCommandMode.value === "manage" ? true : skill.enabled && !selectedIds.has(skill.skillId),
+    )
+    .sort((left, right) => {
+      if (left.enabled !== right.enabled) {
+        return left.enabled ? -1 : 1;
+      }
+      return left.skillId.localeCompare(right.skillId);
+    });
+  if (!query) {
+    return options;
+  }
+  return options.filter((skill) =>
+    [skill.skillId, skill.description ?? "", skill.kind ?? "", ...skill.tags].some((value) =>
+      value.toLowerCase().includes(query),
+    ),
+  );
+});
+const isSkillsManageMode = computed(() => skillCommandMode.value === "manage");
 const providerModelLabel = computed(
   () => configModelDraft.value || readStringField(configSummary.value?.values.model, "model") || "未配置",
 );
@@ -256,11 +331,256 @@ function useSuggestion(text: string) {
   void focusComposer();
 }
 
+async function refreshTabs() {
+  if (typeof tabsApi?.query !== "function") {
+    availableTabs.value = [];
+    return;
+  }
+  const tabs = await tabsApi.query({});
+  availableTabs.value = tabs
+    .filter((tab) => typeof tab.id === "number" && (tab.title || tab.url))
+    .map((tab) => ({
+      id: tab.id as number,
+      title: String(tab.title || tab.url || `Tab ${tab.id}`),
+      url: String(tab.url || ""),
+      ...(typeof tab.favIconUrl === "string" ? { favIconUrl: tab.favIconUrl } : {}),
+    }));
+}
+
+async function openMentionList() {
+  mentionFilter.value = "";
+  focusedMentionIndex.value = 0;
+  showMentionList.value = true;
+  await refreshTabs();
+}
+
 function insertComposerToken(token: string) {
   const needsSpace = draft.value.length > 0 && !draft.value.endsWith(" ");
   draft.value = `${draft.value}${needsSpace ? " " : ""}${token}`;
+  if (token === "@") {
+    void openMentionList();
+  }
   void focusComposer();
 }
+
+function removeSelectedTab(tabId: number) {
+  selectedTabs.value = selectedTabs.value.filter((tab) => tab.id !== tabId);
+}
+
+function clearSelectedContext() {
+  selectedTabs.value = [];
+  selectedSkills.value = [];
+}
+
+function selectMentionedTab(tab = filteredTabs.value[focusedMentionIndex.value]) {
+  if (!tab) {
+    showMentionList.value = false;
+    return;
+  }
+  selectedTabs.value = [...selectedTabs.value, tab];
+  draft.value = draft.value.replace(/@([^\s]*)$/, "").trimStart();
+  mentionFilter.value = "";
+  focusedMentionIndex.value = 0;
+  showMentionList.value = false;
+  void focusComposer();
+}
+
+interface SlashContext {
+  start: number;
+  end: number;
+  query: string;
+  mode: SkillCommandMode;
+}
+
+function extractSlashContext(value: string): SlashContext | null {
+  const selectionStart = composerRef.value?.selectionStart;
+  const cursor =
+    typeof selectionStart === "number" && selectionStart > 0 && selectionStart <= value.length
+      ? selectionStart
+      : value.length;
+  const head = value.slice(0, cursor);
+  const match = /(?:^|\s)\/([^\s/]*)$/.exec(head);
+  if (!match) {
+    return null;
+  }
+  const whole = match[0] ?? "";
+  const leadingWhitespaceOffset = whole.startsWith(" ") ? 1 : 0;
+  const rawQuery = String(match[1] ?? "");
+  const lower = rawQuery.toLowerCase();
+  let mode: SkillCommandMode = "select";
+  let query = rawQuery;
+  if (lower === "skill") {
+    query = "";
+  } else if (lower.startsWith("skill:")) {
+    query = rawQuery.slice("skill:".length);
+  } else if (lower === "skills") {
+    mode = "manage";
+    query = "";
+  } else if (lower.startsWith("skills:")) {
+    mode = "manage";
+    query = rawQuery.slice("skills:".length);
+  }
+  return {
+    start: head.length - whole.length + leadingWhitespaceOffset,
+    end: cursor,
+    query,
+    mode,
+  };
+}
+
+function replaceSlashContextAndFocus(context: SlashContext) {
+  const before = draft.value.slice(0, context.start);
+  const after = draft.value.slice(context.end);
+  draft.value = before.endsWith(" ") && after.startsWith(" ") ? `${before}${after.slice(1)}` : `${before}${after}`;
+  void nextTick(() => {
+    const cursor = before.length;
+    composerRef.value?.focus();
+    composerRef.value?.setSelectionRange(cursor, cursor);
+  });
+}
+
+function skillDescription(skill: SkillCatalogItem): string {
+  if (skill.description?.trim()) {
+    return skill.description.trim();
+  }
+  if (skill.actions.length > 0) {
+    return formatSkillActions(skill);
+  }
+  return skill.kind ?? skill.status;
+}
+
+function isSkillActionPending(skillId: string): boolean {
+  return skillActionPendingIds.value.has(skillId);
+}
+
+function setSkillActionPending(skillId: string, pending: boolean) {
+  const next = new Set(skillActionPendingIds.value);
+  if (pending) {
+    next.add(skillId);
+  } else {
+    next.delete(skillId);
+  }
+  skillActionPendingIds.value = next;
+}
+
+function removeSelectedSkill(skillId: string) {
+  selectedSkills.value = selectedSkills.value.filter((skill) => skill.skillId !== skillId);
+}
+
+function addSelectedSkill(skill: SkillCatalogItem) {
+  if (selectedSkills.value.some((item) => item.skillId === skill.skillId)) {
+    return;
+  }
+  selectedSkills.value = [...selectedSkills.value, skill];
+}
+
+async function ensureSkillCatalogLoaded() {
+  if (skillsSummary.value || managementLoading.value) {
+    return;
+  }
+  await bootstrapManagement();
+}
+
+async function setComposerSkillEnabled(skill: SkillCatalogItem, enabled: boolean): Promise<SkillCatalogItem | null> {
+  if (isSkillActionPending(skill.skillId)) {
+    return null;
+  }
+  setSkillActionPending(skill.skillId, true);
+  try {
+    await callRuntime(enabled ? "skills.enable" : "skills.disable", { skillId: skill.skillId });
+    await bootstrapManagement();
+    const updated = skillItems.value.find((item) => item.skillId === skill.skillId) ?? null;
+    if (updated && !updated.enabled) {
+      removeSelectedSkill(updated.skillId);
+    }
+    managementError.value = null;
+    return updated;
+  } catch (error) {
+    managementError.value = error instanceof Error ? error.message : String(error);
+    return null;
+  } finally {
+    setSkillActionPending(skill.skillId, false);
+  }
+}
+
+function confirmSkillSelection(skill = filteredSkills.value[focusedSkillIndex.value]) {
+  if (!skill) {
+    showSkillList.value = false;
+    return;
+  }
+  const context = extractSlashContext(draft.value);
+  addSelectedSkill(skill);
+  if (context) {
+    replaceSlashContextAndFocus(context);
+  }
+  showSkillList.value = false;
+  skillFilter.value = "";
+  focusedSkillIndex.value = 0;
+  skillCommandMode.value = "select";
+}
+
+async function useSkillFromManage(skill = filteredSkills.value[focusedSkillIndex.value]) {
+  if (!skill) {
+    showSkillList.value = false;
+    return;
+  }
+  const resolved = skill.enabled ? skill : await setComposerSkillEnabled(skill, true);
+  if (!resolved?.enabled) {
+    return;
+  }
+  confirmSkillSelection(resolved);
+}
+
+async function toggleFocusedSkillEnabled(skill = filteredSkills.value[focusedSkillIndex.value]) {
+  if (!skill) {
+    return;
+  }
+  await setComposerSkillEnabled(skill, !skill.enabled);
+}
+
+function handleSkillRowClick(skill: SkillCatalogItem) {
+  if (isSkillsManageMode.value) {
+    void useSkillFromManage(skill);
+    return;
+  }
+  confirmSkillSelection(skill);
+}
+
+watch(draft, (value) => {
+  const slashContext = extractSlashContext(value);
+  if (slashContext) {
+    const modeChanged = skillCommandMode.value !== slashContext.mode;
+    skillCommandMode.value = slashContext.mode;
+    if (skillFilter.value !== slashContext.query) {
+      focusedSkillIndex.value = 0;
+    }
+    skillFilter.value = slashContext.query;
+    showSkillList.value = true;
+    showMentionList.value = false;
+    mentionFilter.value = "";
+    if (modeChanged) {
+      focusedSkillIndex.value = 0;
+    }
+    void ensureSkillCatalogLoaded();
+    return;
+  }
+  showSkillList.value = false;
+  skillFilter.value = "";
+  skillCommandMode.value = "select";
+
+  const mentionMatch = /@([^\s]*)$/.exec(value);
+  if (!mentionMatch) {
+    showMentionList.value = false;
+    mentionFilter.value = "";
+    return;
+  }
+  mentionFilter.value = mentionMatch[1] ?? "";
+  focusedMentionIndex.value = 0;
+  if (!showMentionList.value) {
+    showMentionList.value = true;
+    void refreshTabs();
+  }
+});
 
 function syncConfigDraftsFromSummary() {
   configProviderDraft.value = readStringField(configSummary.value?.values.model, "provider") || "openai";
@@ -437,6 +757,9 @@ function onRuntimeMessage(message: unknown) {
     return;
   }
   chatState.value = applyChatEvent(chatState.value, payload.event);
+  if (payload.event.type === "run.state" && payload.event.status !== "running") {
+    composerQueueItems.value = [];
+  }
   if (
     payload.event.type === "assistant.done" ||
     payload.event.type === "run.state" ||
@@ -446,51 +769,105 @@ function onRuntimeMessage(message: unknown) {
   }
 }
 
-async function sendPrompt() {
+async function sendPrompt(mode: ChatSendMode = isRunning.value ? "steer" : "normal") {
   const text = draft.value.trim();
-  if (!text || !canSend.value) {
+  if (!canSend.value) {
     return;
   }
 
   const optimisticId = `local-user-${crypto.randomUUID()}`;
-  chatState.value = {
-    ...chatState.value,
-    error: null,
-    items: [
-      ...chatState.value.items,
-      {
-        id: optimisticId,
-        kind: "message",
-        role: "user",
-        text,
-        state: "complete",
-      },
-    ],
-  };
+  const sendMode = isRunning.value && mode === "normal" ? "steer" : mode;
+  const selectedTabContext = [...selectedTabs.value];
+  const selectedSkillContext = [...selectedSkills.value];
+  const tabContext = selectedTabContext.map((tab) => ({
+    id: tab.id,
+    title: tab.title,
+    url: tab.url,
+  }));
+  const skillContext = selectedSkillContext.map((skill) => ({
+    id: skill.skillId,
+    description: skillDescription(skill),
+    enabled: skill.enabled,
+  }));
+  const displayText =
+    text ||
+    [
+      skillContext.length > 0 ? `使用 skills：${skillContext.map((skill) => skill.id).join(", ")}` : "",
+      tabContext.length > 0 ? `引用标签页：${tabContext.map((tab) => tab.title).join(", ")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  if (sendMode === "normal") {
+    chatState.value = {
+      ...chatState.value,
+      error: null,
+      items: [
+        ...chatState.value.items,
+        {
+          id: optimisticId,
+          kind: "message",
+          role: "user",
+          text: displayText,
+          state: "complete",
+        },
+      ],
+    };
+  }
   draft.value = "";
+  selectedTabs.value = [];
+  selectedSkills.value = [];
+  showMentionList.value = false;
+  showSkillList.value = false;
   sending.value = true;
 
   try {
     const payload = await callRuntime<{
       sessionId: string | null;
       runState: { status?: string };
-    }>("runtime.chat.send", { text });
-    chatState.value = {
-      ...chatState.value,
-      sessionId: payload.sessionId,
-      status:
-        payload.runState.status === "running" || payload.runState.status === "stopped"
-          ? payload.runState.status
-          : "idle",
-    };
+      queued?: boolean;
+      behavior?: "steer" | "followUp";
+      queuedPrompt?: { id?: string; text?: string };
+    }>("runtime.chat.send", {
+      text,
+      mode: sendMode,
+      context: {
+        tabs: tabContext,
+        skills: skillContext,
+        skillIds: skillContext.map((skill) => skill.id),
+      },
+    });
+    if (payload.queued) {
+      composerQueueItems.value = [
+        ...composerQueueItems.value,
+        {
+          id: payload.queuedPrompt?.id || `queued-${crypto.randomUUID()}`,
+          behavior: payload.behavior === "followUp" ? "followUp" : "steer",
+          text: displayText,
+        },
+      ];
+    } else {
+      chatState.value = {
+        ...chatState.value,
+        sessionId: payload.sessionId,
+        status:
+          payload.runState.status === "running" || payload.runState.status === "stopped"
+            ? payload.runState.status
+            : "idle",
+      };
+    }
     void refreshChatSessions();
   } catch (error) {
     chatState.value = {
       ...chatState.value,
-      items: chatState.value.items.filter((item) => item.id !== optimisticId),
+      items:
+        sendMode === "normal"
+          ? chatState.value.items.filter((item) => item.id !== optimisticId)
+          : chatState.value.items,
       error: error instanceof Error ? error.message : String(error),
     };
     draft.value = text;
+    selectedTabs.value = selectedTabContext;
+    selectedSkills.value = selectedSkillContext;
   } finally {
     sending.value = false;
   }
@@ -663,12 +1040,77 @@ function toggleTool(id: string) {
   chatState.value = toggleToolExpanded(chatState.value, id);
 }
 
-function onComposerEnter(event: KeyboardEvent) {
-  if (event.shiftKey) {
+function onComposerKeydown(event: KeyboardEvent) {
+  if (showSkillList.value) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (filteredSkills.value.length > 0) {
+        focusedSkillIndex.value = (focusedSkillIndex.value + 1) % filteredSkills.value.length;
+      }
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (filteredSkills.value.length > 0) {
+        focusedSkillIndex.value =
+          (focusedSkillIndex.value - 1 + filteredSkills.value.length) % filteredSkills.value.length;
+      }
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (isSkillsManageMode.value) {
+        if (event.altKey) {
+          void toggleFocusedSkillEnabled();
+        } else {
+          void useSkillFromManage();
+        }
+      } else {
+        confirmSkillSelection();
+      }
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      showSkillList.value = false;
+      skillCommandMode.value = "select";
+      return;
+    }
+  }
+
+  if (showMentionList.value) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (filteredTabs.value.length > 0) {
+        focusedMentionIndex.value = (focusedMentionIndex.value + 1) % filteredTabs.value.length;
+      }
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (filteredTabs.value.length > 0) {
+        focusedMentionIndex.value =
+          (focusedMentionIndex.value - 1 + filteredTabs.value.length) % filteredTabs.value.length;
+      }
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      selectMentionedTab();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      showMentionList.value = false;
+      return;
+    }
+  }
+
+  if (event.key !== "Enter" || event.shiftKey) {
     return;
   }
   event.preventDefault();
-  void sendPrompt();
+  void sendPrompt(event.altKey ? "followUp" : isRunning.value ? "steer" : "normal");
 }
 
 onMounted(() => {
@@ -826,15 +1268,113 @@ onUnmounted(() => {
       </div>
 
       <footer class="z-20 shrink-0 bg-white px-3 pb-4 pt-2">
-        <div class="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
+        <div v-if="showSkillList" class="mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl" role="listbox" aria-label="选择 skill">
+          <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Skills</span>
+            <span class="text-[11px] text-slate-400">{{ isSkillsManageMode ? "/skills" : "/skill" }}</span>
+          </div>
+          <div v-if="managementLoading" class="px-3 py-3 text-[12px] text-slate-500">正在加载 skills...</div>
+          <div v-else-if="managementError" class="px-3 py-3 text-[12px] text-rose-600">{{ managementError }}</div>
+          <div v-else-if="filteredSkills.length === 0" class="px-3 py-3 text-[12px] text-slate-500">
+            {{ isSkillsManageMode ? "没有匹配的 skills" : "没有可用的 skills，输入 /skills 管理" }}
+          </div>
+          <template v-else>
+            <button
+              v-for="(skill, index) in filteredSkills"
+              :key="skill.skillId"
+              type="button"
+              role="option"
+              :aria-selected="focusedSkillIndex === index"
+              class="flex w-full items-start gap-2.5 border-b border-slate-100 px-3 py-2 text-left last:border-0"
+              :class="focusedSkillIndex === index ? 'bg-slate-50' : 'bg-white hover:bg-slate-50'"
+              @mouseenter="focusedSkillIndex = index"
+              @click="handleSkillRowClick(skill)"
+            >
+              <span class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md bg-slate-950 text-[10px] font-black text-white" aria-hidden="true">S</span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-[12px] font-semibold text-slate-950">{{ skill.skillId }}</span>
+                <span class="mt-0.5 block truncate text-[11px] leading-4 text-slate-500">{{ skillDescription(skill) }}</span>
+              </span>
+              <span
+                class="mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-[10px]"
+                :class="skill.enabled ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'"
+              >
+                {{ isSkillActionPending(skill.skillId) ? "处理中" : skill.enabled ? "可用" : "停用" }}
+              </span>
+            </button>
+          </template>
+        </div>
+
+        <div v-if="showMentionList" class="mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl" role="listbox" aria-label="选择标签页进行引用">
+          <div class="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Recent Tabs</div>
+          <div v-if="filteredTabs.length === 0" class="px-3 py-3 text-[12px] text-slate-500">没有匹配的标签页</div>
+          <template v-else>
+            <button
+              v-for="(tab, index) in filteredTabs"
+              :key="tab.id"
+              type="button"
+              role="option"
+              :aria-selected="focusedMentionIndex === index"
+              class="flex w-full items-center gap-2.5 border-b border-slate-100 px-3 py-2 text-left last:border-0"
+              :class="focusedMentionIndex === index ? 'bg-slate-50' : 'bg-white hover:bg-slate-50'"
+              @mouseenter="focusedMentionIndex = index"
+              @click="selectMentionedTab(tab)"
+            >
+              <img v-if="tab.favIconUrl" :src="tab.favIconUrl" class="h-4 w-4 shrink-0 rounded-sm" aria-hidden="true" />
+              <span v-else class="grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-slate-100 text-[9px] text-slate-500" aria-hidden="true">□</span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-[12px] font-medium text-slate-950">{{ tab.title }}</span>
+                <span class="block truncate font-mono text-[10px] text-slate-400">{{ tab.url }}</span>
+              </span>
+            </button>
+          </template>
+        </div>
+
+        <div class="overflow-hidden rounded-[22px] border border-slate-300 bg-white shadow-sm focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
+          <div v-if="selectedTabs.length > 0 || selectedSkills.length > 0" class="border-b border-slate-100 bg-slate-50/70 px-3 py-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0 text-[11px] font-semibold text-slate-500">
+                已选择 {{ selectedTabs.length + selectedSkills.length }} 个上下文
+              </div>
+              <button type="button" class="rounded-md px-2 py-1 text-[11px] text-slate-500 hover:bg-white" @click="clearSelectedContext">清除</button>
+            </div>
+            <div class="mt-1.5 flex flex-wrap gap-1.5">
+              <span
+                v-for="skill in selectedSkills"
+                :key="skill.skillId"
+                class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2 py-1 text-[11px] text-indigo-700"
+              >
+                <span class="max-w-[210px] truncate">/{{ skill.skillId }}</span>
+                <button type="button" class="text-indigo-400 hover:text-rose-500" :aria-label="`移除 ${skill.skillId}`" @click="removeSelectedSkill(skill.skillId)">×</button>
+              </span>
+              <span
+                v-for="tab in selectedTabs"
+                :key="tab.id"
+                class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600"
+              >
+                <span class="max-w-[210px] truncate">{{ tab.title }}</span>
+                <button type="button" class="text-slate-400 hover:text-rose-500" :aria-label="`移除 ${tab.title}`" @click="removeSelectedTab(tab.id)">×</button>
+              </span>
+            </div>
+          </div>
+
+          <div v-if="composerQueueItems.length > 0" class="border-b border-slate-100 bg-amber-50/70 px-3 py-2">
+            <div class="text-[11px] font-semibold text-amber-800">运行中已排队</div>
+            <div class="mt-1 space-y-1">
+              <div v-for="item in composerQueueItems" :key="item.id" class="truncate text-[11px] text-amber-800">
+                {{ item.behavior === "followUp" ? "Follow-up" : "Steer" }} · {{ item.text }}
+              </div>
+            </div>
+          </div>
+
           <textarea
             ref="composerRef"
             v-model="draft"
             class="max-h-44 min-h-20 w-full resize-none bg-transparent px-4 py-3 text-[15px] leading-6 text-slate-950 outline-none placeholder:text-slate-400"
-            placeholder="告诉白雪你想做什么..."
-            :disabled="loading || isRunning"
+            :placeholder="isRunning ? '运行中输入可追加：Enter 发送 steer，Alt+Enter 作为 follow-up' : '告诉白雪你想做什么...'"
+            :disabled="loading || sending"
             aria-label="消息输入框"
-            @keydown.enter="onComposerEnter"
+            @keydown="onComposerKeydown"
           />
           <div class="flex items-center justify-between gap-2 border-t border-slate-200 px-2 py-2">
             <div class="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -842,24 +1382,35 @@ onUnmounted(() => {
               <button type="button" class="rounded-md px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-100" @click="insertComposerToken('@')">
                 @ tab
               </button>
-              <button type="button" class="rounded-md px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-100" @click="insertComposerToken('/')">
+              <button type="button" class="rounded-md px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-100" @click="insertComposerToken('/skill')">
                 / skill
               </button>
             </div>
-            <button
-              type="button"
-              class="grid h-8 w-8 place-items-center rounded-full bg-slate-950 text-[14px] text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-              :disabled="!draft.trim() || !canSend"
-              aria-label="发送消息"
-              @click="sendPrompt"
-            >
-              ↑
-            </button>
+            <div class="flex shrink-0 items-center gap-1">
+              <button
+                v-if="isRunning"
+                type="button"
+                class="grid h-8 w-8 place-items-center rounded-full border border-slate-300 bg-white text-[12px] text-slate-700 hover:bg-slate-50"
+                aria-label="停止生成"
+                @click="stopRun"
+              >
+                ■
+              </button>
+              <button
+                type="button"
+                class="grid h-8 w-8 place-items-center rounded-full bg-slate-950 text-[14px] text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                :disabled="!canSend"
+                :aria-label="isRunning ? '追加发送（默认 steer，Alt+Enter 为 follow-up）' : '发送消息'"
+                @click="sendPrompt(isRunning ? 'steer' : 'normal')"
+              >
+                ↑
+              </button>
+            </div>
           </div>
         </div>
         <div class="mt-1 flex items-center justify-between px-1 text-[10px] text-slate-400">
           <span>输入 @ 引用标签页 · 输入 / 使用技能</span>
-          <span>{{ isRunning ? "运行中" : "Shift+Enter 换行" }}</span>
+          <span>{{ isRunning ? "Enter steer · Alt+Enter follow-up" : "Shift+Enter 换行" }}</span>
         </div>
       </footer>
     </main>

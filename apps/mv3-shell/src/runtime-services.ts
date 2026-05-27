@@ -3009,6 +3009,121 @@ export function createBackgroundRuntimeServices({
     return record;
   }
 
+  function normalizeChatSendMode(mode) {
+    return mode === "followUp" ? "followUp" : mode === "steer" ? "steer" : "normal";
+  }
+
+  function normalizePromptContextTabs(context) {
+    const tabs = Array.isArray(context?.tabs) ? context.tabs : [];
+    return tabs
+      .map((tab) => {
+        if (!isPlainObject(tab)) {
+          return null;
+        }
+        const id = Number(tab.id);
+        const title = typeof tab.title === "string" ? tab.title.trim() : "";
+        const url = typeof tab.url === "string" ? tab.url.trim() : "";
+        if (!Number.isFinite(id) || (!title && !url)) {
+          return null;
+        }
+        return {
+          id,
+          title: title || `Tab ${id}`,
+          url,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function normalizePromptContextSkills(context) {
+    const skills = Array.isArray(context?.skills) ? context.skills : [];
+    const skillIds = Array.isArray(context?.skillIds) ? context.skillIds : [];
+    const normalized = skills
+      .map((skill) => {
+        if (!isPlainObject(skill)) {
+          return null;
+        }
+        const id =
+          typeof skill.id === "string"
+            ? skill.id.trim()
+            : typeof skill.skillId === "string"
+              ? skill.skillId.trim()
+              : "";
+        if (!id) {
+          return null;
+        }
+        const description = typeof skill.description === "string" ? skill.description.trim() : "";
+        const enabled = skill.enabled !== false;
+        return {
+          id,
+          description,
+          enabled,
+        };
+      })
+      .filter(Boolean);
+    const knownIds = new Set(normalized.map((skill) => skill.id));
+    for (const value of skillIds) {
+      const id = typeof value === "string" ? value.trim() : "";
+      if (!id || knownIds.has(id)) {
+        continue;
+      }
+      normalized.push({
+        id,
+        description: "",
+        enabled: true,
+      });
+      knownIds.add(id);
+    }
+    return normalized;
+  }
+
+  function buildChatPromptText(prompt, context) {
+    const skills = normalizePromptContextSkills(context);
+    const tabs = normalizePromptContextTabs(context);
+    if (tabs.length === 0 && skills.length === 0) {
+      return prompt;
+    }
+    const sections = [];
+    if (!prompt && (tabs.length > 0 || skills.length > 0)) {
+      sections.push(
+        "The user did not provide extra text. Use the selected skills and browser tabs as context.",
+      );
+    }
+    if (prompt) {
+      sections.push(prompt);
+    }
+    if (skills.length > 0) {
+      const skillLines = skills.map(
+        (skill) =>
+          `- skill ${skill.id}${skill.description ? `: ${skill.description}` : ""}${skill.enabled ? "" : " (disabled)"}`,
+      );
+      sections.push(["Selected skills:", ...skillLines].join("\n"));
+    }
+    const tabLines = tabs.map(
+      (tab) => `- tab ${tab.id}: ${tab.title}${tab.url ? ` (${tab.url})` : ""}`,
+    );
+    if (tabs.length > 0) {
+      sections.push(["Referenced browser tabs:", ...tabLines].join("\n"));
+    }
+    return sections.filter((section) => section.length > 0).join("\n\n");
+  }
+
+  function buildChatHistoryText(prompt, context) {
+    if (prompt) {
+      return prompt;
+    }
+    const skills = normalizePromptContextSkills(context);
+    const tabs = normalizePromptContextTabs(context);
+    const parts = [];
+    if (skills.length > 0) {
+      parts.push(`Selected skills: ${skills.map((skill) => skill.id).join(", ")}`);
+    }
+    if (tabs.length > 0) {
+      parts.push(`Referenced tabs: ${tabs.map((tab) => tab.title).join(", ")}`);
+    }
+    return parts.join("\n");
+  }
+
   async function buildChatBootstrap() {
     const [{ kernel }, session] = await Promise.all([ensureServices(), ensureSession()]);
     return buildChatBootstrapForSession(kernel, session);
@@ -3108,21 +3223,37 @@ export function createBackgroundRuntimeServices({
     });
   }
 
-  async function sendChatPrompt({ text } = {}) {
+  async function sendChatPrompt({ text, mode, context } = {}) {
     const prompt = typeof text === "string" ? text.trim() : "";
-    if (!prompt) {
-      throw new CapabilityError("E_BAD_INPUT", "runtime.chat.send requires a non-empty text");
-    }
-
-    if (activeChatRun && chatRunStatus === "running") {
-      throw new CapabilityError(
-        "E_RUNTIME",
-        "runtime.chat.send requires the current run to finish",
-      );
-    }
-
+    const sendMode = normalizeChatSendMode(mode);
     const [services, session] = await Promise.all([ensureServices(), ensureSession()]);
     const { kernel, registry, profileConfig: managedProfileConfig } = services;
+    const tabs = normalizePromptContextTabs(context);
+    const skills = normalizePromptContextSkills(context);
+    if (!prompt && tabs.length === 0 && skills.length === 0) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        "runtime.chat.send requires text, selected tabs, or selected skills",
+      );
+    }
+    const promptText = buildChatPromptText(prompt, context);
+    const historyText = buildChatHistoryText(prompt, context);
+
+    if (activeChatRun && chatRunStatus === "running") {
+      const behavior = sendMode === "followUp" ? "followUp" : "steer";
+      const queuedPrompt = kernel.enqueue(session.id, behavior, promptText);
+      return {
+        sessionId: session.id,
+        accepted: true,
+        queued: true,
+        behavior,
+        queuedPrompt,
+        runState: {
+          status: normalizeChatRunStatus(chatRunStatus),
+        },
+      };
+    }
+
     const activeProfile = kernel.getActiveProfile();
     const providerRegistry = kernel.getProviderRegistry();
 
@@ -3163,7 +3294,7 @@ export function createBackgroundRuntimeServices({
 
           await kernel.appendMessage(session.id, {
             role: "user",
-            text: prompt,
+            text: historyText,
           });
           await kernel.appendMessage(session.id, {
             role: "assistant",
@@ -3199,7 +3330,8 @@ export function createBackgroundRuntimeServices({
           },
           {
             sessionId: session.id,
-            prompt,
+            prompt: promptText,
+            historyText,
             signal: controller.signal,
             onDelta(chunk) {
               finalAssistantText += chunk;

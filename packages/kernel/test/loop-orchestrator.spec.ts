@@ -252,6 +252,36 @@ describe("runLoop", () => {
     expect(callCount).toBe(1);
   });
 
+  it("keeps the stored user message separate from expanded llm prompt text", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const { kernel, registry, provider } = setup(async (input) => {
+      payloads.push(input.payload);
+      return sseResponse([chatChunk("Done."), chatChunk(undefined, undefined, "stop"), "[DONE]"]);
+    });
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      {
+        sessionId: session.id,
+        prompt: "Original user request\n\nSelected skills:\n- skill page.summary",
+        historyText: "Original user request",
+      },
+    );
+
+    const context = await kernel.buildContext(session.id);
+    expect(result.terminalStatus).toBe("done");
+    expect(JSON.stringify(payloads[0]?.messages)).toContain("Selected skills");
+    expect(context.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "user",
+          content: "Original user request",
+        }),
+      ]),
+    );
+  });
+
   it("projects only chat default-exposed tools into the llm request", async () => {
     const payloads: Array<Record<string, unknown>> = [];
     const storage: SessionStorage = new InMemorySessionStorage();
@@ -569,6 +599,78 @@ describe("runLoop", () => {
     expect(result.terminalStatus).toBe("done");
     expect(callCount).toBe(2);
     expect(toolCalls).toEqual(["tabs_navigate"]);
+  });
+
+  it("applies queued steering before the next llm turn", async () => {
+    let callCount = 0;
+    let sessionId = "";
+    const payloads: Array<Record<string, unknown>> = [];
+    const { kernel, registry, provider } = setup(async (input) => {
+      callCount++;
+      payloads.push(input.payload);
+      if (callCount === 1) {
+        kernel.enqueue(sessionId, "steer", "Use the visible submit button.");
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_1",
+              function: { name: "tabs_navigate", arguments: '{"url":"https://example.com"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([
+        chatChunk("Steering applied."),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    });
+
+    const session = await kernel.createSession();
+    sessionId = session.id;
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Submit the form" },
+    );
+
+    expect(result.terminalStatus).toBe("done");
+    expect(callCount).toBe(2);
+    expect(JSON.stringify(payloads[1]?.messages)).toContain("User steering update");
+    expect(JSON.stringify(payloads[1]?.messages)).toContain("Use the visible submit button.");
+  });
+
+  it("continues with queued follow-up after the current answer", async () => {
+    let callCount = 0;
+    let sessionId = "";
+    const payloads: Array<Record<string, unknown>> = [];
+    const { kernel, registry, provider } = setup(async (input) => {
+      callCount++;
+      payloads.push(input.payload);
+      if (callCount === 1) {
+        kernel.enqueue(sessionId, "followUp", "Now explain what changed.");
+        return sseResponse([chatChunk("Done."), chatChunk(undefined, undefined, "stop"), "[DONE]"]);
+      }
+      return sseResponse([
+        chatChunk("Explained."),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    });
+
+    const session = await kernel.createSession();
+    sessionId = session.id;
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "Do the task" },
+    );
+
+    expect(result.terminalStatus).toBe("done");
+    expect(callCount).toBe(2);
+    expect(JSON.stringify(payloads[1]?.messages)).toContain("User follow-up");
+    expect(JSON.stringify(payloads[1]?.messages)).toContain("Now explain what changed.");
   });
 
   it("uses threshold compaction between turns and rebuilds context before continuing", async () => {
