@@ -667,6 +667,12 @@ describe("sidepanel chat transcript component", () => {
       (node) => node.props["data-testid"] === "system-message",
     );
     expect(systemMessage?.props["aria-label"]).toBe("系统消息");
+    expect(
+      findFirst(
+        systemMessage as MemoryNode,
+        (node) => node.type === "svg" && node.props["data-icon"] === "sparkles",
+      ),
+    ).not.toBeNull();
     expect(textContent(systemMessage)).toContain("历史摘要（压缩上下文）");
     expect(textContent(systemMessage)).toContain("查看摘要");
     expect(textContent(systemMessage)).not.toContain("user asked about setup");
@@ -676,6 +682,13 @@ describe("sidepanel chat transcript component", () => {
       (node) => node.type === "button" && node.props["aria-label"] === "查看摘要",
     );
     expect(toggle?.props["aria-expanded"]).toBe(false);
+    expect(
+      findFirst(
+        toggle as MemoryNode,
+        (node) => node.type === "svg" && node.props["data-icon"] === "chevron-down",
+      ),
+    ).not.toBeNull();
+    expect(textContent(toggle)).not.toContain("⌄");
     expect(toggle?.props.onClick).toBeTypeOf("function");
     (toggle?.props.onClick as () => void)();
     expect(toggled).toEqual(["summary:cmp-1"]);
@@ -689,6 +702,13 @@ describe("sidepanel chat transcript component", () => {
       (node) => node.type === "button" && node.props["aria-label"] === "隐藏摘要",
     );
     expect(expandedToggle?.props["aria-expanded"]).toBe(true);
+    expect(
+      findFirst(
+        expandedToggle as MemoryNode,
+        (node) => node.type === "svg" && node.props["data-icon"] === "chevron-up",
+      ),
+    ).not.toBeNull();
+    expect(textContent(expandedToggle)).not.toContain("⌃");
     expect(
       findFirst(expandedTree, (node) => node.props["aria-label"] === "历史摘要详情"),
     ).not.toBeNull();
@@ -925,6 +945,8 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("跳回来源对话");
     expect(source).toContain('@click.stop="jumpToForkSourceSession"');
     expect(source).toContain("selectChatSession(sourceId)");
+    expect(source).toContain('<SidepanelIcon name="git-branch"');
+    expect(source).not.toContain(">⑂<");
   });
 
   it("inherits old-product fork scene transition around runtime-backed forks", () => {

@@ -1,4 +1,5 @@
 import { type PropType, computed, defineComponent, h } from "vue";
+import { renderSidepanelIcon } from "./icons";
 import {
   type RichTextRenderResult,
   type ToolTraceRenderResult,
@@ -389,7 +390,7 @@ function renderSystemMessageArticle(
     [
       h("div", { class: "rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5" }, [
         h("div", { class: "flex items-center gap-2" }, [
-          h("span", { class: "text-[12px] font-bold text-blue-600", "aria-hidden": "true" }, "✦"),
+          renderSidepanelIcon("sparkles", "h-3 w-3 text-blue-600"),
           h(
             "span",
             { class: "text-[12px] font-semibold text-slate-950" },
@@ -408,8 +409,8 @@ function renderSystemMessageArticle(
                 onClick: () => onToggleSystem({ id: item.id }),
               },
               [
-                expanded ? "隐藏摘要" : "查看摘要",
-                h("span", { "aria-hidden": "true" }, expanded ? "⌃" : "⌄"),
+                h("span", { class: "uppercase" }, expanded ? "隐藏摘要" : "查看摘要"),
+                renderSidepanelIcon(expanded ? "chevron-up" : "chevron-down", "h-3 w-3"),
               ],
             )
           : h("div", { class: "mt-2 max-w-none text-[13px] leading-relaxed text-slate-950" }, [

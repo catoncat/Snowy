@@ -2111,7 +2111,7 @@ onUnmounted(() => {
               aria-label="当前会话来自分叉，悬浮可查看来源信息"
               title="分叉来源信息"
             >
-              <span :class="forkSessionHighlight ? 'animate-pulse' : ''" aria-hidden="true">⑂</span>
+              <SidepanelIcon name="git-branch" :class-name="forkSessionHighlight ? 'h-3 w-3 animate-pulse' : 'h-3 w-3'" />
             </span>
             <div class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-64 max-w-[calc(100vw-24px)] rounded-md border border-slate-200 bg-white px-3 py-2 opacity-0 shadow-xl transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
               <p class="truncate text-[11px] font-semibold text-slate-950">
@@ -2640,7 +2640,7 @@ onUnmounted(() => {
         <div class="absolute inset-0 bg-white/60 backdrop-blur-[2px]" />
         <div class="relative inline-flex items-center gap-3 rounded-full border border-blue-200 bg-white/85 px-3 py-2 shadow-[0_12px_30px_rgba(15,23,42,0.18)]">
           <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[13px] font-semibold text-blue-700">
-            <span :class="forkSceneIconClass" aria-hidden="true">⑂</span>
+            <SidepanelIcon name="git-branch" :class-name="`h-3.5 w-3.5 ${forkSceneIconClass}`" />
           </span>
           <span class="h-1.5 w-[74px] overflow-hidden rounded-full bg-blue-100">
             <span
