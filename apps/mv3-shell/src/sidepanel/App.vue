@@ -25,6 +25,7 @@ import {
   generateConversationMarkdown,
   hasConversationExportContent,
 } from "./conversation-export";
+import { SidepanelIcon } from "./icons";
 import {
   applyManagementResourceDocument,
   buildManagementBootstrapRequests,
@@ -2158,7 +2159,7 @@ onUnmounted(() => {
             :disabled="loading || isRunning"
             @click="createChatSession"
           >
-            +
+            <SidepanelIcon name="plus" class-name="h-5 w-5" />
           </button>
           <button
             type="button"
@@ -2167,7 +2168,7 @@ onUnmounted(() => {
             aria-label="查看会话历史列表"
             @click="selectPane('sessions')"
           >
-            ≡
+            <SidepanelIcon name="history" class-name="h-[18px] w-[18px]" />
           </button>
           <button
             type="button"
@@ -2176,7 +2177,7 @@ onUnmounted(() => {
             aria-label="打开系统设置"
             @click="selectPane('runtime')"
           >
-            ⚙
+            <SidepanelIcon name="settings" class-name="h-[18px] w-[18px]" />
           </button>
           <div class="relative">
             <button
@@ -2188,7 +2189,7 @@ onUnmounted(() => {
               :aria-expanded="moreMenuOpen"
               @click="moreMenuOpen = !moreMenuOpen"
             >
-              ⋯
+              <SidepanelIcon name="more-vertical" class-name="h-[18px] w-[18px]" />
             </button>
             <div
               v-if="moreMenuOpen"
@@ -2196,39 +2197,39 @@ onUnmounted(() => {
               role="menu"
             >
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleCopyMarkdown">
-                <span class="w-4 text-center text-[13px]" aria-hidden="true">⧉</span>
+                <SidepanelIcon name="copy" class-name="h-3.5 w-3.5 shrink-0" />
                 <span>复制 Markdown</span>
               </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleExportMarkdown('download')">
-                <span class="w-4 text-center text-[13px]" aria-hidden="true">↓</span>
+                <SidepanelIcon name="download" class-name="h-3.5 w-3.5 shrink-0" />
                 <span>下载 MD 文件</span>
               </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleExportMarkdown('open')">
-                <span class="w-4 text-center text-[13px]" aria-hidden="true">↗</span>
+                <SidepanelIcon name="external-link" class-name="h-3.5 w-3.5 shrink-0" />
                 <span>在标签页打开</span>
               </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!chatState.sessionId || titleRefreshing" @click="refreshSessionTitle()">
-                <span class="w-4 text-center text-[13px]" aria-hidden="true">↻</span>
+                <SidepanelIcon name="refresh-ccw" class-name="h-3.5 w-3.5 shrink-0" />
                 <span>{{ titleRefreshing ? "正在重新生成标题" : "重新生成标题" }}</span>
               </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="showToolHistory = !showToolHistory; moreMenuOpen = false">
-                <span class="w-4 text-center text-[13px]" aria-hidden="true">⌁</span>
+                <SidepanelIcon name="activity" class-name="h-3.5 w-3.5 shrink-0" />
                 <span>{{ toolHistoryToggleLabel }}</span>
               </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="diagnosticsCopying" @click="handleCopyDiagnosticsSnapshot">
-                <span class="w-4 text-center text-[13px]" aria-hidden="true">⌕</span>
+                <SidepanelIcon name="bug" class-name="h-3.5 w-3.5 shrink-0" />
                 <span>{{ diagnosticsCopying ? "正在复制调试快照" : "复制调试快照" }}</span>
               </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('provider')">
-                <span class="w-4 text-center text-[13px]" aria-hidden="true">◎</span>
+                <SidepanelIcon name="cpu" class-name="h-3.5 w-3.5 shrink-0" />
                 <span>模型路由</span>
               </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('skills')">
-                <span class="w-4 text-center text-[13px]" aria-hidden="true">⌘</span>
+                <SidepanelIcon name="wrench" class-name="h-3.5 w-3.5 shrink-0" />
                 <span>Skills 管理</span>
               </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('runtime')">
-                <span class="w-4 text-center text-[13px]" aria-hidden="true">◇</span>
+                <SidepanelIcon name="bug" class-name="h-3.5 w-3.5 shrink-0" />
                 <span>调试面板</span>
               </button>
             </div>
@@ -2675,7 +2676,7 @@ onUnmounted(() => {
           :aria-label="providerEditorOpen ? '返回模型设置' : '返回'"
           @click="providerEditorOpen ? closeProviderEditor() : closePanelOverlay()"
         >
-          ‹
+          <SidepanelIcon name="arrow-left" class-name="h-5 w-5" />
         </button>
         <h2 class="ml-2 text-[14px] font-bold tracking-normal">
           {{ providerEditorOpen ? providerEditorTitle : "模型设置" }}
@@ -2933,7 +2934,9 @@ onUnmounted(() => {
 
     <section v-if="activePane === 'skills'" class="absolute inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="技能管理" @keydown.esc="skillEditorOpen ? closeSkillEditor() : closePanelOverlay()">
       <header class="flex h-12 shrink-0 items-center border-b border-slate-200 px-2">
-        <button type="button" class="grid h-9 w-9 place-items-center rounded-sm text-[20px] text-slate-600 hover:bg-slate-100" :aria-label="skillEditorOpen ? '返回技能管理列表' : '返回'" @click="skillEditorOpen ? closeSkillEditor() : closePanelOverlay()">‹</button>
+        <button type="button" class="grid h-9 w-9 place-items-center rounded-sm text-[20px] text-slate-600 hover:bg-slate-100" :aria-label="skillEditorOpen ? '返回技能管理列表' : '返回'" @click="skillEditorOpen ? closeSkillEditor() : closePanelOverlay()">
+          <SidepanelIcon name="arrow-left" class-name="h-5 w-5" />
+        </button>
         <div class="ml-2 min-w-0">
           <h2 class="text-[14px] font-bold tracking-normal">技能管理</h2>
           <p v-if="skillEditorOpen" class="truncate text-[10px] text-slate-500">{{ skillEditorTitle }}</p>
@@ -3087,7 +3090,9 @@ onUnmounted(() => {
 
     <section v-if="activePane === 'runtime'" class="absolute inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="系统设置" @keydown.esc="closePanelOverlay">
       <header class="flex h-12 shrink-0 items-center border-b border-slate-200 px-2">
-        <button type="button" class="grid h-9 w-9 place-items-center rounded-sm text-[20px] text-slate-600 hover:bg-slate-100" aria-label="返回" @click="closePanelOverlay">‹</button>
+        <button type="button" class="grid h-9 w-9 place-items-center rounded-sm text-[20px] text-slate-600 hover:bg-slate-100" aria-label="返回" @click="closePanelOverlay">
+          <SidepanelIcon name="arrow-left" class-name="h-5 w-5" />
+        </button>
         <h2 class="ml-2 text-[14px] font-bold tracking-normal">系统设置</h2>
       </header>
       <main class="min-h-0 flex-1 overflow-y-auto p-4 sidepanel-scrollbar">

@@ -449,6 +449,74 @@ describe("sidepanel chat transcript component", () => {
       (node) => node.type === "button" && node.props["aria-label"] === "删除会话: 当前页面总结",
     );
     expect(String(deleteButton?.props.class ?? "")).toContain("border-slate-200");
+    expectIconOnlyButton(deleteButton, ["×"]);
+
+    expectIconOnlyButton(
+      findFirst(
+        tree,
+        (node) => node.type === "button" && node.props["aria-label"] === "关闭会话列表",
+      ),
+      ["‹"],
+    );
+    expectIconOnlyButton(
+      findFirst(tree, (node) => node.type === "button" && node.props["aria-label"] === "新建会话"),
+      ["+"],
+    );
+    expectIconOnlyButton(
+      findFirst(
+        tree,
+        (node) => node.type === "button" && node.props["aria-label"] === "重命名会话: 当前页面总结",
+      ),
+      ["✎"],
+    );
+    expect(
+      findFirst(tree, (node) => node.type === "svg" && node.props["data-icon"] === "search"),
+    ).not.toBeNull();
+    expect(
+      findFirst(
+        activeRow as MemoryNode,
+        (node) => node.type === "svg" && node.props["data-icon"] === "message-square",
+      ),
+    ).not.toBeNull();
+    expect(
+      findFirst(
+        activeRow as MemoryNode,
+        (node) => node.type === "svg" && node.props["data-icon"] === "clock",
+      ),
+    ).not.toBeNull();
+    expect(
+      findFirst(
+        activeRow as MemoryNode,
+        (node) => node.type === "svg" && node.props["data-icon"] === "git-branch",
+      ),
+    ).not.toBeNull();
+
+    const renameTree = mountComponentInMemory(SessionHistoryPane, {
+      sessions,
+      activeId: "s-active",
+      loading: false,
+      error: "",
+      search: "",
+      renamingId: "s-active",
+      renameDraft: "当前页面总结",
+      pendingDeleteId: "",
+      canCreate: true,
+    });
+    expectIconOnlyButton(
+      findFirst(
+        renameTree,
+        (node) =>
+          node.type === "button" && node.props["aria-label"] === "保存会话标题: 当前页面总结",
+      ),
+      ["✓"],
+    );
+    expectIconOnlyButton(
+      findFirst(
+        renameTree,
+        (node) => node.type === "button" && node.props["aria-label"] === "取消重命名",
+      ),
+      ["×"],
+    );
   });
 
   it("keeps old-product session search sorting and keyboard selection behavior", () => {
@@ -820,6 +888,29 @@ describe("sidepanel chat transcript component", () => {
     expect(source).not.toContain("activeTabTitle");
     expect(source).not.toContain('aria-label="停止运行"');
     expect(source).not.toContain("当前标签页未连接");
+  });
+
+  it("inherits old-product icon-only toolbar and more-menu icons", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+    const toolbarStart = source.indexOf('role="toolbar" aria-label="会话操作"');
+    const headerEnd = source.indexOf("</header>", toolbarStart);
+    const toolbarSource = source.slice(toolbarStart, headerEnd);
+
+    expect(toolbarSource).toContain('<SidepanelIcon name="plus"');
+    expect(toolbarSource).toContain('<SidepanelIcon name="history"');
+    expect(toolbarSource).toContain('<SidepanelIcon name="settings"');
+    expect(toolbarSource).toContain('<SidepanelIcon name="more-vertical"');
+    expect(toolbarSource).not.toMatch(/>\s*[+≡⚙⋯]\s*</u);
+
+    expect(toolbarSource).toContain('<SidepanelIcon name="copy"');
+    expect(toolbarSource).toContain('<SidepanelIcon name="download"');
+    expect(toolbarSource).toContain('<SidepanelIcon name="external-link"');
+    expect(toolbarSource).toContain('<SidepanelIcon name="refresh-ccw"');
+    expect(toolbarSource).toContain('<SidepanelIcon name="activity"');
+    expect(toolbarSource).toContain('<SidepanelIcon name="bug"');
+    expect(toolbarSource).toContain('<SidepanelIcon name="cpu"');
+    expect(toolbarSource).toContain('<SidepanelIcon name="wrench"');
+    expect(toolbarSource).not.toMatch(/>\s*[⧉↓↗↻⌁⌕◎⌘◇]\s*</u);
   });
 
   it("inherits old-product fork source indicator and jump-back behavior", () => {

@@ -1,4 +1,5 @@
 import { type PropType, computed, defineComponent, h, ref } from "vue";
+import { renderSidepanelIcon } from "./icons";
 
 type FocusableRow = {
   focus?: () => void;
@@ -182,10 +183,10 @@ export const SessionHistoryPane = defineComponent({
           h(
             "span",
             {
-              class: "pointer-events-none absolute left-3.5 top-2.5 text-[14px] text-slate-400",
+              class: "pointer-events-none absolute left-3.5 top-2.5 text-slate-400",
               "aria-hidden": "true",
             },
-            "⌕",
+            [renderSidepanelIcon("search", "h-4 w-4")],
           ),
           h("input", {
             id: "session-search-input",
@@ -209,7 +210,7 @@ export const SessionHistoryPane = defineComponent({
       return h("div", { class: "mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1" }, [
         date
           ? h("span", { class: "flex items-center gap-1 text-[11px] text-slate-400" }, [
-              h("span", { "aria-hidden": "true" }, "◷"),
+              renderSidepanelIcon("clock", "h-[11px] w-[11px]"),
               h("span", { "aria-label": `更新于 ${date}` }, date),
             ])
           : null,
@@ -220,7 +221,7 @@ export const SessionHistoryPane = defineComponent({
         ),
         forkSource
           ? h("span", { class: "flex items-center gap-1 text-[11px] text-slate-400" }, [
-              h("span", { "aria-hidden": "true" }, "⌁"),
+              renderSidepanelIcon("git-branch", "h-[11px] w-[11px]"),
               h("span", { "aria-label": `分叉自 ${forkSource}` }, forkSource),
             ])
           : null,
@@ -236,7 +237,7 @@ export const SessionHistoryPane = defineComponent({
               "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-[13px] text-slate-500",
             "aria-hidden": "true",
           },
-          "▣",
+          [renderSidepanelIcon("message-square", "h-4 w-4")],
         ),
         h("span", { class: "min-w-0 flex-1" }, [
           h("input", {
@@ -301,7 +302,7 @@ export const SessionHistoryPane = defineComponent({
               ],
               "aria-hidden": "true",
             },
-            "▣",
+            [renderSidepanelIcon("message-square", "h-4 w-4")],
           ),
           h("span", { class: "min-w-0 flex-1 pr-10" }, [
             h("span", { class: "flex min-w-0 items-center text-[14px] leading-snug" }, [
@@ -364,7 +365,7 @@ export const SessionHistoryPane = defineComponent({
                 emit("renameStart", session);
               },
             },
-            "✎",
+            [renderSidepanelIcon("pencil", "h-3.5 w-3.5")],
           ),
           h(
             "button",
@@ -384,7 +385,7 @@ export const SessionHistoryPane = defineComponent({
                 emit("delete", session.id);
               },
             },
-            "×",
+            [renderSidepanelIcon("trash-2", "h-3.5 w-3.5")],
           ),
         ],
       );
@@ -404,7 +405,7 @@ export const SessionHistoryPane = defineComponent({
               emit("renameSave", session.id);
             },
           },
-          "✓",
+          [renderSidepanelIcon("check", "h-3.5 w-3.5")],
         ),
         h(
           "button",
@@ -418,7 +419,7 @@ export const SessionHistoryPane = defineComponent({
               emit("renameCancel");
             },
           },
-          "×",
+          [renderSidepanelIcon("x", "h-3.5 w-3.5")],
         ),
       ]);
     }
@@ -471,7 +472,7 @@ export const SessionHistoryPane = defineComponent({
                 "aria-label": "关闭会话列表",
                 onClick: () => emit("close"),
               },
-              "‹",
+              [renderSidepanelIcon("arrow-left", "h-5 w-5")],
             ),
             h("h2", { class: "ml-2 text-[16px] font-bold tracking-normal" }, "对话历史"),
             h(
@@ -484,7 +485,7 @@ export const SessionHistoryPane = defineComponent({
                 disabled: !props.canCreate,
                 onClick: () => emit("create"),
               },
-              "+",
+              [renderSidepanelIcon("plus", "h-[22px] w-[22px]")],
             ),
           ]),
           renderSearch(),
