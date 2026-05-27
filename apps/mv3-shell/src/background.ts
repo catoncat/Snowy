@@ -3001,10 +3001,23 @@ export function createBackgroundRunnerBridge({
             sessionId: message.sessionId,
           }),
         );
+      case "runtime.chat.message.retry":
+        return routeRuntimeService(() =>
+          getRuntimeServices().retryAssistantMessage({
+            messageId: message.messageId,
+          }),
+        );
       case "runtime.chat.message.fork":
         return routeRuntimeService(() =>
           getRuntimeServices().forkAssistantMessage({
             messageId: message.messageId,
+          }),
+        );
+      case "runtime.chat.message.edit_rerun":
+        return routeRuntimeService(() =>
+          getRuntimeServices().editUserMessageAndRerun({
+            messageId: message.messageId,
+            text: message.text,
           }),
         );
       case "runtime.chat.send":

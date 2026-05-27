@@ -66,6 +66,16 @@ export class VfsSessionStorage implements SessionStorage {
     await this.#vfs.write(uri, next);
   }
 
+  async replaceEntries(sessionId: string, entries: SessionEntry[]): Promise<void> {
+    const uri = entriesUri(sessionId);
+    try {
+      await this.#vfs.read(uri);
+    } catch {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    await this.#vfs.write(uri, entries.map((entry) => JSON.stringify(entry)).join("\n"));
+  }
+
   async getEntries(sessionId: string): Promise<SessionEntry[]> {
     let raw: string;
     try {

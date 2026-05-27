@@ -102,6 +102,14 @@ export class SessionStore {
     return entry;
   }
 
+  async replaceEntries(sessionId: string, entries: SessionEntry[]): Promise<void> {
+    const normalized = entries.map((entry, index) => ({
+      ...entry,
+      parentId: index > 0 ? entries[index - 1]?.entryId : undefined,
+    }));
+    await this.#storage.replaceEntries(sessionId, normalized);
+  }
+
   async getEntries(sessionId: string): Promise<SessionEntry[]> {
     return this.#storage.getEntries(sessionId);
   }

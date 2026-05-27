@@ -111,6 +111,7 @@ export interface Kernel {
     type: SessionEntry["type"],
     payload: unknown,
   ): Promise<SessionEntry>;
+  replaceEntries(sessionId: string, entries: SessionEntry[]): Promise<void>;
   appendMessage(sessionId: string, payload: MessagePayload): Promise<SessionEntry>;
 
   // Run lifecycle
@@ -472,6 +473,7 @@ export function createKernel(opts: KernelOptions): Kernel {
     deleteSession: (id) => sessions.deleteSession(id),
     buildContext: (id) => sessions.buildContext(id),
     appendEntry: (sessionId, type, payload) => sessions.appendEntry(sessionId, type, payload),
+    replaceEntries: (sessionId, entries) => sessions.replaceEntries(sessionId, entries),
     async appendMessage(sessionId, payload) {
       return sessions.appendEntry(sessionId, "message", payload);
     },

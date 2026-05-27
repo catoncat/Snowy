@@ -46,6 +46,15 @@ export interface ChatMessageForkPayload {
   id: string;
 }
 
+export interface ChatMessageRetryPayload {
+  id: string;
+}
+
+export interface ChatMessageEditPayload {
+  id: string;
+  text: string;
+}
+
 export interface ChatCodeCopyPayload {
   code: string;
   language: string;
@@ -123,6 +132,32 @@ export function isForkableAssistantMessage(items: ChatItem[], id: string): boole
     }
   }
   return false;
+}
+
+export function isRetryableAssistantMessage(items: ChatItem[], id: string): boolean {
+  if (!isForkableAssistantMessage(items, id)) {
+    return false;
+  }
+  for (let cursor = items.length - 1; cursor >= 0; cursor -= 1) {
+    const candidate = items[cursor];
+    if (candidate?.kind !== "message" || candidate.role !== "assistant") {
+      continue;
+    }
+    if (candidate.state === "streaming") {
+      continue;
+    }
+    if (!assistantMessageText(candidate).trim()) {
+      continue;
+    }
+    return candidate.id === id;
+  }
+  return false;
+}
+
+export function isEditableUserMessage(items: ChatItem[], id: string): boolean {
+  const index = findMessageIndex(items, id);
+  const item = items[index];
+  return item?.kind === "message" && item.role === "user" && item.text.trim().length > 0;
 }
 
 export function collectAssistantTurnText(items: ChatItem[], id: string): string {
@@ -320,29 +355,119 @@ function renderMessageArticle(
   item: RenderedMessageItem,
   options: {
     copyable: boolean;
+    retryable: boolean;
     forkable: boolean;
     copied: boolean;
+    retrying: boolean;
+    forking: boolean;
+    editing: boolean;
+    editDraft: string;
+    editSubmitting: boolean;
     onCopy: (payload: ChatMessageCopyPayload) => void;
+    onRetry: (payload: ChatMessageRetryPayload) => void;
     onFork: (payload: ChatMessageForkPayload) => void;
+    onEdit: (payload: ChatMessageEditPayload) => void;
+    onEditChange: (payload: ChatMessageEditPayload) => void;
+    onEditCancel: (payload: ChatMessageEditPayload) => void;
+    onEditSubmit: (payload: ChatMessageEditPayload) => void;
     onCopyCode: (payload: ChatCodeCopyPayload) => void;
   },
 ) {
   if (item.role === "user") {
+    const draft = options.editing ? options.editDraft : item.text;
     return h(
       "article",
       {
-        class: "flex justify-end py-2 pl-10",
+        class: "group flex flex-col items-end gap-1.5 py-2 pl-10",
         "aria-label": "用户发送的内容",
       },
       [
-        h(
-          "div",
-          {
-            class:
-              "max-w-[86%] rounded-[20px] border border-slate-200 bg-slate-100 px-4 py-2.5 text-slate-950 shadow-sm",
-          },
-          [renderMessageContent(item)],
-        ),
+        options.editing
+          ? h(
+              "div",
+              {
+                class: "w-full rounded-2xl border border-blue-200 bg-white px-3 py-3 shadow-sm",
+                "data-testid": "user-inline-editor",
+              },
+              [
+                h("textarea", {
+                  class:
+                    "min-h-[54px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[14px] leading-relaxed text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                  "data-testid": "user-inline-editor-input",
+                  "aria-label": "编辑用户消息",
+                  value: draft,
+                  disabled: options.editSubmitting,
+                  onInput: (event: { target?: { value?: string } }) =>
+                    options.onEditChange({
+                      id: item.id,
+                      text: String(event.target?.value ?? ""),
+                    }),
+                }),
+                h("div", { class: "mt-2 flex items-center justify-end gap-1.5" }, [
+                  h(
+                    "button",
+                    {
+                      type: "button",
+                      class:
+                        "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      "aria-label": "取消编辑",
+                      title: "取消编辑",
+                      disabled: options.editSubmitting,
+                      onClick: () =>
+                        options.onEditCancel({
+                          id: item.id,
+                          text: draft,
+                        }),
+                    },
+                    "取消",
+                  ),
+                  h(
+                    "button",
+                    {
+                      type: "button",
+                      class:
+                        "rounded-md px-2 py-1 text-[12px] font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      "aria-label": "提交编辑并重跑",
+                      title: "提交编辑并重跑",
+                      disabled: options.editSubmitting || !draft.trim(),
+                      onClick: () =>
+                        options.onEditSubmit({
+                          id: item.id,
+                          text: draft,
+                        }),
+                    },
+                    options.editSubmitting ? "提交中" : "提交",
+                  ),
+                ]),
+              ],
+            )
+          : h(
+              "div",
+              {
+                class:
+                  "max-w-[86%] rounded-[20px] border border-slate-200 bg-slate-100 px-4 py-2.5 text-slate-950 shadow-sm",
+              },
+              [renderMessageContent(item)],
+            ),
+        !options.editing && isEditableUserMessage([item], item.id)
+          ? h(
+              "button",
+              {
+                type: "button",
+                class:
+                  "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 opacity-0 transition-opacity hover:bg-slate-100 hover:text-slate-950 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                "aria-label": "编辑并重跑",
+                title: "编辑并重跑",
+                disabled: options.editSubmitting || options.forking || options.retrying,
+                onClick: () =>
+                  options.onEdit({
+                    id: item.id,
+                    text: item.text,
+                  }),
+              },
+              "编辑",
+            )
+          : null,
       ],
     );
   }
@@ -381,7 +506,7 @@ function renderMessageArticle(
               : h("span", { "aria-label": "等待模型响应" }, "等待模型响应"),
           )
         : null,
-      options.copyable || options.forkable
+      options.copyable || options.retryable || options.forkable
         ? h(
             "div",
             {
@@ -408,21 +533,40 @@ function renderMessageArticle(
                 },
                 options.copied ? "已复制" : "复制",
               ),
+              options.retryable
+                ? h(
+                    "button",
+                    {
+                      type: "button",
+                      class:
+                        "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      "aria-label": "重新回答",
+                      title: "重新回答",
+                      disabled: options.retrying || options.forking,
+                      onClick: () =>
+                        options.onRetry({
+                          id: item.id,
+                        }),
+                    },
+                    options.retrying ? "重试中" : "重答",
+                  )
+                : null,
               options.forkable
                 ? h(
                     "button",
                     {
                       type: "button",
                       class:
-                        "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                        "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
                       "aria-label": "在新对话中分叉",
                       title: "在新对话中分叉",
+                      disabled: options.retrying || options.forking,
                       onClick: () =>
                         options.onFork({
                           id: item.id,
                         }),
                     },
-                    "分叉",
+                    options.forking ? "分叉中" : "分叉",
                   )
                 : null,
             ],
@@ -436,20 +580,41 @@ function renderRenderedMessageArticle(
   item: RenderedMessageItem,
   items: ChatItem[],
   copiedMessageId: string,
+  retryingMessageId: string,
+  forkingMessageId: string,
+  editingMessageId: string,
+  editDraft: string,
+  editSubmitting: boolean,
   onCopy: (payload: ChatMessageCopyPayload) => void,
+  onRetry: (payload: ChatMessageRetryPayload) => void,
   onFork: (payload: ChatMessageForkPayload) => void,
+  onEdit: (payload: ChatMessageEditPayload) => void,
+  onEditChange: (payload: ChatMessageEditPayload) => void,
+  onEditCancel: (payload: ChatMessageEditPayload) => void,
+  onEditSubmit: (payload: ChatMessageEditPayload) => void,
   onCopyCode: (payload: ChatCodeCopyPayload) => void,
 ) {
   return renderMessageArticle(item, {
     copyable: item.role === "assistant" && isCopyableAssistantMessage(items, item.id),
+    retryable: item.role === "assistant" && isRetryableAssistantMessage(items, item.id),
     forkable: item.role === "assistant" && isForkableAssistantMessage(items, item.id),
     copied: copiedMessageId === item.id,
+    retrying: retryingMessageId === item.id,
+    forking: forkingMessageId === item.id,
+    editing: editingMessageId === item.id,
+    editDraft: editingMessageId === item.id ? editDraft : item.text,
+    editSubmitting: editingMessageId === item.id && editSubmitting,
     onCopy: (payload) =>
       onCopy({
         ...payload,
         text: collectAssistantTurnText(items, item.id) || payload.text,
       }),
+    onRetry,
     onFork,
+    onEdit,
+    onEditChange,
+    onEditCancel,
+    onEditSubmit,
     onCopyCode,
   });
 }
@@ -550,12 +715,38 @@ export const ChatTranscriptPane = defineComponent({
       type: String,
       default: "",
     },
+    retryingMessageId: {
+      type: String,
+      default: "",
+    },
+    forkingMessageId: {
+      type: String,
+      default: "",
+    },
+    editingMessageId: {
+      type: String,
+      default: "",
+    },
+    editDraft: {
+      type: String,
+      default: "",
+    },
+    editSubmitting: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: {
     toggleTool: (id: string) => typeof id === "string" && id.length > 0,
     copyMessage: (payload: ChatMessageCopyPayload) =>
       Boolean(payload?.id) && payload.role === "assistant" && payload.text.trim().length > 0,
+    retryMessage: (payload: ChatMessageRetryPayload) => Boolean(payload?.id),
     forkMessage: (payload: ChatMessageForkPayload) => Boolean(payload?.id),
+    editMessage: (payload: ChatMessageEditPayload) => Boolean(payload?.id),
+    editChange: (payload: ChatMessageEditPayload) => Boolean(payload?.id),
+    editCancel: (payload: ChatMessageEditPayload) => Boolean(payload?.id),
+    editSubmit: (payload: ChatMessageEditPayload) =>
+      Boolean(payload?.id) && payload.text.trim().length > 0,
     copyCode: (payload: ChatCodeCopyPayload) =>
       Boolean(payload?.messageId) && payload.code.length > 0,
   },
@@ -609,8 +800,18 @@ export const ChatTranscriptPane = defineComponent({
                 item,
                 props.items,
                 props.copiedMessageId,
+                props.retryingMessageId,
+                props.forkingMessageId,
+                props.editingMessageId,
+                props.editDraft,
+                props.editSubmitting,
                 (payload) => emit("copyMessage", payload),
+                (payload) => emit("retryMessage", payload),
                 (payload) => emit("forkMessage", payload),
+                (payload) => emit("editMessage", payload),
+                (payload) => emit("editChange", payload),
+                (payload) => emit("editCancel", payload),
+                (payload) => emit("editSubmit", payload),
                 (payload) => emit("copyCode", payload),
               )
             : renderToolArticle(item, (id) => emit("toggleTool", id)),

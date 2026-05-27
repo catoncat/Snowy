@@ -3577,6 +3577,73 @@ export function createBackgroundRuntimeServices({
     );
   }
 
+  function findLatestMessageIndex(entries, role) {
+    for (let index = entries.length - 1; index >= 0; index--) {
+      const message = toSessionMessageEntry(entries[index]);
+      if (message?.role === role && message.text.trim()) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  function findAssistantRetryContext(entries, messageId) {
+    const context = findAssistantForkContext(entries, messageId);
+    const latestAssistantIndex = findLatestMessageIndex(entries, "assistant");
+    if (latestAssistantIndex !== context.assistantIndex) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        "Only the latest assistant message can be retried; fork older assistant messages instead.",
+      );
+    }
+    return context;
+  }
+
+  function findUserEditContext(entries, messageId) {
+    const id = typeof messageId === "string" ? messageId.trim() : "";
+    if (!id) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        "runtime.chat.message.edit_rerun requires messageId",
+      );
+    }
+    const userIndex = entries.findIndex((entry) => {
+      const message = toSessionMessageEntry(entry);
+      return message?.entryId === id && message.role === "user" && message.text.trim();
+    });
+    if (userIndex < 0) {
+      throw new CapabilityError("E_NOT_FOUND", `User message not found: ${id}`);
+    }
+    const latestUserIndex = findLatestMessageIndex(entries, "user");
+    const userMessage = toSessionMessageEntry(entries[userIndex]);
+    return {
+      userEntry: entries[userIndex],
+      userIndex,
+      userMessage,
+      latest: latestUserIndex === userIndex,
+    };
+  }
+
+  function entriesForSameSessionRerun(entries, stopIndex) {
+    const kept = entries.slice(0, stopIndex);
+    const seen = new Set(kept.map((entry) => entry.entryId));
+    for (const entry of entries.slice(stopIndex)) {
+      if (entry?.type !== "session_info" || seen.has(entry.entryId)) {
+        continue;
+      }
+      kept.push(entry);
+      seen.add(entry.entryId);
+    }
+    return kept.map((entry) => ({
+      ...entry,
+      payload: cloneSessionPayload(entry.payload),
+    }));
+  }
+
+  async function rebaseSessionBeforeIndex(kernel, sessionId, entries, stopIndex) {
+    await kernel.replaceEntries(sessionId, entriesForSameSessionRerun(entries, stopIndex));
+  }
+
   async function copyEntriesBeforeIndex(kernel, sourceSessionId, targetSessionId, stopIndex) {
     const entries = await kernel.sessions.getEntries(sourceSessionId);
     const oldToNewEntryId = new Map();
@@ -3648,6 +3715,107 @@ export function createBackgroundRuntimeServices({
       sourceEntryId: forkContext.assistantEntry.entryId,
       previousUserEntryId: forkContext.previousUserEntry.entryId,
       promptText: previousPrompt,
+      messages: toChatTranscriptItems((await kernel.buildContext(forkSession.id)).messages),
+    };
+  }
+
+  async function retryAssistantMessage({ messageId } = {}) {
+    assertCanSwitchChatSession();
+    const [services, session] = await Promise.all([ensureServices(), ensureSession()]);
+    const { kernel } = services;
+    const entries = await kernel.sessions.getEntries(session.id);
+    const retryContext = findAssistantRetryContext(entries, messageId);
+    const previousPrompt = retryContext.previousUserMessage.text.trim();
+
+    await rebaseSessionBeforeIndex(kernel, session.id, entries, retryContext.previousUserIndex);
+    const accepted = await sendChatPrompt({
+      text: previousPrompt,
+      mode: "normal",
+    });
+    return {
+      ...accepted,
+      mode: "retry",
+      sessionId: session.id,
+      sourceSessionId: session.id,
+      sourceEntryId: retryContext.assistantEntry.entryId,
+      previousUserEntryId: retryContext.previousUserEntry.entryId,
+      promptText: previousPrompt,
+      messages: toChatTranscriptItems((await kernel.buildContext(session.id)).messages),
+    };
+  }
+
+  async function editUserMessageAndRerun({ messageId, text } = {}) {
+    assertCanSwitchChatSession();
+    const prompt = typeof text === "string" ? text.trim() : "";
+    if (!prompt) {
+      throw new CapabilityError(
+        "E_BAD_INPUT",
+        "runtime.chat.message.edit_rerun requires non-empty text",
+      );
+    }
+    const [services, sourceSession] = await Promise.all([ensureServices(), ensureSession()]);
+    const { kernel } = services;
+    const sourceEntries = await kernel.sessions.getEntries(sourceSession.id);
+    const editContext = findUserEditContext(sourceEntries, messageId);
+
+    if (editContext.latest) {
+      await rebaseSessionBeforeIndex(
+        kernel,
+        sourceSession.id,
+        sourceEntries,
+        editContext.userIndex,
+      );
+      const accepted = await sendChatPrompt({
+        text: prompt,
+        mode: "normal",
+      });
+      return {
+        ...accepted,
+        mode: "retry",
+        sessionId: sourceSession.id,
+        sourceSessionId: sourceSession.id,
+        sourceEntryId: editContext.userEntry.entryId,
+        activeSourceEntryId: editContext.userEntry.entryId,
+        promptText: prompt,
+        messages: toChatTranscriptItems((await kernel.buildContext(sourceSession.id)).messages),
+      };
+    }
+
+    const forkedFrom = {
+      sessionId: sourceSession.id,
+      leafId: editContext.userEntry.entryId,
+      sourceEntryId: editContext.userEntry.entryId,
+      reason: "branch_from_user_edit",
+    };
+    const forkTitle = normalizeSessionTitleInput(`编辑重跑 · ${trimSessionPreview(prompt)}`);
+    const forkSession = await kernel.createSession({
+      parentSessionId: sourceSession.id,
+      title: forkTitle || "编辑重跑",
+    });
+
+    await copyEntriesBeforeIndex(kernel, sourceSession.id, forkSession.id, editContext.userIndex);
+    await kernel.appendEntry(forkSession.id, "session_info", {
+      key: "forkedFrom",
+      value: forkedFrom,
+    });
+    await kernel.appendEntry(forkSession.id, "session_info", {
+      key: "title",
+      value: forkTitle || "编辑重跑",
+    });
+    await setActiveChatSession(forkSession);
+
+    const accepted = await sendChatPrompt({
+      text: prompt,
+      mode: "normal",
+    });
+    return {
+      ...accepted,
+      mode: "fork",
+      sessionId: forkSession.id,
+      sourceSessionId: sourceSession.id,
+      sourceEntryId: editContext.userEntry.entryId,
+      activeSourceEntryId: editContext.userEntry.entryId,
+      promptText: prompt,
       messages: toChatTranscriptItems((await kernel.buildContext(forkSession.id)).messages),
     };
   }
@@ -4110,6 +4278,7 @@ export function createBackgroundRuntimeServices({
     createChatSession,
     deleteChatSession,
     dispatchCapability,
+    editUserMessageAndRerun,
     ensureServices,
     ensureSession,
     forkAssistantMessage,
@@ -4127,6 +4296,7 @@ export function createBackgroundRuntimeServices({
     refreshChatSessionTitle,
     resolveIntervention,
     cancelIntervention,
+    retryAssistantMessage,
     selectChatSession,
     sendChatPrompt,
     stopChatRun,

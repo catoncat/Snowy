@@ -35,6 +35,13 @@ export class InMemorySessionStorage implements SessionStorage {
     list.push(cloneValue(entry));
   }
 
+  async replaceEntries(sessionId: string, entries: SessionEntry[]): Promise<void> {
+    if (!this.#entries.has(sessionId)) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    this.#entries.set(sessionId, cloneValue(entries));
+  }
+
   async getEntries(sessionId: string): Promise<SessionEntry[]> {
     const list = this.#entries.get(sessionId);
     if (!list) {

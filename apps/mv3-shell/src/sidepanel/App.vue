@@ -13,7 +13,9 @@ import {
 import {
   type ChatCodeCopyPayload,
   type ChatMessageCopyPayload,
+  type ChatMessageEditPayload,
   type ChatMessageForkPayload,
+  type ChatMessageRetryPayload,
   ChatTranscriptPane,
 } from "./chat-transcript-pane";
 import { SessionHistoryPane, type ChatSessionSummary } from "./session-history-pane";
@@ -146,7 +148,11 @@ const showToolHistory = ref(true);
 const titleRefreshing = ref(false);
 const conversationNotice = ref<{ type: "success" | "error"; message: string } | null>(null);
 const copiedMessageId = ref("");
+const retryingMessageId = ref("");
 const forkingMessageId = ref("");
+const editingMessageId = ref("");
+const editDraft = ref("");
+const editSubmitting = ref(false);
 const composerContextExpanded = ref(false);
 const composerHintDismissed = ref(false);
 const selectedTabs = ref<BrowserTabSummary[]>([]);
@@ -517,6 +523,38 @@ async function handleCopyCode(payload: ChatCodeCopyPayload) {
   }
 }
 
+async function handleRetryMessage(payload: ChatMessageRetryPayload) {
+  if (!payload.id || retryingMessageId.value || forkingMessageId.value) {
+    return;
+  }
+  retryingMessageId.value = payload.id;
+  try {
+    const retried = await callRuntime<{
+      sessionId: string | null;
+      runState?: { status?: string };
+      messages?: ChatItem[];
+    }>("runtime.chat.message.retry", {
+      messageId: payload.id,
+    });
+    applyChatBootstrap({
+      sessionId: retried.sessionId,
+      runState: retried.runState ?? { status: "running" },
+      messages: Array.isArray(retried.messages) ? retried.messages : [],
+    });
+    activePane.value = "chat";
+    showConversationNotice("success", "已重新回答");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    chatState.value = {
+      ...chatState.value,
+      error: message,
+    };
+    showConversationNotice("error", message);
+  } finally {
+    retryingMessageId.value = "";
+  }
+}
+
 async function handleForkMessage(payload: ChatMessageForkPayload) {
   if (!payload.id || forkingMessageId.value) {
     return;
@@ -546,6 +584,69 @@ async function handleForkMessage(payload: ChatMessageForkPayload) {
     showConversationNotice("error", message);
   } finally {
     forkingMessageId.value = "";
+  }
+}
+
+function handleEditMessage(payload: ChatMessageEditPayload) {
+  if (!payload.id || editSubmitting.value) {
+    return;
+  }
+  editingMessageId.value = payload.id;
+  editDraft.value = payload.text;
+}
+
+function handleEditChange(payload: ChatMessageEditPayload) {
+  if (!payload.id || payload.id !== editingMessageId.value || editSubmitting.value) {
+    return;
+  }
+  editDraft.value = payload.text;
+}
+
+function handleEditCancel(payload: ChatMessageEditPayload) {
+  if (!payload.id || payload.id !== editingMessageId.value || editSubmitting.value) {
+    return;
+  }
+  editingMessageId.value = "";
+  editDraft.value = "";
+}
+
+async function handleEditSubmit(payload: ChatMessageEditPayload) {
+  if (!payload.id || payload.id !== editingMessageId.value || editSubmitting.value) {
+    return;
+  }
+  const text = payload.text.trim();
+  if (!text) {
+    return;
+  }
+  editSubmitting.value = true;
+  try {
+    const edited = await callRuntime<{
+      sessionId: string | null;
+      mode?: "retry" | "fork";
+      runState?: { status?: string };
+      messages?: ChatItem[];
+    }>("runtime.chat.message.edit_rerun", {
+      messageId: payload.id,
+      text,
+    });
+    applyChatBootstrap({
+      sessionId: edited.sessionId,
+      runState: edited.runState ?? { status: "running" },
+      messages: Array.isArray(edited.messages) ? edited.messages : [],
+    });
+    activePane.value = "chat";
+    showConversationNotice("success", edited.mode === "fork" ? "已创建编辑分叉" : "已编辑并重跑");
+    editingMessageId.value = "";
+    editDraft.value = "";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    chatState.value = {
+      ...chatState.value,
+      error: message,
+    };
+    showConversationNotice("error", message);
+  } finally {
+    editSubmitting.value = false;
   }
 }
 
@@ -2011,9 +2112,19 @@ onUnmounted(() => {
             :items="visibleChatItems"
             :loading="loading"
             :copied-message-id="copiedMessageId"
+            :retrying-message-id="retryingMessageId"
+            :forking-message-id="forkingMessageId"
+            :editing-message-id="editingMessageId"
+            :edit-draft="editDraft"
+            :edit-submitting="editSubmitting"
             @toggle-tool="toggleTool"
             @copy-message="handleCopyMessage"
+            @retry-message="handleRetryMessage"
             @fork-message="handleForkMessage"
+            @edit-message="handleEditMessage"
+            @edit-change="handleEditChange"
+            @edit-cancel="handleEditCancel"
+            @edit-submit="handleEditSubmit"
             @copy-code="handleCopyCode"
           />
 

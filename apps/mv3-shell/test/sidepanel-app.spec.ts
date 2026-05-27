@@ -5,10 +5,14 @@ import { type Component, createRenderer, createSSRApp } from "vue";
 import {
   type ChatCodeCopyPayload,
   type ChatMessageCopyPayload,
+  type ChatMessageEditPayload,
+  type ChatMessageRetryPayload,
   ChatTranscriptPane,
   collectAssistantTurnText,
   isCopyableAssistantMessage,
+  isEditableUserMessage,
   isForkableAssistantMessage,
+  isRetryableAssistantMessage,
 } from "../src/sidepanel/chat-transcript-pane";
 import {
   conversationMarkdownFileName,
@@ -672,7 +676,7 @@ describe("sidepanel chat transcript component", () => {
     );
 
     const userArticle = findFirst(tree, (node) => node.props["aria-label"] === "用户发送的内容");
-    expect(String(userArticle?.props.class ?? "")).toContain("justify-end");
+    expect(String(userArticle?.props.class ?? "")).toContain("items-end");
     expect(String(userArticle?.children[0]?.props.class ?? "")).toContain("rounded-[20px]");
 
     const assistantArticle = findFirst(
@@ -1019,18 +1023,134 @@ describe("sidepanel chat transcript component", () => {
     expect(backgroundSource).toContain('case "runtime.chat.session.refresh_title"');
   });
 
-  it("exposes only runtime-backed message fork action and keeps retry hidden", () => {
+  it("exposes runtime-backed assistant retry and fork actions using old-product visibility rules", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/chat-transcript-pane.ts", "utf8");
     const appSource = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
     expect(source).toContain("copyMessage");
+    expect(source).toContain("retryMessage");
     expect(source).toContain("forkMessage");
+    expect(source).toContain("重新回答");
     expect(source).toContain("在新对话中分叉");
+    expect(appSource).toContain("handleRetryMessage");
     expect(appSource).toContain("handleForkMessage");
+    expect(appSource).toContain('"runtime.chat.message.retry"');
     expect(appSource).toContain('"runtime.chat.message.fork"');
+    expect(appSource).toContain('@retry-message="handleRetryMessage"');
     expect(appSource).toContain('@fork-message="handleForkMessage"');
-    expect(source).not.toContain("retryMessage");
-    expect(source).not.toContain("重新回答");
+  });
+
+  it("shows retry only on the latest assistant turn tail", () => {
+    const retried: string[] = [];
+    const items: ChatItem[] = [
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "请总结当前页面",
+        state: "complete",
+      },
+      {
+        id: "assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "先读取页面。",
+        state: "complete",
+      },
+      {
+        id: "tool-1",
+        kind: "tool",
+        toolName: "page.query",
+        summary: "读取页面快照",
+        detail: "{}",
+        expanded: false,
+      },
+      {
+        id: "assistant-2",
+        kind: "message",
+        role: "assistant",
+        text: "页面要点已经整理。",
+        state: "complete",
+      },
+    ];
+
+    const tree = mountInMemory({
+      loading: false,
+      items,
+      onRetryMessage: (payload: ChatMessageRetryPayload) => retried.push(payload.id),
+    });
+
+    expect(isRetryableAssistantMessage(items, "assistant-1")).toBe(false);
+    expect(isRetryableAssistantMessage(items, "assistant-2")).toBe(true);
+
+    const retryButton = findFirst(
+      tree,
+      (node) => node.type === "button" && node.props["aria-label"] === "重新回答",
+    );
+    expect(retryButton?.props.onClick).toBeTypeOf("function");
+
+    (retryButton?.props.onClick as () => void)();
+
+    expect(retried).toEqual(["assistant-2"]);
+  });
+
+  it("renders old-product inline user edit and submits edited content", () => {
+    const editStarted: ChatMessageEditPayload[] = [];
+    const editSubmitted: ChatMessageEditPayload[] = [];
+    const items: ChatItem[] = [
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "旧问题",
+        state: "complete",
+      },
+      {
+        id: "assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "旧回答",
+        state: "complete",
+      },
+    ];
+
+    const idleTree = mountInMemory({
+      loading: false,
+      items,
+      onEditMessage: (payload: ChatMessageEditPayload) => editStarted.push(payload),
+    });
+
+    expect(isEditableUserMessage(items, "user-1")).toBe(true);
+    const editButton = findFirst(
+      idleTree,
+      (node) => node.type === "button" && node.props["aria-label"] === "编辑并重跑",
+    );
+    expect(editButton?.props.onClick).toBeTypeOf("function");
+    (editButton?.props.onClick as () => void)();
+    expect(editStarted).toEqual([{ id: "user-1", text: "旧问题" }]);
+
+    const editingTree = mountInMemory({
+      loading: false,
+      items,
+      editingMessageId: "user-1",
+      editDraft: "编辑后的问题",
+      onEditSubmit: (payload: ChatMessageEditPayload) => editSubmitted.push(payload),
+    });
+
+    const editor = findFirst(
+      editingTree,
+      (node) => node.type === "textarea" && node.props["aria-label"] === "编辑用户消息",
+    );
+    expect(editor?.props.value).toBe("编辑后的问题");
+
+    const submitButton = findFirst(
+      editingTree,
+      (node) => node.type === "button" && node.props["aria-label"] === "提交编辑并重跑",
+    );
+    expect(submitButton?.props.onClick).toBeTypeOf("function");
+    (submitButton?.props.onClick as () => void)();
+
+    expect(editSubmitted).toEqual([{ id: "user-1", text: "编辑后的问题" }]);
   });
 
   it("exports conversation markdown like the old product without tool traces", () => {

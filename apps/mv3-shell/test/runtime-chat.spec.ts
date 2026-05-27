@@ -484,11 +484,24 @@ describe("mv3-shell runtime chat bridge", () => {
       refreshChatSessionTitle: vi.fn(async ({ sessionId }) => ({
         item: { id: sessionId, title: "重新生成后的标题" },
       })),
+      retryAssistantMessage: vi.fn(async ({ messageId }) => ({
+        sessionId: "s-1",
+        accepted: true,
+        mode: "retry",
+        sourceEntryId: messageId,
+      })),
       forkAssistantMessage: vi.fn(async ({ messageId }) => ({
         sessionId: "s-fork",
         accepted: true,
         mode: "fork",
         sourceEntryId: messageId,
+      })),
+      editUserMessageAndRerun: vi.fn(async ({ messageId, text }) => ({
+        sessionId: messageId === "user-latest" ? "s-1" : "s-fork",
+        accepted: true,
+        mode: messageId === "user-latest" ? "retry" : "fork",
+        sourceEntryId: messageId,
+        promptText: text,
       })),
       deleteChatSession: vi.fn(async ({ sessionId }) => ({
         deletedSessionId: sessionId,
@@ -580,6 +593,25 @@ describe("mv3-shell runtime chat bridge", () => {
     await expect(
       bridge.route({
         target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.chat.message.retry",
+        messageId: "assistant-1",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        sessionId: "s-1",
+        accepted: true,
+        mode: "retry",
+        sourceEntryId: "assistant-1",
+      },
+    });
+    expect(runtimeServices.retryAssistantMessage).toHaveBeenCalledWith({
+      messageId: "assistant-1",
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
         kind: "runtime.chat.message.fork",
         messageId: "assistant-1",
       }),
@@ -594,6 +626,28 @@ describe("mv3-shell runtime chat bridge", () => {
     });
     expect(runtimeServices.forkAssistantMessage).toHaveBeenCalledWith({
       messageId: "assistant-1",
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.chat.message.edit_rerun",
+        messageId: "user-latest",
+        text: "改写后的问题",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        sessionId: "s-1",
+        accepted: true,
+        mode: "retry",
+        sourceEntryId: "user-latest",
+        promptText: "改写后的问题",
+      },
+    });
+    expect(runtimeServices.editUserMessageAndRerun).toHaveBeenCalledWith({
+      messageId: "user-latest",
+      text: "改写后的问题",
     });
 
     await expect(
@@ -1133,6 +1187,216 @@ describe("mv3-shell end-to-end loop integration", () => {
         leafId: assistant.entryId,
         sourceEntryId: assistant.entryId,
         reason: "branch_from_assistant",
+      },
+    });
+  });
+
+  it("retries the latest assistant message in the active session by rebasing to the previous user prompt", async () => {
+    const sentMessages: unknown[] = [];
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        runtime: {
+          sendMessage: vi.fn(async (message) => {
+            sentMessages.push(message);
+            return undefined;
+          }),
+        },
+      },
+    });
+
+    const initial = await services.bootstrapChat();
+    const sessionId = initial.sessionId as string;
+    const { kernel } = await services.ensureServices();
+
+    await kernel.appendMessage(sessionId, {
+      role: "user",
+      text: "第一个问题",
+    });
+    await kernel.appendMessage(sessionId, {
+      role: "assistant",
+      text: "第一个回答",
+    });
+    const latestUser = await kernel.appendMessage(sessionId, {
+      role: "user",
+      text: "最后一个问题",
+    });
+    const latestAssistant = await kernel.appendMessage(sessionId, {
+      role: "assistant",
+      text: "需要重写的旧回答",
+    });
+
+    const retried = await services.retryAssistantMessage({ messageId: latestAssistant.entryId });
+
+    expect(retried).toMatchObject({
+      accepted: true,
+      mode: "retry",
+      sessionId,
+      sourceEntryId: latestAssistant.entryId,
+      previousUserEntryId: latestUser.entryId,
+      promptText: "最后一个问题",
+    });
+
+    await waitFor(() =>
+      sentMessages.some(
+        (message) =>
+          (message as { type?: string; event?: { type?: string; sessionId?: string } }).type ===
+            "bbl-next.runtime.chat.event" &&
+          (message as { event?: { type?: string; sessionId?: string } }).event?.type ===
+            "assistant.done" &&
+          (message as { event?: { sessionId?: string } }).event?.sessionId === sessionId,
+      ),
+    );
+
+    const bootstrap = await services.bootstrapChat();
+    expect(bootstrap.sessionId).toBe(sessionId);
+    expect(
+      bootstrap.messages.map((item: { kind?: string; role?: string; text?: string }) =>
+        item.kind === "message" ? `${item.role}:${item.text}` : `${item.kind}:${item.text}`,
+      ),
+    ).toEqual([
+      "user:第一个问题",
+      "assistant:第一个回答",
+      "user:最后一个问题",
+      "assistant:No LLM provider is configured. Please set an API key via config.update to enable the agent loop.",
+    ]);
+    expect(
+      bootstrap.messages.some((item: { text?: string }) => item.text === "需要重写的旧回答"),
+    ).toBe(false);
+  });
+
+  it("edits the latest user message in-place and reruns the active session", async () => {
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        runtime: {
+          sendMessage: vi.fn(async () => undefined),
+        },
+      },
+    });
+
+    const initial = await services.bootstrapChat();
+    const sessionId = initial.sessionId as string;
+    const { kernel } = await services.ensureServices();
+
+    await kernel.appendMessage(sessionId, {
+      role: "user",
+      text: "保留的问题",
+    });
+    await kernel.appendMessage(sessionId, {
+      role: "assistant",
+      text: "保留的回答",
+    });
+    const latestUser = await kernel.appendMessage(sessionId, {
+      role: "user",
+      text: "旧问题",
+    });
+    await kernel.appendMessage(sessionId, {
+      role: "assistant",
+      text: "旧回答",
+    });
+
+    const edited = await services.editUserMessageAndRerun({
+      messageId: latestUser.entryId,
+      text: "编辑后的问题",
+    });
+
+    expect(edited).toMatchObject({
+      accepted: true,
+      mode: "retry",
+      sessionId,
+      sourceEntryId: latestUser.entryId,
+      promptText: "编辑后的问题",
+    });
+
+    const bootstrap = await services.bootstrapChat();
+    expect(bootstrap.sessionId).toBe(sessionId);
+    expect(
+      bootstrap.messages.map((item: { kind?: string; role?: string; text?: string }) =>
+        item.kind === "message" ? `${item.role}:${item.text}` : `${item.kind}:${item.text}`,
+      ),
+    ).toEqual([
+      "user:保留的问题",
+      "assistant:保留的回答",
+      "user:编辑后的问题",
+      "assistant:No LLM provider is configured. Please set an API key via config.update to enable the agent loop.",
+    ]);
+    expect(bootstrap.messages.some((item: { text?: string }) => item.text === "旧问题")).toBe(
+      false,
+    );
+    expect(bootstrap.messages.some((item: { text?: string }) => item.text === "旧回答")).toBe(
+      false,
+    );
+  });
+
+  it("edits a historical user message by forking a new active session", async () => {
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        runtime: {
+          sendMessage: vi.fn(async () => undefined),
+        },
+      },
+    });
+
+    const initial = await services.bootstrapChat();
+    const sourceSessionId = initial.sessionId as string;
+    const { kernel } = await services.ensureServices();
+
+    const historicalUser = await kernel.appendMessage(sourceSessionId, {
+      role: "user",
+      text: "历史问题",
+    });
+    await kernel.appendMessage(sourceSessionId, {
+      role: "assistant",
+      text: "历史回答",
+    });
+    await kernel.appendMessage(sourceSessionId, {
+      role: "user",
+      text: "后续问题",
+    });
+    await kernel.appendMessage(sourceSessionId, {
+      role: "assistant",
+      text: "后续回答",
+    });
+
+    const edited = await services.editUserMessageAndRerun({
+      messageId: historicalUser.entryId,
+      text: "编辑后的历史问题",
+    });
+
+    expect(edited).toMatchObject({
+      accepted: true,
+      mode: "fork",
+      sourceSessionId,
+      sourceEntryId: historicalUser.entryId,
+      promptText: "编辑后的历史问题",
+    });
+    expect(edited.sessionId).not.toBe(sourceSessionId);
+
+    const bootstrap = await services.bootstrapChat();
+    expect(bootstrap.sessionId).toBe(edited.sessionId);
+    expect(
+      bootstrap.messages.map((item: { kind?: string; role?: string; text?: string }) =>
+        item.kind === "message" ? `${item.role}:${item.text}` : `${item.kind}:${item.text}`,
+      ),
+    ).toEqual([
+      "user:编辑后的历史问题",
+      "assistant:No LLM provider is configured. Please set an API key via config.update to enable the agent loop.",
+    ]);
+
+    const sessions = await services.listChatSessions();
+    const forkSummary = sessions.items.find(
+      (item: { id?: string }) => item.id === edited.sessionId,
+    );
+    expect(forkSummary).toMatchObject({
+      id: edited.sessionId,
+      parentSessionId: sourceSessionId,
+      forkedFrom: {
+        sessionId: sourceSessionId,
+        leafId: historicalUser.entryId,
+        sourceEntryId: historicalUser.entryId,
+        reason: "branch_from_user_edit",
       },
     });
   });

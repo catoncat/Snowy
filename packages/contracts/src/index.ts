@@ -1841,6 +1841,7 @@ export interface LlmSseStreamResult {
 export interface SessionStorage {
   createSession(header: SessionHeader): Promise<void>;
   appendEntry(sessionId: string, entry: SessionEntry): Promise<void>;
+  replaceEntries(sessionId: string, entries: SessionEntry[]): Promise<void>;
   getEntries(sessionId: string): Promise<SessionEntry[]>;
   listSessions(): Promise<SessionHeader[]>;
   deleteSession(sessionId: string): Promise<void>;

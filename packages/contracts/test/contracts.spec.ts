@@ -1409,6 +1409,7 @@ describe("contracts", () => {
       const storage: SessionStorage = {
         createSession: async () => {},
         appendEntry: async () => {},
+        replaceEntries: async () => {},
         getEntries: async () => [],
         listSessions: async () => [],
         deleteSession: async () => {},
@@ -1417,6 +1418,7 @@ describe("contracts", () => {
       };
       expect(typeof storage.createSession).toBe("function");
       expect(typeof storage.appendEntry).toBe("function");
+      expect(typeof storage.replaceEntries).toBe("function");
       expect(typeof storage.getEntries).toBe("function");
       expect(typeof storage.listSessions).toBe("function");
       expect(typeof storage.deleteSession).toBe("function");
