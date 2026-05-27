@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { renderToString } from "@vue/server-renderer";
 import { describe, expect, it } from "vitest";
-import { createRenderer, createSSRApp } from "vue";
+import { type Component, createRenderer, createSSRApp } from "vue";
 import {
   type ChatMessageCopyPayload,
   ChatTranscriptPane,
@@ -13,6 +13,12 @@ import {
   generateConversationMarkdown,
   hasConversationExportContent,
 } from "../src/sidepanel/conversation-export";
+import {
+  type ChatSessionSummary,
+  SessionHistoryPane,
+  filterAndSortSessions,
+  formatSessionDate,
+} from "../src/sidepanel/session-history-pane";
 import type { ChatItem } from "../src/sidepanel/state";
 
 interface MemoryNode {
@@ -41,7 +47,7 @@ function insertNode(child: MemoryNode, parent: MemoryNode, anchor: MemoryNode | 
   }
 }
 
-function mountInMemory(props: Record<string, unknown>): MemoryNode {
+function mountComponentInMemory(component: Component, props: Record<string, unknown>): MemoryNode {
   const renderer = createRenderer<MemoryNode, MemoryNode>({
     patchProp(node, key, _prev, next) {
       node.props[key] = next;
@@ -99,8 +105,12 @@ function mountInMemory(props: Record<string, unknown>): MemoryNode {
   });
 
   const container = createMemoryNode("root");
-  renderer.createApp(ChatTranscriptPane, props).mount(container);
+  renderer.createApp(component, props).mount(container);
   return container;
+}
+
+function mountInMemory(props: Record<string, unknown>): MemoryNode {
+  return mountComponentInMemory(ChatTranscriptPane, props);
 }
 
 function findFirst(node: MemoryNode, predicate: (node: MemoryNode) => boolean): MemoryNode | null {
@@ -167,6 +177,113 @@ describe("sidepanel chat transcript component", () => {
     expect(html).toContain('href="https://example.com/docs"');
     expect(html).toContain("Just a plain runtime update.");
     expect((html.match(/sidepanel-rich-text/g) ?? []).length).toBe(1);
+  });
+
+  it("inherits old-product session history shell and list row chrome", () => {
+    const sessions: ChatSessionSummary[] = [
+      {
+        id: "s-old",
+        title: "昨天的调研",
+        updatedAt: "2026-05-26T08:20:00.000Z",
+        messageCount: 2,
+        preview: "旧记录",
+      },
+      {
+        id: "s-active",
+        title: "当前页面总结",
+        updatedAt: "2026-05-27T10:30:00.000Z",
+        messageCount: 5,
+        preview: "页面核心内容",
+        sourceLabel: "wechat",
+        forkedFrom: { sessionId: "source-session-abcdef12" },
+      },
+    ];
+
+    const tree = mountComponentInMemory(SessionHistoryPane, {
+      sessions,
+      activeId: "s-active",
+      loading: false,
+      error: "",
+      search: "",
+      renamingId: "",
+      renameDraft: "",
+      pendingDeleteId: "",
+      canCreate: true,
+    });
+
+    const dialog = findFirst(tree, (node) => node.props.role === "dialog");
+    expect(dialog?.props["aria-label"]).toBe("对话历史");
+    expect(String(dialog?.props.class ?? "")).toContain("bg-white");
+
+    const searchInput = findFirst(
+      tree,
+      (node) => node.type === "input" && node.props.id === "session-search-input",
+    );
+    expect(searchInput?.props.placeholder).toBe("搜索会话记录...");
+    expect(String(searchInput?.props.class ?? "")).toContain("rounded-2xl");
+
+    const activeRow = findFirst(
+      tree,
+      (node) => node.type === "button" && node.props["aria-label"] === "选择会话: 当前页面总结",
+    );
+    expect(activeRow?.props["aria-current"]).toBe("true");
+    expect(String(activeRow?.props.class ?? "")).toContain("rounded-2xl");
+    expect(String(activeRow?.props.class ?? "")).toContain("gap-3.5");
+
+    expect(textContent(activeRow)).toContain("微信");
+    expect(textContent(activeRow)).toContain("来源 abcdef12");
+    expect(textContent(activeRow)).toContain("5 messages");
+
+    const actions = findFirst(tree, (node) =>
+      String(node.props.class ?? "").includes("group-hover:opacity-100"),
+    );
+    expect(String(actions?.props.class ?? "")).toContain("translate-x-1");
+
+    const deleteButton = findFirst(
+      tree,
+      (node) => node.type === "button" && node.props["aria-label"] === "删除会话: 当前页面总结",
+    );
+    expect(String(deleteButton?.props.class ?? "")).toContain("border-slate-200");
+  });
+
+  it("keeps old-product session search sorting and keyboard selection behavior", () => {
+    const sessions: ChatSessionSummary[] = [
+      { id: "s-1", title: "Alpha", updatedAt: "2026-05-26T08:20:00.000Z" },
+      { id: "s-2", title: "Beta", updatedAt: "2026-05-27T08:20:00.000Z" },
+    ];
+    expect(filterAndSortSessions(sessions, "").map((session) => session.id)).toEqual([
+      "s-2",
+      "s-1",
+    ]);
+    expect(filterAndSortSessions(sessions, "alp").map((session) => session.id)).toEqual(["s-1"]);
+    expect(formatSessionDate("not-a-date")).toBe("");
+
+    const selected: string[] = [];
+    const tree = mountComponentInMemory(SessionHistoryPane, {
+      sessions,
+      activeId: "",
+      loading: false,
+      error: "",
+      search: "",
+      renamingId: "",
+      renameDraft: "",
+      pendingDeleteId: "",
+      canCreate: true,
+      onSelect: (id: string) => selected.push(id),
+    });
+
+    const dialog = findFirst(tree, (node) => node.props.role === "dialog");
+    const preventDefaultCalls: string[] = [];
+    const keydown = dialog?.props.onKeydown as
+      | ((event: { key: string; preventDefault: () => void }) => void)
+      | undefined;
+    expect(keydown).toBeTypeOf("function");
+
+    keydown?.({ key: "ArrowDown", preventDefault: () => preventDefaultCalls.push("down") });
+    keydown?.({ key: "Enter", preventDefault: () => preventDefaultCalls.push("enter") });
+
+    expect(preventDefaultCalls).toEqual(["down", "enter"]);
+    expect(selected).toEqual(["s-2"]);
   });
 
   it("emits toggleTool when the tool card button is clicked", () => {
@@ -432,6 +549,19 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("renamingSessionId");
     expect(source).toContain("sessionRenameDraft");
     expect(source).toContain("saveSessionRename");
+  });
+
+  it("wires old-product SessionHistoryPane into App.vue instead of inline session markup", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("SessionHistoryPane");
+    expect(source).toContain(':sessions="chatSessions"');
+    expect(source).toContain(":active-id=\"chatState.sessionId ?? ''\"");
+    expect(source).toContain('@select="selectChatSession"');
+    expect(source).toContain('@delete="deleteChatSession"');
+    expect(source).toContain('@rename-start="startSessionRename"');
+    expect(source).toContain('@rename-save="saveSessionRename"');
+    expect(source).not.toContain('v-for="session in filteredChatSessions"');
   });
 
   it("keeps old-product composer behaviors wired to real runtime input", () => {

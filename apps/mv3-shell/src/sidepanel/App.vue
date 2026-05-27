@@ -10,6 +10,7 @@ import {
   type ChatState,
 } from "./state";
 import { ChatTranscriptPane, type ChatMessageCopyPayload } from "./chat-transcript-pane";
+import { SessionHistoryPane, type ChatSessionSummary } from "./session-history-pane";
 import {
   conversationMarkdownFileName,
   generateConversationMarkdown,
@@ -38,15 +39,6 @@ type RuntimeEnvelope = {
 type SidepanelPane = "chat" | "sessions" | "provider" | "skills" | "runtime";
 type ChatSendMode = "normal" | "steer" | "followUp";
 type SkillCommandMode = "select" | "manage";
-interface ChatSessionSummary {
-  id: string;
-  title: string;
-  createdAt?: string;
-  updatedAt?: string;
-  messageCount?: number;
-  preview?: string;
-  active?: boolean;
-}
 interface BrowserTabSummary {
   id: number;
   title: string;
@@ -220,20 +212,6 @@ const lastMessagePreview = computed(() => {
   return lastMessage?.kind === "message" && lastMessage.text.trim()
     ? lastMessage.text.trim()
     : "暂无消息";
-});
-const filteredChatSessions = computed(() => {
-  const query = sessionSearch.value.trim().toLowerCase();
-  const sessions = [...chatSessions.value].sort((left, right) =>
-    String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")),
-  );
-  if (!query) {
-    return sessions;
-  }
-  return sessions.filter((session) =>
-    [session.title, session.preview, session.id].some((value) =>
-      String(value ?? "").toLowerCase().includes(query),
-    ),
-  );
 });
 const filteredTabs = computed(() => {
   const query = mentionFilter.value.trim().toLowerCase();
@@ -634,21 +612,6 @@ function closePanelOverlay() {
   activePane.value = "chat";
   moreMenuOpen.value = false;
   cancelSessionRename();
-}
-
-function formatSessionDate(value: string | undefined): string {
-  if (!value) {
-    return "";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-  const now = new Date();
-  if (date.toDateString() === now.toDateString()) {
-    return `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`;
-  }
-  return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
 async function focusComposer() {
@@ -2132,119 +2095,27 @@ onUnmounted(() => {
       </footer>
     </main>
 
-    <section
+    <SessionHistoryPane
       v-if="activePane === 'sessions'"
-      class="absolute inset-0 z-50 flex flex-col bg-white"
-      role="dialog"
-      aria-modal="true"
-      aria-label="对话历史"
-      @keydown.esc="closePanelOverlay"
-    >
-      <header class="flex h-14 shrink-0 items-center border-b border-slate-200 px-3">
-        <button type="button" class="grid h-9 w-9 place-items-center rounded-full text-[20px] text-slate-700 hover:bg-slate-100" aria-label="关闭会话列表" @click="closePanelOverlay">
-          ‹
-        </button>
-        <h2 class="ml-2 text-[16px] font-bold tracking-normal">对话历史</h2>
-        <button type="button" class="ml-auto grid h-9 w-9 place-items-center rounded-full text-[20px] text-slate-700 hover:bg-slate-100" aria-label="新建会话" :disabled="loading || isRunning" @click="createChatSession">
-          +
-        </button>
-      </header>
-      <div class="px-4 py-3">
-        <label class="sr-only" for="session-search-input">搜索会话记录</label>
-        <input
-          id="session-search-input"
-          v-model="sessionSearch"
-          type="text"
-          class="w-full rounded-2xl border border-slate-200 bg-slate-100 px-4 py-2 text-[14px] outline-none placeholder:text-slate-400 focus:border-blue-400 focus:bg-white"
-          placeholder="搜索会话记录..."
-        />
-      </div>
-      <div v-if="sessionsError" class="mx-4 mb-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
-        {{ sessionsError }}
-      </div>
-      <nav class="min-h-0 flex-1 overflow-y-auto px-3 py-2 sidepanel-scrollbar" aria-label="会话列表">
-        <div v-if="sessionsLoading && chatSessions.length === 0" class="px-4 py-6 text-[13px] text-slate-500">
-          正在加载会话...
-        </div>
-        <div
-          v-for="session in filteredChatSessions"
-          :key="session.id"
-          class="group relative mb-1.5 flex w-full items-start gap-3 rounded-2xl border px-4 py-3.5 text-left transition-colors"
-          :class="session.id === chatState.sessionId ? 'border-slate-300 bg-slate-50 shadow-sm' : 'border-transparent hover:bg-slate-50'"
-        >
-          <button
-            v-if="renamingSessionId !== session.id"
-            type="button"
-            class="flex min-w-0 flex-1 items-start gap-3 pr-16 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            :aria-current="session.id === chatState.sessionId ? 'true' : 'false'"
-            :aria-label="`选择会话: ${session.title || '新对话'}`"
-            @click="selectChatSession(session.id)"
-          >
-            <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-[13px] text-slate-500">□</span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-[14px] font-semibold text-slate-950">{{ session.title || "新对话" }}</span>
-              <span class="mt-1 block truncate text-[12px] text-slate-500">{{ session.preview || "暂无消息" }}</span>
-              <span class="mt-1.5 block text-[11px] text-slate-400">{{ formatSessionDate(session.updatedAt) }} · {{ session.messageCount ?? 0 }} messages</span>
-            </span>
-          </button>
-          <div v-else class="flex min-w-0 flex-1 items-start gap-3 pr-20">
-            <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-[13px] text-slate-500">□</span>
-            <span class="min-w-0 flex-1">
-              <input
-                v-model="sessionRenameDraft"
-                type="text"
-                class="w-full min-w-0 rounded-md border border-blue-300 bg-white px-2 py-1 text-[14px] font-semibold text-slate-950 outline-none focus:ring-2 focus:ring-blue-100"
-                aria-label="编辑会话标题"
-                @keydown.enter.stop.prevent="saveSessionRename(session.id)"
-                @keydown.esc.stop.prevent="cancelSessionRename"
-                @click.stop
-              />
-              <span class="mt-1.5 block text-[11px] text-slate-400">{{ formatSessionDate(session.updatedAt) }} · {{ session.messageCount ?? 0 }} messages</span>
-            </span>
-          </div>
-          <div
-            v-if="renamingSessionId === session.id"
-            class="absolute right-3 top-1/2 flex -translate-y-1/2 gap-1"
-          >
-            <button
-              type="button"
-              class="grid h-8 w-8 place-items-center rounded-lg border border-blue-200 bg-blue-50 text-[13px] font-bold text-blue-700"
-              :aria-label="`保存会话标题: ${session.title || '新对话'}`"
-              @click.stop="saveSessionRename(session.id)"
-            >
-              ✓
-            </button>
-            <button
-              type="button"
-              class="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-[13px] text-slate-500 hover:text-slate-900"
-              aria-label="取消重命名"
-              @click.stop="cancelSessionRename"
-            >
-              ×
-            </button>
-          </div>
-          <button
-            v-if="renamingSessionId !== session.id"
-            type="button"
-            class="absolute right-12 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg border border-slate-200 bg-white text-[13px] text-slate-500 opacity-0 transition-opacity hover:text-blue-700 group-hover:opacity-100 focus:opacity-100"
-            :aria-label="`重命名会话: ${session.title || '新对话'}`"
-            @click.stop="startSessionRename(session)"
-          >
-            ✎
-          </button>
-          <button
-            v-if="renamingSessionId !== session.id"
-            type="button"
-            class="absolute right-3 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg border text-[14px] opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
-            :class="pendingDeleteSessionId === session.id ? 'border-rose-300 bg-rose-50 text-rose-600 opacity-100' : 'border-slate-200 bg-white text-slate-500 hover:text-rose-600'"
-            :aria-label="pendingDeleteSessionId === session.id ? `确认删除会话: ${session.title}` : `删除会话: ${session.title}`"
-            @click.stop="deleteChatSession(session.id)"
-          >
-            ×
-          </button>
-        </div>
-      </nav>
-    </section>
+      :sessions="chatSessions"
+      :active-id="chatState.sessionId ?? ''"
+      :loading="sessionsLoading"
+      :error="sessionsError ?? ''"
+      :search="sessionSearch"
+      :renaming-id="renamingSessionId"
+      :rename-draft="sessionRenameDraft"
+      :pending-delete-id="pendingDeleteSessionId"
+      :can-create="!loading && !isRunning"
+      @close="closePanelOverlay"
+      @create="createChatSession"
+      @select="selectChatSession"
+      @delete="deleteChatSession"
+      @rename-start="startSessionRename"
+      @rename-save="saveSessionRename"
+      @rename-cancel="cancelSessionRename"
+      @search-change="sessionSearch = $event"
+      @rename-draft-change="sessionRenameDraft = $event"
+    />
 
     <section
       v-if="activePane === 'provider'"
