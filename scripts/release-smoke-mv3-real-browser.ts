@@ -1,13 +1,18 @@
 #!/usr/bin/env bun
 
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
-const repoRoot = resolve(import.meta.dir, "..");
-const extensionDir = resolve(repoRoot, "apps/mv3-shell/dist");
-const manifestPath = resolve(extensionDir, "manifest.json");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const defaultExtensionDir = resolve(repoRoot, "apps/mv3-shell/dist");
+export const defaultExternalSubmissionArtifact = resolve(
+  repoRoot,
+  ".ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip",
+);
 const target = "bbl-next.runner.background";
 
 type RuntimeResponse =
@@ -24,16 +29,120 @@ type RuntimeResponse =
       };
     };
 
+type ChromeRuntimeGlobal = typeof globalThis & {
+  chrome?: {
+    runtime?: {
+      sendMessage: (
+        extensionId: string,
+        message: Record<string, unknown>,
+      ) => Promise<RuntimeResponse>;
+    };
+  };
+};
+
+export type ReleaseSmokeOptions = {
+  artifact?: string;
+  extensionDir?: string;
+  keepProfile?: boolean;
+  scenario?: string;
+  userDataDir?: string;
+};
+
+type PreparedExtension = {
+  cleanupDir?: string;
+  dir: string;
+  source: {
+    kind: "artifact" | "directory";
+    path: string;
+  };
+};
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
 }
 
-function requireBuiltExtension() {
+function resolveFromRepo(path: string): string {
+  return resolve(repoRoot, path);
+}
+
+function readArgValue(argv: string[], name: string): string | undefined {
+  const prefix = `${name}=`;
+  const inline = argv.find((arg) => arg.startsWith(prefix));
+  if (inline) {
+    return inline.slice(prefix.length);
+  }
+  const index = argv.indexOf(name);
+  if (index === -1) {
+    return undefined;
+  }
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error(`${name} requires a value`);
+  }
+  return value;
+}
+
+export function parseReleaseSmokeCliOptions(argv: string[]): ReleaseSmokeOptions {
+  return {
+    artifact: readArgValue(argv, "--artifact"),
+    extensionDir: readArgValue(argv, "--extension-dir"),
+    keepProfile: argv.includes("--keep-profile"),
+    scenario: readArgValue(argv, "--scenario"),
+    userDataDir: readArgValue(argv, "--user-data-dir"),
+  };
+}
+
+function requireBuiltExtension(extensionDir: string): void {
+  const manifestPath = resolve(extensionDir, "manifest.json");
   if (!existsSync(manifestPath)) {
     throw new Error(`Built extension is missing at ${manifestPath}. Run bun run build first.`);
   }
+}
+
+function extractArtifact(artifactPath: string): PreparedExtension {
+  const resolvedArtifactPath = resolveFromRepo(artifactPath);
+  if (!existsSync(resolvedArtifactPath)) {
+    throw new Error(`Release artifact is missing at ${resolvedArtifactPath}`);
+  }
+  const extractDir = mkdtempSync(resolve(tmpdir(), "bbl-next-mv3-artifact-"));
+  const result = spawnSync("unzip", ["-q", resolvedArtifactPath, "-d", extractDir], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status !== 0) {
+    rmSync(extractDir, { recursive: true, force: true });
+    const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim();
+    throw new Error(
+      `unzip ${resolvedArtifactPath} failed with status ${result.status ?? "unknown"}${
+        output ? `\n${output}` : ""
+      }`,
+    );
+  }
+  return {
+    cleanupDir: extractDir,
+    dir: extractDir,
+    source: {
+      kind: "artifact",
+      path: resolvedArtifactPath,
+    },
+  };
+}
+
+function prepareExtension(options: ReleaseSmokeOptions): PreparedExtension {
+  if (options.artifact) {
+    return extractArtifact(options.artifact);
+  }
+  const extensionDir = resolveFromRepo(options.extensionDir ?? defaultExtensionDir);
+  return {
+    dir: extensionDir,
+    source: {
+      kind: "directory",
+      path: extensionDir,
+    },
+  };
 }
 
 function createSetupPlan() {
@@ -117,14 +226,19 @@ async function waitForExtensionWorker(
   return worker;
 }
 
-async function main() {
-  requireBuiltExtension();
-  const userDataDir = mkdtempSync(resolve(tmpdir(), "bbl-next-mv3-smoke-"));
+export async function runReleaseSmoke(options: ReleaseSmokeOptions = {}) {
+  const preparedExtension = prepareExtension(options);
+  requireBuiltExtension(preparedExtension.dir);
+
+  const userDataDir = options.userDataDir
+    ? resolveFromRepo(options.userDataDir)
+    : mkdtempSync(resolve(tmpdir(), "bbl-next-mv3-smoke-"));
+  const shouldCleanupUserDataDir = !options.userDataDir && !options.keepProfile;
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     args: [
-      `--disable-extensions-except=${extensionDir}`,
-      `--load-extension=${extensionDir}`,
+      `--disable-extensions-except=${preparedExtension.dir}`,
+      `--load-extension=${preparedExtension.dir}`,
       "--no-first-run",
       "--no-default-browser-check",
     ],
@@ -135,7 +249,7 @@ async function main() {
     const extensionId = new URL(worker.url()).host;
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/src/sidepanel.html`);
-    await page.waitForFunction(() => typeof chrome !== "undefined" && Boolean(chrome.runtime));
+    await page.waitForFunction(() => Boolean((globalThis as ChromeRuntimeGlobal).chrome?.runtime));
 
     const send = async (message: Record<string, unknown>): Promise<RuntimeResponse> =>
       page.evaluate(
@@ -143,11 +257,16 @@ async function main() {
           extensionId: evaluatedExtensionId,
           message: evaluatedMessage,
           target: evaluatedTarget,
-        }) =>
-          chrome.runtime.sendMessage(evaluatedExtensionId, {
+        }) => {
+          const chromeRuntime = (globalThis as ChromeRuntimeGlobal).chrome?.runtime;
+          if (!chromeRuntime) {
+            throw new Error("chrome.runtime is unavailable");
+          }
+          return chromeRuntime.sendMessage(evaluatedExtensionId, {
             target: evaluatedTarget,
             ...evaluatedMessage,
-          }),
+          });
+        },
         { extensionId, message, target },
       );
 
@@ -215,25 +334,34 @@ async function main() {
       `audit.tail did not record the sandbox capability call: ${JSON.stringify(audit)}`,
     );
 
-    console.log(
-      JSON.stringify(
-        {
-          ok: true,
-          extensionId,
-          skillId,
-          dispatchedCount: dispatch.data.dispatchedCount,
-        },
-        null,
-        2,
-      ),
-    );
+    return {
+      ok: true,
+      extensionId,
+      extensionSource: preparedExtension.source,
+      profileMode: options.userDataDir ? "provided" : "temporary",
+      scenario: options.scenario ?? "release-smoke",
+      skillId,
+      userDataDir,
+      dispatchedCount: dispatch.data.dispatchedCount,
+    };
   } finally {
     await context.close();
-    rmSync(userDataDir, { recursive: true, force: true });
+    if (shouldCleanupUserDataDir) {
+      rmSync(userDataDir, { recursive: true, force: true });
+    }
+    if (preparedExtension.cleanupDir) {
+      rmSync(preparedExtension.cleanupDir, { recursive: true, force: true });
+    }
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  runReleaseSmoke(parseReleaseSmokeCliOptions(process.argv.slice(2)))
+    .then((result) => {
+      console.log(JSON.stringify(result, null, 2));
+    })
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    });
+}
