@@ -31,7 +31,7 @@ Required result:
 - `releaseDecision.oldMainlineSwitched: true`
 - `nextActions` points to external store/deployment submission or one real-profile UAT
 
-The latest observed run on `origin/main@1449762ec3fea1a22847c01ed5fd476f40476063` passed with those properties at 2026-05-27T03:30:10.756Z.
+The latest observed run on `origin/main@a0d7781530ed6547fc77a4a52066d0bc39d36292` passed with those properties at 2026-05-27T03:50:31.200Z.
 
 ## Release Artifact
 
@@ -45,14 +45,24 @@ The package command normalizes ZIP metadata so repeated runs with the same exten
 
 Latest generated artifact:
 
-- source_commit: `1449762ec3fea1a22847c01ed5fd476f40476063`
-- source_pr: https://github.com/catoncat/Snowy/pull/10
+- source_commit: `a0d7781530ed6547fc77a4a52066d0bc39d36292`
+- source_pr: https://github.com/catoncat/Snowy/pull/13
 - artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
 - sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
-- generated_at: 2026-05-27T03:29:18.249Z
+- generated_at: 2026-05-27T03:50:02.307Z
 - command: `bun scripts/release-package-mv3.ts --output .ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
 - deterministic_rerun_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
-- deterministic_rerun_generated_at: 2026-05-27T03:29:32.740Z
+- deterministic_rerun_generated_at: 2026-05-27T03:50:40.506Z
+
+Latest generated handoff manifest:
+
+- source_commit: `a0d7781530ed6547fc77a4a52066d0bc39d36292`
+- source_pr: https://github.com/catoncat/Snowy/pull/13
+- manifest: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.manifest.json`
+- generated_at: 2026-05-27T03:50:44.821Z
+- channel: `external-store-or-deployment`
+- artifact_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
+- review_status: `ready_for_upload`
 
 Manifest summary:
 
