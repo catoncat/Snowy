@@ -31,7 +31,7 @@ Required result:
 - `releaseDecision.oldMainlineSwitched: true`
 - `nextActions` points to external store/deployment submission or one real-profile UAT
 
-The latest observed run on `origin/main@a0d7781530ed6547fc77a4a52066d0bc39d36292` passed with those properties at 2026-05-27T03:50:31.200Z.
+The latest observed run on `origin/main@033570b28ac57f3280dd7e36bc891828c6d47003` passed with those properties at 2026-05-27T04:22:33.550Z.
 
 ## Release Artifact
 
@@ -43,23 +43,23 @@ bun scripts/release-package-mv3.ts --output .ml-cache/release-artifacts/browser-
 
 The package command normalizes ZIP metadata so repeated runs with the same extension contents produce the same SHA256.
 
-Latest generated artifact:
+Latest generated upload bundle:
 
-- source_commit: `a0d7781530ed6547fc77a4a52066d0bc39d36292`
-- source_pr: https://github.com/catoncat/Snowy/pull/13
+- source_commit: `033570b28ac57f3280dd7e36bc891828c6d47003`
+- source_pr: https://github.com/catoncat/Snowy/pull/15
 - artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
 - sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
-- generated_at: 2026-05-27T03:50:02.307Z
-- command: `bun scripts/release-package-mv3.ts --output .ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
+- prepared_at: 2026-05-27T04:19:28.129Z
+- command: `bun run release:submission:prepare -- --channel external-store-or-deployment --source-pr https://github.com/catoncat/Snowy/pull/15`
 - deterministic_rerun_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
 - deterministic_rerun_generated_at: 2026-05-27T03:50:40.506Z
 
 Latest generated handoff manifest:
 
-- source_commit: `a0d7781530ed6547fc77a4a52066d0bc39d36292`
-- source_pr: https://github.com/catoncat/Snowy/pull/13
+- source_commit: `033570b28ac57f3280dd7e36bc891828c6d47003`
+- source_pr: https://github.com/catoncat/Snowy/pull/15
 - manifest: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.manifest.json`
-- generated_at: 2026-05-27T03:50:44.821Z
+- generated_at: 2026-05-27T04:19:45.594Z
 - channel: `external-store-or-deployment`
 - artifact_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
 - review_status: `ready_for_upload`
@@ -96,10 +96,10 @@ Packaged files:
 ```bash
 bun run release:submission:prepare -- \
   --channel <store-or-deployment-channel> \
-  --source-pr https://github.com/catoncat/Snowy/pull/13
+  --source-pr <source-pr-or-release-pr-url>
 ```
 
-The prepare command runs the cutover status gate, regenerates the MV3 zip, writes the machine-readable handoff manifest, and prints the artifact / manifest paths to upload.
+The prepare command runs the cutover status gate, regenerates the MV3 zip, writes the machine-readable handoff manifest, and prints the artifact / manifest paths to upload. The generated manifest records the live `git rev-parse HEAD` source commit at handoff time; do not rely on a stale PR URL copied from this document.
 
 2. If you need to run the lower-level commands manually, confirm `bun run release:cutover:status` still returns `ok: true`, then regenerate the handoff manifest:
 

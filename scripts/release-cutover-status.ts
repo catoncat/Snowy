@@ -41,6 +41,7 @@ type ReleaseDecisionState = {
   oldMainlineSwitchCommit: string | null;
   oldMainlineStatus: string | null;
   remainingBoundary: string | null;
+  recordedMainCommit: string | null;
   currentAcceptedMainCommit: string | null;
   missingReason?: string;
 };
@@ -102,6 +103,7 @@ function stripInlineCode(value: string | null): string | null {
 export function parseReleaseDecisionState(
   packet: string,
   packetText: string,
+  currentMainCommit?: string,
 ): ReleaseDecisionState {
   const acceptedAt = extractBulletValue(packetText, "accepted_at");
   const acceptedBy = extractBulletValue(packetText, "accepted_by");
@@ -114,6 +116,9 @@ export function parseReleaseDecisionState(
     decision.includes("accept the repo-side Level 2 evidence pack");
   const oldMainlineSwitched =
     oldMainlineStatusText.includes("maintenance") && oldMainlineStatusText.includes("reference");
+  const recordedMainCommit = stripInlineCode(
+    extractBulletValue(packetText, "current accepted main commit"),
+  );
   return {
     packet,
     recorded,
@@ -128,16 +133,15 @@ export function parseReleaseDecisionState(
     ),
     oldMainlineStatus,
     remainingBoundary: extractBulletValue(packetText, "remaining_boundary"),
-    currentAcceptedMainCommit: stripInlineCode(
-      extractBulletValue(packetText, "current accepted main commit"),
-    ),
+    recordedMainCommit,
+    currentAcceptedMainCommit: currentMainCommit ?? recordedMainCommit,
   };
 }
 
-function collectReleaseDecisionState(): ReleaseDecisionState {
+function collectReleaseDecisionState(currentMainCommit?: string): ReleaseDecisionState {
   try {
     const packetText = readTextFile(releaseDecisionPacket);
-    return parseReleaseDecisionState(releaseDecisionPacket, packetText);
+    return parseReleaseDecisionState(releaseDecisionPacket, packetText, currentMainCommit);
   } catch (error) {
     return {
       packet: releaseDecisionPacket,
@@ -151,6 +155,7 @@ function collectReleaseDecisionState(): ReleaseDecisionState {
       oldMainlineSwitchCommit: null,
       oldMainlineStatus: null,
       remainingBoundary: null,
+      recordedMainCommit: null,
       currentAcceptedMainCommit: null,
       missingReason: error instanceof Error ? error.message : String(error),
     };
@@ -251,7 +256,7 @@ function main(): void {
   const acceptance = collectAcceptance();
   const git = collectGitState();
   const workflow = collectWorkflowState();
-  const releaseDecision = collectReleaseDecisionState();
+  const releaseDecision = collectReleaseDecisionState(git.head);
   const blockers: string[] = [];
 
   if (!acceptance.ok) {
