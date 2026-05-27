@@ -48,7 +48,8 @@ Current delivery state as of this packet refresh:
 - release package command: PR #5, `feat(release): 固化 MV3 打包命令`
 - cutover final state record: PR #7, `docs(cutover): 记录最终执行状态`
 - cutover status final next action: PR #8, `fix(release): 收敛 cutover 状态下一步`
-- current accepted main commit: `ea0443fe0e99465d1723899fa864b4e93516d42d`
+- real-profile UAT command: PR #10, `feat(release): 增加 real-profile UAT 命令`
+- current accepted main commit: `1449762ec3fea1a22847c01ed5fd476f40476063`
 - `bun run release:cutover:status`: passing on `origin/main` with no blockers
 - external submission packet: `docs/external-release-submission-packet-2026-05-27.md`
 - remaining boundary: external store/deployment submission or the single real-profile UAT scenario in the external submission packet, if required
@@ -92,12 +93,15 @@ bun run release:package:mv3
 - cutover_status_final_boundary_merged_at: 2026-05-27T02:56:26Z
 - cutover_status_final_boundary_pr: https://github.com/catoncat/Snowy/pull/8
 - cutover_status_final_boundary_merge_commit: `ea0443fe0e99465d1723899fa864b4e93516d42d`
-- refreshed_cutover_gate_at: 2026-05-27T02:58:45.680Z
+- real_profile_uat_command_merged_at: 2026-05-27T03:23:26Z
+- real_profile_uat_command_pr: https://github.com/catoncat/Snowy/pull/10
+- real_profile_uat_command_merge_commit: `1449762ec3fea1a22847c01ed5fd476f40476063`
+- refreshed_cutover_gate_at: 2026-05-27T03:30:10.756Z
 - refreshed_cutover_gate_command: `bun run release:cutover:status`
 - refreshed_cutover_gate_result: `ok: true`
 - refreshed_cutover_gate_branch: `codex/verify-origin-main` tracking `origin/main`
 - refreshed_cutover_gate_upstream: `origin/main`
-- refreshed_cutover_gate_head: `ea0443fe0e99465d1723899fa864b4e93516d42d`
+- refreshed_cutover_gate_head: `1449762ec3fea1a22847c01ed5fd476f40476063`
 - refreshed_cutover_gate_coverage: acceptance docs, extension build, real Chromium MV3 smoke, repo-wide `bun run check`, live queue, active leases
 - live_queue_entries: 0
 - active_leases: 0
@@ -105,7 +109,11 @@ bun run release:package:mv3
 - local_release_artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
 - local_release_artifact_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
 - local_release_artifact_deterministic_rerun_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
+- local_release_artifact_refreshed_at: 2026-05-27T03:29:32.740Z
 - artifact_manifest: `Browser Brain Loop Next`, MV3, version `0.0.1`
+- real_profile_uat_command: `bun run release:uat:real-profile -- --user-data-dir <path-to-human-selected-chrome-profile>`
+- real_profile_uat_refresh_command: `bun run release:uat:real-profile -- --user-data-dir /tmp/bbl-real-profile-uat-main-jwZQWp`
+- real_profile_uat_refresh_result: `ok: true`, artifact-backed, provided profile, scenario `real-profile-uat`, `dispatchedCount: 1`
 
 The old repository at `/Users/envvar/work/repos/snowy/browser-brain-loop` was checked read-only during this execution pass. Its current worktree has unrelated dirty and untracked changes, but `catoncat/browsir` PR #3 is merged and `origin/main` now marks that repository as maintenance / reference mode for replacement work. Do not perform further old-mainline writes in that dirty worktree; use an isolated worktree or coordinate ownership first.
 
