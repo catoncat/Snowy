@@ -31,7 +31,7 @@ Required result:
 - `releaseDecision.oldMainlineSwitched: true`
 - `nextActions` points to external store/deployment submission or one real-profile UAT
 
-The latest observed run on `origin/main@ea0443fe0e99465d1723899fa864b4e93516d42d` passed with those properties.
+The latest observed run on `origin/main@1449762ec3fea1a22847c01ed5fd476f40476063` passed with those properties at 2026-05-27T03:30:10.756Z.
 
 ## Release Artifact
 
@@ -45,13 +45,14 @@ The package command normalizes ZIP metadata so repeated runs with the same exten
 
 Latest generated artifact:
 
-- source_commit: `ea0443fe0e99465d1723899fa864b4e93516d42d`
-- source_pr: https://github.com/catoncat/Snowy/pull/8
+- source_commit: `1449762ec3fea1a22847c01ed5fd476f40476063`
+- source_pr: https://github.com/catoncat/Snowy/pull/10
 - artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
 - sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
-- generated_at: 2026-05-27T03:03:37.676Z
+- generated_at: 2026-05-27T03:29:18.249Z
 - command: `bun scripts/release-package-mv3.ts --output .ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
 - deterministic_rerun_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
+- deterministic_rerun_generated_at: 2026-05-27T03:29:32.740Z
 
 Manifest summary:
 
@@ -114,3 +115,13 @@ By default this command loads `.ml-cache/release-artifacts/browser-brain-loop-ne
 Pass condition: the real profile produces the same replacement-loop evidence as the automated real Chromium MV3 smoke.
 
 Fail condition: a concrete runtime, packaging, permission, profile, or store-policy failure blocks that exact path. In that case, fix the reported blocker. Do not reopen unrelated deferred breadth.
+
+Latest command verification:
+
+- checked_at: 2026-05-27T03:30:33Z
+- command: `bun run release:uat:real-profile -- --user-data-dir /tmp/bbl-real-profile-uat-main-jwZQWp`
+- artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
+- result: `ok: true`
+- profile_mode: `provided`
+- scenario: `real-profile-uat`
+- dispatched_count: 1
