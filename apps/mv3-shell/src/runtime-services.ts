@@ -1453,6 +1453,27 @@ function extractSessionInfoTitle(entries) {
   return "";
 }
 
+function normalizeSessionSourceLabel(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function extractSessionInfoSourceLabel(entries) {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const info = toSessionInfoEntry(entries[index]);
+    if (info?.key !== "sourceLabel") {
+      continue;
+    }
+    const sourceLabel = normalizeSessionSourceLabel(info.value);
+    if (sourceLabel) {
+      return sourceLabel;
+    }
+  }
+  return "";
+}
+
 function normalizeForkedFrom(value) {
   if (!isPlainObject(value)) {
     return null;
@@ -1516,6 +1537,7 @@ function toChatSessionSummary(header, entries, activeSessionId) {
     id: header.id,
     title: deriveSessionTitle(header, messages, extractSessionInfoTitle(entries)),
     parentSessionId: header.parentSessionId ?? "",
+    sourceLabel: extractSessionInfoSourceLabel(entries),
     forkedFrom: extractSessionInfoForkedFrom(entries),
     createdAt: header.createdAt,
     updatedAt,

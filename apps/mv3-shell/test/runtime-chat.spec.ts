@@ -367,6 +367,26 @@ describe("mv3-shell runtime chat bridge", () => {
     ).toBe("产品验收清单");
   });
 
+  it("projects chat session source labels from persisted session metadata", async () => {
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+    });
+
+    const bootstrap = await services.bootstrapChat();
+    const { kernel } = await services.ensureServices();
+    await kernel.appendEntry(bootstrap.sessionId as string, "session_info", {
+      key: "sourceLabel",
+      value: " WeChat ",
+    });
+
+    const sessions = await services.listChatSessions();
+    expect(
+      sessions.items.find(
+        (item: { id: string; sourceLabel?: string }) => item.id === bootstrap.sessionId,
+      )?.sourceLabel,
+    ).toBe("wechat");
+  });
+
   it("refreshes chat session titles through the title LLM lane", async () => {
     const originalFetch = globalThis.fetch;
     const requestBodies: Array<Record<string, unknown>> = [];

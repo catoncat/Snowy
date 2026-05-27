@@ -259,6 +259,11 @@ const activeSessionTitle = computed(() =>
     ? `Session ${shortId(chatState.value.sessionId)}`
     : "新对话"),
 );
+const activeSessionSourceLabel = computed(() =>
+  String(activeSession.value?.sourceLabel || "")
+    .trim()
+    .toLowerCase(),
+);
 const activeForkSourceSessionId = computed(() =>
   String(activeSession.value?.forkedFrom?.sessionId || "").trim(),
 );
@@ -1848,9 +1853,18 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="ml-1 flex min-w-0 flex-1 flex-col justify-center">
-            <h1 class="truncate text-[15px] font-bold leading-5 tracking-normal text-slate-950">
-              {{ activeSessionTitle }}
-            </h1>
+            <div class="flex min-w-0 items-center gap-2">
+              <h1 class="truncate text-[15px] font-bold leading-5 tracking-normal text-slate-950">
+                {{ activeSessionTitle }}
+              </h1>
+              <span
+                v-if="activeSessionSourceLabel === 'wechat'"
+                class="inline-flex shrink-0 items-center rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+                aria-label="当前会话来自微信"
+              >
+                微信
+              </span>
+            </div>
           </div>
         </div>
 

@@ -766,6 +766,15 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("selectChatSession(sourceId)");
   });
 
+  it("inherits old-product active session source badge in the chat header", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("activeSessionSourceLabel");
+    expect(source).toContain("activeSessionSourceLabel === 'wechat'");
+    expect(source).toContain('aria-label="当前会话来自微信"');
+    expect(source).toContain("微信");
+  });
+
   it("uses real chat session routes for old-product history UX", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
