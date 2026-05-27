@@ -82,16 +82,26 @@ Packaged files:
 ## External Submission Steps
 
 1. Confirm `bun run release:cutover:status` still returns `ok: true`.
-2. Upload `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip` to the chosen extension store or deployment channel.
-3. Record the external submission result next to this packet:
+2. Generate the machine-readable handoff manifest:
+
+```bash
+bun run release:submission:manifest -- \
+  --artifact .ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip \
+  --channel <store-or-deployment-channel> \
+  --output .ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.manifest.json
+```
+
+3. Upload `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip` to the chosen extension store or deployment channel.
+4. Record the external submission result next to this packet:
    - submitted_at
    - submitted_by
    - channel
    - uploaded_artifact
    - uploaded_sha256
+   - uploaded_manifest
    - store_item_or_release_url
    - review_status
-4. If the store requires metadata that is not in this repository, treat that as external listing data. Do not add implementation backlog unless the store rejects the artifact for a concrete product/runtime reason.
+5. If the store requires metadata that is not in this repository, treat that as external listing data. Do not add implementation backlog unless the store rejects the artifact for a concrete product/runtime reason.
 
 ## One Real-Profile UAT If Requested
 
