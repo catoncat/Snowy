@@ -1269,6 +1269,27 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain('runManagementAction("config.update"');
   });
 
+  it("keeps old-product provider scene routing selectable and backed by config.update", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+    const auxSelect = source.match(/data-provider-scene="aux"[\s\S]*?<\/select>/)?.[0] ?? "";
+    const fallbackSelect =
+      source.match(/data-provider-scene="fallback"[\s\S]*?<\/select>/)?.[0] ?? "";
+
+    expect(source).toContain("configAuxModelDraft");
+    expect(source).toContain("configFallbackModelDraft");
+    expect(auxSelect).toContain("configAuxModelDraft");
+    expect(auxSelect).toContain("跟随主对话");
+    expect(auxSelect).not.toContain("disabled");
+    expect(fallbackSelect).toContain("configFallbackModelDraft");
+    expect(fallbackSelect).toContain("关闭");
+    expect(fallbackSelect).not.toContain("disabled");
+    expect(source).toContain("laneProfiles");
+    expect(source).toContain("compaction");
+    expect(source).toContain("title");
+    expect(source).toContain("fallbackProfile");
+    expect(source).toContain("profiles");
+  });
+
   it("keeps old-product conversation export actions in the more menu", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 

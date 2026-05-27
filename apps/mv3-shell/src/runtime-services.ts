@@ -2256,6 +2256,30 @@ function cloneLlmProfileConfig(config) {
   };
 }
 
+function trimString(value) {
+  return String(value ?? "").trim();
+}
+
+function normalizeModelProfileSummary(profile) {
+  if (!isPlainObject(profile)) {
+    return null;
+  }
+  const providerId = trimString(profile.providerId ?? profile.provider);
+  const model = trimString(profile.llmModel ?? profile.model);
+  const baseUrl = trimString(profile.llmBase ?? profile.baseUrl);
+  const api = normalizeOpenAiApiMode(
+    isPlainObject(profile.providerOptions) ? profile.providerOptions.api : profile.api,
+  );
+  const normalized = {
+    id: trimString(profile.id),
+    ...(providerId ? { provider: toConfigModelProvider(providerId) } : {}),
+    ...(model ? { model } : {}),
+    ...(baseUrl ? { baseUrl: normalizeLlmBaseForApi(baseUrl, api) } : {}),
+    api,
+  };
+  return normalized.id ? normalized : null;
+}
+
 function syncLlmProfileConfig(target, source) {
   const next = cloneLlmProfileConfig(source);
   if (!next) {
@@ -2312,15 +2336,47 @@ function cloneConfigSummary(summary) {
 
 function redactConfigSummaryField(field, value) {
   if (field === "model") {
-    const entries = Object.entries(value)
-      .filter(([key]) => key !== "apiKey")
-      .map(([key, entryValue]) => [
-        key,
+    const redacted = {};
+    for (const [key, entryValue] of Object.entries(value)) {
+      if (key === "apiKey") {
+        continue;
+      }
+      if (key === "profiles" && Array.isArray(entryValue)) {
+        const profiles = entryValue
+          .map((profile) => normalizeModelProfileSummary(profile))
+          .filter(Boolean);
+        const routing = isPlainObject(value.routing) ? value.routing : {};
+        const defaultProfileId = trimString(routing.defaultProfile) || "default";
+        if (
+          profiles.length > 0 &&
+          !profiles.some((profile) => profile.id === defaultProfileId) &&
+          typeof value.model === "string" &&
+          value.model.trim()
+        ) {
+          profiles.unshift({
+            id: defaultProfileId,
+            ...(typeof value.provider === "string"
+              ? { provider: toConfigModelProvider(toProfileProviderId(value.provider)) }
+              : {}),
+            model: value.model.trim(),
+            ...(typeof value.baseUrl === "string" && value.baseUrl.trim()
+              ? {
+                  baseUrl: normalizeLlmBaseForApi(value.baseUrl, normalizeOpenAiApiMode(value.api)),
+                }
+              : {}),
+            api: normalizeOpenAiApiMode(value.api),
+          });
+        }
+        if (profiles.length > 0) {
+          redacted.profiles = profiles;
+        }
+        continue;
+      }
+      redacted[key] =
         key === "provider" && typeof entryValue === "string"
           ? toConfigModelProvider(toProfileProviderId(entryValue))
-          : entryValue,
-      ]);
-    const redacted = Object.fromEntries(entries);
+          : entryValue;
+    }
     const api = normalizeOpenAiApiMode(redacted.api);
     return {
       ...redacted,
@@ -2482,6 +2538,71 @@ function normalizeRoutingLaneProfiles(laneProfiles, { includeEmpty = false } = {
   return normalized;
 }
 
+function normalizeLlmProfilePatch(profilePatch, { defaultProfile, existingProfilesById }) {
+  if (!isPlainObject(profilePatch) || typeof profilePatch.id !== "string") {
+    return null;
+  }
+
+  const id = profilePatch.id.trim();
+  if (!id) {
+    return null;
+  }
+
+  const existingProfile = existingProfilesById.get(id) ?? null;
+  const fallbackProfile = existingProfilesById.get(defaultProfile.id) ?? defaultProfile;
+  const providerId = toProfileProviderId(
+    trimString(
+      profilePatch.providerId ??
+        profilePatch.provider ??
+        existingProfile?.providerId ??
+        fallbackProfile?.providerId ??
+        "openai_compatible",
+    ),
+  );
+  const apiMode = normalizeOpenAiApiMode(
+    isPlainObject(profilePatch.providerOptions)
+      ? profilePatch.providerOptions.api
+      : (profilePatch.api ??
+          existingProfile?.providerOptions?.api ??
+          fallbackProfile?.providerOptions?.api),
+  );
+  const providerOptions = {
+    ...(isPlainObject(existingProfile?.providerOptions) ? existingProfile.providerOptions : {}),
+    ...(isPlainObject(profilePatch.providerOptions) ? profilePatch.providerOptions : {}),
+    api: apiMode,
+  };
+  const llmBaseSource = trimString(
+    profilePatch.llmBase ??
+      profilePatch.baseUrl ??
+      existingProfile?.llmBase ??
+      fallbackProfile?.llmBase ??
+      "https://api.openai.com/v1",
+  );
+  const llmKeySource = trimString(
+    profilePatch.llmKey ??
+      profilePatch.apiKey ??
+      existingProfile?.llmKey ??
+      fallbackProfile?.llmKey ??
+      "",
+  );
+  const llmModelSource = trimString(
+    profilePatch.llmModel ??
+      profilePatch.model ??
+      existingProfile?.llmModel ??
+      fallbackProfile?.llmModel ??
+      "",
+  );
+
+  return {
+    id,
+    providerId,
+    llmBase: normalizeLlmBaseForApi(llmBaseSource, apiMode),
+    llmKey: llmKeySource,
+    llmModel: llmModelSource,
+    ...(Object.keys(providerOptions).length > 0 ? { providerOptions } : {}),
+  };
+}
+
 function laneProfilesEqual(left, right) {
   const lanes = [...new Set([...Object.keys(left ?? {}), ...Object.keys(right ?? {})])];
   return lanes.every((lane) => {
@@ -2522,6 +2643,12 @@ function buildConfigModelValues(profileConfig) {
     model.baseUrl = normalizeLlmBaseForApi(activeProfile.llmBase, apiMode);
   }
   model.api = apiMode;
+  const profiles = normalized.profiles
+    .map((profile) => normalizeModelProfileSummary(profile))
+    .filter(Boolean);
+  if (profiles.length > 0) {
+    model.profiles = profiles;
+  }
   model.routing = {
     defaultProfile:
       typeof normalized.defaultProfile === "string" && normalized.defaultProfile.trim()
@@ -2651,6 +2778,43 @@ function applyConfigModelPatchToProfileConfig(currentConfig, modelPatch) {
     }
   }
 
+  if (Array.isArray(modelPatch.profiles)) {
+    const existingProfilesById = new Map(
+      next.profiles.map((entry) => [
+        entry.id,
+        cloneLlmProfileConfig({ profiles: [entry], defaultProfile: entry.id })?.profiles?.[0] ??
+          entry,
+      ]),
+    );
+    const nextProfiles = [];
+    let hasDefaultProfile = false;
+
+    for (const profilePatch of modelPatch.profiles) {
+      const normalizedProfile = normalizeLlmProfilePatch(profilePatch, {
+        defaultProfile: profile,
+        existingProfilesById,
+      });
+      if (!normalizedProfile) {
+        continue;
+      }
+      if (normalizedProfile.id === defaultProfileId) {
+        hasDefaultProfile = true;
+      }
+      nextProfiles.push(normalizedProfile);
+    }
+
+    if (!hasDefaultProfile) {
+      nextProfiles.unshift(profile);
+    }
+
+    const normalizedCurrentProfiles = JSON.stringify(next.profiles);
+    const normalizedNextProfiles = JSON.stringify(nextProfiles);
+    if (normalizedCurrentProfiles !== normalizedNextProfiles) {
+      next.profiles = nextProfiles;
+      changed = true;
+    }
+  }
+
   const routingPatch = isPlainObject(modelPatch.routing) ? modelPatch.routing : null;
   if (routingPatch) {
     if (typeof routingPatch.defaultProfile === "string" && routingPatch.defaultProfile.trim()) {
@@ -2660,10 +2824,15 @@ function applyConfigModelPatchToProfileConfig(currentConfig, modelPatch) {
         changed = true;
       }
     }
-    if (typeof routingPatch.fallbackProfile === "string" && routingPatch.fallbackProfile.trim()) {
+    if (typeof routingPatch.fallbackProfile === "string") {
       const fallbackProfile = routingPatch.fallbackProfile.trim();
-      if (next.fallbackProfile !== fallbackProfile) {
-        next.fallbackProfile = fallbackProfile;
+      if (fallbackProfile) {
+        if (next.fallbackProfile !== fallbackProfile) {
+          next.fallbackProfile = fallbackProfile;
+          changed = true;
+        }
+      } else if (typeof next.fallbackProfile === "string") {
+        next.fallbackProfile = undefined;
         changed = true;
       }
     }

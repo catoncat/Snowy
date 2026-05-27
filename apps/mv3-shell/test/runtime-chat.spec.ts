@@ -2231,6 +2231,117 @@ describe("mv3-shell end-to-end loop integration", () => {
     });
   });
 
+  it("creates routed scene profiles through config.update without leaking profile keys", async () => {
+    const storedData: Record<string, unknown> = {};
+    const createStorageArea = () => ({
+      get: vi.fn(async (keys) => {
+        const result: Record<string, unknown> = {};
+        for (const key of Array.isArray(keys) ? keys : [keys]) {
+          if (storedData[key]) {
+            result[key] = storedData[key];
+          }
+        }
+        return result;
+      }),
+      set: vi.fn(async (items) => {
+        Object.assign(storedData, items);
+      }),
+    });
+
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        ...createFixtureChromeApi(),
+        storage: {
+          local: createStorageArea(),
+        },
+      },
+    });
+
+    const result = await services.dispatchCapability({
+      capabilityId: "config.update",
+      input: {
+        patch: {
+          model: {
+            provider: "openai",
+            api: "responses",
+            model: "gpt-main",
+            baseUrl: "https://llm.example/v1",
+            apiKey: "sk-main",
+            profiles: [
+              {
+                id: "title",
+                providerId: "openai",
+                llmBase: "https://llm.example/v1",
+                llmKey: "sk-title",
+                llmModel: "gpt-title",
+                providerOptions: {
+                  api: "responses",
+                },
+              },
+              {
+                id: "fallback",
+                providerId: "openai",
+                llmBase: "https://llm.example/v1",
+                llmKey: "sk-fallback",
+                llmModel: "gpt-fallback",
+                providerOptions: {
+                  api: "responses",
+                },
+              },
+            ],
+            routing: {
+              defaultProfile: "default",
+              fallbackProfile: "fallback",
+              laneProfiles: {
+                compaction: ["title"],
+                title: ["title"],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const summaryJson = JSON.stringify(result.config);
+    expect(summaryJson).not.toContain("sk-main");
+    expect(summaryJson).not.toContain("sk-title");
+    expect(summaryJson).not.toContain("sk-fallback");
+    expect(result.config.values.model).toMatchObject({
+      model: "gpt-main",
+      profiles: expect.arrayContaining([
+        expect.objectContaining({ id: "default", model: "gpt-main" }),
+        expect.objectContaining({ id: "title", model: "gpt-title" }),
+        expect.objectContaining({ id: "fallback", model: "gpt-fallback" }),
+      ]),
+      routing: {
+        defaultProfile: "default",
+        fallbackProfile: "fallback",
+        laneProfiles: {
+          compaction: ["title"],
+          title: ["title"],
+        },
+      },
+    });
+
+    const { kernel } = await services.ensureServices();
+    expect(kernel.resolveProviderRoute({ lane: "title" })).toMatchObject({
+      ok: true,
+      route: expect.objectContaining({
+        profile: "title",
+        llmModel: "gpt-title",
+        orderedProfiles: ["title"],
+      }),
+    });
+    expect(kernel.resolveProviderRoute({ lane: "primary" })).toMatchObject({
+      ok: true,
+      route: expect.objectContaining({
+        profile: "default",
+        llmModel: "gpt-main",
+      }),
+    });
+  });
+
   it("rehydrates shared model.routing overrides from config.summary into runtime-owned profile config after restart", async () => {
     const storedData: Record<string, unknown> = {
       "bbl-next.llm.config.v1": {

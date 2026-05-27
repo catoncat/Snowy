@@ -203,6 +203,8 @@ const diagnosticsCopying = ref(false);
 const configProviderDraft = ref("openai");
 const configApiDraft = ref("responses");
 const configModelDraft = ref("");
+const configAuxModelDraft = ref("");
+const configFallbackModelDraft = ref("");
 const configBaseUrlDraft = ref("");
 const configApiKeyDraft = ref("");
 const providerEditorOpen = ref(false);
@@ -385,12 +387,16 @@ const providerVisibleError = computed(() => providerEditorError.value || managem
 const providerEditorTitle = computed(() =>
   providerServiceCards.value.length > 0 ? "编辑自定义服务" : "添加自定义服务",
 );
+const providerProfileModels = computed(() => listProviderProfileModels(readModelConfigRecord()));
 const providerModelOptions = computed(() =>
   dedupeTextValues([
     configModelDraft.value,
+    configAuxModelDraft.value,
+    configFallbackModelDraft.value,
     readStringField(configSummary.value?.values.model, "model"),
     providerEditorModelDraft.value,
     ...providerAvailableModels.value,
+    ...providerProfileModels.value,
   ]),
 );
 const providerServiceCards = computed(() => {
@@ -401,14 +407,20 @@ const providerServiceCards = computed(() => {
   if (!model && !baseUrl) {
     return [];
   }
+  const selectedModels = dedupeTextValues([
+    model,
+    configAuxModelDraft.value,
+    configFallbackModelDraft.value,
+    ...providerProfileModels.value,
+  ]);
   return [
     {
       id: "current",
       name: provider === "openai" ? "OpenAI-compatible" : provider,
       api,
       apiBase: baseUrl,
-      selectedModels: model ? [model] : [],
-      selectedModelCount: model ? 1 : 0,
+      selectedModels,
+      selectedModelCount: selectedModels.length,
     },
   ];
 });
@@ -420,6 +432,79 @@ function readStringField(record: unknown, field: string): string {
   }
   const value = (record as Record<string, unknown>)[field];
   return typeof value === "string" ? value : "";
+}
+
+function readObjectField(record: unknown, field: string): Record<string, unknown> | null {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    return null;
+  }
+  const value = (record as Record<string, unknown>)[field];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readModelConfigRecord(): Record<string, unknown> {
+  const model = configSummary.value?.values.model;
+  return model && typeof model === "object" && !Array.isArray(model)
+    ? (model as Record<string, unknown>)
+    : {};
+}
+
+function readProviderProfileRecords(modelConfig: Record<string, unknown>): Record<string, unknown>[] {
+  return Array.isArray(modelConfig.profiles)
+    ? modelConfig.profiles.filter(
+        (profile): profile is Record<string, unknown> =>
+          Boolean(profile) && typeof profile === "object" && !Array.isArray(profile),
+      )
+    : [];
+}
+
+function listProviderProfileModels(modelConfig: Record<string, unknown>): string[] {
+  return dedupeTextValues(
+    readProviderProfileRecords(modelConfig).map((profile) => profile.model ?? profile.llmModel),
+  );
+}
+
+function readProfileModel(modelConfig: Record<string, unknown>, profileId: string): string {
+  const normalizedProfileId = trimText(profileId);
+  if (!normalizedProfileId) {
+    return "";
+  }
+  const matchedProfile = readProviderProfileRecords(modelConfig).find(
+    (profile) => readStringField(profile, "id") === normalizedProfileId,
+  );
+  const profileModel =
+    readStringField(matchedProfile, "model") || readStringField(matchedProfile, "llmModel");
+  if (profileModel) {
+    return profileModel;
+  }
+  const routing = readObjectField(modelConfig, "routing");
+  const defaultProfile = readStringField(routing, "defaultProfile") || "default";
+  return normalizedProfileId === defaultProfile ? readStringField(modelConfig, "model") : normalizedProfileId;
+}
+
+function readLaneProfileModel(modelConfig: Record<string, unknown>, lanes: string[]): string {
+  const routing = readObjectField(modelConfig, "routing");
+  const laneProfiles = readObjectField(routing, "laneProfiles");
+  if (!laneProfiles) {
+    return "";
+  }
+  for (const lane of lanes) {
+    const profiles = Array.isArray(laneProfiles[lane]) ? laneProfiles[lane] : [];
+    for (const profileId of profiles) {
+      const model = readProfileModel(modelConfig, String(profileId ?? ""));
+      if (model) {
+        return model;
+      }
+    }
+  }
+  return "";
+}
+
+function readFallbackProfileModel(modelConfig: Record<string, unknown>): string {
+  const routing = readObjectField(modelConfig, "routing");
+  return readProfileModel(modelConfig, readStringField(routing, "fallbackProfile"));
 }
 
 function trimText(value: unknown): string {
@@ -468,6 +553,23 @@ function parseProviderModelList(payload: unknown): string[] {
       return item;
     }),
   );
+}
+
+function buildProviderProfilePatch(
+  id: "default" | "title" | "fallback",
+  model: string,
+  options: { provider: string; api: string; baseUrl: string; apiKey: string },
+) {
+  return {
+    id,
+    providerId: options.provider || "openai",
+    llmBase: options.baseUrl,
+    llmModel: model,
+    ...(options.apiKey ? { llmKey: options.apiKey } : {}),
+    providerOptions: {
+      api: options.api || "responses",
+    },
+  };
 }
 
 function formatJson(value: unknown): string {
@@ -1276,13 +1378,19 @@ watch(draft, (value) => {
 });
 
 function syncConfigDraftsFromSummary() {
-  configProviderDraft.value = readStringField(configSummary.value?.values.model, "provider") || "openai";
-  configApiDraft.value = readStringField(configSummary.value?.values.model, "api") || "responses";
-  configModelDraft.value = readStringField(configSummary.value?.values.model, "model");
-  configBaseUrlDraft.value = readStringField(configSummary.value?.values.model, "baseUrl");
+  const modelConfig = readModelConfigRecord();
+  configProviderDraft.value = readStringField(modelConfig, "provider") || "openai";
+  configApiDraft.value = readStringField(modelConfig, "api") || "responses";
+  configModelDraft.value = readStringField(modelConfig, "model");
+  configAuxModelDraft.value = readLaneProfileModel(modelConfig, ["title", "compaction"]);
+  configFallbackModelDraft.value = readFallbackProfileModel(modelConfig);
+  configBaseUrlDraft.value = readStringField(modelConfig, "baseUrl");
   configApiKeyDraft.value = "";
   providerAvailableModels.value = dedupeTextValues([
     configModelDraft.value,
+    configAuxModelDraft.value,
+    configFallbackModelDraft.value,
+    ...listProviderProfileModels(modelConfig),
     ...providerAvailableModels.value,
   ]);
 }
@@ -1749,6 +1857,9 @@ function openProviderEditor() {
   providerEditorModelDraft.value = configModelDraft.value;
   providerAvailableModels.value = dedupeTextValues([
     configModelDraft.value,
+    configAuxModelDraft.value,
+    configFallbackModelDraft.value,
+    ...providerProfileModels.value,
     ...providerAvailableModels.value,
   ]);
   showProviderApiKey.value = false;
@@ -1828,7 +1939,12 @@ function saveProviderServiceDraft() {
   if (apiKey) {
     configApiKeyDraft.value = apiKey;
   }
-  providerAvailableModels.value = dedupeTextValues([model, ...providerAvailableModels.value]);
+  providerAvailableModels.value = dedupeTextValues([
+    model,
+    configAuxModelDraft.value,
+    configFallbackModelDraft.value,
+    ...providerAvailableModels.value,
+  ]);
   closeProviderEditor();
 }
 
@@ -1836,19 +1952,36 @@ function saveConfig() {
   const provider = configProviderDraft.value.trim();
   const api = configApiDraft.value.trim();
   const model = configModelDraft.value.trim();
+  const auxModel = configAuxModelDraft.value.trim();
+  const fallbackModel = configFallbackModelDraft.value.trim();
   const baseUrl = configBaseUrlDraft.value.trim();
   const apiKey = configApiKeyDraft.value.trim();
+  if (!model) {
+    managementError.value = "请先为主对话选择模型。";
+    return;
+  }
+  const profileOptions = { provider, api, baseUrl, apiKey };
+  const profiles = [
+    buildProviderProfilePatch("default", model, profileOptions),
+    ...(auxModel ? [buildProviderProfilePatch("title", auxModel, profileOptions)] : []),
+    ...(fallbackModel ? [buildProviderProfilePatch("fallback", fallbackModel, profileOptions)] : []),
+  ];
   const modelPatch: Record<string, unknown> = {
     ...(provider ? { provider } : {}),
     ...(api ? { api } : {}),
     ...(model ? { model } : {}),
     ...(baseUrl ? { baseUrl } : {}),
     ...(apiKey ? { apiKey } : {}),
+    profiles,
+    routing: {
+      defaultProfile: "default",
+      fallbackProfile: fallbackModel ? "fallback" : "",
+      laneProfiles: {
+        compaction: auxModel ? ["title"] : [],
+        title: auxModel ? ["title"] : [],
+      },
+    },
   };
-  if (Object.keys(modelPatch).length === 0) {
-    managementError.value = "Enter at least one provider setting before saving.";
-    return;
-  }
   void runManagementAction("config.update", {
     patch: {
       model: modelPatch,
@@ -2725,20 +2858,32 @@ onUnmounted(() => {
             <label class="block space-y-1.5">
               <span class="block text-[13px] font-semibold text-slate-950">标题与摘要</span>
               <select
+                data-provider-scene="aux"
+                v-model="configAuxModelDraft"
                 class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500"
-                disabled
               >
-                <option>跟随主对话</option>
+                <option value="">跟随主对话</option>
+                <option v-for="model in providerModelOptions" :key="`aux-${model}`" :value="model">
+                  {{ model }}
+                </option>
               </select>
             </label>
 
             <label class="block space-y-1.5">
               <span class="block text-[13px] font-semibold text-slate-950">失败兜底</span>
               <select
+                data-provider-scene="fallback"
+                v-model="configFallbackModelDraft"
                 class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500"
-                disabled
               >
-                <option>关闭</option>
+                <option value="">关闭</option>
+                <option
+                  v-for="model in providerModelOptions"
+                  :key="`fallback-${model}`"
+                  :value="model"
+                >
+                  {{ model }}
+                </option>
               </select>
             </label>
           </section>
