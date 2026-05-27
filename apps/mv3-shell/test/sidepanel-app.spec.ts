@@ -181,7 +181,7 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain('const activePane = ref<SidepanelPane>("chat")');
     expect(source).toContain("会话历史");
     expect(source).toContain("模型设置");
-    expect(source).toContain("Skills 管理");
+    expect(source).toContain("技能管理");
     expect(source).toContain("调试面板");
     expect(source).not.toContain("Control Plane");
     expect(source).not.toContain("Chat Shell");
@@ -239,6 +239,28 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain('runManagementAction("intervention.resolve"');
     expect(source).toContain('runManagementAction("intervention.cancel"');
     expect(source).toContain("listPendingInterventions");
+  });
+
+  it("keeps skill management shaped like the old product while using real actions", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("技能管理");
+    expect(source).toContain("已安装技能");
+    expect(source).toContain("新建技能");
+    expect(source).toContain("导入已有技能");
+    expect(source).toContain("查看高级信息");
+    expect(source).toContain("保存并安装");
+    expect(source).toContain("skillEditorOpen");
+    expect(source).toContain("skillEditorMode");
+    expect(source).toContain("openSkillCreateEditor");
+    expect(source).toContain("openSkillImportEditor");
+    expect(source).toContain("editSkillPackageDraft");
+    expect(source).toContain("useSkillInComposer");
+    expect(source).toContain("skills.enable");
+    expect(source).toContain("skills.disable");
+    expect(source).toContain("skills.uninstall");
+    expect(source).toContain("skills.rollback");
+    expect(source).toContain("createSkillPackageSetupPlan");
   });
 
   it("exposes complete provider configuration fields without echoing stored API keys", () => {

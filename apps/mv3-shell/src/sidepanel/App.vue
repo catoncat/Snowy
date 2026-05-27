@@ -152,6 +152,8 @@ const skillManifestDraft = ref(
 );
 const skillHandlerDraft = ref("exports.default = async ({ input }) => ({ action: input.action, args: input.args });");
 const skillMarkdownDraft = ref("# Sidepanel Authored Skill\n");
+const skillEditorOpen = ref(false);
+const skillEditorMode = ref<"create" | "import" | "edit">("create");
 
 const isRunning = computed(() => chatState.value.status === "running");
 const isStopped = computed(() => chatState.value.status === "stopped");
@@ -249,6 +251,13 @@ const filteredSkills = computed(() => {
   );
 });
 const isSkillsManageMode = computed(() => skillCommandMode.value === "manage");
+const skillEditorTitle = computed(() =>
+  skillEditorMode.value === "edit"
+    ? "编辑技能包"
+    : skillEditorMode.value === "import"
+      ? "导入已有技能"
+      : "新建技能",
+);
 const providerModelLabel = computed(
   () => configModelDraft.value || readStringField(configSummary.value?.values.model, "model") || "未配置",
 );
@@ -369,6 +378,99 @@ function formatSkillVersionSurface(skill: SkillCatalogItem): string {
   const active = surface.activeVersion?.versionId ?? "none";
   const rollback = surface.rollbackTarget?.versionId ?? "none";
   return `active ${active} · rollback ${rollback} · snapshots ${surface.policy.snapshotRootUri}`;
+}
+
+function skillDisplayName(skill: SkillCatalogItem): string {
+  return skill.skillId;
+}
+
+function skillStatusLabel(skill: SkillCatalogItem): string {
+  if (skill.status === "archived") {
+    return "已归档";
+  }
+  if (skill.enabled) {
+    return "已启用";
+  }
+  if (skill.status === "disabled") {
+    return "已禁用";
+  }
+  return "已安装";
+}
+
+function skillStatusClass(skill: SkillCatalogItem): string {
+  if (skill.enabled) {
+    return "border-emerald-300 bg-emerald-50 text-emerald-700";
+  }
+  if (skill.status === "archived") {
+    return "border-slate-200 bg-slate-100 text-slate-500";
+  }
+  return "border-slate-200 bg-white text-slate-500";
+}
+
+function skillSourceLabel(skill: SkillCatalogItem): string {
+  if (skill.source === "package") {
+    return "自定义";
+  }
+  if (skill.source === "builtin") {
+    return "内置";
+  }
+  return String(skill.source || "runtime");
+}
+
+function skillDraftManifest(skill: SkillCatalogItem | null = null): string {
+  return JSON.stringify(
+    {
+      version: skill?.version ?? 1,
+      permissions: skill?.permissions ?? [],
+      description: skill?.description ?? "描述这个技能要解决什么问题",
+      kind: skill?.kind ?? "prompt",
+      entry: skill?.entry ?? "handler.js",
+      ...(skill?.tags.length ? { tags: skill.tags } : {}),
+      ...(skill?.matches.length ? { matches: skill.matches } : {}),
+    },
+    null,
+    2,
+  );
+}
+
+function resetSkillPackageDraft() {
+  skillIdDraft.value = "skill.new";
+  skillManifestDraft.value = skillDraftManifest();
+  skillHandlerDraft.value = "exports.default = async ({ input }) => ({ action: input.action, args: input.args });";
+  skillMarkdownDraft.value = "# 新技能\n\n描述这个技能如何帮助当前对话。\n";
+}
+
+function openSkillCreateEditor() {
+  managementError.value = null;
+  managementNotice.value = null;
+  resetSkillPackageDraft();
+  skillEditorMode.value = "create";
+  skillEditorOpen.value = true;
+}
+
+function openSkillImportEditor() {
+  managementError.value = null;
+  managementNotice.value = null;
+  resetSkillPackageDraft();
+  skillEditorMode.value = "import";
+  skillMarkdownDraft.value = "# Imported Skill\n\n粘贴已有技能的 SKILL.md 内容。\n";
+  skillEditorOpen.value = true;
+}
+
+function editSkillPackageDraft(skill: SkillCatalogItem) {
+  managementError.value = null;
+  managementNotice.value = null;
+  skillIdDraft.value = skill.skillId;
+  skillManifestDraft.value = skillDraftManifest(skill);
+  skillHandlerDraft.value = "exports.default = async ({ input }) => ({ action: input.action, args: input.args });";
+  skillMarkdownDraft.value = `# ${skillDisplayName(skill)}\n\n${skillDescription(skill)}\n`;
+  skillEditorMode.value = "edit";
+  skillEditorOpen.value = true;
+}
+
+function closeSkillEditor() {
+  skillEditorOpen.value = false;
+  managementError.value = null;
 }
 
 function shortId(value: string | null | undefined): string {
@@ -563,6 +665,16 @@ function addSelectedSkill(skill: SkillCatalogItem) {
     return;
   }
   selectedSkills.value = [...selectedSkills.value, skill];
+}
+
+function useSkillInComposer(skill: SkillCatalogItem) {
+  if (!skill.enabled) {
+    managementError.value = "请先启用该技能。";
+    return;
+  }
+  addSelectedSkill(skill);
+  activePane.value = "chat";
+  void focusComposer();
 }
 
 async function ensureSkillCatalogLoaded() {
@@ -1187,7 +1299,7 @@ function saveConfig() {
 function submitSkillAction(kind: SkillActionKind, selectedSkillId = skillIdDraft.value) {
   const skillId = selectedSkillId.trim();
   if (!skillId) {
-    managementError.value = "Enter a skill id first.";
+    managementError.value = "请先填写 skill id。";
     return;
   }
   void runManagementAction(kind, { skillId });
@@ -1196,7 +1308,7 @@ function submitSkillAction(kind: SkillActionKind, selectedSkillId = skillIdDraft
 function submitSkillPackageInstall() {
   const skillId = skillIdDraft.value.trim();
   if (!skillId) {
-    managementError.value = "Enter a skill id first.";
+    managementError.value = "请先填写 skill id。";
     return;
   }
   let manifest: Record<string, unknown>;
@@ -1220,6 +1332,7 @@ function submitSkillPackageInstall() {
         source: "sidepanel.studio",
       },
     });
+    skillEditorOpen.value = false;
   } catch (error) {
     managementError.value = error instanceof Error ? error.message : String(error);
   }
@@ -1234,6 +1347,14 @@ function submitSkillRollback(skill: SkillCatalogItem) {
     skillId: skill.skillId,
     versionUri,
   });
+}
+
+function confirmSkillUninstall(skill: SkillCatalogItem) {
+  const confirmed = globalThis.confirm?.(`确认卸载技能 ${skillDisplayName(skill)} ?`) ?? true;
+  if (!confirmed) {
+    return;
+  }
+  submitSkillAction("skills.uninstall", skill.skillId);
 }
 
 function selectSkill(skillId: string) {
@@ -1411,7 +1532,7 @@ onUnmounted(() => {
                 模型设置
               </button>
               <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('skills')">
-                Skills 管理
+                技能管理
               </button>
               <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('runtime')">
                 调试面板
@@ -2025,56 +2146,158 @@ onUnmounted(() => {
       </footer>
     </section>
 
-    <section v-if="activePane === 'skills'" class="absolute inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="Skills 管理" @keydown.esc="closePanelOverlay">
+    <section v-if="activePane === 'skills'" class="absolute inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="技能管理" @keydown.esc="skillEditorOpen ? closeSkillEditor() : closePanelOverlay()">
       <header class="flex h-12 shrink-0 items-center border-b border-slate-200 px-2">
-        <button type="button" class="grid h-9 w-9 place-items-center rounded-sm text-[20px] text-slate-600 hover:bg-slate-100" aria-label="返回" @click="closePanelOverlay">‹</button>
-        <h2 class="ml-2 text-[14px] font-bold tracking-normal">Skills 管理</h2>
+        <button type="button" class="grid h-9 w-9 place-items-center rounded-sm text-[20px] text-slate-600 hover:bg-slate-100" :aria-label="skillEditorOpen ? '返回技能管理列表' : '返回'" @click="skillEditorOpen ? closeSkillEditor() : closePanelOverlay()">‹</button>
+        <div class="ml-2 min-w-0">
+          <h2 class="text-[14px] font-bold tracking-normal">技能管理</h2>
+          <p v-if="skillEditorOpen" class="truncate text-[10px] text-slate-500">{{ skillEditorTitle }}</p>
+        </div>
+        <button
+          v-if="!skillEditorOpen"
+          type="button"
+          class="ml-auto rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          :disabled="managementLoading"
+          @click="bootstrapManagement"
+        >
+          刷新
+        </button>
       </header>
       <main class="min-h-0 flex-1 overflow-y-auto p-4 sidepanel-scrollbar">
-        <section v-if="managementLoading" class="rounded-md border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">正在加载 skills...</section>
-        <section v-else class="space-y-3">
+        <section v-if="managementLoading" class="rounded-md border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">正在加载技能...</section>
+        <section v-else class="space-y-6">
           <div v-if="managementError" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">{{ managementError }}</div>
           <div v-if="managementNotice" class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700">{{ managementNotice }}</div>
-          <p class="text-[12px] text-slate-500">installed {{ skillsSummary?.installedCount ?? 0 }} · enabled {{ skillsSummary?.enabledCount ?? 0 }} · trusted {{ skillsSummary?.trustedCount ?? 0 }}</p>
-          <div v-if="skillItems.length === 0" class="rounded-md border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">No skill catalog items.</div>
-          <article v-for="skill in skillItems" v-else :key="skill.skillId" class="rounded-sm border border-slate-200 px-3 py-3">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <p class="break-all text-[14px] font-semibold">{{ skill.skillId }}</p>
-                <p class="mt-1 text-[12px] text-slate-500">{{ skill.source }} · {{ skill.status }} · {{ skill.kind ?? 'unknown' }}</p>
-              </div>
-              <span class="shrink-0 rounded-full px-2 py-1 text-[11px] font-medium" :class="skill.enabled ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-slate-100 text-slate-600'">
-                {{ skill.enabled ? 'enabled' : 'inactive' }}
-              </span>
-            </div>
-            <p v-if="skill.description" class="mt-2 text-[13px] leading-5 text-slate-700">{{ skill.description }}</p>
-            <div class="mt-3 grid gap-1 text-[11px] text-slate-500">
-              <p class="break-all">entry {{ skill.entry ?? 'none' }} · version {{ skill.version ?? 'none' }}</p>
-              <p class="break-all">actions {{ formatSkillActions(skill) }}</p>
-              <p class="break-all">matches {{ formatList(skill.matches) }}</p>
-              <p class="break-all">permissions {{ formatList(skill.permissions) }}</p>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button type="button" class="rounded-sm border border-slate-300 px-2.5 py-1.5 text-[12px] font-medium text-slate-700 disabled:opacity-50" :disabled="managementBusy" @click="selectSkill(skill.skillId)">Select</button>
-              <button type="button" class="rounded-sm border border-slate-300 px-2.5 py-1.5 text-[12px] font-medium text-slate-700 disabled:opacity-50" :disabled="managementBusy || skill.enabled || skill.status === 'archived'" @click="submitSkillAction('skills.enable', skill.skillId)">Enable</button>
-              <button type="button" class="rounded-sm border border-slate-300 px-2.5 py-1.5 text-[12px] font-medium text-slate-700 disabled:opacity-50" :disabled="managementBusy || !skill.enabled" @click="submitSkillAction('skills.disable', skill.skillId)">Disable</button>
-              <button type="button" class="rounded-sm border border-slate-300 px-2.5 py-1.5 text-[12px] font-medium text-slate-700 disabled:opacity-50" :disabled="managementBusy || skill.status === 'archived'" @click="submitSkillAction('skills.uninstall', skill.skillId)">Uninstall</button>
-              <button type="button" class="rounded-sm border border-slate-300 px-2.5 py-1.5 text-[12px] font-medium text-slate-700 disabled:opacity-50" :disabled="managementBusy || !skill.versionSurface?.rollbackTarget" @click="submitSkillRollback(skill)">Rollback</button>
-            </div>
-          </article>
 
-          <details class="rounded-sm border border-slate-200 px-3 py-3">
-            <summary class="cursor-pointer text-[12px] font-medium text-slate-600">包编辑器</summary>
-            <div class="mt-3 space-y-3">
-              <input v-model="skillIdDraft" class="w-full rounded-sm border border-slate-300 px-3 py-2 text-[13px] text-slate-950 outline-none" placeholder="skill id" />
-              <textarea v-model="skillManifestDraft" class="min-h-36 w-full rounded-sm border border-slate-300 px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none" aria-label="Manifest JSON" />
-              <textarea v-model="skillHandlerDraft" class="min-h-28 w-full rounded-sm border border-slate-300 px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none" aria-label="Handler JS" />
-              <textarea v-model="skillMarkdownDraft" class="min-h-20 w-full rounded-sm border border-slate-300 px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none" aria-label="SKILL.md" />
-              <button type="button" class="rounded-sm bg-slate-950 px-3 py-2 text-[13px] font-medium text-white disabled:opacity-50" :disabled="managementBusy" @click="submitSkillPackageInstall">Save package</button>
+          <template v-if="!skillEditorOpen">
+            <section class="space-y-3 rounded-md border border-slate-200 bg-slate-50/40 px-3 py-3">
+              <div class="space-y-1">
+                <h3 class="text-[11px] font-bold uppercase tracking-normal text-slate-500">技能管理</h3>
+                <p class="text-[12px] leading-5 text-slate-500">先管理已有技能；需要新建或导入时，再进入编辑界面。</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" class="rounded-md bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-slate-800" @click="openSkillCreateEditor">
+                  新建技能
+                </button>
+                <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100" @click="openSkillImportEditor">
+                  导入已有技能
+                </button>
+              </div>
+            </section>
+
+            <section class="space-y-3">
+              <div class="space-y-1">
+                <h3 class="text-[11px] font-bold uppercase tracking-normal text-slate-500">已安装技能 · {{ skillItems.length }}</h3>
+                <p class="text-[11px] text-slate-500">enabled {{ skillsSummary?.enabledCount ?? 0 }} · trusted {{ skillsSummary?.trustedCount ?? 0 }}</p>
+              </div>
+
+              <div v-if="skillItems.length === 0" class="rounded-md border border-dashed border-slate-300 bg-slate-50/40 px-4 py-4 text-[13px] text-slate-600">
+                <p class="font-semibold text-slate-950">还没有已安装技能</p>
+                <p class="mt-1 text-[12px] text-slate-500">你可以先创建一个新技能，或粘贴已有技能包内容安装。</p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button type="button" class="rounded-md bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white" @click="openSkillCreateEditor">创建第一个技能</button>
+                  <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700" @click="openSkillImportEditor">导入已有技能</button>
+                </div>
+              </div>
+
+              <ul v-else class="space-y-2" role="list">
+                <li v-for="skill in skillItems" :key="skill.skillId" role="listitem" class="space-y-2 rounded-sm border border-slate-200 bg-slate-50/50 p-3">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <p class="truncate text-[13px] font-semibold text-slate-950">{{ skillDisplayName(skill) }}</p>
+                      <p class="mt-0.5 truncate text-[11px] text-slate-500">{{ skill.skillId }}</p>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-1.5">
+                      <span class="rounded-full border bg-white px-2 py-0.5 text-[10px] text-slate-500">{{ skillSourceLabel(skill) }}</span>
+                      <span class="rounded-full border px-2 py-0.5 text-[10px] font-semibold" :class="skillStatusClass(skill)">{{ skillStatusLabel(skill) }}</span>
+                    </div>
+                  </div>
+                  <p class="text-[12px] leading-5 text-slate-600">{{ skillDescription(skill) }}</p>
+                  <details class="rounded border border-slate-200 bg-white px-2.5 py-2 text-[11px] text-slate-500">
+                    <summary class="cursor-pointer select-none font-semibold">查看高级信息</summary>
+                    <div class="mt-2 grid gap-1">
+                      <p class="break-all">entry {{ skill.entry ?? 'none' }} · version {{ skill.version ?? 'none' }}</p>
+                      <p class="break-all">actions {{ formatSkillActions(skill) }}</p>
+                      <p class="break-all">matches {{ formatList(skill.matches) }}</p>
+                      <p class="break-all">permissions {{ formatList(skill.permissions) }}</p>
+                      <p class="break-all">versions {{ formatSkillVersionSurface(skill) }}</p>
+                    </div>
+                  </details>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" class="rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100" @click="editSkillPackageDraft(skill)">
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                      :disabled="managementBusy || skill.status === 'archived'"
+                      @click="submitSkillAction(skill.enabled ? 'skills.disable' : 'skills.enable', skill.skillId)"
+                    >
+                      {{ skill.enabled ? '禁用' : '启用' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                      :disabled="!skill.enabled"
+                      @click="useSkillInComposer(skill)"
+                    >
+                      用于对话
+                    </button>
+                    <button
+                      v-if="skill.versionSurface?.rollbackTarget"
+                      type="button"
+                      class="rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                      :disabled="managementBusy"
+                      @click="submitSkillRollback(skill)"
+                    >
+                      回滚
+                    </button>
+                    <button
+                      type="button"
+                      class="ml-auto rounded-sm border border-rose-300 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                      :disabled="managementBusy || skill.status === 'archived'"
+                      @click="confirmSkillUninstall(skill)"
+                    >
+                      卸载
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </section>
+          </template>
+
+          <section v-else class="space-y-4 rounded-md border border-slate-200 bg-slate-50/40 p-4">
+            <div class="space-y-1">
+              <h3 class="text-[15px] font-semibold tracking-normal text-slate-950">{{ skillEditorTitle }}</h3>
+              <p class="text-[12px] leading-5 text-slate-500">当前 vNext 使用 package setup plan 安装技能；保存后会写入 mem://skills 并刷新列表。</p>
             </div>
-          </details>
+            <label class="block space-y-1.5">
+              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">Skill ID</span>
+              <input v-model="skillIdDraft" class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500" placeholder="skill.example" />
+            </label>
+            <label class="block space-y-1.5">
+              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">Manifest JSON</span>
+              <textarea v-model="skillManifestDraft" class="min-h-36 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none focus:border-blue-500" aria-label="Manifest JSON" />
+            </label>
+            <label class="block space-y-1.5">
+              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">Handler JS</span>
+              <textarea v-model="skillHandlerDraft" class="min-h-28 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none focus:border-blue-500" aria-label="Handler JS" />
+            </label>
+            <label class="block space-y-1.5">
+              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">SKILL.md</span>
+              <textarea v-model="skillMarkdownDraft" class="min-h-24 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none focus:border-blue-500" aria-label="SKILL.md" />
+            </label>
+          </section>
         </section>
       </main>
+      <footer v-if="skillEditorOpen" class="shrink-0 border-t border-slate-200 bg-slate-50/80 p-4">
+        <div class="flex gap-2">
+          <button type="button" class="flex-1 rounded-sm border border-slate-300 bg-white py-2.5 text-[13px] font-semibold text-slate-700 hover:bg-slate-100" @click="closeSkillEditor">返回</button>
+          <button type="button" class="flex-[1.4] rounded-sm bg-slate-950 py-2.5 text-[13px] font-bold text-white hover:bg-slate-800 disabled:opacity-50" :disabled="managementBusy" @click="submitSkillPackageInstall">
+            {{ managementBusy ? "保存中..." : "保存并安装" }}
+          </button>
+        </div>
+      </footer>
     </section>
 
     <section v-if="activePane === 'runtime'" class="absolute inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="调试面板" @keydown.esc="closePanelOverlay">
