@@ -94,7 +94,15 @@ Packaged files:
 
 ## One Real-Profile UAT If Requested
 
-If a human decision maker requests one extra UAT before submission, run exactly this scenario and record the result here instead of opening broad deferred scope:
+If a human decision maker requests one extra UAT before submission, run exactly this scenario and record the result here instead of opening broad deferred scope.
+
+Command:
+
+```bash
+bun run release:uat:real-profile -- --user-data-dir <path-to-human-selected-chrome-profile>
+```
+
+By default this command loads `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`, extracts it to a temporary unpacked extension directory, runs the release smoke flow against the selected profile, and preserves the profile directory. To test a different candidate artifact, pass `--artifact <zip-path>`.
 
 1. Use a real Chrome or Chromium profile selected by the decision maker.
 2. Load the release artifact as the candidate MV3 extension build.
