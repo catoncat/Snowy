@@ -127,6 +127,15 @@ const configApiDraft = ref("responses");
 const configModelDraft = ref("");
 const configBaseUrlDraft = ref("");
 const configApiKeyDraft = ref("");
+const providerEditorOpen = ref(false);
+const providerServiceNameDraft = ref("OpenAI-compatible");
+const providerApiBaseDraft = ref("");
+const providerApiKeyEditorDraft = ref("");
+const providerEditorModelDraft = ref("");
+const providerAvailableModels = ref<string[]>([]);
+const providerDiscoveringModels = ref(false);
+const providerEditorError = ref("");
+const showProviderApiKey = ref(false);
 const skillIdDraft = ref("");
 const skillManifestDraft = ref(
   JSON.stringify(
@@ -249,6 +258,37 @@ const providerApiLabel = computed(
 const providerBaseUrlLabel = computed(
   () => configBaseUrlDraft.value || readStringField(configSummary.value?.values.model, "baseUrl") || "未配置",
 );
+const providerVisibleError = computed(() => providerEditorError.value || managementError.value);
+const providerEditorTitle = computed(() =>
+  providerServiceCards.value.length > 0 ? "编辑自定义服务" : "添加自定义服务",
+);
+const providerModelOptions = computed(() =>
+  dedupeTextValues([
+    configModelDraft.value,
+    readStringField(configSummary.value?.values.model, "model"),
+    providerEditorModelDraft.value,
+    ...providerAvailableModels.value,
+  ]),
+);
+const providerServiceCards = computed(() => {
+  const model = configModelDraft.value || readStringField(configSummary.value?.values.model, "model");
+  const baseUrl = configBaseUrlDraft.value || readStringField(configSummary.value?.values.model, "baseUrl");
+  const provider = configProviderDraft.value || readStringField(configSummary.value?.values.model, "provider") || "openai";
+  const api = configApiDraft.value || readStringField(configSummary.value?.values.model, "api") || "responses";
+  if (!model && !baseUrl) {
+    return [];
+  }
+  return [
+    {
+      id: "current",
+      name: provider === "openai" ? "OpenAI-compatible" : provider,
+      api,
+      apiBase: baseUrl,
+      selectedModels: model ? [model] : [],
+      selectedModelCount: model ? 1 : 0,
+    },
+  ];
+});
 const configValuesJson = computed(() => formatJson(configSummary.value?.values ?? {}));
 
 function readStringField(record: unknown, field: string): string {
@@ -257,6 +297,54 @@ function readStringField(record: unknown, field: string): string {
   }
   const value = (record as Record<string, unknown>)[field];
   return typeof value === "string" ? value : "";
+}
+
+function trimText(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function dedupeTextValues(values: unknown[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = trimText(value);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function buildProviderModelsEndpoint(apiBase: string): string {
+  const base = trimText(apiBase)
+    .replace(/\/+$/u, "")
+    .replace(/\/chat\/completions$/iu, "")
+    .replace(/\/responses$/iu, "");
+  return `${base}/models`;
+}
+
+function parseProviderModelList(payload: unknown): string[] {
+  const record = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>)
+    : null;
+  const candidates = Array.isArray(payload)
+    ? payload
+    : Array.isArray(record?.data)
+      ? record.data
+      : Array.isArray(record?.models)
+        ? record.models
+        : [];
+  return dedupeTextValues(
+    candidates.map((item) => {
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        const row = item as Record<string, unknown>;
+        return row.id ?? row.name;
+      }
+      return item;
+    }),
+  );
 }
 
 function formatJson(value: unknown): string {
@@ -591,6 +679,10 @@ function syncConfigDraftsFromSummary() {
   configModelDraft.value = readStringField(configSummary.value?.values.model, "model");
   configBaseUrlDraft.value = readStringField(configSummary.value?.values.model, "baseUrl");
   configApiKeyDraft.value = "";
+  providerAvailableModels.value = dedupeTextValues([
+    configModelDraft.value,
+    ...providerAvailableModels.value,
+  ]);
 }
 
 async function scrollToBottom() {
@@ -972,6 +1064,100 @@ function captureDiagnostics() {
 
 function clearRuntimeError() {
   void runManagementAction("runtime.clear_error");
+}
+
+function openProviderEditor() {
+  providerEditorError.value = "";
+  providerServiceNameDraft.value =
+    configProviderDraft.value === "openai" || !configProviderDraft.value
+      ? "OpenAI-compatible"
+      : configProviderDraft.value;
+  providerApiBaseDraft.value = configBaseUrlDraft.value;
+  providerApiKeyEditorDraft.value = "";
+  providerEditorModelDraft.value = configModelDraft.value;
+  providerAvailableModels.value = dedupeTextValues([
+    configModelDraft.value,
+    ...providerAvailableModels.value,
+  ]);
+  showProviderApiKey.value = false;
+  providerEditorOpen.value = true;
+}
+
+function closeProviderEditor() {
+  providerEditorOpen.value = false;
+  providerEditorError.value = "";
+  providerApiKeyEditorDraft.value = "";
+  showProviderApiKey.value = false;
+}
+
+async function discoverProviderModels() {
+  providerEditorError.value = "";
+  const apiBase = trimText(providerApiBaseDraft.value);
+  const apiKey = trimText(providerApiKeyEditorDraft.value || configApiKeyDraft.value);
+  if (!apiBase) {
+    providerEditorError.value = "请先填写 API Base。";
+    return;
+  }
+  if (!apiKey) {
+    providerEditorError.value = "请先填写 API Key。";
+    return;
+  }
+
+  providerDiscoveringModels.value = true;
+  try {
+    const response = await fetch(buildProviderModelsEndpoint(apiBase), {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+    const bodyText = await response.text();
+    if (!response.ok) {
+      throw new Error(bodyText || `获取模型失败：${response.status} ${response.statusText}`.trim());
+    }
+    const models = parseProviderModelList(bodyText ? JSON.parse(bodyText) : {});
+    if (models.length === 0) {
+      throw new Error("没有从该服务返回可用模型。");
+    }
+    providerAvailableModels.value = models;
+    if (!providerEditorModelDraft.value || !models.includes(providerEditorModelDraft.value)) {
+      providerEditorModelDraft.value = models[0] ?? "";
+    }
+  } catch (error) {
+    providerEditorError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    providerDiscoveringModels.value = false;
+  }
+}
+
+function saveProviderServiceDraft() {
+  providerEditorError.value = "";
+  const serviceName = trimText(providerServiceNameDraft.value);
+  const apiBase = trimText(providerApiBaseDraft.value);
+  const model = trimText(providerEditorModelDraft.value);
+  const apiKey = trimText(providerApiKeyEditorDraft.value);
+  if (!serviceName) {
+    providerEditorError.value = "请先填写服务名称。";
+    return;
+  }
+  if (!apiBase) {
+    providerEditorError.value = "请先填写 API Base。";
+    return;
+  }
+  if (!model) {
+    providerEditorError.value = "请先填写或选择模型。";
+    return;
+  }
+
+  configProviderDraft.value = "openai";
+  configBaseUrlDraft.value = apiBase;
+  configModelDraft.value = model;
+  if (apiKey) {
+    configApiKeyDraft.value = apiKey;
+  }
+  providerAvailableModels.value = dedupeTextValues([model, ...providerAvailableModels.value]);
+  closeProviderEditor();
 }
 
 function saveConfig() {
@@ -1574,66 +1760,122 @@ onUnmounted(() => {
       role="dialog"
       aria-modal="true"
       aria-label="模型设置"
-      @keydown.esc="closePanelOverlay"
+      @keydown.esc="providerEditorOpen ? closeProviderEditor() : closePanelOverlay()"
     >
       <header class="flex h-12 shrink-0 items-center border-b border-slate-200 px-2">
-        <button type="button" class="grid h-9 w-9 place-items-center rounded-sm text-[20px] text-slate-600 hover:bg-slate-100" aria-label="返回" @click="closePanelOverlay">‹</button>
-        <h2 class="ml-2 text-[14px] font-bold tracking-normal">模型设置</h2>
+        <button
+          type="button"
+          class="grid h-9 w-9 place-items-center rounded-sm text-[20px] text-slate-600 hover:bg-slate-100"
+          :aria-label="providerEditorOpen ? '返回模型设置' : '返回'"
+          @click="providerEditorOpen ? closeProviderEditor() : closePanelOverlay()"
+        >
+          ‹
+        </button>
+        <h2 class="ml-2 text-[14px] font-bold tracking-normal">
+          {{ providerEditorOpen ? providerEditorTitle : "模型设置" }}
+        </h2>
       </header>
-      <main class="min-h-0 flex-1 overflow-y-auto p-4 sidepanel-scrollbar">
+
+      <main v-if="managementLoading" class="min-h-0 flex-1 overflow-y-auto p-4 sidepanel-scrollbar">
         <section v-if="managementLoading" class="rounded-md border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">正在加载模型设置...</section>
-        <section v-else class="space-y-4">
-          <div v-if="managementError" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">{{ managementError }}</div>
+      </main>
+
+      <main v-else-if="!providerEditorOpen" class="min-h-0 flex-1 overflow-y-auto p-4 sidepanel-scrollbar">
+        <section class="space-y-4">
+          <div v-if="providerVisibleError" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">{{ providerVisibleError }}</div>
           <div v-if="managementNotice" class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700">{{ managementNotice }}</div>
 
-          <div class="divide-y divide-slate-200 rounded-sm border border-slate-200 bg-slate-50/40">
-            <div class="grid grid-cols-[58px_1fr] gap-3 px-3 py-3">
-              <p class="text-[12px] font-semibold text-slate-500">主力</p>
-              <div class="min-w-0 text-[13px]">
-                <p class="truncate font-medium text-slate-950">{{ providerModelLabel }}</p>
-                <p class="truncate text-[12px] text-slate-500">{{ providerApiLabel }} · {{ providerBaseUrlLabel }}</p>
-              </div>
-            </div>
-            <div class="grid grid-cols-[58px_1fr] gap-3 px-3 py-3">
-              <p class="text-[12px] font-semibold text-slate-500">辅助</p>
-              <p class="text-[13px] text-slate-500">跟随主力</p>
-            </div>
-            <div class="grid grid-cols-[58px_1fr] gap-3 px-3 py-3">
-              <p class="text-[12px] font-semibold text-slate-500">兜底</p>
-              <p class="text-[13px] text-slate-500">未单独配置</p>
-            </div>
-          </div>
+          <section class="space-y-4 rounded-sm border border-slate-200 bg-slate-50/40 p-4">
+            <label class="block space-y-1.5">
+              <span class="block text-[13px] font-semibold text-slate-950">主对话</span>
+              <select
+                v-model="configModelDraft"
+                data-provider-scene="primary"
+                class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500"
+              >
+                <option value="" disabled>
+                  {{ providerModelOptions.length > 0 ? "请选择模型" : "当前没有可用模型" }}
+                </option>
+                <option v-for="model in providerModelOptions" :key="model" :value="model">
+                  {{ model }}
+                </option>
+              </select>
+            </label>
 
-          <div class="space-y-3 rounded-sm border border-slate-200 bg-slate-50/40 p-4">
-            <label class="block text-[12px] font-medium text-slate-600">
-              Provider
-              <select v-model="configProviderDraft" class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500">
-                <option value="openai">OpenAI-compatible</option>
+            <label class="block space-y-1.5">
+              <span class="block text-[13px] font-semibold text-slate-950">标题与摘要</span>
+              <select
+                class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500"
+                disabled
+              >
+                <option>跟随主对话</option>
               </select>
             </label>
-            <label class="block text-[12px] font-medium text-slate-600">
-              API
-              <select v-model="configApiDraft" class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500">
-                <option value="responses">Responses API</option>
-                <option value="chat_completions">Chat Completions</option>
+
+            <label class="block space-y-1.5">
+              <span class="block text-[13px] font-semibold text-slate-950">失败兜底</span>
+              <select
+                class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500"
+                disabled
+              >
+                <option>关闭</option>
               </select>
             </label>
-            <label class="block text-[12px] font-medium text-slate-600">
-              Model
-              <input v-model="configModelDraft" class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-[13px] text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500" placeholder="gpt-4o" />
-            </label>
-            <label class="block text-[12px] font-medium text-slate-600">
-              Base URL
-              <input v-model="configBaseUrlDraft" class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-[13px] text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500" placeholder="https://api.openai.com/v1" />
-            </label>
-            <label class="block text-[12px] font-medium text-slate-600">
-              API Key
-              <input v-model="configApiKeyDraft" type="password" autocomplete="off" spellcheck="false" class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-[13px] text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500" placeholder="Leave blank to keep saved key" />
-            </label>
-            <button type="button" class="rounded-sm bg-slate-950 px-3 py-2 text-[13px] font-bold text-white disabled:opacity-50" :disabled="managementBusy" @click="saveConfig">
-              保存模型设置
-            </button>
-          </div>
+          </section>
+
+          <section class="space-y-3 rounded-sm border border-slate-200 bg-slate-50/40 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div class="space-y-1">
+                <h3 class="text-[13px] font-semibold text-slate-950">自定义服务</h3>
+                <p class="text-[12px] text-slate-500">只有这里添加的服务会出现在模型选择里。</p>
+              </div>
+              <button
+                type="button"
+                class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-100"
+                @click="openProviderEditor"
+              >
+                {{ providerServiceCards.length > 0 ? "管理模型" : "添加服务" }}
+              </button>
+            </div>
+
+            <div
+              v-if="providerServiceCards.length <= 0"
+              class="rounded-sm border border-dashed border-slate-300 px-3 py-4 text-[12px] text-slate-500"
+            >
+              还没有添加自定义服务。
+            </div>
+
+            <article
+              v-for="provider in providerServiceCards"
+              v-else
+              :key="provider.id"
+              class="rounded-sm border border-slate-200 bg-white px-3 py-3"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 space-y-1">
+                  <h4 class="truncate text-[13px] font-semibold text-slate-950">{{ provider.name }}</h4>
+                  <p class="truncate text-[11px] text-slate-500">{{ provider.apiBase || "未配置 API Base" }}</p>
+                  <p class="text-[11px] text-slate-500">{{ provider.api }} · {{ provider.selectedModelCount }} 个模型</p>
+                </div>
+                <button
+                  type="button"
+                  class="rounded-sm border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100"
+                  @click="openProviderEditor"
+                >
+                  管理模型
+                </button>
+              </div>
+              <div v-if="provider.selectedModels.length > 0" class="mt-2 flex flex-wrap gap-2">
+                <span
+                  v-for="model in provider.selectedModels"
+                  :key="model"
+                  class="inline-flex max-w-full items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600"
+                >
+                  <span class="truncate">{{ model }}</span>
+                </span>
+              </div>
+            </article>
+          </section>
 
           <details class="rounded-sm border border-slate-200 px-3 py-3">
             <summary class="cursor-pointer text-[12px] font-medium text-slate-600">配置摘要</summary>
@@ -1641,6 +1883,146 @@ onUnmounted(() => {
           </details>
         </section>
       </main>
+
+      <main v-else class="min-h-0 flex-1 overflow-y-auto p-4 sidepanel-scrollbar">
+        <section class="space-y-4 rounded-sm border border-slate-200 bg-slate-50/40 p-4">
+          <div class="space-y-1">
+            <h3 class="text-[15px] font-semibold tracking-normal text-slate-950">{{ providerEditorTitle }}</h3>
+            <p class="text-[12px] leading-relaxed text-slate-500">连接后，你可以把想使用的模型加入可选列表。</p>
+          </div>
+
+          <label class="block space-y-1.5">
+            <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">服务名称</span>
+            <input
+              v-model="providerServiceNameDraft"
+              data-provider-field="name"
+              type="text"
+              autocomplete="off"
+              class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500"
+              placeholder="例如 OpenRouter"
+            />
+          </label>
+
+          <label class="block space-y-1.5">
+            <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">API Base</span>
+            <input
+              v-model="providerApiBaseDraft"
+              data-provider-field="api-base"
+              type="text"
+              autocomplete="off"
+              class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500"
+              placeholder="https://your-api.example/v1"
+            />
+          </label>
+
+          <label class="block space-y-1.5">
+            <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">API</span>
+            <select
+              v-model="configApiDraft"
+              data-provider-field="api"
+              class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500"
+            >
+              <option value="responses">Responses API</option>
+              <option value="chat_completions">Chat Completions</option>
+            </select>
+          </label>
+
+          <label class="block space-y-1.5">
+            <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">API Key</span>
+            <span class="relative block">
+              <input
+                v-model="providerApiKeyEditorDraft"
+                data-provider-field="api-key"
+                :type="showProviderApiKey ? 'text' : 'password'"
+                autocomplete="off"
+                spellcheck="false"
+                class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 pr-10 text-[13px] text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500"
+                placeholder="留空则继续使用已保存的 API Key"
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 px-2.5 text-[12px] font-semibold text-slate-500 hover:text-slate-900"
+                :aria-label="showProviderApiKey ? '隐藏 API Key' : '显示 API Key'"
+                :aria-pressed="showProviderApiKey"
+                @click="showProviderApiKey = !showProviderApiKey"
+              >
+                {{ showProviderApiKey ? "隐藏" : "显示" }}
+              </button>
+            </span>
+          </label>
+
+          <label class="block space-y-1.5">
+            <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">模型</span>
+            <input
+              v-model="providerEditorModelDraft"
+              data-provider-field="model"
+              type="text"
+              list="provider-model-options"
+              autocomplete="off"
+              class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500"
+              placeholder="gpt-4o"
+            />
+            <datalist id="provider-model-options">
+              <option v-for="model in providerAvailableModels" :key="model" :value="model" />
+            </datalist>
+          </label>
+
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-sm bg-slate-950 px-3 py-2 text-[13px] font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+            :disabled="providerDiscoveringModels"
+            @click="discoverProviderModels"
+          >
+            {{ providerDiscoveringModels ? "获取中..." : "连接并获取模型" }}
+          </button>
+
+          <div v-if="providerAvailableModels.length > 0" class="rounded-sm border border-slate-200 bg-white p-3">
+            <p class="text-[12px] font-semibold text-slate-950">已发现 {{ providerAvailableModels.length }} 个模型</p>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <button
+                v-for="model in providerAvailableModels"
+                :key="model"
+                type="button"
+                class="max-w-full rounded-full border px-2.5 py-1 text-[11px]"
+                :class="providerEditorModelDraft === model ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'"
+                @click="providerEditorModelDraft = model"
+              >
+                <span class="block truncate">{{ model }}</span>
+              </button>
+            </div>
+          </div>
+
+          <p v-if="providerVisibleError" class="text-[11px] text-rose-600">{{ providerVisibleError }}</p>
+        </section>
+      </main>
+
+      <footer class="shrink-0 border-t border-slate-200 bg-slate-50/80 p-4">
+        <div v-if="providerEditorOpen" class="flex gap-2">
+          <button
+            type="button"
+            class="flex-1 rounded-sm border border-slate-300 bg-white py-2.5 text-[13px] font-semibold text-slate-700 hover:bg-slate-100"
+            @click="closeProviderEditor"
+          >
+            返回
+          </button>
+          <button
+            type="button"
+            class="flex-[1.4] rounded-sm bg-slate-950 py-2.5 text-[13px] font-bold text-white hover:bg-slate-800"
+            @click="saveProviderServiceDraft"
+          >
+            保存服务
+          </button>
+        </div>
+        <button
+          v-else
+          type="button"
+          class="w-full rounded-sm bg-slate-950 py-2.5 text-[13px] font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+          :disabled="managementBusy"
+          @click="saveConfig"
+        >
+          {{ managementBusy ? "保存中..." : "保存并生效" }}
+        </button>
+      </footer>
     </section>
 
     <section v-if="activePane === 'skills'" class="absolute inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="Skills 管理" @keydown.esc="closePanelOverlay">
