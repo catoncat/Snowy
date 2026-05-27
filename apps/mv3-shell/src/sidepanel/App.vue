@@ -9,7 +9,7 @@ import {
   type ChatItem,
   type ChatState,
 } from "./state";
-import { ChatTranscriptPane } from "./chat-transcript-pane";
+import { ChatTranscriptPane, type ChatMessageCopyPayload } from "./chat-transcript-pane";
 import {
   conversationMarkdownFileName,
   generateConversationMarkdown,
@@ -102,6 +102,7 @@ const listRef = ref<HTMLElement | null>(null);
 const composerRef = ref<HTMLTextAreaElement | null>(null);
 const moreMenuOpen = ref(false);
 const conversationNotice = ref<{ type: "success" | "error"; message: string } | null>(null);
+const copiedMessageId = ref("");
 const selectedTabs = ref<BrowserTabSummary[]>([]);
 const availableTabs = ref<BrowserTabSummary[]>([]);
 const mentionFilter = ref("");
@@ -123,6 +124,7 @@ const renamingSessionId = ref("");
 const sessionRenameDraft = ref("");
 let pendingDeleteTimer: ReturnType<typeof setTimeout> | null = null;
 let conversationNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+let copiedMessageTimer: ReturnType<typeof setTimeout> | null = null;
 
 const managementState = ref<ManagementState>(createInitialManagementState());
 const managementLoading = ref(true);
@@ -380,6 +382,19 @@ function showConversationNotice(type: "success" | "error", message: string) {
   }, 1800);
 }
 
+async function writeClipboardText(text: string) {
+  const maybeWriter = (globalThis as Record<string, unknown>).__BRAIN_E2E_CLIPBOARD_WRITE;
+  if (typeof maybeWriter === "function") {
+    await (maybeWriter as (value: string) => Promise<void> | void)(text);
+    return;
+  }
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  throw new Error("clipboard unavailable");
+}
+
 function currentConversationMarkdown(): string {
   return generateConversationMarkdown({
     title: activeSessionTitle.value,
@@ -394,12 +409,36 @@ async function handleCopyMarkdown() {
     return;
   }
   try {
-    await navigator.clipboard.writeText(currentConversationMarkdown());
+    await writeClipboardText(currentConversationMarkdown());
     showConversationNotice("success", "已复制到剪贴板");
   } catch (error) {
     showConversationNotice("error", error instanceof Error ? error.message : "复制失败");
   } finally {
     moreMenuOpen.value = false;
+  }
+}
+
+async function handleCopyMessage(payload: ChatMessageCopyPayload) {
+  if (payload.role !== "assistant") {
+    return;
+  }
+  const text = payload.text.trim();
+  if (!text) {
+    return;
+  }
+  try {
+    await writeClipboardText(text);
+    copiedMessageId.value = payload.id;
+    if (copiedMessageTimer) {
+      clearTimeout(copiedMessageTimer);
+    }
+    copiedMessageTimer = setTimeout(() => {
+      copiedMessageId.value = "";
+      copiedMessageTimer = null;
+    }, 1800);
+    showConversationNotice("success", "已复制");
+  } catch {
+    showConversationNotice("error", "复制失败，请检查剪贴板权限");
   }
 }
 
@@ -1606,6 +1645,9 @@ onUnmounted(() => {
   if (conversationNoticeTimer) {
     clearTimeout(conversationNoticeTimer);
   }
+  if (copiedMessageTimer) {
+    clearTimeout(copiedMessageTimer);
+  }
 });
 </script>
 
@@ -1721,7 +1763,9 @@ onUnmounted(() => {
             v-else-if="hasChatMessages"
             :items="chatState.items"
             :loading="loading"
+            :copied-message-id="copiedMessageId"
             @toggle-tool="toggleTool"
+            @copy-message="handleCopyMessage"
           />
 
           <section v-else class="flex w-full flex-col items-start py-6">

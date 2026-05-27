@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { renderToString } from "@vue/server-renderer";
 import { describe, expect, it } from "vitest";
 import { createRenderer, createSSRApp } from "vue";
-import { ChatTranscriptPane } from "../src/sidepanel/chat-transcript-pane";
+import {
+  type ChatMessageCopyPayload,
+  ChatTranscriptPane,
+  collectAssistantTurnText,
+  isCopyableAssistantMessage,
+} from "../src/sidepanel/chat-transcript-pane";
 import {
   conversationMarkdownFileName,
   generateConversationMarkdown,
@@ -111,6 +116,17 @@ function findFirst(node: MemoryNode, predicate: (node: MemoryNode) => boolean): 
   return null;
 }
 
+function findAll(node: MemoryNode, predicate: (node: MemoryNode) => boolean): MemoryNode[] {
+  const matches: MemoryNode[] = [];
+  if (predicate(node)) {
+    matches.push(node);
+  }
+  for (const child of node.children) {
+    matches.push(...findAll(child, predicate));
+  }
+  return matches;
+}
+
 describe("sidepanel chat transcript component", () => {
   it("renders assistant markdown and keeps plain fallback in transcript html", async () => {
     const items: ChatItem[] = [
@@ -172,12 +188,93 @@ describe("sidepanel chat transcript component", () => {
     expect(emitted).toEqual(["tool-1"]);
   });
 
+  it("inherits old-product message layout and copies assistant turn tails only", () => {
+    const emitted: ChatMessageCopyPayload[] = [];
+    const items: ChatItem[] = [
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "请总结当前页面",
+        state: "complete",
+      },
+      {
+        id: "assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "先读取页面。",
+        state: "complete",
+      },
+      {
+        id: "tool-1",
+        kind: "tool",
+        toolName: "page.query",
+        summary: "读取页面快照",
+        detail: "{}",
+        expanded: false,
+      },
+      {
+        id: "assistant-2",
+        kind: "message",
+        role: "assistant",
+        text: "页面要点已经整理。",
+        state: "complete",
+      },
+    ];
+
+    const tree = mountInMemory({
+      loading: false,
+      items,
+      copiedMessageId: "assistant-2",
+      onCopyMessage: (payload: ChatMessageCopyPayload) => emitted.push(payload),
+    });
+
+    expect(isCopyableAssistantMessage(items, "assistant-1")).toBe(false);
+    expect(isCopyableAssistantMessage(items, "assistant-2")).toBe(true);
+    expect(collectAssistantTurnText(items, "assistant-2")).toBe(
+      "先读取页面。\n\n页面要点已经整理。",
+    );
+
+    const userArticle = findFirst(tree, (node) => node.props["aria-label"] === "用户发送的内容");
+    expect(String(userArticle?.props.class ?? "")).toContain("justify-end");
+    expect(String(userArticle?.children[0]?.props.class ?? "")).toContain("rounded-[20px]");
+
+    const assistantArticle = findFirst(
+      tree,
+      (node) => node.props["aria-label"] === "助手回复的内容",
+    );
+    expect(String(assistantArticle?.props.class ?? "")).toContain("group flex flex-col");
+
+    const actionBars = findAll(tree, (node) => node.props.role === "toolbar");
+    expect(actionBars).toHaveLength(1);
+    expect(actionBars[0]?.props["aria-label"]).toBe("消息操作");
+
+    const copyButton = findFirst(
+      tree,
+      (node) => node.type === "button" && node.props["aria-label"] === "已复制",
+    );
+    expect(copyButton?.props.onClick).toBeTypeOf("function");
+
+    (copyButton?.props.onClick as () => void)();
+
+    expect(emitted).toEqual([
+      {
+        id: "assistant-2",
+        role: "assistant",
+        text: "先读取页面。\n\n页面要点已经整理。",
+      },
+    ]);
+  });
+
   it("wires ChatTranscriptPane into App.vue instead of inline transcript markup", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
     expect(source).toContain("ChatTranscriptPane");
     expect(source).toContain(':items="chatState.items"');
     expect(source).toContain('@toggle-tool="toggleTool"');
+    expect(source).toContain(':copied-message-id="copiedMessageId"');
+    expect(source).toContain('@copy-message="handleCopyMessage"');
+    expect(source).toContain("__BRAIN_E2E_CLIPBOARD_WRITE");
   });
 
   it("uses product sidepanel views instead of a debug-first split", () => {
@@ -334,6 +431,16 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("hasConversationExportContent");
     expect(source).toContain("navigator.clipboard.writeText");
     expect(source).toContain("tabsApi.create");
+  });
+
+  it("does not expose unsupported message retry or fork actions until runtime routes exist", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/chat-transcript-pane.ts", "utf8");
+
+    expect(source).toContain("copyMessage");
+    expect(source).not.toContain("retryMessage");
+    expect(source).not.toContain("forkMessage");
+    expect(source).not.toContain("重新回答");
+    expect(source).not.toContain("在新对话中分叉");
   });
 
   it("exports conversation markdown like the old product without tool traces", () => {
