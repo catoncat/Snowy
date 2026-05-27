@@ -50,10 +50,13 @@ Current delivery state as of this packet refresh:
 - cutover status final next action: PR #8, `fix(release): 收敛 cutover 状态下一步`
 - real-profile UAT command: PR #10, `feat(release): 增加 real-profile UAT 命令`
 - submission manifest command: PR #13, `feat(release): 增加 submission manifest 命令`
-- current accepted main commit: `a0d7781530ed6547fc77a4a52066d0bc39d36292`
+- submission prepare command: PR #15, `feat(release): 增加外部提交准备命令`
+- current accepted main commit: `033570b28ac57f3280dd7e36bc891828c6d47003`
 - `bun run release:cutover:status`: passing on `origin/main` with no blockers
 - external submission packet: `docs/external-release-submission-packet-2026-05-27.md`
 - remaining boundary: external store/deployment submission or the single real-profile UAT scenario in the external submission packet, if required
+
+`bun run release:cutover:status` reports `releaseDecision.currentAcceptedMainCommit` from the live git HEAD at run time and keeps this packet's commit value as `recordedMainCommit`; do not use the static packet checkpoint as the only source of current main truth.
 
 ## External Acceptance Decision
 
@@ -100,12 +103,15 @@ bun run release:package:mv3
 - submission_manifest_command_merged_at: 2026-05-27T03:45:31Z
 - submission_manifest_command_pr: https://github.com/catoncat/Snowy/pull/13
 - submission_manifest_command_merge_commit: `a0d7781530ed6547fc77a4a52066d0bc39d36292`
-- refreshed_cutover_gate_at: 2026-05-27T03:50:31.200Z
+- release_submission_prepare_command_merged_at: 2026-05-27T04:17:54Z
+- release_submission_prepare_command_pr: https://github.com/catoncat/Snowy/pull/15
+- release_submission_prepare_command_merge_commit: `033570b28ac57f3280dd7e36bc891828c6d47003`
+- refreshed_cutover_gate_at: 2026-05-27T04:22:33.550Z
 - refreshed_cutover_gate_command: `bun run release:cutover:status`
 - refreshed_cutover_gate_result: `ok: true`
 - refreshed_cutover_gate_branch: `codex/verify-origin-main` tracking `origin/main`
 - refreshed_cutover_gate_upstream: `origin/main`
-- refreshed_cutover_gate_head: `a0d7781530ed6547fc77a4a52066d0bc39d36292`
+- refreshed_cutover_gate_head: `033570b28ac57f3280dd7e36bc891828c6d47003`
 - refreshed_cutover_gate_coverage: acceptance docs, extension build, real Chromium MV3 smoke, repo-wide `bun run check`, live queue, active leases
 - live_queue_entries: 0
 - active_leases: 0
@@ -113,9 +119,9 @@ bun run release:package:mv3
 - local_release_artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
 - local_release_artifact_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
 - local_release_artifact_deterministic_rerun_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
-- local_release_artifact_refreshed_at: 2026-05-27T03:50:40.506Z
+- local_release_artifact_refreshed_at: 2026-05-27T04:19:28.129Z
 - local_release_submission_manifest: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.manifest.json`
-- local_release_submission_manifest_refreshed_at: 2026-05-27T03:50:44.821Z
+- local_release_submission_manifest_refreshed_at: 2026-05-27T04:19:45.594Z
 - local_release_submission_manifest_status: `ready_for_upload`
 - artifact_manifest: `Browser Brain Loop Next`, MV3, version `0.0.1`
 - real_profile_uat_command: `bun run release:uat:real-profile -- --user-data-dir <path-to-human-selected-chrome-profile>`

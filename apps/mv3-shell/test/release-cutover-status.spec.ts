@@ -27,6 +27,7 @@ describe("release cutover status next actions", () => {
     expect(state.recorded).toBe(true);
     expect(state.oldMainlineSwitched).toBe(true);
     expect(state.mergeCommit).toBe("89034b63b5be03fd2965af3e44a41e6eb6c7be17");
+    expect(state.recordedMainCommit).toBe("afeb54e2430df0ecdf9cf47fecb8d8697987e2c2");
 
     expect(buildReadyNextActions(state)).toEqual([
       "use docs/external-release-submission-packet-2026-05-27.md for external store/deployment submission, or its single real-profile UAT if required",
@@ -49,5 +50,16 @@ describe("release cutover status next actions", () => {
     expect(buildReadyNextActions(state)[0]).toBe(
       "use the accepted branch/PR/release process to switch the old browser plugin mainline",
     );
+  });
+
+  it("reports the live main commit even when the packet checkpoint is stale", () => {
+    const state = parseReleaseDecisionState(
+      "packet.md",
+      acceptedPacket,
+      "033570b28ac57f3280dd7e36bc891828c6d47003",
+    );
+
+    expect(state.recordedMainCommit).toBe("afeb54e2430df0ecdf9cf47fecb8d8697987e2c2");
+    expect(state.currentAcceptedMainCommit).toBe("033570b28ac57f3280dd7e36bc891828c6d47003");
   });
 });
