@@ -175,6 +175,20 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain('@toggle-tool="toggleTool"');
   });
 
+  it("uses product sidepanel views instead of a debug-first split", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain('{ id: "chat", label: "Chat" }');
+    expect(source).toContain('{ id: "sessions", label: "Sessions" }');
+    expect(source).toContain('{ id: "provider", label: "Provider" }');
+    expect(source).toContain('{ id: "skills", label: "Skills" }');
+    expect(source).toContain('{ id: "runtime", label: "Runtime" }');
+    expect(source).toContain('const activePane = ref<SidepanelPane>("chat")');
+    expect(source).not.toContain("Control Plane");
+    expect(source).not.toContain("Chat Shell");
+    expect(source).not.toContain("Shared control plane + chat shell");
+  });
+
   it("surfaces pending interventions through shared management actions", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
@@ -197,9 +211,12 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("OpenAI-compatible");
     expect(source).toContain("Responses API");
     expect(source).toContain('type="password"');
+    expect(source).toContain("主力");
+    expect(source).toContain("辅助");
+    expect(source).toContain("兜底");
     expect(source).toContain("api");
     expect(source).toContain("apiKey");
     expect(source).toContain("baseUrl");
-    expect(source).toContain("Save provider");
+    expect(source).toContain("保存模型设置");
   });
 });
