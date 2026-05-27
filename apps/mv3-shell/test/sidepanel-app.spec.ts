@@ -3,6 +3,11 @@ import { renderToString } from "@vue/server-renderer";
 import { describe, expect, it } from "vitest";
 import { createRenderer, createSSRApp } from "vue";
 import { ChatTranscriptPane } from "../src/sidepanel/chat-transcript-pane";
+import {
+  conversationMarkdownFileName,
+  generateConversationMarkdown,
+  hasConversationExportContent,
+} from "../src/sidepanel/conversation-export";
 import type { ChatItem } from "../src/sidepanel/state";
 
 interface MemoryNode {
@@ -313,5 +318,78 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("apiKey");
     expect(source).toContain("baseUrl");
     expect(source).toContain('runManagementAction("config.update"');
+  });
+
+  it("keeps old-product conversation export actions in the more menu", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("复制 Markdown");
+    expect(source).toContain("下载 MD 文件");
+    expect(source).toContain("在标签页打开");
+    expect(source).toContain("handleCopyMarkdown");
+    expect(source).toContain("handleExportMarkdown('download')");
+    expect(source).toContain("handleExportMarkdown('open')");
+    expect(source).toContain("generateConversationMarkdown");
+    expect(source).toContain("conversationMarkdownFileName");
+    expect(source).toContain("hasConversationExportContent");
+    expect(source).toContain("navigator.clipboard.writeText");
+    expect(source).toContain("tabsApi.create");
+  });
+
+  it("exports conversation markdown like the old product without tool traces", () => {
+    const items: ChatItem[] = [
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "Open the current page",
+        state: "complete",
+      },
+      {
+        id: "tool-1",
+        kind: "tool",
+        toolName: "tabs.query",
+        summary: "Loaded tabs",
+        detail: '{"tabId":1}',
+        expanded: true,
+      },
+      {
+        id: "assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "Done.",
+        state: "complete",
+      },
+    ];
+
+    const markdown = generateConversationMarkdown({
+      title: "Browser Task",
+      sessionId: "session-1",
+      items,
+    });
+
+    expect(markdown).toBe(
+      "# Browser Task\n\n**User**: Open the current page\n\n**Assistant**: Done.\n",
+    );
+    expect(markdown).not.toContain("session-1");
+    expect(markdown).not.toContain("tabs.query");
+    expect(hasConversationExportContent(items)).toBe(true);
+    expect(
+      hasConversationExportContent([
+        {
+          id: "tool-only",
+          kind: "tool",
+          toolName: "tabs.query",
+          summary: "Loaded tabs",
+          detail: "{}",
+          expanded: false,
+        },
+      ]),
+    ).toBe(false);
+  });
+
+  it("uses safe markdown filenames for exported conversations", () => {
+    expect(conversationMarkdownFileName(' Demo: "bad/path" ')).toBe("Demo_bad_path.md");
+    expect(conversationMarkdownFileName("   ")).toBe("conversation.md");
   });
 });

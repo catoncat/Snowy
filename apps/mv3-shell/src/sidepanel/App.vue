@@ -11,6 +11,11 @@ import {
 } from "./state";
 import { ChatTranscriptPane } from "./chat-transcript-pane";
 import {
+  conversationMarkdownFileName,
+  generateConversationMarkdown,
+  hasConversationExportContent,
+} from "./conversation-export";
+import {
   applyManagementResourceDocument,
   buildManagementBootstrapRequests,
   createInitialManagementState,
@@ -80,6 +85,7 @@ const chromeApi = (
             favIconUrl?: string;
           }>
         >;
+        create?: (createProperties: { url: string }) => Promise<unknown>;
       };
     };
   }
@@ -95,6 +101,7 @@ const sending = ref(false);
 const listRef = ref<HTMLElement | null>(null);
 const composerRef = ref<HTMLTextAreaElement | null>(null);
 const moreMenuOpen = ref(false);
+const conversationNotice = ref<{ type: "success" | "error"; message: string } | null>(null);
 const selectedTabs = ref<BrowserTabSummary[]>([]);
 const availableTabs = ref<BrowserTabSummary[]>([]);
 const mentionFilter = ref("");
@@ -115,6 +122,7 @@ const pendingDeleteSessionId = ref("");
 const renamingSessionId = ref("");
 const sessionRenameDraft = ref("");
 let pendingDeleteTimer: ReturnType<typeof setTimeout> | null = null;
+let conversationNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
 const managementState = ref<ManagementState>(createInitialManagementState());
 const managementLoading = ref(true);
@@ -177,6 +185,7 @@ const hostItems = computed(() => hostsSummary.value?.items ?? []);
 const pendingInterventions = computed(() => listPendingInterventions(runtimeSummary.value));
 const activeTabId = computed(() => runtimeSummary.value?.activeTab?.tabId ?? null);
 const hasChatMessages = computed(() => chatState.value.items.length > 0);
+const hasExportableConversation = computed(() => hasConversationExportContent(chatState.value.items));
 const messageCount = computed(
   () => chatState.value.items.filter((item) => item.kind === "message").length,
 );
@@ -358,6 +367,88 @@ function parseProviderModelList(payload: unknown): string[] {
 
 function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+function showConversationNotice(type: "success" | "error", message: string) {
+  if (conversationNoticeTimer) {
+    clearTimeout(conversationNoticeTimer);
+  }
+  conversationNotice.value = { type, message };
+  conversationNoticeTimer = setTimeout(() => {
+    conversationNotice.value = null;
+    conversationNoticeTimer = null;
+  }, 1800);
+}
+
+function currentConversationMarkdown(): string {
+  return generateConversationMarkdown({
+    title: activeSessionTitle.value,
+    sessionId: chatState.value.sessionId,
+    items: chatState.value.items,
+  });
+}
+
+async function handleCopyMarkdown() {
+  if (!hasExportableConversation.value) {
+    showConversationNotice("error", "当前对话还没有可导出的内容。");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(currentConversationMarkdown());
+    showConversationNotice("success", "已复制到剪贴板");
+  } catch (error) {
+    showConversationNotice("error", error instanceof Error ? error.message : "复制失败");
+  } finally {
+    moreMenuOpen.value = false;
+  }
+}
+
+function createConversationMarkdownUrl(): string {
+  return URL.createObjectURL(
+    new Blob([currentConversationMarkdown()], { type: "text/markdown;charset=utf-8" }),
+  );
+}
+
+async function handleExportMarkdown(mode: "download" | "open") {
+  if (!hasExportableConversation.value) {
+    showConversationNotice("error", "当前对话还没有可导出的内容。");
+    return;
+  }
+
+  const url = createConversationMarkdownUrl();
+  moreMenuOpen.value = false;
+  if (mode === "download") {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = conversationMarkdownFileName(activeSessionTitle.value);
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showConversationNotice("success", "已下载 Markdown 文件");
+    return;
+  }
+
+  if (typeof tabsApi?.create === "function") {
+    try {
+      await tabsApi.create({ url });
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      showConversationNotice("success", "已在标签页打开");
+    } catch (error) {
+      URL.revokeObjectURL(url);
+      showConversationNotice("error", error instanceof Error ? error.message : "打开标签页失败");
+    }
+    return;
+  }
+
+  const opened = globalThis.open?.(url, "_blank", "noopener");
+  if (opened) {
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showConversationNotice("success", "已在标签页打开");
+    return;
+  }
+  URL.revokeObjectURL(url);
+  showConversationNotice("error", "当前环境无法打开新标签页。");
 }
 
 function formatList(values: string[]): string {
@@ -1512,6 +1603,9 @@ onUnmounted(() => {
   if (pendingDeleteTimer) {
     clearTimeout(pendingDeleteTimer);
   }
+  if (conversationNoticeTimer) {
+    clearTimeout(conversationNoticeTimer);
+  }
 });
 </script>
 
@@ -1571,7 +1665,16 @@ onUnmounted(() => {
               class="absolute right-0 top-full z-50 mt-1 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl"
               role="menu"
             >
-              <button type="button" role="menuitem" class="w-full px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('provider')">
+              <button type="button" role="menuitem" class="w-full px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleCopyMarkdown">
+                复制 Markdown
+              </button>
+              <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleExportMarkdown('download')">
+                下载 MD 文件
+              </button>
+              <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="!hasExportableConversation" @click="handleExportMarkdown('open')">
+                在标签页打开
+              </button>
+              <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('provider')">
                 模型设置
               </button>
               <button type="button" role="menuitem" class="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('skills')">
@@ -1586,8 +1689,17 @@ onUnmounted(() => {
       </header>
 
       <div
+        v-if="conversationNotice"
+        class="absolute left-3 right-3 top-14 z-30 rounded-full border px-3 py-1.5 text-[12px] font-medium shadow-sm"
+        :class="conversationNotice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'"
+        role="alert"
+      >
+        {{ conversationNotice.message }}
+      </div>
+
+      <div
         v-if="chatState.error"
-        class="absolute left-3 right-3 top-14 z-30 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[12px] font-medium text-rose-700 shadow-sm"
+        class="absolute left-3 right-3 top-24 z-30 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[12px] font-medium text-rose-700 shadow-sm"
         role="alert"
       >
         {{ chatState.error }}
