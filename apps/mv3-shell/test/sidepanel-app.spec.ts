@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { renderToString } from "@vue/server-renderer";
 import { describe, expect, it } from "vitest";
 import { type Component, createRenderer, createSSRApp } from "vue";
@@ -615,6 +615,30 @@ describe("sidepanel chat transcript component", () => {
     expect(styles).toContain(".composer-stop-btn");
     expect(styles).toContain(".shortcut-kbd");
     expect(styles).not.toContain("transition: all");
+  });
+
+  it("inherits old-product empty-state suggestion categories", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(existsSync("apps/mv3-shell/public/icon-48.png")).toBe(true);
+    expect(source).toContain("interface SuggestionItem");
+    expect(source).toContain("suggestionCategories");
+    expect(source).toContain('<img src="/icon-48.png" alt="白雪"');
+    expect(source).toContain('v-for="category in suggestionCategories"');
+    expect(source).toContain('v-for="item in category.items"');
+    expect(source).toContain("网页操作");
+    expect(source).toContain("信息提取");
+    expect(source).toContain("标签页管理");
+    expect(source).toContain("更多玩法");
+    expect(source).toContain("点击页面上的登录按钮");
+    expect(source).toContain("提取表格数据");
+    expect(source).toContain("关掉重复标签页");
+    expect(source).toContain("输入 @ 可以引用标签页内容");
+    expect(source).toContain("输入 / 可以搜索和使用技能");
+    expect(source).toContain('@click="useSuggestion(item)"');
+    expect(source).toContain(':disabled="loading || sending || !item.text"');
+    expect(source).not.toContain("grid h-9 w-9 place-items-center rounded-xl bg-slate-950");
+    expect(source).not.toContain("useSuggestion('帮我填这个表')");
   });
 
   it("surfaces pending interventions through shared management actions", () => {

@@ -39,6 +39,11 @@ type RuntimeEnvelope = {
 type SidepanelPane = "chat" | "sessions" | "provider" | "skills" | "runtime";
 type ChatSendMode = "normal" | "steer" | "followUp";
 type SkillCommandMode = "select" | "manage";
+interface SuggestionItem {
+  label: string;
+  text: string;
+  hint?: string;
+}
 interface BrowserTabSummary {
   id: number;
   title: string;
@@ -84,6 +89,41 @@ const chromeApi = (
 ).chrome;
 const runtimeApi = chromeApi?.runtime;
 const tabsApi = chromeApi?.tabs;
+
+const suggestionCategories: { icon: string; title: string; items: SuggestionItem[] }[] = [
+  {
+    icon: "🌐",
+    title: "网页操作",
+    items: [
+      { label: "帮我填这个表", text: "帮我填这个表" },
+      { label: "点击页面上的登录按钮", text: "点击页面上的登录按钮" },
+    ],
+  },
+  {
+    icon: "📋",
+    title: "信息提取",
+    items: [
+      { label: "总结这个页面", text: "帮我总结这个页面的要点" },
+      { label: "提取表格数据", text: "提取这个页面的表格数据" },
+    ],
+  },
+  {
+    icon: "🔍",
+    title: "标签页管理",
+    items: [
+      { label: "查看所有标签页", text: "查看所有打开的标签页" },
+      { label: "关掉重复标签页", text: "帮我关掉所有重复的标签页" },
+    ],
+  },
+  {
+    icon: "✨",
+    title: "更多玩法",
+    items: [
+      { label: "@ 引用标签页", text: "", hint: "输入 @ 可以引用标签页内容" },
+      { label: "/ 使用技能", text: "", hint: "输入 / 可以搜索和使用技能" },
+    ],
+  },
+];
 
 const activePane = ref<SidepanelPane>("chat");
 const chatState = ref<ChatState>(createInitialChatState());
@@ -620,9 +660,14 @@ async function focusComposer() {
   composerRef.value?.focus();
 }
 
-function useSuggestion(text: string) {
-  draft.value = text;
-  void focusComposer();
+async function useSuggestion(item: SuggestionItem) {
+  if (!item.text) {
+    await focusComposer();
+    return;
+  }
+  draft.value = item.text;
+  await nextTick();
+  await sendPrompt("normal");
 }
 
 function loadComposerHintPreference() {
@@ -1769,43 +1814,39 @@ onUnmounted(() => {
 
           <section v-else class="flex w-full flex-col items-start py-6">
             <div class="mb-2 flex items-center gap-3">
-              <span class="grid h-9 w-9 place-items-center rounded-xl bg-slate-950 text-[15px] font-black text-white" aria-hidden="true">白</span>
+              <img src="/icon-48.png" alt="白雪" class="h-9 w-9 rounded-xl" aria-hidden="true" />
               <h1 class="text-lg font-black tracking-normal text-slate-950">白雪</h1>
             </div>
             <p class="mb-4 text-[13px] text-slate-500">试试这些：</p>
             <div class="grid w-full grid-cols-2 gap-2">
-              <button
-                type="button"
-                class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-left text-[12px] text-slate-700 hover:bg-white hover:shadow-sm"
-                @click="useSuggestion('帮我填这个表')"
+              <div
+                v-for="category in suggestionCategories"
+                :key="category.title"
+                class="space-y-1.5 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3"
               >
-                <span class="block font-semibold text-slate-900">网页操作</span>
-                <span class="mt-1 block">帮我填这个表</span>
-              </button>
-              <button
-                type="button"
-                class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-left text-[12px] text-slate-700 hover:bg-white hover:shadow-sm"
-                @click="useSuggestion('帮我总结这个页面的要点')"
-              >
-                <span class="block font-semibold text-slate-900">信息提取</span>
-                <span class="mt-1 block">总结这个页面</span>
-              </button>
-              <button
-                type="button"
-                class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-left text-[12px] text-slate-700 hover:bg-white hover:shadow-sm"
-                @click="useSuggestion('查看所有打开的标签页')"
-              >
-                <span class="block font-semibold text-slate-900">标签页管理</span>
-                <span class="mt-1 block">查看所有标签页</span>
-              </button>
-              <button
-                type="button"
-                class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-left text-[12px] text-slate-700 hover:bg-white hover:shadow-sm"
-                @click="insertComposerToken('@')"
-              >
-                <span class="block font-semibold text-slate-900">更多玩法</span>
-                <span class="mt-1 block">@ 引用标签页</span>
-              </button>
+                <div class="flex items-center gap-1.5 text-[12px] font-semibold text-slate-950">
+                  <span aria-hidden="true">{{ category.icon }}</span>
+                  {{ category.title }}
+                </div>
+                <div class="space-y-1">
+                  <button
+                    v-for="item in category.items"
+                    :key="item.label"
+                    type="button"
+                    class="w-full rounded-md px-2 py-1 text-left text-[12px] leading-4 text-slate-500 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-900"
+                    :class="item.text ? 'cursor-pointer hover:bg-white hover:text-slate-900' : 'cursor-default opacity-70'"
+                    :disabled="loading || sending || !item.text"
+                    @click="useSuggestion(item)"
+                  >
+                    <span class="flex flex-col gap-0.5">
+                      <span>{{ item.label }}</span>
+                      <span v-if="item.hint && !item.text" class="text-[10px] leading-tight opacity-50">
+                        {{ item.hint }}
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
         </div>
