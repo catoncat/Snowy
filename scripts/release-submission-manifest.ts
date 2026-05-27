@@ -7,9 +7,14 @@ import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 type ChromeManifest = {
+  action?: {
+    default_icon?: Record<string, string>;
+    default_title?: string;
+  };
   background?: {
     service_worker?: string;
   };
+  description?: string;
   manifest_version?: number;
   minimum_chrome_version?: string;
   name?: string;
@@ -48,6 +53,11 @@ export type ReleaseSubmissionManifest = {
     sha256: string;
   };
   extension: {
+    action?: {
+      default_icon?: Record<string, string>;
+      default_title?: string;
+    };
+    description?: string;
     manifest_version?: number;
     name?: string;
     version?: string;
@@ -166,6 +176,19 @@ export function buildReleaseSubmissionManifest(
       sha256: sha256(artifactPath),
     },
     extension: {
+      ...(manifest.action
+        ? {
+            action: {
+              ...(manifest.action.default_title
+                ? { default_title: manifest.action.default_title }
+                : {}),
+              ...(manifest.action.default_icon
+                ? { default_icon: { ...manifest.action.default_icon } }
+                : {}),
+            },
+          }
+        : {}),
+      ...(manifest.description ? { description: manifest.description } : {}),
       manifest_version: manifest.manifest_version,
       name: manifest.name,
       version: manifest.version,

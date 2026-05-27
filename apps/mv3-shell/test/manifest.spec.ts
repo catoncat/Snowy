@@ -637,8 +637,19 @@ describe("mv3-shell manifest", () => {
     const hostPermissions = (manifest as { host_permissions?: string[] }).host_permissions ?? [];
     const webAccessibleResources =
       (manifest as { web_accessible_resources?: unknown[] }).web_accessible_resources ?? [];
+    const snowyManifest = manifest as typeof manifest & {
+      description?: string;
+      action?: {
+        default_icon?: Record<string, string>;
+        default_title?: string;
+      };
+    };
 
     expect(manifest.manifest_version).toBe(3);
+    expect(manifest.name).toBe("白雪 Snowy - AI 浏览器助手");
+    expect(snowyManifest.description).toBe(
+      "用自然语言操控网页的 AI 助手。填表、点击、提取数据、后台自动化——装上就能用，开源免费。",
+    );
     expect(manifest.minimum_chrome_version).toBe("116");
     expect(manifest.permissions).toContain("offscreen");
     expect(manifest.permissions).toContain("activeTab");
@@ -659,6 +670,17 @@ describe("mv3-shell manifest", () => {
       extension_pages: "script-src 'self'; object-src 'self'",
       sandbox: expect.stringContaining("'unsafe-eval'"),
     });
+    expect(snowyManifest.action).toMatchObject({
+      default_title: "白雪 Snowy",
+      default_icon: {
+        "16": "icon-16.png",
+        "48": "icon-48.png",
+        "128": "icon-128.png",
+      },
+    });
+    for (const icon of ["icon-16.png", "icon-48.png", "icon-128.png"]) {
+      expect(existsSync(new URL(`../public/${icon}`, import.meta.url))).toBe(true);
+    }
   });
 
   it("keeps the offscreen entry free of TypeScript source imports", () => {
@@ -4692,6 +4714,7 @@ describe("mv3-shell manifest", () => {
     };
     expect(summaryResponse.ok).toBe(true);
     const authoredSkill = summaryResponse.data.data.items.find((item) => item.skillId === skillId);
+    const rollbackUri = authoredSkill?.versionSurface?.rollbackTarget?.uri;
     expect(authoredSkill).toMatchObject({
       skillId,
       version: 2,
@@ -4701,12 +4724,11 @@ describe("mv3-shell manifest", () => {
         },
         rollbackTarget: {
           trusted: true,
-          uri: expect.stringContaining(`${packageUri}/@versions/`),
         },
       },
     });
-    const rollbackUri = authoredSkill?.versionSurface?.rollbackTarget?.uri;
-    expect(rollbackUri).toEqual(expect.stringContaining(`${packageUri}/@versions/`));
+    expect(rollbackUri).toEqual(expect.any(String));
+    expect(rollbackUri).toContain(`${packageUri}/@versions/`);
 
     await expect(
       send({

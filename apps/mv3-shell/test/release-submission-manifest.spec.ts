@@ -16,13 +16,23 @@ function writeZipFixture(root: string): string {
     JSON.stringify(
       {
         manifest_version: 3,
-        name: "Browser Brain Loop Next",
+        name: "白雪 Snowy - AI 浏览器助手",
         version: "0.0.1",
+        description:
+          "用自然语言操控网页的 AI 助手。填表、点击、提取数据、后台自动化——装上就能用，开源免费。",
         minimum_chrome_version: "116",
         permissions: ["storage", "tabs"],
         background: { service_worker: "src/background.js" },
         side_panel: { default_path: "src/sidepanel.html" },
         sandbox: { pages: ["src/runner-sandbox.html"] },
+        action: {
+          default_title: "白雪 Snowy",
+          default_icon: {
+            "16": "icon-16.png",
+            "48": "icon-48.png",
+            "128": "icon-128.png",
+          },
+        },
       },
       null,
       2,
@@ -30,6 +40,9 @@ function writeZipFixture(root: string): string {
   );
   for (const file of ["background.js", "runner-sandbox.html", "sidepanel.html"]) {
     writeFileSync(join(payloadDir, "src", file), "");
+  }
+  for (const icon of ["icon-16.png", "icon-48.png", "icon-128.png"]) {
+    writeFileSync(join(payloadDir, icon), icon);
   }
 
   const artifactPath = join(root, "submission.zip");
@@ -72,15 +85,28 @@ describe("release submission manifest", () => {
       },
       extension: {
         manifest_version: 3,
-        name: "Browser Brain Loop Next",
+        name: "白雪 Snowy - AI 浏览器助手",
         version: "0.0.1",
+        description:
+          "用自然语言操控网页的 AI 助手。填表、点击、提取数据、后台自动化——装上就能用，开源免费。",
         minimum_chrome_version: "116",
         permissions: ["storage", "tabs"],
         service_worker: "src/background.js",
         sandbox_pages: ["src/runner-sandbox.html"],
         side_panel: "src/sidepanel.html",
+        action: {
+          default_title: "白雪 Snowy",
+          default_icon: {
+            "16": "icon-16.png",
+            "48": "icon-48.png",
+            "128": "icon-128.png",
+          },
+        },
       },
       packaged_files: [
+        "icon-128.png",
+        "icon-16.png",
+        "icon-48.png",
         "manifest.json",
         "src/background.js",
         "src/runner-sandbox.html",
