@@ -259,6 +259,23 @@ const activeSessionTitle = computed(() =>
     ? `Session ${shortId(chatState.value.sessionId)}`
     : "新对话"),
 );
+const activeForkSourceSessionId = computed(() =>
+  String(activeSession.value?.forkedFrom?.sessionId || "").trim(),
+);
+const activeForkSourceSession = computed(() => {
+  const sourceId = activeForkSourceSessionId.value;
+  if (!sourceId) {
+    return null;
+  }
+  return chatSessions.value.find((session) => session.id === sourceId) ?? null;
+});
+const activeForkSourceTitle = computed(() => {
+  const title = activeForkSourceSession.value?.title?.trim();
+  if (title) {
+    return title;
+  }
+  return "未命名会话";
+});
 const lastMessagePreview = computed(() => {
   if (activeSession.value?.preview?.trim()) {
     return activeSession.value.preview.trim();
@@ -1144,6 +1161,17 @@ async function selectChatSession(sessionId: string) {
   }
 }
 
+async function jumpToForkSourceSession() {
+  const sourceId = activeForkSourceSessionId.value;
+  if (!sourceId) {
+    return;
+  }
+  if (!chatSessions.value.some((session) => session.id === sourceId)) {
+    await refreshChatSessions();
+  }
+  await selectChatSession(sourceId);
+}
+
 async function deleteChatSession(sessionId: string) {
   if (pendingDeleteSessionId.value !== sessionId) {
     if (pendingDeleteTimer) {
@@ -1795,6 +1823,30 @@ onUnmounted(() => {
     <main class="relative flex min-h-0 flex-1 flex-col bg-white">
       <header class="z-30 flex h-12 shrink-0 items-center border-b border-slate-200 bg-white px-3" role="banner">
         <div class="flex min-w-0 flex-1 items-center gap-2">
+          <div v-if="activeForkSourceSessionId" class="group relative shrink-0">
+            <span
+              tabindex="0"
+              data-testid="fork-session-indicator"
+              class="inline-grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[12px] font-semibold text-blue-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              role="note"
+              aria-label="当前会话来自分叉，悬浮可查看来源信息"
+              title="分叉来源信息"
+            >
+              ⑂
+            </span>
+            <div class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-64 max-w-[calc(100vw-24px)] rounded-md border border-slate-200 bg-white px-3 py-2 opacity-0 shadow-xl transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+              <p class="truncate text-[11px] font-semibold text-slate-950">
+                分叉来源：{{ activeForkSourceTitle }}
+              </p>
+              <button
+                type="button"
+                class="mt-1 text-[11px] font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                @click.stop="jumpToForkSourceSession"
+              >
+                跳回来源对话
+              </button>
+            </div>
+          </div>
           <div class="ml-1 flex min-w-0 flex-1 flex-col justify-center">
             <h1 class="truncate text-[15px] font-bold leading-5 tracking-normal text-slate-950">
               {{ activeSessionTitle }}

@@ -752,6 +752,20 @@ describe("sidepanel chat transcript component", () => {
     expect(source).not.toContain("当前标签页未连接");
   });
 
+  it("inherits old-product fork source indicator and jump-back behavior", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("activeForkSourceSessionId");
+    expect(source).toContain("activeForkSourceTitle");
+    expect(source).toContain("jumpToForkSourceSession");
+    expect(source).toContain('data-testid="fork-session-indicator"');
+    expect(source).toContain("当前会话来自分叉");
+    expect(source).toContain("分叉来源：{{ activeForkSourceTitle }}");
+    expect(source).toContain("跳回来源对话");
+    expect(source).toContain('@click.stop="jumpToForkSourceSession"');
+    expect(source).toContain("selectChatSession(sourceId)");
+  });
+
   it("uses real chat session routes for old-product history UX", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
