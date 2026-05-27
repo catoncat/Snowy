@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -56,15 +55,6 @@ function writeIssue(repoRoot: string, filename: string, frontmatter: string, bod
     `${frontmatter}\n${body}`,
     "utf8",
   );
-}
-
-function initGitRepo(repoRoot: string) {
-  execFileSync("git", ["init"], { cwd: repoRoot });
-  execFileSync("git", ["config", "user.name", "Test Bot"], { cwd: repoRoot });
-  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repoRoot });
-  writeFileSync(path.join(repoRoot, "note.txt"), "hello\n", "utf8");
-  execFileSync("git", ["add", "note.txt"], { cwd: repoRoot });
-  execFileSync("git", ["commit", "-m", "test commit"], { cwd: repoRoot });
 }
 
 afterEach(() => {
@@ -247,7 +237,6 @@ check_cmd: bun run check
 
   it("requires at least one commit ref", () => {
     const repoRoot = makeRepo();
-    initGitRepo(repoRoot);
 
     expect(() => resolveCommitRefs(repoRoot, [])).toThrow(
       "workflow:done requires at least one --commit",

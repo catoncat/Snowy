@@ -91,8 +91,17 @@ Packaged files:
 
 ## External Submission Steps
 
-1. Confirm `bun run release:cutover:status` still returns `ok: true`.
-2. Generate the machine-readable handoff manifest:
+1. Prepare the upload bundle in one command:
+
+```bash
+bun run release:submission:prepare -- \
+  --channel <store-or-deployment-channel> \
+  --source-pr https://github.com/catoncat/Snowy/pull/13
+```
+
+The prepare command runs the cutover status gate, regenerates the MV3 zip, writes the machine-readable handoff manifest, and prints the artifact / manifest paths to upload.
+
+2. If you need to run the lower-level commands manually, confirm `bun run release:cutover:status` still returns `ok: true`, then regenerate the handoff manifest:
 
 ```bash
 bun run release:submission:manifest -- \
@@ -101,7 +110,7 @@ bun run release:submission:manifest -- \
   --output .ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.manifest.json
 ```
 
-3. Upload `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip` to the chosen extension store or deployment channel.
+3. Upload `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip` and `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.manifest.json` to the chosen extension store or deployment channel.
 4. Record the external submission result next to this packet:
    - submitted_at
    - submitted_by
