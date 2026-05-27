@@ -171,7 +171,7 @@ export function buildReadyNextActions(releaseDecision: ReleaseDecisionState): st
     ];
   }
   return [
-    "continue only through external store/deployment submission, or define exactly one human real-profile UAT if required",
+    "use docs/external-release-submission-packet-2026-05-27.md for external store/deployment submission, or its single real-profile UAT if required",
     "keep bun run release:acceptance and bun run release:cutover:status as the pre-submission gates",
     "do not create default deferred implementation issues while the repo-side gate stays green",
   ];
