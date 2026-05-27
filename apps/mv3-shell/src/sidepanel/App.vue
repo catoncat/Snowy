@@ -2337,7 +2337,10 @@ onUnmounted(() => {
       <footer class="z-20 shrink-0 bg-white px-3 pb-3 pt-2">
         <div v-if="showSkillList" class="mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl" role="listbox" aria-label="选择 skill">
           <div class="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Skills</span>
+            <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <SidepanelIcon name="wand-2" class-name="h-3 w-3" />
+              Skills
+            </span>
             <span class="text-[11px] text-slate-400">{{ isSkillsManageMode ? "/skills" : "/skill" }}</span>
           </div>
           <div v-if="managementLoading" class="px-3 py-3 text-[12px] text-slate-500">正在加载 skills...</div>
@@ -2357,7 +2360,9 @@ onUnmounted(() => {
               @mouseenter="focusedSkillIndex = index"
               @click="handleSkillRowClick(skill)"
             >
-              <span class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md bg-slate-950 text-[10px] font-black text-white" aria-hidden="true">S</span>
+              <span class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center text-slate-500" aria-hidden="true">
+                <SidepanelIcon name="wand-2" class-name="h-3.5 w-3.5" />
+              </span>
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-[12px] font-semibold text-slate-950">{{ skill.skillId }}</span>
                 <span class="mt-0.5 block truncate text-[11px] leading-4 text-slate-500">{{ skillDescription(skill) }}</span>
@@ -2373,7 +2378,10 @@ onUnmounted(() => {
         </div>
 
         <div v-if="showMentionList" class="mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl" role="listbox" aria-label="选择标签页进行引用">
-          <div class="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Recent Tabs</div>
+          <div class="flex items-center gap-1.5 border-b border-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <SidepanelIcon name="search" class-name="h-3 w-3" />
+            Recent Tabs
+          </div>
           <div v-if="filteredTabs.length === 0" class="px-3 py-3 text-[12px] text-slate-500">没有匹配的标签页</div>
           <template v-else>
             <button
@@ -2388,7 +2396,9 @@ onUnmounted(() => {
               @click="selectMentionedTab(tab)"
             >
               <img v-if="tab.favIconUrl" :src="tab.favIconUrl" class="h-4 w-4 shrink-0 rounded-sm" aria-hidden="true" />
-              <span v-else class="grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-slate-100 text-[9px] text-slate-500" aria-hidden="true">□</span>
+              <span v-else class="grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-500" aria-hidden="true">
+                <SidepanelIcon name="globe" class-name="h-3 w-3" />
+              </span>
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-[12px] font-medium text-slate-950">{{ tab.title }}</span>
                 <span class="block truncate font-mono text-[10px] text-slate-400">{{ tab.url }}</span>
@@ -2417,7 +2427,7 @@ onUnmounted(() => {
                       aria-hidden="true"
                     >
                       <img v-if="tab.favIconUrl" :src="tab.favIconUrl" class="h-full w-full object-contain" alt="" />
-                      <span v-else>□</span>
+                      <SidepanelIcon v-else name="globe" class-name="h-2.5 w-2.5" />
                     </span>
                     <span
                       v-if="selectedTabs.length > 2"
@@ -2435,7 +2445,7 @@ onUnmounted(() => {
                   v-if="selectedSkills.length > 0"
                   class="flex shrink-0 items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-1.5 py-0.5"
                 >
-                  <span class="text-[10px] font-black text-blue-600" aria-hidden="true">/</span>
+                  <SidepanelIcon name="wand-2" class-name="h-3 w-3 text-blue-600" />
                   <span class="max-w-[190px] truncate text-[10px] font-bold text-blue-700">
                     {{ selectedSkills.length === 1 ? skillDisplayName(selectedSkills[0]) : `${selectedSkills.length} 个技能` }}
                   </span>
@@ -2451,7 +2461,8 @@ onUnmounted(() => {
                   @click="composerContextExpanded = !composerContextExpanded"
                 >
                   <span>{{ composerContextExpanded ? "收起" : "管理" }}</span>
-                  <span aria-hidden="true">{{ composerContextExpanded ? "⌃" : "⌄" }}</span>
+                  <SidepanelIcon name="chevron-up" v-if="composerContextExpanded" class-name="h-3 w-3" />
+                  <SidepanelIcon name="chevron-down" v-else class-name="h-3 w-3" />
                 </button>
                 <button
                   type="button"
@@ -2460,7 +2471,7 @@ onUnmounted(() => {
                   title="清除所有上下文"
                   @click="clearSelectedContext"
                 >
-                  ×
+                  <SidepanelIcon name="x" class-name="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
@@ -2476,11 +2487,13 @@ onUnmounted(() => {
                 >
                   <div class="flex min-w-0 items-center gap-2">
                     <img v-if="tab.favIconUrl" :src="tab.favIconUrl" class="h-3 w-3 shrink-0 rounded-sm" alt="" />
-                    <span v-else class="grid h-3 w-3 shrink-0 place-items-center rounded-sm bg-slate-100 text-[8px] text-slate-500" aria-hidden="true">□</span>
+                    <span v-else class="grid h-3 w-3 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-500" aria-hidden="true">
+                      <SidepanelIcon name="globe" class-name="h-2.5 w-2.5" />
+                    </span>
                     <span class="truncate text-[11px] text-slate-700">{{ tab.title }}</span>
                   </div>
                   <button type="button" class="grid h-5 w-5 place-items-center rounded-sm text-slate-400 hover:text-rose-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500" :aria-label="`移除 ${tab.title}`" @click="removeSelectedTab(tab.id)">
-                    ×
+                    <SidepanelIcon name="x" class-name="h-3 w-3" />
                   </button>
                 </div>
               </div>
@@ -2494,11 +2507,11 @@ onUnmounted(() => {
                   role="listitem"
                 >
                   <div class="flex min-w-0 items-center gap-2">
-                    <span class="shrink-0 text-[10px] font-black text-blue-600" aria-hidden="true">/</span>
+                    <SidepanelIcon name="wand-2" class-name="h-3 w-3 shrink-0 text-blue-600" />
                     <span class="truncate text-[11px] font-medium text-blue-700">{{ skillDisplayName(skill) }}</span>
                   </div>
                   <button type="button" class="grid h-5 w-5 place-items-center rounded-sm text-blue-400 hover:text-rose-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500" :aria-label="`移除 ${skillDisplayName(skill)}`" @click="removeSelectedSkill(skill.skillId)">
-                    ×
+                    <SidepanelIcon name="x" class-name="h-3 w-3" />
                   </button>
                 </div>
               </div>
@@ -2555,7 +2568,7 @@ onUnmounted(() => {
                 title="引用标签页"
                 @click="insertComposerToken('@')"
               >
-                +
+                <SidepanelIcon name="plus" class-name="h-5 w-5" />
               </button>
               <button
                 type="button"
@@ -2566,7 +2579,7 @@ onUnmounted(() => {
                 title="使用技能"
                 @click="insertComposerToken('/skill')"
               >
-                /
+                <SidepanelIcon name="wand-2" class-name="h-[18px] w-[18px]" />
               </button>
             </div>
             <div class="composer-actions-cluster">
@@ -2577,7 +2590,7 @@ onUnmounted(() => {
                 aria-label="停止生成"
                 @click="stopRun"
               >
-                ■
+                <SidepanelIcon name="square" class-name="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
@@ -2587,7 +2600,7 @@ onUnmounted(() => {
                 :aria-label="isRunning ? '追加发送（默认 steer，Alt+Enter 为 follow-up）' : '发送消息'"
                 @click="sendPrompt(isRunning ? 'steer' : 'normal')"
               >
-                ↑
+                <SidepanelIcon name="send" class-name="h-[18px] w-[18px]" />
               </button>
             </div>
           </div>
@@ -2612,7 +2625,7 @@ onUnmounted(() => {
             aria-label="关闭提示"
             @click="dismissComposerHint"
           >
-            ×
+            <SidepanelIcon name="x" class-name="h-3 w-3" />
           </button>
         </div>
       </footer>

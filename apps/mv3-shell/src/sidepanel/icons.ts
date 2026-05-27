@@ -12,6 +12,9 @@ export type SidepanelIconName =
   | "external-link"
   | "git-branch"
   | "history"
+  | "chevron-down"
+  | "chevron-up"
+  | "globe"
   | "message-square"
   | "more-vertical"
   | "pencil"
@@ -19,6 +22,9 @@ export type SidepanelIconName =
   | "refresh-ccw"
   | "search"
   | "settings"
+  | "send"
+  | "square"
+  | "wand-2"
   | "trash-2"
   | "wrench"
   | "x";
@@ -80,6 +86,15 @@ const iconPaths: Record<SidepanelIconName, IconPathFactory> = {
     h("path", { d: "M3 3v5h5" }),
     h("path", { d: "M12 7v5l4 2" }),
   ],
+  "chevron-down": () => [h("path", { d: "m6 9 6 6 6-6" })],
+  "chevron-up": () => [h("path", { d: "m18 15-6-6-6 6" })],
+  globe: () => [
+    h("circle", { cx: "12", cy: "12", r: "10" }),
+    h("path", { d: "M2 12h20" }),
+    h("path", {
+      d: "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
+    }),
+  ],
   "message-square": () => [
     h("path", {
       d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
@@ -109,6 +124,25 @@ const iconPaths: Record<SidepanelIconName, IconPathFactory> = {
       d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z",
     }),
     h("circle", { cx: "12", cy: "12", r: "3" }),
+  ],
+  send: () => [h("path", { d: "m22 2-7 20-4-9-9-4Z" }), h("path", { d: "M22 2 11 13" })],
+  square: () => [
+    h("rect", {
+      x: "5",
+      y: "5",
+      width: "14",
+      height: "14",
+      rx: "2",
+      fill: "currentColor",
+      stroke: "none",
+    }),
+  ],
+  "wand-2": () => [
+    h("path", { d: "m20 2-2 2" }),
+    h("path", { d: "m7 15-5.3 5.3a1 1 0 0 0 0 1.4l.6.6a1 1 0 0 0 1.4 0L9 17" }),
+    h("path", { d: "m9 17 6-6" }),
+    h("path", { d: "m11 3 3 3" }),
+    h("path", { d: "M3 11l6 6" }),
   ],
   "trash-2": () => [
     h("path", { d: "M3 6h18" }),

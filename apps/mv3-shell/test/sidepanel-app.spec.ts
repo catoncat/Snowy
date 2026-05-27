@@ -1043,6 +1043,31 @@ describe("sidepanel chat transcript component", () => {
     expect(styles).not.toContain("transition: all");
   });
 
+  it("inherits old-product ChatInput icon-only controls", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+    const iconSource = readFileSync("apps/mv3-shell/src/sidepanel/icons.ts", "utf8");
+    const footerSource = source.slice(source.indexOf("<footer"), source.indexOf("</footer>"));
+
+    for (const icon of [
+      "chevron-down",
+      "chevron-up",
+      "globe",
+      "plus",
+      "search",
+      "send",
+      "square",
+      "wand-2",
+      "x",
+    ]) {
+      expect(iconSource).toContain(`| "${icon}"`);
+      expect(footerSource).toContain(`<SidepanelIcon name="${icon}"`);
+    }
+
+    for (const legacyGlyph of [">□<", ">⌃<", ">⌄<", ">×<", ">■<", ">↑<"]) {
+      expect(footerSource).not.toContain(legacyGlyph);
+    }
+  });
+
   it("inherits old-product empty-state suggestion categories", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
