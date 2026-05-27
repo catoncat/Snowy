@@ -10,6 +10,7 @@ import {
   RUNNER_OFFSCREEN_REASONS,
   createBackgroundRunnerBridge,
   createPageHookBridge,
+  startBackgroundRunnerBridge,
 } from "../src/background.js";
 import { createDefaultOffscreenRunnerHost, createOffscreenRunnerBridge } from "../src/offscreen.js";
 import {
@@ -641,6 +642,7 @@ describe("mv3-shell manifest", () => {
     expect(manifest.minimum_chrome_version).toBe("116");
     expect(manifest.permissions).toContain("offscreen");
     expect(manifest.permissions).toContain("activeTab");
+    expect(manifest.permissions).toContain("sidePanel");
     expect(hostPermissions).toEqual([]);
     expect(webAccessibleResources).toEqual([]);
     expect(manifest.background).toMatchObject({
@@ -670,6 +672,26 @@ describe("mv3-shell manifest", () => {
 
     expect(source).toMatch(/@bbl-next\/js-runner/);
     expect(source).not.toMatch(/\.\/runner-host-core\.js/);
+  });
+
+  it("opens the side panel when the extension action is clicked", async () => {
+    const harness = createChromeHarness({});
+    const setPanelBehavior = vi.fn(async () => undefined);
+    const chromeApi = {
+      ...harness.chromeApi,
+      sidePanel: {
+        setPanelBehavior,
+      },
+    };
+
+    const runtime = startBackgroundRunnerBridge({ chromeApi });
+
+    expect(runtime).not.toBeNull();
+    expect(setPanelBehavior).toHaveBeenCalledWith({
+      openPanelOnActionClick: true,
+    });
+    runtime.dispose();
+    harness.cleanup();
   });
 
   it("creates the offscreen document once and uses the WORKERS reason", async () => {

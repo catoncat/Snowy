@@ -3078,6 +3078,7 @@ export function startBackgroundRunnerBridge(options: any = {}): any {
   }
   const bridge = createBackgroundRunnerBridge({ chromeApi, ...options });
   const dispose = bridge.registerRuntimeListener();
+  registerActionSidePanelOpen(chromeApi);
   if (chromeApi.runtime.onInstalled?.addListener) {
     chromeApi.runtime.onInstalled.addListener(() => {
       console.log("BBL Next MV3 shell installed");
@@ -3087,6 +3088,31 @@ export function startBackgroundRunnerBridge(options: any = {}): any {
     bridge,
     dispose,
   };
+}
+
+export function registerActionSidePanelOpen(chromeApi: any): void {
+  const sidePanelApi = chromeApi?.sidePanel;
+  if (!sidePanelApi) {
+    return;
+  }
+  if (typeof sidePanelApi.setPanelBehavior === "function") {
+    sidePanelApi.setPanelBehavior({ openPanelOnActionClick: true }).catch((error) => {
+      console.warn("Failed to enable BBL Next action side panel behavior", error);
+    });
+    return;
+  }
+  if (
+    typeof sidePanelApi.open === "function" &&
+    typeof chromeApi?.action?.onClicked?.addListener === "function"
+  ) {
+    chromeApi.action.onClicked.addListener((tab) => {
+      const tabId = typeof tab?.id === "number" ? tab.id : undefined;
+      const openOptions = tabId === undefined ? {} : { tabId };
+      sidePanelApi.open(openOptions).catch((error) => {
+        console.warn("Failed to open BBL Next side panel from action click", error);
+      });
+    });
+  }
 }
 
 if (globalThis.chrome?.runtime?.onMessage && globalThis.chrome?.offscreen?.createDocument) {
