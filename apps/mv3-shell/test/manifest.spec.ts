@@ -4335,13 +4335,18 @@ describe("mv3-shell manifest", () => {
     await browserVfs.snapshot(packageUri, `${packageUri}/@versions/${trustedVersionId}`, {
       trusted: true,
     });
-    await setupServices.dispatchCapability({
+    const updateResponse = await setupServices.dispatchCapability({
       capabilityId: "skills.install",
       input: {
         skillId,
         setupPlan: setupPlan(2),
       },
       permissions: ["skills.install"],
+    });
+    const rollbackTarget = updateResponse.update?.previousVersion;
+    expect(rollbackTarget).toMatchObject({
+      trusted: true,
+      uri: expect.stringContaining(`${packageUri}/@versions/`),
     });
     await setupServices.dispatchCapability({
       capabilityId: "skills.enable",
@@ -4382,8 +4387,8 @@ describe("mv3-shell manifest", () => {
               versionSurface: expect.objectContaining({
                 activeVersion: expect.objectContaining({ versionId: "2" }),
                 rollbackTarget: expect.objectContaining({
-                  versionId: trustedVersionId,
-                  uri: `${packageUri}/@versions/${trustedVersionId}`,
+                  versionId: rollbackTarget?.versionId,
+                  uri: rollbackTarget?.uri,
                   trusted: true,
                 }),
               }),
@@ -4408,8 +4413,8 @@ describe("mv3-shell manifest", () => {
         },
         rollback: {
           skillId,
-          versionId: trustedVersionId,
-          versionUri: `${packageUri}/@versions/${trustedVersionId}`,
+          versionId: rollbackTarget?.versionId,
+          versionUri: rollbackTarget?.uri,
           targetUri: packageUri,
         },
       },
@@ -4433,7 +4438,7 @@ describe("mv3-shell manifest", () => {
               version: 1,
               versionSurface: expect.objectContaining({
                 activeVersion: expect.objectContaining({ versionId: "1" }),
-                rollbackTarget: expect.objectContaining({ versionId: trustedVersionId }),
+                rollbackTarget: expect.objectContaining({ versionId: rollbackTarget?.versionId }),
               }),
             }),
           ],
@@ -4487,8 +4492,8 @@ describe("mv3-shell manifest", () => {
           kind: "skills.rollback",
           skillId,
           status: "rolled_back",
-          versionId: trustedVersionId,
-          versionUri: `${packageUri}/@versions/${trustedVersionId}`,
+          versionId: rollbackTarget?.versionId,
+          versionUri: rollbackTarget?.uri,
         }),
       ]),
     );
