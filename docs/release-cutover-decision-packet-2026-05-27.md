@@ -41,10 +41,11 @@ This command reruns the repo-side acceptance gate and adds delivery state: Git b
 
 Current delivery state as of this packet refresh:
 
-- release branch: `codex/browser-plugin-cutover`
-- review handoff: PR #2, `[codex] 推进浏览器插件重构 cutover`
-- local `bun run release:cutover:status`: passing, with no blockers
-- GitHub PR CI: passing
+- release branch: `main`
+- accepted review handoff: PR #2, `[codex] 推进浏览器插件重构 cutover`
+- follow-up delivery blocker fix: PR #3, `[codex] 修复 cutover 回滚验收时间戳漂移`
+- current accepted main commit: `247b2fae997c9fc52c47c919c26ea3aa362820b9`
+- `bun run release:cutover:status`: passing on `origin/main` with no blockers
 - remaining boundary: external release acceptance / old-mainline switch decision
 
 ## External Acceptance Decision
@@ -57,6 +58,27 @@ Current delivery state as of this packet refresh:
 - remaining_boundary: old-mainline switch / release execution still requires its own explicit execution step
 
 Do not interpret an empty queue after this point as permission to create more default implementation slices. If the status gate stays green, continue through review, acceptance, and explicit release/cutover decision handling. If the gate fails, fix the concrete delivery blocker it reports before reopening product scope.
+
+## Release Execution Evidence
+
+- follow_up_fix_merged_at: 2026-05-27T01:54:01Z
+- follow_up_fix_pr: https://github.com/catoncat/Snowy/pull/3
+- follow_up_fix_merge_commit: `247b2fae997c9fc52c47c919c26ea3aa362820b9`
+- refreshed_cutover_gate_at: 2026-05-27T01:55:02.786Z
+- refreshed_cutover_gate_command: `bun run release:cutover:status`
+- refreshed_cutover_gate_result: `ok: true`
+- refreshed_cutover_gate_branch: `codex/verify-origin-main`
+- refreshed_cutover_gate_upstream: `origin/main`
+- refreshed_cutover_gate_head: `247b2fae997c9fc52c47c919c26ea3aa362820b9`
+- refreshed_cutover_gate_coverage: acceptance docs, extension build, real Chromium MV3 smoke, repo-wide `bun run check`, live queue, active leases
+- live_queue_entries: 0
+- active_leases: 0
+- blockers: 0
+- local_release_artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-247b2fa.zip`
+- local_release_artifact_sha256: `842fb6e248dbc04502cf7ea446e0f9eb4bdd85af60a370907e88498dbae7ab2f`
+- artifact_manifest: `Browser Brain Loop Next`, MV3, version `0.0.1`
+
+The old repository at `/Users/envvar/work/repos/snowy/browser-brain-loop` was checked read-only during this execution pass. Its current worktree has unrelated dirty and untracked changes, and `origin/main` exposes build/test/e2e scripts but no dedicated publish/deploy script. Do not perform old-mainline switch work in that dirty worktree; use an isolated worktree or coordinate ownership first.
 
 ## Repo-Side Evidence Summary
 
