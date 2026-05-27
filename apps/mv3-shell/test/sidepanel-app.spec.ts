@@ -178,15 +178,27 @@ describe("sidepanel chat transcript component", () => {
   it("uses product sidepanel views instead of a debug-first split", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
-    expect(source).toContain('{ id: "chat", label: "Chat" }');
-    expect(source).toContain('{ id: "sessions", label: "Sessions" }');
-    expect(source).toContain('{ id: "provider", label: "Provider" }');
-    expect(source).toContain('{ id: "skills", label: "Skills" }');
-    expect(source).toContain('{ id: "runtime", label: "Runtime" }');
     expect(source).toContain('const activePane = ref<SidepanelPane>("chat")');
+    expect(source).toContain("会话历史");
+    expect(source).toContain("模型设置");
+    expect(source).toContain("Skills 管理");
+    expect(source).toContain("调试面板");
     expect(source).not.toContain("Control Plane");
     expect(source).not.toContain("Chat Shell");
     expect(source).not.toContain("Shared control plane + chat shell");
+    expect(source).not.toContain('aria-label="Sidepanel views"');
+    expect(source).not.toContain("暂无其它会话");
+  });
+
+  it("uses real chat session routes for old-product history UX", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain('"runtime.chat.sessions"');
+    expect(source).toContain('"runtime.chat.session.create"');
+    expect(source).toContain('"runtime.chat.session.select"');
+    expect(source).toContain('"runtime.chat.session.delete"');
+    expect(source).toContain("chatSessions");
+    expect(source).toContain("sessionSearch");
   });
 
   it("surfaces pending interventions through shared management actions", () => {

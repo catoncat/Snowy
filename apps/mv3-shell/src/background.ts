@@ -2972,6 +2972,22 @@ export function createBackgroundRunnerBridge({
         );
       case "runtime.chat.bootstrap":
         return routeRuntimeService(() => getRuntimeServices().bootstrapChat());
+      case "runtime.chat.sessions":
+        return routeRuntimeService(() => getRuntimeServices().listChatSessions());
+      case "runtime.chat.session.create":
+        return routeRuntimeService(() => getRuntimeServices().createChatSession());
+      case "runtime.chat.session.select":
+        return routeRuntimeService(() =>
+          getRuntimeServices().selectChatSession({
+            sessionId: message.sessionId,
+          }),
+        );
+      case "runtime.chat.session.delete":
+        return routeRuntimeService(() =>
+          getRuntimeServices().deleteChatSession({
+            sessionId: message.sessionId,
+          }),
+        );
       case "runtime.chat.send":
         return routeRuntimeService(() =>
           getRuntimeServices().sendChatPrompt({

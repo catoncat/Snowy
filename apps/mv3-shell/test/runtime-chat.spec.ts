@@ -161,6 +161,26 @@ describe("mv3-shell runtime chat bridge", () => {
         messages: [],
         runState: { status: "idle" },
       })),
+      listChatSessions: vi.fn(async () => ({
+        activeSessionId: "s-1",
+        items: [{ id: "s-1", title: "新对话" }],
+      })),
+      createChatSession: vi.fn(async () => ({
+        sessionId: "s-2",
+        messages: [],
+        runState: { status: "idle" },
+      })),
+      selectChatSession: vi.fn(async ({ sessionId }) => ({
+        sessionId,
+        messages: [],
+        runState: { status: "idle" },
+      })),
+      deleteChatSession: vi.fn(async ({ sessionId }) => ({
+        deletedSessionId: sessionId,
+        sessionId: "s-1",
+        messages: [],
+        runState: { status: "idle" },
+      })),
       sendChatPrompt: vi.fn(async ({ text }) => ({
         sessionId: "s-1",
         accepted: true,
@@ -184,6 +204,33 @@ describe("mv3-shell runtime chat bridge", () => {
     await expect(
       bridge.route({ target: RUNNER_BACKGROUND_TARGET, kind: "runtime.chat.bootstrap" }),
     ).resolves.toMatchObject({ ok: true, data: { sessionId: "s-1" } });
+
+    await expect(
+      bridge.route({ target: RUNNER_BACKGROUND_TARGET, kind: "runtime.chat.sessions" }),
+    ).resolves.toMatchObject({ ok: true, data: { activeSessionId: "s-1" } });
+
+    await expect(
+      bridge.route({ target: RUNNER_BACKGROUND_TARGET, kind: "runtime.chat.session.create" }),
+    ).resolves.toMatchObject({ ok: true, data: { sessionId: "s-2" } });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.chat.session.select",
+        sessionId: "s-2",
+      }),
+    ).resolves.toMatchObject({ ok: true, data: { sessionId: "s-2" } });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.chat.session.delete",
+        sessionId: "s-2",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { deletedSessionId: "s-2", sessionId: "s-1" },
+    });
 
     await expect(
       bridge.route({ target: RUNNER_BACKGROUND_TARGET, kind: "runtime.chat.send", text: "hello" }),

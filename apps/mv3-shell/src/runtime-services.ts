@@ -829,6 +829,17 @@ function pickRuntimeSession(sessions) {
   );
 }
 
+function pickMostRecentSession(sessions) {
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    return null;
+  }
+  return (
+    [...sessions].sort((left, right) =>
+      String(right?.createdAt ?? "").localeCompare(String(left?.createdAt ?? "")),
+    )[0] ?? null
+  );
+}
+
 function toCanonicalTab(activeTab) {
   return {
     tabId: activeTab.id,
@@ -1232,6 +1243,64 @@ function toChatTranscriptItem(message) {
     });
   }
   return null;
+}
+
+function toSessionMessageEntry(entry) {
+  if (!entry || entry.type !== "message" || !entry.payload || typeof entry.payload !== "object") {
+    return null;
+  }
+  const payload = entry.payload;
+  if (payload.role !== "user" && payload.role !== "assistant" && payload.role !== "system") {
+    return null;
+  }
+  if (typeof payload.text !== "string") {
+    return null;
+  }
+  return {
+    entryId: entry.entryId,
+    timestamp: String(entry.timestamp ?? ""),
+    role: payload.role,
+    text: payload.text,
+  };
+}
+
+function trimSessionPreview(text) {
+  const normalized = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.length > 96 ? `${normalized.slice(0, 93)}...` : normalized;
+}
+
+function deriveSessionTitle(header, messages) {
+  const explicitTitle = String(header?.title ?? "").trim();
+  if (
+    explicitTitle &&
+    explicitTitle !== "mv3-shell runtime session" &&
+    explicitTitle !== "新对话"
+  ) {
+    return explicitTitle;
+  }
+  const firstUser = messages.find((message) => message.role === "user" && message.text.trim());
+  const title = trimSessionPreview(firstUser?.text ?? "");
+  return title || "新对话";
+}
+
+function toChatSessionSummary(header, entries, activeSessionId) {
+  const messages = entries.map((entry) => toSessionMessageEntry(entry)).filter(Boolean);
+  const lastMessage = [...messages].reverse().find((message) => message.text.trim()) ?? null;
+  const updatedAt = String(lastMessage?.timestamp || header?.createdAt || "");
+  return {
+    id: header.id,
+    title: deriveSessionTitle(header, messages),
+    createdAt: header.createdAt,
+    updatedAt,
+    messageCount: messages.length,
+    preview: trimSessionPreview(lastMessage?.text ?? ""),
+    active: header.id === activeSessionId,
+  };
 }
 
 async function emitRuntimeChatEvent(chromeApi, event) {
@@ -2418,6 +2487,7 @@ export function createBackgroundRuntimeServices({
 }: any = {}): any {
   let servicesPromise = null;
   let sessionPromise = null;
+  let activeSessionId = null;
   let chatRunStatus = "idle";
   let activeChatRun = null;
   const skillManager = createSkillLifecycleManager({
@@ -2707,17 +2777,31 @@ export function createBackgroundRuntimeServices({
   async function ensureSession() {
     if (!sessionPromise) {
       sessionPromise = ensureServices().then(async ({ kernel }) => {
-        const existing = pickRuntimeSession(await kernel.listSessions());
+        const sessions = await kernel.listSessions();
+        const selected = activeSessionId
+          ? sessions.find((session) => session.id === activeSessionId)
+          : null;
+        const existing =
+          selected ?? pickRuntimeSession(sessions) ?? pickMostRecentSession(sessions);
         const session =
           existing ??
           (await kernel.createSession({
             title: "mv3-shell runtime session",
           }));
+        activeSessionId = session.id;
         await kernel.rehydrateInterventions(session.id);
         return session;
       });
     }
     return sessionPromise;
+  }
+
+  async function setActiveChatSession(session) {
+    activeSessionId = session.id;
+    sessionPromise = Promise.resolve(session);
+    const { kernel } = await ensureServices();
+    await kernel.rehydrateInterventions(session.id);
+    return session;
   }
 
   async function dispatchCapability({
@@ -2927,6 +3011,10 @@ export function createBackgroundRuntimeServices({
 
   async function buildChatBootstrap() {
     const [{ kernel }, session] = await Promise.all([ensureServices(), ensureSession()]);
+    return buildChatBootstrapForSession(kernel, session);
+  }
+
+  async function buildChatBootstrapForSession(kernel, session) {
     const context = await kernel.buildContext(session.id);
 
     return {
@@ -2935,6 +3023,79 @@ export function createBackgroundRuntimeServices({
       runState: {
         status: normalizeChatRunStatus(chatRunStatus),
       },
+    };
+  }
+
+  async function listChatSessions() {
+    const [{ kernel }, session] = await Promise.all([ensureServices(), ensureSession()]);
+    const headers = await kernel.listSessions();
+    const items = await Promise.all(
+      headers.map(async (header) => {
+        let entries = [];
+        try {
+          entries = await kernel.sessions.getEntries(header.id);
+        } catch {
+          entries = [];
+        }
+        return toChatSessionSummary(header, entries, session.id);
+      }),
+    );
+    return {
+      activeSessionId: session.id,
+      items: items.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+    };
+  }
+
+  function assertCanSwitchChatSession() {
+    if (activeChatRun && chatRunStatus === "running") {
+      throw new CapabilityError(
+        "E_RUNTIME",
+        "runtime.chat.session requires the current run to finish",
+      );
+    }
+  }
+
+  async function createChatSession() {
+    assertCanSwitchChatSession();
+    const { kernel } = await ensureServices();
+    const session = await kernel.createSession({
+      title: "新对话",
+    });
+    await setActiveChatSession(session);
+    return buildChatBootstrapForSession(kernel, session);
+  }
+
+  async function selectChatSession({ sessionId } = {}) {
+    assertCanSwitchChatSession();
+    const id = typeof sessionId === "string" ? sessionId.trim() : "";
+    if (!id) {
+      throw new CapabilityError("E_BAD_INPUT", "runtime.chat.session.select requires sessionId");
+    }
+    const { kernel } = await ensureServices();
+    const session = (await kernel.listSessions()).find((item) => item.id === id);
+    if (!session) {
+      throw new CapabilityError("E_NOT_FOUND", `Session not found: ${id}`);
+    }
+    await setActiveChatSession(session);
+    return buildChatBootstrapForSession(kernel, session);
+  }
+
+  async function deleteChatSession({ sessionId } = {}) {
+    assertCanSwitchChatSession();
+    const id = typeof sessionId === "string" ? sessionId.trim() : "";
+    if (!id) {
+      throw new CapabilityError("E_BAD_INPUT", "runtime.chat.session.delete requires sessionId");
+    }
+    const { kernel } = await ensureServices();
+    await kernel.deleteSession(id);
+    if (activeSessionId === id) {
+      activeSessionId = null;
+      sessionPromise = null;
+    }
+    const bootstrap = await buildChatBootstrap();
+    return {
+      deletedSessionId: id,
+      ...bootstrap,
     };
   }
 
@@ -3376,6 +3537,8 @@ export function createBackgroundRuntimeServices({
 
   return {
     bootstrapChat: buildChatBootstrap,
+    createChatSession,
+    deleteChatSession,
     dispatchCapability,
     ensureServices,
     ensureSession,
@@ -3385,12 +3548,14 @@ export function createBackgroundRuntimeServices({
     getLoopStatus,
     invokePageAction,
     invokeSiteSkill,
+    listChatSessions,
     listSkills,
     listInterventions,
     readInterventionAudit,
     readReplayContinuityMarkers,
     resolveIntervention,
     cancelIntervention,
+    selectChatSession,
     sendChatPrompt,
     stopChatRun,
     updateLlmConfig,
