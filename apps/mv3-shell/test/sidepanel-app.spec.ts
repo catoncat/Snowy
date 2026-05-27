@@ -781,6 +781,76 @@ describe("sidepanel chat transcript component", () => {
     ).not.toBeNull();
   });
 
+  it("inherits old-product running tool placeholder while runtime tool call is active", () => {
+    const emitted: string[] = [];
+    const tree = mountInMemory({
+      loading: false,
+      items: [
+        {
+          id: "tc-1",
+          kind: "tool",
+          toolName: "tabs_navigate",
+          summary: "执行中 · tabs_navigate",
+          detail: '{"url":"https://example.com"}',
+          expanded: false,
+          status: "running",
+        },
+      ],
+      onToggleTool: (id: string) => emitted.push(id),
+    });
+
+    const placeholder = findFirst(
+      tree,
+      (node) => node.props["data-testid"] === "tool-running-placeholder",
+    );
+    expect(placeholder?.props.role).toBe("status");
+    expect(placeholder?.props["aria-live"]).toBe("polite");
+    expect(placeholder?.props["aria-label"]).toBe("工具执行中");
+    expect(placeholder?.props["data-tool-action"]).toBe("tabs_navigate");
+    expect(textContent(placeholder as MemoryNode)).toContain("执行中 · tabs_navigate");
+    expect(textContent(placeholder as MemoryNode)).toContain("https://example.com");
+    expect(
+      findFirst(
+        placeholder as MemoryNode,
+        (node) => node.type === "svg" && node.props["data-icon"] === "loader-2",
+      ),
+    ).not.toBeNull();
+    expect(findFirst(tree, (node) => node.props["data-testid"] === "tool-message")).toBeNull();
+
+    const toggle = findFirst(
+      tree,
+      (node) => node.type === "button" && node.props["aria-label"] === "展开工具输出详情",
+    );
+    expect(toggle?.props["aria-expanded"]).toBe(false);
+    expect(toggle?.props.onClick).toBeTypeOf("function");
+    (toggle?.props.onClick as () => void)();
+    expect(emitted).toEqual(["tc-1"]);
+
+    const expandedTree = mountInMemory({
+      loading: false,
+      items: [
+        {
+          id: "tc-1",
+          kind: "tool",
+          toolName: "tabs_navigate",
+          summary: "执行中 · tabs_navigate",
+          detail: '{"url":"https://example.com"}',
+          expanded: true,
+          status: "running",
+        },
+      ],
+    });
+    expect(
+      findFirst(expandedTree, (node) => node.props["aria-label"] === "工具输出详情"),
+    ).not.toBeNull();
+    expect(
+      findFirst(
+        expandedTree,
+        (node) => node.type === "svg" && node.props["data-icon"] === "chevron-up",
+      ),
+    ).not.toBeNull();
+  });
+
   it("inherits old-product message layout and copies assistant turn tails only", () => {
     const emitted: ChatMessageCopyPayload[] = [];
     const items: ChatItem[] = [

@@ -3956,6 +3956,25 @@ export function createBackgroundRuntimeServices({
           throw new CapabilityError("E_RUNTIME", "LLM provider not available");
         }
 
+        const pendingToolMessageIds = new Map();
+        const rememberPendingToolMessage = (toolName, messageId) => {
+          const key = String(toolName || "tool");
+          const queue = pendingToolMessageIds.get(key) ?? [];
+          queue.push(messageId);
+          pendingToolMessageIds.set(key, queue);
+        };
+        const claimPendingToolMessageId = (toolName) => {
+          const key = String(toolName || "tool");
+          const queue = pendingToolMessageIds.get(key) ?? [];
+          const messageId = queue.shift();
+          if (queue.length > 0) {
+            pendingToolMessageIds.set(key, queue);
+          } else {
+            pendingToolMessageIds.delete(key);
+          }
+          return messageId || `tool-${crypto.randomUUID()}`;
+        };
+
         const result = await runLoop(
           {
             kernel,
@@ -3977,17 +3996,26 @@ export function createBackgroundRuntimeServices({
                 chunk,
               });
             },
-            onToolCall(toolName, _args) {
+            onToolCall(toolName, args) {
               const toolMsgId = `tool-${crypto.randomUUID()}`;
+              const detail =
+                args === undefined || args === null
+                  ? ""
+                  : typeof args === "string"
+                    ? args
+                    : JSON.stringify(args);
+              rememberPendingToolMessage(toolName, toolMsgId);
               void emitRuntimeChatEvent(chromeApi, {
                 type: "tool.call",
                 sessionId: session.id,
                 messageId: toolMsgId,
                 toolName,
+                summary: `执行中 · ${toolName}`,
+                detail,
               });
             },
             onToolResult(toolName, resultData) {
-              const toolMsgId = `tool-${crypto.randomUUID()}`;
+              const toolMsgId = claimPendingToolMessageId(toolName);
               const summary = summarizeChatToolDetail(
                 resultData && typeof resultData === "object" && "data" in resultData
                   ? JSON.stringify(resultData.data)

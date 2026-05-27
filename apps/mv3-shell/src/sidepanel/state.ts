@@ -23,6 +23,7 @@ export interface ChatToolItem {
   summary: string;
   detail: string;
   expanded: boolean;
+  status?: "running" | "done" | "failed";
 }
 
 export type ChatItem = ChatMessageItem | ChatToolItem;
@@ -53,6 +54,13 @@ export type ChatEvent =
       text?: string;
       contentBlocks?: ChatMessageContentBlock[];
       toolResults?: Record<string, string>;
+    } & ChatEventBase)
+  | ({
+      type: "tool.call";
+      messageId: string;
+      toolName: string;
+      summary?: string;
+      detail?: string;
     } & ChatEventBase)
   | ({
       type: "tool.result";
@@ -121,6 +129,9 @@ function containsToolErrorText(value: string): boolean {
 export function shouldAlwaysShowToolItem(item: ChatItem): boolean {
   if (item.kind !== "tool") {
     return false;
+  }
+  if (item.status === "running") {
+    return true;
   }
   const detail = item.detail.trim();
   const searchableText = `${item.summary}\n${detail}`;
@@ -255,6 +266,46 @@ export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState {
           ...(toolResults ? { toolResults } : {}),
         });
       }
+      const absorbedToolIds = new Set(
+        (contentBlocks ?? [])
+          .filter((block): block is Extract<ChatMessageContentBlock, { type: "toolCall" }> => {
+            return (
+              block.type === "toolCall" &&
+              Boolean(toolResults) &&
+              Object.prototype.hasOwnProperty.call(toolResults, block.id)
+            );
+          })
+          .map((block) => block.id),
+      );
+      return {
+        ...state,
+        sessionId: nextSessionId,
+        items:
+          absorbedToolIds.size > 0
+            ? items.filter((item) => !(item.kind === "tool" && absorbedToolIds.has(item.id)))
+            : items,
+      };
+    }
+    case "tool.call": {
+      const items = [...state.items];
+      const toolName = String(event.toolName ?? "").trim() || "工具调用";
+      const toolItem: ChatToolItem = {
+        id: event.messageId,
+        kind: "tool",
+        toolName,
+        summary: String(event.summary ?? "").trim() || `执行中 · ${toolName}`,
+        detail: String(event.detail ?? ""),
+        expanded: false,
+        status: "running",
+      };
+      const existingIndex = items.findIndex(
+        (item) => item.kind === "tool" && item.id === event.messageId,
+      );
+      if (existingIndex >= 0) {
+        items[existingIndex] = toolItem;
+      } else {
+        items.push(toolItem);
+      }
       return { ...state, sessionId: nextSessionId, items };
     }
     case "tool.result": {
@@ -273,7 +324,14 @@ export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState {
             [toolCallId]: event.detail,
           },
         };
-        return { ...state, sessionId: nextSessionId, items };
+        return {
+          ...state,
+          sessionId: nextSessionId,
+          items: items.filter(
+            (item) =>
+              !(item.kind === "tool" && (item.id === event.messageId || item.id === toolCallId)),
+          ),
+        };
       }
       const toolItem: ChatToolItem = {
         id: event.messageId,
@@ -282,12 +340,14 @@ export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState {
         summary: event.summary,
         detail: event.detail,
         expanded: false,
+        status: containsToolErrorText(`${event.summary}\n${event.detail}`) ? "failed" : "done",
       };
       const existingIndex = items.findIndex(
-        (item) => item.kind === "tool" && item.id === event.messageId,
+        (item) => item.kind === "tool" && (item.id === event.messageId || item.id === toolCallId),
       );
       if (existingIndex >= 0) {
-        items[existingIndex] = toolItem;
+        const existing = items[existingIndex] as ChatToolItem;
+        items[existingIndex] = { ...toolItem, id: existing.id, expanded: existing.expanded };
       } else {
         items.push(toolItem);
       }

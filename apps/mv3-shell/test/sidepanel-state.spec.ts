@@ -86,6 +86,66 @@ describe("sidepanel chat state", () => {
     ]);
   });
 
+  it("tracks old-product running tool placeholders and absorbs them into final assistant content", () => {
+    let state = applyChatEvent(createInitialChatState(), {
+      type: "tool.call",
+      sessionId: "s-1",
+      messageId: "tc-1",
+      toolName: "tabs_navigate",
+      detail: '{"url":"https://example.com"}',
+    });
+
+    expect(state.items).toEqual([
+      expect.objectContaining({
+        id: "tc-1",
+        kind: "tool",
+        toolName: "tabs_navigate",
+        summary: "执行中 · tabs_navigate",
+        status: "running",
+        expanded: false,
+      }),
+    ]);
+    expect(filterChatItemsForToolHistory(state.items, false)).toHaveLength(1);
+
+    state = applyChatEvent(state, {
+      type: "tool.result",
+      sessionId: "s-1",
+      messageId: "tc-1",
+      toolName: "tabs_navigate",
+      summary: "已打开标签页",
+      detail: '{"ok":true}',
+    });
+    expect(state.items[0]).toMatchObject({
+      id: "tc-1",
+      kind: "tool",
+      status: "done",
+      summary: "已打开标签页",
+    });
+
+    state = applyChatEvent(state, {
+      type: "assistant.done",
+      sessionId: "s-1",
+      messageId: "assistant-1",
+      text: "Navigation complete.",
+      contentBlocks: [
+        {
+          type: "toolCall",
+          id: "tc-1",
+          name: "tabs_navigate",
+          arguments: '{"url":"https://example.com"}',
+        },
+        { type: "text", text: "Navigation complete." },
+      ],
+      toolResults: { "tc-1": '{"ok":true}' },
+    });
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0]).toMatchObject({
+      id: "assistant-1",
+      kind: "message",
+      role: "assistant",
+    });
+  });
+
   it("toggles old-product system summary expansion state", () => {
     const state = applyBootstrapState(createInitialChatState(), {
       sessionId: "s-1",

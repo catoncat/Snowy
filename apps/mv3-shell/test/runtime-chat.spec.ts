@@ -1529,6 +1529,28 @@ describe("mv3-shell end-to-end loop integration", () => {
         2000,
       );
 
+      const chatEvents = sentMessages
+        .filter(
+          (
+            msg,
+          ): msg is {
+            type: string;
+            event: { type: string; messageId?: string; toolName?: string };
+          } => (msg as { type?: string }).type === "bbl-next.runtime.chat.event",
+        )
+        .map((msg) => msg.event);
+      const toolCallEvent = chatEvents.find((event) => event.type === "tool.call");
+      const toolResultEvent = chatEvents.find((event) => event.type === "tool.result");
+      expect(toolCallEvent).toMatchObject({
+        type: "tool.call",
+        toolName: "tabs_navigate",
+      });
+      expect(toolResultEvent).toMatchObject({
+        type: "tool.result",
+        toolName: "tabs_navigate",
+        messageId: toolCallEvent?.messageId,
+      });
+
       await expect(
         bridge.route({
           target: RUNNER_BACKGROUND_TARGET,

@@ -846,6 +846,88 @@ function renderToolArticle(item: RenderedToolItem, onToggle: (id: string) => voi
   );
 }
 
+function renderPendingToolArticle(item: RenderedToolItem, onToggle: (id: string) => void) {
+  const detail = item.detail.trim();
+  const headline = item.summary.trim() || `执行中 · ${item.toolName || "工具调用"}`;
+  const previewLine = detail || "等待工具输出";
+
+  return h(
+    "article",
+    {
+      class: "flex flex-col py-1 pr-2 transition-all duration-200 ease-out",
+      role: "status",
+      "aria-live": "polite",
+      "aria-label": "工具执行中",
+      "data-testid": "tool-running-placeholder",
+      "data-tool-action": item.toolName,
+    },
+    [
+      h(
+        "div",
+        {
+          class: "rounded-md border border-slate-200/70 bg-slate-50/80 px-2.5 py-2 shadow-sm",
+        },
+        [
+          h("div", { class: "flex min-w-0 items-center gap-2" }, [
+            h(
+              "div",
+              {
+                class:
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white/85 text-slate-500 shadow-inner",
+              },
+              [renderSidepanelIcon("loader-2", "h-3 w-3 animate-spin")],
+            ),
+            h(
+              "p",
+              {
+                class:
+                  "min-w-0 flex-1 truncate text-[12px] font-semibold leading-snug text-slate-800",
+                title: headline,
+              },
+              headline,
+            ),
+          ]),
+          h(
+            "p",
+            { class: "mt-1.5 break-all pl-7 text-[11px] leading-snug text-slate-500" },
+            previewLine,
+          ),
+          detail
+            ? h("div", { class: "mt-1 flex items-center pl-7" }, [
+                h(
+                  "button",
+                  {
+                    type: "button",
+                    class:
+                      "rounded-sm p-1 text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                    "aria-label": item.expanded ? "收起工具输出详情" : "展开工具输出详情",
+                    title: item.expanded ? "收起工具输出详情" : "展开工具输出详情",
+                    "aria-expanded": item.expanded,
+                    onClick: () => onToggle(item.id),
+                  },
+                  [renderSidepanelIcon(item.expanded ? "chevron-up" : "chevron-down", "h-3 w-3")],
+                ),
+              ])
+            : null,
+          item.expanded && detail
+            ? h(
+                "div",
+                {
+                  class:
+                    "mt-2.5 max-h-40 overflow-y-auto rounded-md bg-white/70 px-2 py-1.5 font-mono text-[11px] leading-snug text-slate-600",
+                  role: "log",
+                  "aria-label": "工具输出详情",
+                  "aria-live": "polite",
+                },
+                detail,
+              )
+            : null,
+        ],
+      ),
+    ],
+  );
+}
+
 export const ChatTranscriptPane = defineComponent({
   name: "ChatTranscriptPane",
   props: {
@@ -964,7 +1046,9 @@ export const ChatTranscriptPane = defineComponent({
                 (payload) => emit("copyCode", payload),
                 (payload) => emit("toggleSystem", payload),
               )
-            : renderToolArticle(item, (id) => emit("toggleTool", id)),
+            : item.status === "running"
+              ? renderPendingToolArticle(item, (id) => emit("toggleTool", id))
+              : renderToolArticle(item, (id) => emit("toggleTool", id)),
         ),
       );
     };

@@ -15,6 +15,7 @@ export type SidepanelIconName =
   | "chevron-down"
   | "chevron-up"
   | "globe"
+  | "loader-2"
   | "message-square"
   | "more-vertical"
   | "pencil"
@@ -96,6 +97,7 @@ const iconPaths: Record<SidepanelIconName, IconPathFactory> = {
       d: "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
     }),
   ],
+  "loader-2": () => [h("path", { d: "M21 12a9 9 0 1 1-6.219-8.56" })],
   "message-square": () => [
     h("path", {
       d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
