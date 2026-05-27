@@ -127,6 +127,13 @@ function findAll(node: MemoryNode, predicate: (node: MemoryNode) => boolean): Me
   return matches;
 }
 
+function textContent(node: MemoryNode | null): string {
+  if (!node) {
+    return "";
+  }
+  return `${node.text}${node.children.map((child) => textContent(child)).join("")}`;
+}
+
 describe("sidepanel chat transcript component", () => {
   it("renders assistant markdown and keeps plain fallback in transcript html", async () => {
     const items: ChatItem[] = [
@@ -186,6 +193,126 @@ describe("sidepanel chat transcript component", () => {
     (button?.props.onClick as () => void)();
 
     expect(emitted).toEqual(["tool-1"]);
+  });
+
+  it("inherits old-product streaming draft status instead of debug loading copy", () => {
+    const waitingTree = mountInMemory({
+      loading: false,
+      items: [
+        {
+          id: "assistant-waiting",
+          kind: "message",
+          role: "assistant",
+          text: "",
+          state: "streaming",
+        },
+      ],
+    });
+
+    const waitingArticle = findFirst(
+      waitingTree,
+      (node) => node.props["data-testid"] === "assistant-streaming-message",
+    );
+    expect(waitingArticle?.props["aria-label"]).toBe("助手正在生成回复");
+
+    const waitingStatus = findFirst(waitingTree, (node) => node.props.role === "status");
+    expect(waitingStatus?.props["data-testid"]).toBe("assistant-streaming-spinner");
+    expect(textContent(waitingStatus)).toContain("等待模型响应");
+
+    const streamingTree = mountInMemory({
+      loading: false,
+      items: [
+        {
+          id: "assistant-streaming",
+          kind: "message",
+          role: "assistant",
+          text: "正在整理页面内容",
+          state: "streaming",
+        },
+      ],
+    });
+    const ellipsis = findFirst(streamingTree, (node) =>
+      String(node.props.class ?? "").includes("streaming-ellipsis"),
+    );
+    expect(ellipsis?.props["aria-label"]).toBe("正在生成");
+    expect(
+      isCopyableAssistantMessage(
+        [
+          {
+            id: "assistant-streaming",
+            kind: "message",
+            role: "assistant",
+            text: "正在整理页面内容",
+            state: "streaming",
+          },
+        ],
+        "assistant-streaming",
+      ),
+    ).toBe(false);
+    expect(findAll(streamingTree, (node) => node.props.role === "toolbar")).toHaveLength(0);
+  });
+
+  it("inherits old-product tool result card chrome and expandable runtime details", () => {
+    const emitted: string[] = [];
+    const tree = mountInMemory({
+      loading: false,
+      items: [
+        {
+          id: "tool-1",
+          kind: "tool",
+          toolName: "page.query",
+          summary: "Collected DOM snapshot",
+          detail: '{"status":"ok","durationMs":12,"output":{"count":2}}',
+          expanded: false,
+        },
+      ],
+      onToggleTool: (id: string) => emitted.push(id),
+    });
+
+    const toolArticle = findFirst(tree, (node) => node.props["data-testid"] === "tool-message");
+    expect(toolArticle?.props["aria-label"]).toBe("工具执行结果");
+    expect(String(toolArticle?.props.class ?? "")).toContain("group/tool");
+
+    const shell = toolArticle?.children[0];
+    expect(String(shell?.props.class ?? "")).toContain("rounded-xl");
+    expect(String(shell?.props.class ?? "")).not.toContain("amber");
+
+    const toggle = findFirst(
+      tree,
+      (node) => node.type === "button" && node.props["aria-label"] === "展开运行详情",
+    );
+    expect(toggle?.props["aria-expanded"]).toBe(false);
+    expect(toggle?.props.onClick).toBeTypeOf("function");
+
+    (toggle?.props.onClick as () => void)();
+    expect(emitted).toEqual(["tool-1"]);
+
+    const expandedTree = mountInMemory({
+      loading: false,
+      items: [
+        {
+          id: "tool-1",
+          kind: "tool",
+          toolName: "page.query",
+          summary: "Collected DOM snapshot",
+          detail: '{"status":"ok","durationMs":12,"output":{"count":2}}',
+          expanded: true,
+        },
+      ],
+    });
+    const expandedToggle = findFirst(
+      expandedTree,
+      (node) => node.type === "button" && node.props["aria-label"] === "收起运行详情",
+    );
+    expect(expandedToggle?.props["aria-expanded"]).toBe(true);
+    expect(
+      findFirst(expandedTree, (node) =>
+        String(node.props.class ?? "").includes("sidepanel-tool-trace"),
+      ),
+    ).not.toBeNull();
+    expect(
+      findFirst(expandedTree, (node) => node.props["data-structured"] === "true"),
+    ).not.toBeNull();
   });
 
   it("inherits old-product message layout and copies assistant turn tails only", () => {

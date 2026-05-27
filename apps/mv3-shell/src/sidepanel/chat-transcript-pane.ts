@@ -71,6 +71,9 @@ export function isCopyableAssistantMessage(items: ChatItem[], id: string): boole
     if (candidate?.kind !== "message" || candidate.role !== "assistant") {
       continue;
     }
+    if (candidate.state === "streaming") {
+      continue;
+    }
     if (!candidate.text.trim()) {
       continue;
     }
@@ -136,6 +139,7 @@ function renderMessageArticle(
     {
       class: "group flex flex-col gap-2 py-2 pr-2 text-slate-950",
       "aria-label": item.state === "streaming" ? "助手正在生成回复" : "助手回复的内容",
+      "data-testid": item.state === "streaming" ? "assistant-streaming-message" : undefined,
     },
     [
       h(
@@ -150,10 +154,14 @@ function renderMessageArticle(
         ? h(
             "span",
             {
-              class: "inline-flex w-fit items-center text-[12px] font-mono text-slate-400",
+              class: "inline-flex w-fit items-center text-[12px] font-mono text-slate-500",
               role: "status",
+              "aria-live": "polite",
+              "data-testid": "assistant-streaming-spinner",
             },
-            item.text.trim() ? "..." : "等待模型响应",
+            item.text.trim()
+              ? h("span", { class: "streaming-ellipsis", "aria-label": "正在生成" }, "...")
+              : h("span", { "aria-label": "等待模型响应" }, "等待模型响应"),
           )
         : null,
       options.copyable
@@ -208,53 +216,84 @@ function renderRenderedMessageArticle(
 }
 
 function renderToolArticle(item: RenderedToolItem, onToggle: (id: string) => void) {
-  return h("article", { class: "overflow-hidden rounded-md border border-amber-200 bg-amber-50" }, [
-    h(
-      "button",
-      {
-        class: "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left",
-        onClick: () => onToggle(item.id),
-      },
-      [
-        h("div", { class: "min-w-0 flex-1" }, [
-          h("div", { class: "flex flex-wrap items-center gap-2" }, [
-            h("p", { class: "text-[11px] font-semibold text-amber-800" }, item.toolName),
-            ...item.rendered.preview.map((preview) =>
-              h(
-                "span",
-                {
-                  class:
-                    "rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200",
-                },
-                preview,
-              ),
+  const previewLine = item.rendered.preview.filter(Boolean).join(" · ");
+
+  return h(
+    "article",
+    {
+      class: "flex flex-col py-1 pr-2 transition-all duration-300 group/tool",
+      role: "group",
+      "aria-label": "工具执行结果",
+      "data-testid": "tool-message",
+    },
+    [
+      h(
+        "div",
+        {
+          class:
+            "overflow-hidden rounded-xl border border-slate-200/70 bg-white/80 shadow-sm transition-all duration-300",
+        },
+        [
+          h("div", { class: "flex items-center gap-2 px-2.5 py-2" }, [
+            h(
+              "div",
+              {
+                class:
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-500 shadow-inner",
+                "aria-hidden": "true",
+              },
+              item.rendered.structured ? "{}" : ">",
             ),
+            h("div", { class: "min-w-0 flex-1" }, [
+              h("div", { class: "flex items-center justify-between gap-2" }, [
+                h(
+                  "span",
+                  { class: "truncate text-[11px] font-bold text-slate-700" },
+                  item.summary || item.toolName || "工具调用",
+                ),
+                h(
+                  "button",
+                  {
+                    type: "button",
+                    class:
+                      "shrink-0 rounded-md px-1.5 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                    "aria-label": item.expanded ? "收起运行详情" : "展开运行详情",
+                    title: item.expanded ? "收起运行详情" : "展开运行详情",
+                    "aria-expanded": item.expanded,
+                    onClick: () => onToggle(item.id),
+                  },
+                  item.expanded ? "收起" : "展开",
+                ),
+              ]),
+              previewLine
+                ? h(
+                    "p",
+                    { class: "mt-0.5 truncate text-[10px] leading-tight text-slate-500" },
+                    previewLine,
+                  )
+                : null,
+            ]),
           ]),
-          h("p", { class: "mt-1 text-[13px] text-amber-950" }, item.summary),
-        ]),
-        h(
-          "span",
-          { class: "text-[12px] font-medium text-amber-700" },
-          item.expanded ? "Hide" : "Show",
-        ),
-      ],
-    ),
-    item.expanded
-      ? h(
-          "div",
-          {
-            class: "border-t border-amber-200 px-3 py-3",
-            "data-structured": String(item.rendered.structured),
-          },
-          [
-            h("div", {
-              class: "sidepanel-tool-trace text-xs leading-5 text-amber-950",
-              innerHTML: item.rendered.html,
-            }),
-          ],
-        )
-      : null,
-  ]);
+          item.expanded
+            ? h(
+                "div",
+                {
+                  class: "animate-in border-t border-slate-200/70 bg-slate-50/70 p-2",
+                  "data-structured": String(item.rendered.structured),
+                },
+                [
+                  h("div", {
+                    class:
+                      "sidepanel-tool-trace max-h-[320px] overflow-auto rounded-lg border border-slate-200/70 bg-white/70 p-2.5 font-mono text-[10px] leading-snug text-slate-700",
+                    innerHTML: item.rendered.html,
+                  }),
+                ],
+              )
+            : null,
+        ],
+      ),
+    ],
+  );
 }
 
 export const ChatTranscriptPane = defineComponent({

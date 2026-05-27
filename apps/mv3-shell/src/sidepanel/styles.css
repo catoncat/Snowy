@@ -235,7 +235,7 @@ body {
 
 .sidepanel-tool-trace section {
   border-radius: 0.375rem;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(248, 250, 252, 0.82);
   padding: 0.75rem;
 }
 
@@ -245,7 +245,51 @@ body {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #92400e;
+  color: #475569;
+}
+
+.streaming-ellipsis {
+  display: inline-block;
+  width: 3ch;
+  overflow: hidden;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  animation: sidepanel-streaming-ellipsis 1s steps(4, end) infinite;
+}
+
+@keyframes sidepanel-streaming-ellipsis {
+  0% {
+    width: 0;
+    opacity: 0.35;
+  }
+
+  35% {
+    width: 1ch;
+    opacity: 0.62;
+  }
+
+  65% {
+    width: 2ch;
+    opacity: 0.82;
+  }
+
+  85% {
+    width: 3ch;
+    opacity: 1;
+  }
+
+  100% {
+    width: 3ch;
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-ellipsis {
+    animation: none;
+    width: 3ch;
+    opacity: 0.8;
+  }
 }
 
 .sidepanel-scrollbar {
