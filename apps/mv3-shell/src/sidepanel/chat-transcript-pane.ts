@@ -23,6 +23,12 @@ export interface ChatMessageCopyPayload {
   role: ChatMessageItem["role"];
 }
 
+export interface ChatCodeCopyPayload {
+  code: string;
+  language: string;
+  messageId: string;
+}
+
 function findMessageIndex(items: ChatItem[], id: string): number {
   return items.findIndex((item) => item.kind === "message" && item.id === id);
 }
@@ -96,11 +102,37 @@ export function collectAssistantTurnText(items: ChatItem[], id: string): string 
     .join("\n\n");
 }
 
-function renderMessageContent(item: RenderedMessageItem) {
+function renderMessageContent(
+  item: RenderedMessageItem,
+  options?: {
+    onCopyCode?: (payload: ChatCodeCopyPayload) => void;
+  },
+) {
   if (item.role === "assistant" && item.rendered.mode === "rich") {
     return h("div", {
       class: "sidepanel-rich-text text-[14px] leading-6",
       innerHTML: item.rendered.html,
+      onClick: (event: { target: unknown; preventDefault?: () => void }) => {
+        const target = event.target as {
+          closest?: (selector: string) => { getAttribute?: (name: string) => string | null } | null;
+        };
+        const button = target.closest?.("button[data-code-copy]");
+        const indexValue = button?.getAttribute?.("data-code-copy");
+        if (!indexValue) {
+          return;
+        }
+        const index = Number.parseInt(indexValue, 10);
+        const codeBlock = item.rendered.codeBlocks[index];
+        if (!codeBlock) {
+          return;
+        }
+        event.preventDefault?.();
+        options?.onCopyCode?.({
+          code: codeBlock.code,
+          language: codeBlock.language,
+          messageId: item.id,
+        });
+      },
     });
   }
   return h("p", { class: "whitespace-pre-wrap text-[14px] leading-6" }, item.text);
@@ -112,6 +144,7 @@ function renderMessageArticle(
     copyable: boolean;
     copied: boolean;
     onCopy: (payload: ChatMessageCopyPayload) => void;
+    onCopyCode: (payload: ChatCodeCopyPayload) => void;
   },
 ) {
   if (item.role === "user") {
@@ -148,7 +181,11 @@ function renderMessageArticle(
           class:
             item.state === "streaming" ? "max-w-none text-slate-950" : "max-w-none text-slate-950",
         },
-        [renderMessageContent(item)],
+        [
+          renderMessageContent(item, {
+            onCopyCode: options.onCopyCode,
+          }),
+        ],
       ),
       item.state === "streaming"
         ? h(
@@ -203,6 +240,7 @@ function renderRenderedMessageArticle(
   items: ChatItem[],
   copiedMessageId: string,
   onCopy: (payload: ChatMessageCopyPayload) => void,
+  onCopyCode: (payload: ChatCodeCopyPayload) => void,
 ) {
   return renderMessageArticle(item, {
     copyable: item.role === "assistant" && isCopyableAssistantMessage(items, item.id),
@@ -212,6 +250,7 @@ function renderRenderedMessageArticle(
         ...payload,
         text: collectAssistantTurnText(items, item.id) || payload.text,
       }),
+    onCopyCode,
   });
 }
 
@@ -316,6 +355,8 @@ export const ChatTranscriptPane = defineComponent({
     toggleTool: (id: string) => typeof id === "string" && id.length > 0,
     copyMessage: (payload: ChatMessageCopyPayload) =>
       Boolean(payload?.id) && payload.role === "assistant" && payload.text.trim().length > 0,
+    copyCode: (payload: ChatCodeCopyPayload) =>
+      Boolean(payload?.messageId) && payload.code.length > 0,
   },
   setup(props, { emit }) {
     const renderedItems = computed<RenderedChatItem[]>(() =>
@@ -326,7 +367,7 @@ export const ChatTranscriptPane = defineComponent({
               rendered:
                 item.role === "assistant"
                   ? renderMessageRichText(item.text)
-                  : { mode: "plain", html: "" },
+                  : { codeBlocks: [], mode: "plain", html: "" },
             }
           : {
               ...item,
@@ -363,8 +404,12 @@ export const ChatTranscriptPane = defineComponent({
         { class: "space-y-3" },
         renderedItems.value.map((item) =>
           item.kind === "message"
-            ? renderRenderedMessageArticle(item, props.items, props.copiedMessageId, (payload) =>
-                emit("copyMessage", payload),
+            ? renderRenderedMessageArticle(
+                item,
+                props.items,
+                props.copiedMessageId,
+                (payload) => emit("copyMessage", payload),
+                (payload) => emit("copyCode", payload),
               )
             : renderToolArticle(item, (id) => emit("toggleTool", id)),
         ),

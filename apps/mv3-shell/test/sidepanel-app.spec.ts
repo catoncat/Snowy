@@ -3,6 +3,7 @@ import { renderToString } from "@vue/server-renderer";
 import { describe, expect, it } from "vitest";
 import { type Component, createRenderer, createSSRApp } from "vue";
 import {
+  type ChatCodeCopyPayload,
   type ChatMessageCopyPayload,
   ChatTranscriptPane,
   collectAssistantTurnText,
@@ -13,6 +14,7 @@ import {
   generateConversationMarkdown,
   hasConversationExportContent,
 } from "../src/sidepanel/conversation-export";
+import { renderMessageRichText } from "../src/sidepanel/renderers";
 import {
   type ChatSessionSummary,
   SessionHistoryPane,
@@ -177,6 +179,78 @@ describe("sidepanel chat transcript component", () => {
     expect(html).toContain('href="https://example.com/docs"');
     expect(html).toContain("Just a plain runtime update.");
     expect((html.match(/sidepanel-rich-text/g) ?? []).length).toBe(1);
+  });
+
+  it("inherits old-product code block shell and copies fenced code", () => {
+    const rendered = renderMessageRichText(
+      ["Use this snippet:", "", "```ts", "const answer = 42;", "```"].join("\n"),
+    );
+
+    expect(rendered.codeBlocks).toEqual([
+      {
+        code: "const answer = 42;",
+        language: "typescript",
+      },
+    ]);
+    expect(rendered.html).toContain("incremark-code");
+    expect(rendered.html).toContain('data-code-copy="0"');
+    expect(rendered.html).toContain("复制代码");
+    expect(rendered.html).toContain("typescript");
+
+    const items: ChatItem[] = [
+      {
+        id: "assistant-code",
+        kind: "message",
+        role: "assistant",
+        text: ["Here:", "", "```ts", "const answer = 42;", "```"].join("\n"),
+        state: "complete",
+      },
+    ];
+    const copied: ChatCodeCopyPayload[] = [];
+    const tree = mountInMemory({
+      items,
+      loading: false,
+      onCopyCode: (payload: ChatCodeCopyPayload) => copied.push(payload),
+    });
+
+    const richText = findFirst(tree, (node) =>
+      String(node.props.class ?? "").includes("sidepanel-rich-text"),
+    );
+    expect(String(richText?.props.innerHTML ?? "")).toContain('data-code-copy="0"');
+
+    let defaultPrevented = false;
+    const buttonTarget = {
+      closest(selector: string) {
+        if (selector !== "button[data-code-copy]") {
+          return null;
+        }
+        return {
+          getAttribute(name: string) {
+            return name === "data-code-copy" ? "0" : null;
+          },
+        };
+      },
+    };
+    const onClick = richText?.props.onClick as
+      | ((event: { target: unknown; preventDefault: () => void }) => void)
+      | undefined;
+    expect(onClick).toBeTypeOf("function");
+
+    onClick?.({
+      target: buttonTarget,
+      preventDefault() {
+        defaultPrevented = true;
+      },
+    });
+
+    expect(defaultPrevented).toBe(true);
+    expect(copied).toEqual([
+      {
+        code: "const answer = 42;",
+        language: "typescript",
+        messageId: "assistant-code",
+      },
+    ]);
   });
 
   it("inherits old-product session history shell and list row chrome", () => {

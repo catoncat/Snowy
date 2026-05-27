@@ -1,6 +1,12 @@
 export type RichTextMode = "plain" | "rich";
 
+export interface CodeBlockRenderResult {
+  code: string;
+  language: string;
+}
+
 export interface RichTextRenderResult {
+  codeBlocks: CodeBlockRenderResult[];
   mode: RichTextMode;
   html: string;
 }
@@ -19,6 +25,14 @@ const TRACE_SECTION_KEYS = [
   ["Output", ["output", "result", "response", "data"]],
   ["Error", ["error"]],
 ] as const;
+const LANGUAGE_ALIASES: Record<string, string> = {
+  bash: "shell",
+  js: "javascript",
+  py: "python",
+  rb: "ruby",
+  sh: "shell",
+  ts: "typescript",
+};
 
 function escapeHtml(value: string): string {
   return value
@@ -26,6 +40,34 @@ function escapeHtml(value: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function normalizeCodeLanguage(value: string | undefined): string {
+  const language = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (!language) {
+    return "text";
+  }
+  return LANGUAGE_ALIASES[language] ?? language;
+}
+
+function normalizeCodeBlockContent(value: string): string {
+  return value.replace(/\n$/u, "");
+}
+
+function renderCodeBlockHtml(block: CodeBlockRenderResult, index: number): string {
+  return [
+    `<div class="incremark-code" data-code-block="${index}">`,
+    '<div class="code-header">',
+    `<span class="language">${escapeHtml(block.language)}</span>`,
+    `<button type="button" class="code-btn" data-code-copy="${index}" aria-label="复制代码" title="复制代码">复制代码</button>`,
+    "</div>",
+    '<div class="code-content">',
+    `<pre class="code-fallback"><code data-language="${escapeHtml(block.language)}">${escapeHtml(block.code)}</code></pre>`,
+    "</div>",
+    "</div>",
+  ].join("");
 }
 
 function renderInlineMarkdown(text: string): RichTextRenderResult {
@@ -49,7 +91,7 @@ function renderInlineMarkdown(text: string): RichTextRenderResult {
   }
 
   html += escapeHtml(text.slice(cursor));
-  return { mode: rich ? "rich" : "plain", html };
+  return { codeBlocks: [], mode: rich ? "rich" : "plain", html };
 }
 
 function renderTextBlocks(text: string): RichTextRenderResult {
@@ -79,7 +121,7 @@ function renderTextBlocks(text: string): RichTextRenderResult {
     })
     .join("");
 
-  return { mode: rich ? "rich" : "plain", html };
+  return { codeBlocks: [], mode: rich ? "rich" : "plain", html };
 }
 
 function toJsonBlock(label: string, value: unknown): string {
@@ -142,12 +184,13 @@ function parseStructuredTrace(detail: string): ToolTraceRenderResult | null {
 export function renderMessageRichText(text: string): RichTextRenderResult {
   const normalized = text.replace(/\r\n?/g, "\n").trim();
   if (!normalized) {
-    return { mode: "plain", html: "<p></p>" };
+    return { codeBlocks: [], mode: "plain", html: "<p></p>" };
   }
 
   let cursor = 0;
   let rich = false;
   const blocks: string[] = [];
+  const codeBlocks: CodeBlockRenderResult[] = [];
 
   for (const match of normalized.matchAll(CODE_FENCE_PATTERN)) {
     const index = match.index ?? 0;
@@ -157,11 +200,10 @@ export function renderMessageRichText(text: string): RichTextRenderResult {
       rich ||= rendered.mode === "rich";
       blocks.push(rendered.html);
     }
-    const language = match[1]?.trim();
-    const code = match[2] ?? "";
-    blocks.push(
-      `<pre><code${language ? ` data-language="${escapeHtml(language)}"` : ""}>${escapeHtml(code)}</code></pre>`,
-    );
+    const language = normalizeCodeLanguage(match[1]);
+    const code = normalizeCodeBlockContent(match[2] ?? "");
+    const codeIndex = codeBlocks.push({ code, language }) - 1;
+    blocks.push(renderCodeBlockHtml({ code, language }, codeIndex));
     rich = true;
     cursor = index + match[0].length;
   }
@@ -175,12 +217,13 @@ export function renderMessageRichText(text: string): RichTextRenderResult {
 
   if (!rich) {
     return {
+      codeBlocks: [],
       mode: "plain",
       html: `<p>${escapeHtml(normalized).replaceAll("\n", "<br />")}</p>`,
     };
   }
 
-  return { mode: "rich", html: blocks.join("") };
+  return { codeBlocks, mode: "rich", html: blocks.join("") };
 }
 
 export function renderToolTrace(summary: string, detail: string): ToolTraceRenderResult {

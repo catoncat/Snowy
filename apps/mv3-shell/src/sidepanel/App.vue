@@ -9,7 +9,11 @@ import {
   type ChatItem,
   type ChatState,
 } from "./state";
-import { ChatTranscriptPane, type ChatMessageCopyPayload } from "./chat-transcript-pane";
+import {
+  type ChatCodeCopyPayload,
+  type ChatMessageCopyPayload,
+  ChatTranscriptPane,
+} from "./chat-transcript-pane";
 import { SessionHistoryPane, type ChatSessionSummary } from "./session-history-pane";
 import {
   conversationMarkdownFileName,
@@ -462,6 +466,15 @@ async function handleCopyMessage(payload: ChatMessageCopyPayload) {
       copiedMessageTimer = null;
     }, 1800);
     showConversationNotice("success", "已复制");
+  } catch {
+    showConversationNotice("error", "复制失败，请检查剪贴板权限");
+  }
+}
+
+async function handleCopyCode(payload: ChatCodeCopyPayload) {
+  try {
+    await writeClipboardText(payload.code);
+    showConversationNotice("success", "已复制代码");
   } catch {
     showConversationNotice("error", "复制失败，请检查剪贴板权限");
   }
@@ -1813,6 +1826,7 @@ onUnmounted(() => {
             :copied-message-id="copiedMessageId"
             @toggle-tool="toggleTool"
             @copy-message="handleCopyMessage"
+            @copy-code="handleCopyCode"
           />
 
           <section v-else class="flex w-full flex-col items-start py-6">
