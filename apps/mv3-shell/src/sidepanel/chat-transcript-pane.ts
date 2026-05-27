@@ -42,6 +42,10 @@ export interface ChatMessageCopyPayload {
   role: ChatMessageItem["role"];
 }
 
+export interface ChatMessageForkPayload {
+  id: string;
+}
+
 export interface ChatCodeCopyPayload {
   code: string;
   language: string;
@@ -103,6 +107,20 @@ export function isCopyableAssistantMessage(items: ChatItem[], id: string): boole
       continue;
     }
     return candidate.id === id;
+  }
+  return false;
+}
+
+export function isForkableAssistantMessage(items: ChatItem[], id: string): boolean {
+  const index = findMessageIndex(items, id);
+  if (!isCopyableAssistantMessage(items, id)) {
+    return false;
+  }
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const candidate = items[cursor];
+    if (candidate?.kind === "message" && candidate.role === "user" && candidate.text.trim()) {
+      return true;
+    }
   }
   return false;
 }
@@ -302,8 +320,10 @@ function renderMessageArticle(
   item: RenderedMessageItem,
   options: {
     copyable: boolean;
+    forkable: boolean;
     copied: boolean;
     onCopy: (payload: ChatMessageCopyPayload) => void;
+    onFork: (payload: ChatMessageForkPayload) => void;
     onCopyCode: (payload: ChatCodeCopyPayload) => void;
   },
 ) {
@@ -361,7 +381,7 @@ function renderMessageArticle(
               : h("span", { "aria-label": "等待模型响应" }, "等待模型响应"),
           )
         : null,
-      options.copyable
+      options.copyable || options.forkable
         ? h(
             "div",
             {
@@ -388,6 +408,23 @@ function renderMessageArticle(
                 },
                 options.copied ? "已复制" : "复制",
               ),
+              options.forkable
+                ? h(
+                    "button",
+                    {
+                      type: "button",
+                      class:
+                        "rounded-md px-2 py-1 text-[12px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      "aria-label": "在新对话中分叉",
+                      title: "在新对话中分叉",
+                      onClick: () =>
+                        options.onFork({
+                          id: item.id,
+                        }),
+                    },
+                    "分叉",
+                  )
+                : null,
             ],
           )
         : null,
@@ -400,16 +437,19 @@ function renderRenderedMessageArticle(
   items: ChatItem[],
   copiedMessageId: string,
   onCopy: (payload: ChatMessageCopyPayload) => void,
+  onFork: (payload: ChatMessageForkPayload) => void,
   onCopyCode: (payload: ChatCodeCopyPayload) => void,
 ) {
   return renderMessageArticle(item, {
     copyable: item.role === "assistant" && isCopyableAssistantMessage(items, item.id),
+    forkable: item.role === "assistant" && isForkableAssistantMessage(items, item.id),
     copied: copiedMessageId === item.id,
     onCopy: (payload) =>
       onCopy({
         ...payload,
         text: collectAssistantTurnText(items, item.id) || payload.text,
       }),
+    onFork,
     onCopyCode,
   });
 }
@@ -515,6 +555,7 @@ export const ChatTranscriptPane = defineComponent({
     toggleTool: (id: string) => typeof id === "string" && id.length > 0,
     copyMessage: (payload: ChatMessageCopyPayload) =>
       Boolean(payload?.id) && payload.role === "assistant" && payload.text.trim().length > 0,
+    forkMessage: (payload: ChatMessageForkPayload) => Boolean(payload?.id),
     copyCode: (payload: ChatCodeCopyPayload) =>
       Boolean(payload?.messageId) && payload.code.length > 0,
   },
@@ -569,6 +610,7 @@ export const ChatTranscriptPane = defineComponent({
                 props.items,
                 props.copiedMessageId,
                 (payload) => emit("copyMessage", payload),
+                (payload) => emit("forkMessage", payload),
                 (payload) => emit("copyCode", payload),
               )
             : renderToolArticle(item, (id) => emit("toggleTool", id)),

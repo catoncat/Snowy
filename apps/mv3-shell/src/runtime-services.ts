@@ -1398,6 +1398,13 @@ function normalizeSessionTitleInput(value) {
   return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
 }
 
+function cloneSessionPayload(value) {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
 function extractSessionInfoTitle(entries) {
   for (let index = entries.length - 1; index >= 0; index--) {
     const info = toSessionInfoEntry(entries[index]);
@@ -1410,6 +1417,39 @@ function extractSessionInfoTitle(entries) {
     }
   }
   return "";
+}
+
+function normalizeForkedFrom(value) {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  const sessionId = typeof value.sessionId === "string" ? value.sessionId.trim() : "";
+  const leafId = typeof value.leafId === "string" ? value.leafId.trim() : "";
+  const sourceEntryId = typeof value.sourceEntryId === "string" ? value.sourceEntryId.trim() : "";
+  const reason = typeof value.reason === "string" ? value.reason.trim() : "";
+  if (!sessionId && !leafId && !sourceEntryId && !reason) {
+    return null;
+  }
+  return {
+    sessionId,
+    leafId,
+    sourceEntryId,
+    reason,
+  };
+}
+
+function extractSessionInfoForkedFrom(entries) {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const info = toSessionInfoEntry(entries[index]);
+    if (info?.key !== "forkedFrom") {
+      continue;
+    }
+    const forkedFrom = normalizeForkedFrom(info.value);
+    if (forkedFrom) {
+      return forkedFrom;
+    }
+  }
+  return null;
 }
 
 function deriveSessionTitle(header, messages, sessionInfoTitle = "") {
@@ -1441,6 +1481,8 @@ function toChatSessionSummary(header, entries, activeSessionId) {
   return {
     id: header.id,
     title: deriveSessionTitle(header, messages, extractSessionInfoTitle(entries)),
+    parentSessionId: header.parentSessionId ?? "",
+    forkedFrom: extractSessionInfoForkedFrom(entries),
     createdAt: header.createdAt,
     updatedAt,
     messageCount: messages.length,
@@ -3390,6 +3432,111 @@ export function createBackgroundRuntimeServices({
     };
   }
 
+  function findAssistantForkContext(entries, messageId) {
+    const id = typeof messageId === "string" ? messageId.trim() : "";
+    if (!id) {
+      throw new CapabilityError("E_BAD_INPUT", "runtime.chat.message.fork requires messageId");
+    }
+    const assistantIndex = entries.findIndex((entry) => {
+      const message = toSessionMessageEntry(entry);
+      return message?.entryId === id && message.role === "assistant" && message.text.trim();
+    });
+    if (assistantIndex < 0) {
+      throw new CapabilityError("E_NOT_FOUND", `Assistant message not found: ${id}`);
+    }
+    for (let index = assistantIndex - 1; index >= 0; index--) {
+      const message = toSessionMessageEntry(entries[index]);
+      if (message?.role === "user" && message.text.trim()) {
+        return {
+          assistantEntry: entries[assistantIndex],
+          assistantIndex,
+          previousUserEntry: entries[index],
+          previousUserIndex: index,
+          previousUserMessage: message,
+        };
+      }
+    }
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "runtime.chat.message.fork requires a previous user message",
+    );
+  }
+
+  async function copyEntriesBeforeIndex(kernel, sourceSessionId, targetSessionId, stopIndex) {
+    const entries = await kernel.sessions.getEntries(sourceSessionId);
+    const oldToNewEntryId = new Map();
+    for (const entry of entries.slice(0, stopIndex)) {
+      if (!entry || typeof entry.type !== "string") {
+        continue;
+      }
+      const payload = cloneSessionPayload(entry.payload);
+      if (
+        entry.type === "compaction" &&
+        payload &&
+        typeof payload === "object" &&
+        typeof payload.firstKeptEntryId === "string"
+      ) {
+        payload.firstKeptEntryId =
+          oldToNewEntryId.get(payload.firstKeptEntryId) ?? payload.firstKeptEntryId;
+      }
+      const copied = await kernel.appendEntry(targetSessionId, entry.type, payload);
+      oldToNewEntryId.set(entry.entryId, copied.entryId);
+    }
+  }
+
+  async function forkAssistantMessage({ messageId } = {}) {
+    assertCanSwitchChatSession();
+    const [services, sourceSession] = await Promise.all([ensureServices(), ensureSession()]);
+    const { kernel } = services;
+    const sourceEntries = await kernel.sessions.getEntries(sourceSession.id);
+    const forkContext = findAssistantForkContext(sourceEntries, messageId);
+    const previousPrompt = forkContext.previousUserMessage.text.trim();
+    const forkedFrom = {
+      sessionId: sourceSession.id,
+      leafId: forkContext.assistantEntry.entryId,
+      sourceEntryId: forkContext.assistantEntry.entryId,
+      reason: "branch_from_assistant",
+    };
+    const forkTitle = normalizeSessionTitleInput(
+      `重答分支 · ${trimSessionPreview(previousPrompt)}`,
+    );
+    const forkSession = await kernel.createSession({
+      parentSessionId: sourceSession.id,
+      title: forkTitle || "重答分支",
+    });
+
+    await copyEntriesBeforeIndex(
+      kernel,
+      sourceSession.id,
+      forkSession.id,
+      forkContext.previousUserIndex,
+    );
+    await kernel.appendEntry(forkSession.id, "session_info", {
+      key: "forkedFrom",
+      value: forkedFrom,
+    });
+    await kernel.appendEntry(forkSession.id, "session_info", {
+      key: "title",
+      value: forkTitle || "重答分支",
+    });
+    await setActiveChatSession(forkSession);
+
+    const accepted = await sendChatPrompt({
+      text: previousPrompt,
+      mode: "normal",
+    });
+    return {
+      ...accepted,
+      mode: "fork",
+      sessionId: forkSession.id,
+      sourceSessionId: sourceSession.id,
+      sourceEntryId: forkContext.assistantEntry.entryId,
+      previousUserEntryId: forkContext.previousUserEntry.entryId,
+      promptText: previousPrompt,
+      messages: toChatTranscriptItems((await kernel.buildContext(forkSession.id)).messages),
+    };
+  }
+
   async function emitChatRunState(sessionId, status) {
     chatRunStatus = normalizeChatRunStatus(status);
     await emitRuntimeChatEvent(chromeApi, {
@@ -3850,6 +3997,7 @@ export function createBackgroundRuntimeServices({
     dispatchCapability,
     ensureServices,
     ensureSession,
+    forkAssistantMessage,
     getConfigBootstrapSummary,
     getInterventionState,
     getKernelRuntimeState,

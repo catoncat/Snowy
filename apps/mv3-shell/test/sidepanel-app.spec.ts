@@ -8,6 +8,7 @@ import {
   ChatTranscriptPane,
   collectAssistantTurnText,
   isCopyableAssistantMessage,
+  isForkableAssistantMessage,
 } from "../src/sidepanel/chat-transcript-pane";
 import {
   conversationMarkdownFileName,
@@ -290,6 +291,44 @@ describe("sidepanel chat transcript component", () => {
     expect(resultIndex).toBeGreaterThan(toolIndex);
     expect(finalTextIndex).toBeGreaterThan(resultIndex);
     expect(html).not.toContain("fallback text should not render");
+  });
+
+  it("exposes the old-product assistant fork action when backed by runtime route", () => {
+    const items: ChatItem[] = [
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "第一个问题",
+        state: "complete",
+      },
+      {
+        id: "assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "旧回答",
+        state: "complete",
+      },
+    ];
+    const forked: string[] = [];
+    const tree = mountInMemory({
+      items,
+      loading: false,
+      onForkMessage: (payload: { id: string }) => forked.push(payload.id),
+    });
+
+    expect(isForkableAssistantMessage(items, "assistant-1")).toBe(true);
+    const forkButton = findFirst(
+      tree,
+      (node) => node.type === "button" && node.props["aria-label"] === "在新对话中分叉",
+    );
+    expect(forkButton).toBeTruthy();
+    expect(String(forkButton?.props.title ?? "")).toBe("在新对话中分叉");
+
+    const onClick = forkButton?.props.onClick as (() => void) | undefined;
+    expect(onClick).toBeTypeOf("function");
+    onClick?.();
+    expect(forked).toEqual(["assistant-1"]);
   });
 
   it("absorbs matching tool result events into assistant content blocks", () => {
@@ -931,14 +970,18 @@ describe("sidepanel chat transcript component", () => {
     expect(source).not.toContain(':items="chatState.items"');
   });
 
-  it("does not expose unsupported message retry or fork actions until runtime routes exist", () => {
+  it("exposes only runtime-backed message fork action and keeps retry hidden", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/chat-transcript-pane.ts", "utf8");
+    const appSource = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
     expect(source).toContain("copyMessage");
+    expect(source).toContain("forkMessage");
+    expect(source).toContain("在新对话中分叉");
+    expect(appSource).toContain("handleForkMessage");
+    expect(appSource).toContain('"runtime.chat.message.fork"');
+    expect(appSource).toContain('@fork-message="handleForkMessage"');
     expect(source).not.toContain("retryMessage");
-    expect(source).not.toContain("forkMessage");
     expect(source).not.toContain("重新回答");
-    expect(source).not.toContain("在新对话中分叉");
   });
 
   it("exports conversation markdown like the old product without tool traces", () => {

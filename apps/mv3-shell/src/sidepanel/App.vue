@@ -13,6 +13,7 @@ import {
 import {
   type ChatCodeCopyPayload,
   type ChatMessageCopyPayload,
+  type ChatMessageForkPayload,
   ChatTranscriptPane,
 } from "./chat-transcript-pane";
 import { SessionHistoryPane, type ChatSessionSummary } from "./session-history-pane";
@@ -144,6 +145,7 @@ const moreMenuOpen = ref(false);
 const showToolHistory = ref(true);
 const conversationNotice = ref<{ type: "success" | "error"; message: string } | null>(null);
 const copiedMessageId = ref("");
+const forkingMessageId = ref("");
 const composerContextExpanded = ref(false);
 const composerHintDismissed = ref(false);
 const selectedTabs = ref<BrowserTabSummary[]>([]);
@@ -488,6 +490,38 @@ async function handleCopyCode(payload: ChatCodeCopyPayload) {
     showConversationNotice("success", "已复制代码");
   } catch {
     showConversationNotice("error", "复制失败，请检查剪贴板权限");
+  }
+}
+
+async function handleForkMessage(payload: ChatMessageForkPayload) {
+  if (!payload.id || forkingMessageId.value) {
+    return;
+  }
+  forkingMessageId.value = payload.id;
+  try {
+    const forked = await callRuntime<{
+      sessionId: string | null;
+      runState?: { status?: string };
+      messages?: ChatItem[];
+    }>("runtime.chat.message.fork", {
+      messageId: payload.id,
+    });
+    applyChatBootstrap({
+      sessionId: forked.sessionId,
+      runState: forked.runState ?? { status: "running" },
+      messages: Array.isArray(forked.messages) ? forked.messages : [],
+    });
+    activePane.value = "chat";
+    showConversationNotice("success", "已创建分叉对话");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    chatState.value = {
+      ...chatState.value,
+      error: message,
+    };
+    showConversationNotice("error", message);
+  } finally {
+    forkingMessageId.value = "";
   }
 }
 
@@ -1849,6 +1883,7 @@ onUnmounted(() => {
             :copied-message-id="copiedMessageId"
             @toggle-tool="toggleTool"
             @copy-message="handleCopyMessage"
+            @fork-message="handleForkMessage"
             @copy-code="handleCopyCode"
           />
 

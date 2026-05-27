@@ -391,6 +391,12 @@ describe("mv3-shell runtime chat bridge", () => {
       updateChatSessionTitle: vi.fn(async ({ sessionId, title }) => ({
         item: { id: sessionId, title },
       })),
+      forkAssistantMessage: vi.fn(async ({ messageId }) => ({
+        sessionId: "s-fork",
+        accepted: true,
+        mode: "fork",
+        sourceEntryId: messageId,
+      })),
       deleteChatSession: vi.fn(async ({ sessionId }) => ({
         deletedSessionId: sessionId,
         sessionId: "s-1",
@@ -462,6 +468,25 @@ describe("mv3-shell runtime chat bridge", () => {
     expect(runtimeServices.updateChatSessionTitle).toHaveBeenCalledWith({
       sessionId: "s-1",
       title: "重命名后的会话",
+    });
+
+    await expect(
+      bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.chat.message.fork",
+        messageId: "assistant-1",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        sessionId: "s-fork",
+        accepted: true,
+        mode: "fork",
+        sourceEntryId: "assistant-1",
+      },
+    });
+    expect(runtimeServices.forkAssistantMessage).toHaveBeenCalledWith({
+      messageId: "assistant-1",
     });
 
     await expect(
@@ -914,6 +939,95 @@ describe("mv3-shell end-to-end loop integration", () => {
       },
     ]);
     expect(bootstrap.messages.some((item: { kind?: string }) => item.kind === "tool")).toBe(false);
+  });
+
+  it("forks an assistant message into a new active session and reruns the previous user prompt", async () => {
+    const sentMessages: unknown[] = [];
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        runtime: {
+          sendMessage: vi.fn(async (message) => {
+            sentMessages.push(message);
+            return undefined;
+          }),
+        },
+      },
+    });
+
+    const initial = await services.bootstrapChat();
+    const sourceSessionId = initial.sessionId as string;
+    const { kernel } = await services.ensureServices();
+
+    const firstUser = await kernel.appendMessage(sourceSessionId, {
+      role: "user",
+      text: "第一个问题",
+    });
+    const assistant = await kernel.appendMessage(sourceSessionId, {
+      role: "assistant",
+      text: "旧回答",
+    });
+    await kernel.appendMessage(sourceSessionId, {
+      role: "user",
+      text: "后续问题",
+    });
+    await kernel.appendMessage(sourceSessionId, {
+      role: "assistant",
+      text: "后续回答",
+    });
+
+    const forked = await services.forkAssistantMessage({ messageId: assistant.entryId });
+
+    expect(forked).toMatchObject({
+      accepted: true,
+      mode: "fork",
+      sourceSessionId,
+      sourceEntryId: assistant.entryId,
+      previousUserEntryId: firstUser.entryId,
+    });
+    expect(forked.sessionId).not.toBe(sourceSessionId);
+
+    await waitFor(() =>
+      sentMessages.some(
+        (message) =>
+          (message as { type?: string; event?: { type?: string; sessionId?: string } }).type ===
+            "bbl-next.runtime.chat.event" &&
+          (message as { event?: { type?: string; sessionId?: string } }).event?.type ===
+            "assistant.done" &&
+          (message as { event?: { sessionId?: string } }).event?.sessionId === forked.sessionId,
+      ),
+    );
+
+    const bootstrap = await services.bootstrapChat();
+    expect(bootstrap.sessionId).toBe(forked.sessionId);
+    expect(
+      bootstrap.messages.map((item: { kind?: string; role?: string; text?: string }) =>
+        item.kind === "message" ? `${item.role}:${item.text}` : `${item.kind}:${item.text}`,
+      ),
+    ).toEqual([
+      "user:第一个问题",
+      "assistant:No LLM provider is configured. Please set an API key via config.update to enable the agent loop.",
+    ]);
+    expect(
+      bootstrap.messages.some(
+        (item: { text?: string }) => item.text === "旧回答" || item.text === "后续问题",
+      ),
+    ).toBe(false);
+
+    const sessions = await services.listChatSessions();
+    const forkSummary = sessions.items.find(
+      (item: { id?: string }) => item.id === forked.sessionId,
+    );
+    expect(forkSummary).toMatchObject({
+      id: forked.sessionId,
+      parentSessionId: sourceSessionId,
+      forkedFrom: {
+        sessionId: sourceSessionId,
+        leafId: assistant.entryId,
+        sourceEntryId: assistant.entryId,
+        reason: "branch_from_assistant",
+      },
+    });
   });
 
   it("uses kernel-managed provider/profile state on the runtime chat path", async () => {

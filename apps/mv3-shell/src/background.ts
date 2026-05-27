@@ -2995,6 +2995,12 @@ export function createBackgroundRunnerBridge({
             title: message.title,
           }),
         );
+      case "runtime.chat.message.fork":
+        return routeRuntimeService(() =>
+          getRuntimeServices().forkAssistantMessage({
+            messageId: message.messageId,
+          }),
+        );
       case "runtime.chat.send":
         return routeRuntimeService(() =>
           getRuntimeServices().sendChatPrompt({
