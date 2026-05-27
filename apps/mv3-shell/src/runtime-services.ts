@@ -1192,13 +1192,24 @@ function normalizeChatRunStatus(status) {
   return status === "running" || status === "stopped" ? status : "idle";
 }
 
-function createChatMessageItem({ id, role, text, state = "complete", contentBlocks, toolResults }) {
+function createChatMessageItem({
+  id,
+  role,
+  text,
+  state = "complete",
+  systemKind,
+  expanded,
+  contentBlocks,
+  toolResults,
+}) {
   return {
     id,
     kind: "message",
     role,
     text,
     state,
+    ...(systemKind ? { systemKind } : {}),
+    ...(typeof expanded === "boolean" ? { expanded } : {}),
     ...(contentBlocks ? { contentBlocks } : {}),
     ...(toolResults ? { toolResults } : {}),
   };
@@ -1307,6 +1318,24 @@ function toolResultsForContentBlocks(contentBlocks, toolResultMap) {
 function toChatTranscriptItem(message, toolResultMap = new Map()) {
   if (!message || typeof message !== "object") {
     return null;
+  }
+  if (message.role === "compactionSummary") {
+    return createChatMessageItem({
+      id: `summary:${message.entryId}`,
+      role: "system",
+      text: message.content,
+      systemKind: "compactionSummary",
+      expanded: false,
+    });
+  }
+  if (message.role === "system") {
+    return createChatMessageItem({
+      id: message.entryId,
+      role: "system",
+      text: message.content,
+      systemKind: "system",
+      expanded: true,
+    });
   }
   if (message.role === "user" || message.role === "assistant") {
     if (typeof message.toolName === "string" && message.toolName.length > 0) {

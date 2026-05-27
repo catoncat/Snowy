@@ -1659,6 +1659,21 @@ describe("mv3-shell end-to-end loop integration", () => {
       },
     });
 
+    await expect(services.bootstrapChat()).resolves.toMatchObject({
+      sessionId,
+      messages: [
+        {
+          id: "summary:cmp-1",
+          kind: "message",
+          role: "system",
+          text: "Earlier turns compacted",
+          state: "complete",
+          systemKind: "compactionSummary",
+          expanded: false,
+        },
+      ],
+    });
+
     await expect(services.readReplayContinuityMarkers()).resolves.toEqual([
       {
         entryId: "cmp-1",

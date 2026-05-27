@@ -26,6 +26,16 @@ export function conversationMarkdownFileName(title: string): string {
   return `${base || "conversation"}.md`;
 }
 
+function messageRoleLabel(role: string): string {
+  if (role === "user") {
+    return "User";
+  }
+  if (role === "system") {
+    return "System";
+  }
+  return "Assistant";
+}
+
 export function generateConversationMarkdown(input: ConversationMarkdownInput): string {
   const lines: string[] = [`# ${normalizeTitle(input.title)}`, ""];
 
@@ -37,7 +47,7 @@ export function generateConversationMarkdown(input: ConversationMarkdownInput): 
     if (!text) {
       continue;
     }
-    lines.push(`**${item.role === "user" ? "User" : "Assistant"}**: ${text}`, "");
+    lines.push(`**${messageRoleLabel(item.role)}**: ${text}`, "");
   }
 
   return `${lines

@@ -5,6 +5,7 @@ import {
   applyChatEvent,
   createInitialChatState,
   filterChatItemsForToolHistory,
+  toggleSystemMessageExpanded,
   toggleToolExpanded,
   type ChatEvent,
   type ChatItem,
@@ -1853,6 +1854,10 @@ function toggleTool(id: string) {
   chatState.value = toggleToolExpanded(chatState.value, id);
 }
 
+function toggleSystemMessage(payload: { id: string }) {
+  chatState.value = toggleSystemMessageExpanded(chatState.value, payload.id);
+}
+
 function onComposerKeydown(event: KeyboardEvent) {
   if (showSkillList.value) {
     if (event.key === "ArrowDown") {
@@ -2118,6 +2123,7 @@ onUnmounted(() => {
             :edit-draft="editDraft"
             :edit-submitting="editSubmitting"
             @toggle-tool="toggleTool"
+            @toggle-system="toggleSystemMessage"
             @copy-message="handleCopyMessage"
             @retry-message="handleRetryMessage"
             @fork-message="handleForkMessage"

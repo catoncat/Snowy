@@ -7,9 +7,11 @@ export type ChatMessageContentBlock =
 export interface ChatMessageItem {
   id: string;
   kind: "message";
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   text: string;
   state: "complete" | "streaming" | "stopped" | "error";
+  systemKind?: "compactionSummary" | "system";
+  expanded?: boolean;
   contentBlocks?: ChatMessageContentBlock[];
   toolResults?: Record<string, string>;
 }
@@ -308,6 +310,17 @@ export function toggleToolExpanded(state: ChatState, id: string): ChatState {
     ...state,
     items: state.items.map((item) =>
       item.kind === "tool" && item.id === id ? { ...item, expanded: !item.expanded } : item,
+    ),
+  };
+}
+
+export function toggleSystemMessageExpanded(state: ChatState, id: string): ChatState {
+  return {
+    ...state,
+    items: state.items.map((item) =>
+      item.kind === "message" && item.role === "system" && item.id === id
+        ? { ...item, expanded: !item.expanded }
+        : item,
     ),
   };
 }

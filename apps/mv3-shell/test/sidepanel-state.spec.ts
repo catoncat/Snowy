@@ -6,6 +6,7 @@ import {
   createInitialChatState,
   filterChatItemsForToolHistory,
   shouldAlwaysShowToolItem,
+  toggleSystemMessageExpanded,
   toggleToolExpanded,
 } from "../src/sidepanel/state";
 
@@ -83,6 +84,31 @@ describe("sidepanel chat state", () => {
         expanded: false,
       }),
     ]);
+  });
+
+  it("toggles old-product system summary expansion state", () => {
+    const state = applyBootstrapState(createInitialChatState(), {
+      sessionId: "s-1",
+      runState: { status: "idle" },
+      messages: [
+        {
+          id: "summary:cmp-1",
+          kind: "message",
+          role: "system",
+          text: "Earlier turns compacted",
+          state: "complete",
+          systemKind: "compactionSummary",
+          expanded: false,
+        },
+      ],
+    });
+
+    const expanded = toggleSystemMessageExpanded(state, "summary:cmp-1");
+    expect(expanded.items[0]).toMatchObject({
+      id: "summary:cmp-1",
+      role: "system",
+      expanded: true,
+    });
   });
 
   it("renders assistant markdown into rich text html", () => {

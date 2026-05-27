@@ -565,6 +565,62 @@ describe("sidepanel chat transcript component", () => {
     expect(findAll(streamingTree, (node) => node.props.role === "toolbar")).toHaveLength(0);
   });
 
+  it("inherits old-product collapsible system summary messages", () => {
+    const toggled: string[] = [];
+    const items: ChatItem[] = [
+      {
+        id: "summary:cmp-1",
+        kind: "message",
+        role: "system",
+        text: "Earlier turns compacted\n\n- user asked about setup",
+        state: "complete",
+        systemKind: "compactionSummary",
+        expanded: false,
+      },
+    ];
+
+    const collapsedTree = mountInMemory({
+      loading: false,
+      items,
+      onToggleSystem: (payload: { id: string }) => toggled.push(payload.id),
+    });
+
+    const systemMessage = findFirst(
+      collapsedTree,
+      (node) => node.props["data-testid"] === "system-message",
+    );
+    expect(systemMessage?.props["aria-label"]).toBe("系统消息");
+    expect(textContent(systemMessage)).toContain("历史摘要（压缩上下文）");
+    expect(textContent(systemMessage)).toContain("查看摘要");
+    expect(textContent(systemMessage)).not.toContain("user asked about setup");
+
+    const toggle = findFirst(
+      collapsedTree,
+      (node) => node.type === "button" && node.props["aria-label"] === "查看摘要",
+    );
+    expect(toggle?.props["aria-expanded"]).toBe(false);
+    expect(toggle?.props.onClick).toBeTypeOf("function");
+    (toggle?.props.onClick as () => void)();
+    expect(toggled).toEqual(["summary:cmp-1"]);
+
+    const expandedTree = mountInMemory({
+      loading: false,
+      items: [{ ...items[0], expanded: true }],
+    });
+    const expandedToggle = findFirst(
+      expandedTree,
+      (node) => node.type === "button" && node.props["aria-label"] === "隐藏摘要",
+    );
+    expect(expandedToggle?.props["aria-expanded"]).toBe(true);
+    expect(
+      findFirst(expandedTree, (node) => node.props["aria-label"] === "历史摘要详情"),
+    ).not.toBeNull();
+    const expandedRichText = findFirst(expandedTree, (node) =>
+      String(node.props.class ?? "").includes("sidepanel-rich-text"),
+    );
+    expect(String(expandedRichText?.props.innerHTML ?? "")).toContain("user asked about setup");
+  });
+
   it("inherits old-product tool result card chrome and expandable runtime details", () => {
     const emitted: string[] = [];
     const tree = mountInMemory({
@@ -714,6 +770,7 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain('@toggle-tool="toggleTool"');
     expect(source).toContain(':copied-message-id="copiedMessageId"');
     expect(source).toContain('@copy-message="handleCopyMessage"');
+    expect(source).toContain('@toggle-system="toggleSystemMessage"');
     expect(source).toContain("__BRAIN_E2E_CLIPBOARD_WRITE");
   });
 

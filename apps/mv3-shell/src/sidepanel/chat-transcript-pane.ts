@@ -55,6 +55,10 @@ export interface ChatMessageEditPayload {
   text: string;
 }
 
+export interface ChatMessageSystemTogglePayload {
+  id: string;
+}
+
 export interface ChatCodeCopyPayload {
   code: string;
   language: string;
@@ -184,6 +188,22 @@ function assistantMessageText(item: ChatMessageItem): string {
       .join("");
   }
   return item.text;
+}
+
+function isSummarySystemMessage(item: ChatMessageItem): boolean {
+  return (
+    item.role === "system" &&
+    (item.systemKind === "compactionSummary" ||
+      item.id.startsWith("summary:") ||
+      item.text.startsWith("Previous summary:\n"))
+  );
+}
+
+function normalizedSystemMessageText(item: ChatMessageItem): string {
+  const prefix = "Previous summary:\n";
+  return isSummarySystemMessage(item) && item.text.startsWith(prefix)
+    ? item.text.slice(prefix.length)
+    : item.text;
 }
 
 function normalizeMarkdownSegment(text: string): string {
@@ -351,6 +371,75 @@ function renderMessageContent(
   return h("p", { class: "whitespace-pre-wrap text-[14px] leading-6" }, item.text);
 }
 
+function renderSystemMessageArticle(
+  item: RenderedMessageItem,
+  onToggleSystem: (payload: ChatMessageSystemTogglePayload) => void,
+) {
+  const summary = isSummarySystemMessage(item);
+  const expanded = summary ? item.expanded === true : true;
+
+  return h(
+    "article",
+    {
+      class: "flex flex-col gap-2 py-1 pr-2",
+      role: "group",
+      "aria-label": "系统消息",
+      "data-testid": "system-message",
+    },
+    [
+      h("div", { class: "rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5" }, [
+        h("div", { class: "flex items-center gap-2" }, [
+          h("span", { class: "text-[12px] font-bold text-blue-600", "aria-hidden": "true" }, "✦"),
+          h(
+            "span",
+            { class: "text-[12px] font-semibold text-slate-950" },
+            summary ? "历史摘要（压缩上下文）" : "系统提示",
+          ),
+        ]),
+        summary
+          ? h(
+              "button",
+              {
+                type: "button",
+                class:
+                  "mt-2 flex w-fit items-center gap-2 rounded-sm py-1 text-[11px] font-bold uppercase text-blue-600 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                "aria-expanded": expanded,
+                "aria-label": expanded ? "隐藏摘要" : "查看摘要",
+                onClick: () => onToggleSystem({ id: item.id }),
+              },
+              [
+                expanded ? "隐藏摘要" : "查看摘要",
+                h("span", { "aria-hidden": "true" }, expanded ? "⌃" : "⌄"),
+              ],
+            )
+          : h("div", { class: "mt-2 max-w-none text-[13px] leading-relaxed text-slate-950" }, [
+              renderRichTextContent(item.id, normalizedSystemMessageText(item), item.rendered),
+            ]),
+      ]),
+      summary && expanded
+        ? h(
+            "div",
+            {
+              class: "animate-in",
+              role: "region",
+              "aria-label": "历史摘要详情",
+            },
+            [
+              h(
+                "div",
+                {
+                  class:
+                    "rounded-md border border-slate-200 bg-white px-3 py-2.5 text-[13px] leading-relaxed text-slate-950",
+                },
+                [renderRichTextContent(item.id, normalizedSystemMessageText(item), item.rendered)],
+              ),
+            ],
+          )
+        : null,
+    ],
+  );
+}
+
 function renderMessageArticle(
   item: RenderedMessageItem,
   options: {
@@ -371,6 +460,7 @@ function renderMessageArticle(
     onEditCancel: (payload: ChatMessageEditPayload) => void;
     onEditSubmit: (payload: ChatMessageEditPayload) => void;
     onCopyCode: (payload: ChatCodeCopyPayload) => void;
+    onToggleSystem: (payload: ChatMessageSystemTogglePayload) => void;
   },
 ) {
   if (item.role === "user") {
@@ -470,6 +560,10 @@ function renderMessageArticle(
           : null,
       ],
     );
+  }
+
+  if (item.role === "system") {
+    return renderSystemMessageArticle(item, options.onToggleSystem);
   }
 
   return h(
@@ -593,6 +687,7 @@ function renderRenderedMessageArticle(
   onEditCancel: (payload: ChatMessageEditPayload) => void,
   onEditSubmit: (payload: ChatMessageEditPayload) => void,
   onCopyCode: (payload: ChatCodeCopyPayload) => void,
+  onToggleSystem: (payload: ChatMessageSystemTogglePayload) => void,
 ) {
   return renderMessageArticle(item, {
     copyable: item.role === "assistant" && isCopyableAssistantMessage(items, item.id),
@@ -616,6 +711,7 @@ function renderRenderedMessageArticle(
     onEditCancel,
     onEditSubmit,
     onCopyCode,
+    onToggleSystem,
   });
 }
 
@@ -742,6 +838,7 @@ export const ChatTranscriptPane = defineComponent({
       Boolean(payload?.id) && payload.role === "assistant" && payload.text.trim().length > 0,
     retryMessage: (payload: ChatMessageRetryPayload) => Boolean(payload?.id),
     forkMessage: (payload: ChatMessageForkPayload) => Boolean(payload?.id),
+    toggleSystem: (payload: ChatMessageSystemTogglePayload) => Boolean(payload?.id),
     editMessage: (payload: ChatMessageEditPayload) => Boolean(payload?.id),
     editChange: (payload: ChatMessageEditPayload) => Boolean(payload?.id),
     editCancel: (payload: ChatMessageEditPayload) => Boolean(payload?.id),
@@ -757,8 +854,10 @@ export const ChatTranscriptPane = defineComponent({
           ? {
               ...item,
               rendered:
-                item.role === "assistant"
-                  ? renderMessageRichText(item.text)
+                item.role === "assistant" || item.role === "system"
+                  ? renderMessageRichText(
+                      item.role === "system" ? normalizedSystemMessageText(item) : item.text,
+                    )
                   : { codeBlocks: [], mode: "plain", html: "" },
             }
           : {
@@ -813,6 +912,7 @@ export const ChatTranscriptPane = defineComponent({
                 (payload) => emit("editCancel", payload),
                 (payload) => emit("editSubmit", payload),
                 (payload) => emit("copyCode", payload),
+                (payload) => emit("toggleSystem", payload),
               )
             : renderToolArticle(item, (id) => emit("toggleTool", id)),
         ),
