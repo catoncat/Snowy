@@ -4,6 +4,8 @@ import {
   applyBootstrapState,
   applyChatEvent,
   createInitialChatState,
+  filterChatItemsForToolHistory,
+  shouldAlwaysShowToolItem,
   toggleToolExpanded,
 } from "../src/sidepanel/state";
 
@@ -143,5 +145,48 @@ describe("sidepanel chat state", () => {
     expect(trace.html).toContain("Input");
     expect(trace.html).toContain("Output");
     expect(trace.html).toContain("main article");
+  });
+
+  it("filters normal tool traces while keeping error traces visible", () => {
+    const items = [
+      { id: "user-1", kind: "message", role: "user", text: "run it", state: "complete" },
+      {
+        id: "tool-ok",
+        kind: "tool",
+        toolName: "page.query",
+        summary: "Collected DOM snapshot",
+        detail: '{"status":"ok","output":{"count":2}}',
+        expanded: false,
+      },
+      {
+        id: "tool-error",
+        kind: "tool",
+        toolName: "page.click",
+        summary: "Click failed",
+        detail: '{"ok":false,"error":"element not found"}',
+        expanded: false,
+      },
+      {
+        id: "assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "I could not click it.",
+        state: "complete",
+      },
+    ] as const;
+
+    expect(shouldAlwaysShowToolItem(items[1])).toBe(false);
+    expect(shouldAlwaysShowToolItem(items[2])).toBe(true);
+    expect(filterChatItemsForToolHistory(items, true).map((item) => item.id)).toEqual([
+      "user-1",
+      "tool-ok",
+      "tool-error",
+      "assistant-1",
+    ]);
+    expect(filterChatItemsForToolHistory(items, false).map((item) => item.id)).toEqual([
+      "user-1",
+      "tool-error",
+      "assistant-1",
+    ]);
   });
 });

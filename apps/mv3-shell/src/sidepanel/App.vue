@@ -4,6 +4,7 @@ import {
   applyBootstrapState,
   applyChatEvent,
   createInitialChatState,
+  filterChatItemsForToolHistory,
   toggleToolExpanded,
   type ChatEvent,
   type ChatItem,
@@ -140,6 +141,7 @@ const sending = ref(false);
 const listRef = ref<HTMLElement | null>(null);
 const composerRef = ref<HTMLTextAreaElement | null>(null);
 const moreMenuOpen = ref(false);
+const showToolHistory = ref(true);
 const conversationNotice = ref<{ type: "success" | "error"; message: string } | null>(null);
 const copiedMessageId = ref("");
 const composerContextExpanded = ref(false);
@@ -233,12 +235,18 @@ const skillItems = computed(() => listSkillCatalogItems(skillsSummary.value));
 const hostItems = computed(() => hostsSummary.value?.items ?? []);
 const pendingInterventions = computed(() => listPendingInterventions(runtimeSummary.value));
 const activeTabId = computed(() => runtimeSummary.value?.activeTab?.tabId ?? null);
-const hasChatMessages = computed(() => chatState.value.items.length > 0);
+const visibleChatItems = computed(() =>
+  filterChatItemsForToolHistory(chatState.value.items, showToolHistory.value),
+);
+const hasChatMessages = computed(() => visibleChatItems.value.length > 0);
 const hasExportableConversation = computed(() => hasConversationExportContent(chatState.value.items));
 const messageCount = computed(
   () => chatState.value.items.filter((item) => item.kind === "message").length,
 );
 const toolCount = computed(() => chatState.value.items.filter((item) => item.kind === "tool").length);
+const toolHistoryToggleLabel = computed(() =>
+  showToolHistory.value ? "隐藏工具轨迹" : "显示工具轨迹",
+);
 const activeSession = computed(
   () => chatSessions.value.find((session) => session.id === chatState.value.sessionId) ?? null,
 );
@@ -1788,6 +1796,10 @@ onUnmounted(() => {
                 <span class="w-4 text-center text-[13px]" aria-hidden="true">↗</span>
                 <span>在标签页打开</span>
               </button>
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="showToolHistory = !showToolHistory; moreMenuOpen = false">
+                <span class="w-4 text-center text-[13px]" aria-hidden="true">⌁</span>
+                <span>{{ toolHistoryToggleLabel }}</span>
+              </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('provider')">
                 <span class="w-4 text-center text-[13px]" aria-hidden="true">◎</span>
                 <span>模型路由</span>
@@ -1832,7 +1844,7 @@ onUnmounted(() => {
 
           <ChatTranscriptPane
             v-else-if="hasChatMessages"
-            :items="chatState.items"
+            :items="visibleChatItems"
             :loading="loading"
             :copied-message-id="copiedMessageId"
             @toggle-tool="toggleTool"

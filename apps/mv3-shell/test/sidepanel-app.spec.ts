@@ -667,7 +667,7 @@ describe("sidepanel chat transcript component", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
     expect(source).toContain("ChatTranscriptPane");
-    expect(source).toContain(':items="chatState.items"');
+    expect(source).toContain(':items="visibleChatItems"');
     expect(source).toContain('@toggle-tool="toggleTool"');
     expect(source).toContain(':copied-message-id="copiedMessageId"');
     expect(source).toContain('@copy-message="handleCopyMessage"');
@@ -917,6 +917,18 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("hasConversationExportContent");
     expect(source).toContain("navigator.clipboard.writeText");
     expect(source).toContain("tabsApi.create");
+  });
+
+  it("keeps old-product tool trace visibility toggle in the more menu", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("showToolHistory");
+    expect(source).toContain("visibleChatItems");
+    expect(source).toContain("filterChatItemsForToolHistory");
+    expect(source).toContain("隐藏工具轨迹");
+    expect(source).toContain("显示工具轨迹");
+    expect(source).toContain(':items="visibleChatItems"');
+    expect(source).not.toContain(':items="chatState.items"');
   });
 
   it("does not expose unsupported message retry or fork actions until runtime routes exist", () => {

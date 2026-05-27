@@ -106,6 +106,60 @@ function messageReferencesToolCall(item: ChatItem, toolCallId: string): item is 
   );
 }
 
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function containsToolErrorText(value: string): boolean {
+  return /error|failed|失败|异常/i.test(value);
+}
+
+export function shouldAlwaysShowToolItem(item: ChatItem): boolean {
+  if (item.kind !== "tool") {
+    return false;
+  }
+  const detail = item.detail.trim();
+  const searchableText = `${item.summary}\n${detail}`;
+  if (!detail) {
+    return containsToolErrorText(searchableText);
+  }
+  try {
+    const parsed = JSON.parse(detail);
+    const row = toRecord(parsed);
+    if (typeof row.error === "string" && row.error.trim()) {
+      return true;
+    }
+    if (row.ok === false) {
+      return true;
+    }
+    const response = toRecord(row.response);
+    if (response.ok === false) {
+      return true;
+    }
+    const bridgeResult = toRecord(response.response);
+    if (bridgeResult.ok === false) {
+      return true;
+    }
+    return containsToolErrorText(searchableText);
+  } catch {
+    return containsToolErrorText(searchableText);
+  }
+}
+
+export function filterChatItemsForToolHistory(
+  items: readonly ChatItem[],
+  showToolHistory: boolean,
+): ChatItem[] {
+  return items.filter((item) => {
+    if (item.kind !== "tool") {
+      return true;
+    }
+    return showToolHistory || shouldAlwaysShowToolItem(item);
+  });
+}
+
 export function createInitialChatState(): ChatState {
   return {
     sessionId: null,
