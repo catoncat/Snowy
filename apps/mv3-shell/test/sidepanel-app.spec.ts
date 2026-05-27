@@ -993,6 +993,21 @@ describe("sidepanel chat transcript component", () => {
     expect(source).not.toContain(':items="chatState.items"');
   });
 
+  it("inherits the old-product debug menu entry with a runtime-backed diagnostics snapshot", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("diagnosticsCopying");
+    expect(source).toContain("handleCopyDiagnosticsSnapshot");
+    expect(source).toContain('"runtime.capture_diagnostics"');
+    expect(source).toContain("复制调试快照");
+    expect(source).toContain("正在复制调试快照");
+    expect(source).toContain("调试快照已复制");
+    expect(source).toContain("writeClipboardText(diagnosticsPayload.value)");
+    expect(source).toContain("调试面板");
+    expect(source).toContain("@click=\"selectPane('runtime')\"");
+    expect(source).not.toContain("复制调试链接");
+  });
+
   it("keeps old-product title refresh in the more menu with a runtime-backed route", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
     const backgroundSource = readFileSync("apps/mv3-shell/src/background.ts", "utf8");

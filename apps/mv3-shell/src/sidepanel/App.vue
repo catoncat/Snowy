@@ -180,6 +180,7 @@ const managementBusy = ref(false);
 const managementError = ref<string | null>(null);
 const managementNotice = ref<string | null>(null);
 const diagnosticsPayload = ref<string | null>(null);
+const diagnosticsCopying = ref(false);
 const configProviderDraft = ref("openai");
 const configApiDraft = ref("responses");
 const configModelDraft = ref("");
@@ -1475,6 +1476,27 @@ function captureDiagnostics() {
   });
 }
 
+async function handleCopyDiagnosticsSnapshot() {
+  if (diagnosticsCopying.value) {
+    return;
+  }
+  diagnosticsCopying.value = true;
+  moreMenuOpen.value = false;
+  try {
+    const result = await callRuntime("runtime.capture_diagnostics", {
+      world: "main",
+      ...(typeof activeTabId.value === "number" ? { tabId: activeTabId.value } : {}),
+    });
+    diagnosticsPayload.value = formatJson(result);
+    await writeClipboardText(diagnosticsPayload.value);
+    showConversationNotice("success", "调试快照已复制");
+  } catch (error) {
+    showConversationNotice("error", error instanceof Error ? error.message : "复制调试快照失败");
+  } finally {
+    diagnosticsCopying.value = false;
+  }
+}
+
 function clearRuntimeError() {
   void runManagementAction("runtime.clear_error");
 }
@@ -1934,6 +1956,10 @@ onUnmounted(() => {
                 <span class="w-4 text-center text-[13px]" aria-hidden="true">⌁</span>
                 <span>{{ toolHistoryToggleLabel }}</span>
               </button>
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="diagnosticsCopying" @click="handleCopyDiagnosticsSnapshot">
+                <span class="w-4 text-center text-[13px]" aria-hidden="true">⌕</span>
+                <span>{{ diagnosticsCopying ? "正在复制调试快照" : "复制调试快照" }}</span>
+              </button>
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('provider')">
                 <span class="w-4 text-center text-[13px]" aria-hidden="true">◎</span>
                 <span>模型路由</span>
@@ -1941,6 +1967,10 @@ onUnmounted(() => {
               <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('skills')">
                 <span class="w-4 text-center text-[13px]" aria-hidden="true">⌘</span>
                 <span>Skills 管理</span>
+              </button>
+              <button type="button" role="menuitem" class="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-left text-[13px] hover:bg-slate-50" @click="selectPane('runtime')">
+                <span class="w-4 text-center text-[13px]" aria-hidden="true">◇</span>
+                <span>调试面板</span>
               </button>
             </div>
           </div>
