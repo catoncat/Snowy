@@ -827,6 +827,32 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("selectChatSession(sourceId)");
   });
 
+  it("inherits old-product fork scene transition around runtime-backed forks", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("forkScenePhase");
+    expect(source).toContain("isForkSceneActive");
+    expect(source).toContain("chatSceneClass");
+    expect(source).toContain("switchForkSessionWithScene");
+    expect(source).toContain('data-chat-scene-phase="forkScenePhase"');
+    expect(source).toContain('data-ui-widget-slot="chat.scene.overlay"');
+    expect(source).toContain('data-testid="chat-fork-switch-overlay"');
+    expect(source).toContain("chat-scene--prepare");
+    expect(source).toContain("chat-scene--leave");
+    expect(source).toContain("chat-scene--enter");
+    expect(source).toContain("switchForkSessionWithScene(forked.sessionId");
+    expect(source).toContain("switchForkSessionWithScene(edited.sessionId");
+  });
+
+  it("inherits old-product title refresh state in the chat header", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain('v-if="!titleRefreshing"');
+    expect(source).toContain("正在重新生成标题");
+    expect(source).toContain("animate-pulse");
+    expect(source).toContain("animate-bounce");
+  });
+
   it("inherits old-product active session source badge in the chat header", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 

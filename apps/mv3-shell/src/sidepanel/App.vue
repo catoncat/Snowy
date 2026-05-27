@@ -38,6 +38,11 @@ import {
 } from "./management";
 
 const RUNNER_BACKGROUND_TARGET = "bbl-next.runner.background";
+const FORK_MIN_VISIBLE_MS = 620;
+const FORK_SCENE_PREPARE_MS = 140;
+const FORK_SCENE_LEAVE_MS = 170;
+const FORK_SCENE_ENTER_MS = 240;
+const FORK_SWITCH_HIGHLIGHT_MS = 1800;
 
 type RuntimeEnvelope = {
   ok?: boolean;
@@ -175,9 +180,15 @@ const sessionSearch = ref("");
 const pendingDeleteSessionId = ref("");
 const renamingSessionId = ref("");
 const sessionRenameDraft = ref("");
+const forkScenePhase = ref<"idle" | "prepare" | "leave" | "swap" | "enter">("idle");
+const forkSceneToken = ref(0);
+const forkSceneSwitching = ref(false);
+const forkSceneTargetSessionId = ref("");
+const forkSessionHighlight = ref(false);
 let pendingDeleteTimer: ReturnType<typeof setTimeout> | null = null;
 let conversationNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 let copiedMessageTimer: ReturnType<typeof setTimeout> | null = null;
+let forkSessionHighlightTimer: ReturnType<typeof setTimeout> | null = null;
 
 const COMPOSER_HINT_STORAGE_KEY = "snowy_input_hint_dismissed";
 
@@ -289,6 +300,24 @@ const activeForkSourceTitle = computed(() => {
   }
   return "未命名会话";
 });
+const isForkSceneActive = computed(() => forkScenePhase.value !== "idle");
+const chatSceneClass = computed(() => ({
+  "chat-scene--prepare": forkScenePhase.value === "prepare",
+  "chat-scene--leave": forkScenePhase.value === "leave" || forkScenePhase.value === "swap",
+  "chat-scene--enter": forkScenePhase.value === "enter",
+}));
+const forkSceneProgressClass = computed(() => {
+  if (forkScenePhase.value === "prepare") {
+    return "w-[30%]";
+  }
+  if (forkScenePhase.value === "enter") {
+    return "w-full";
+  }
+  return "w-[74%]";
+});
+const forkSceneIconClass = computed(() =>
+  forkScenePhase.value === "enter" ? "animate-pulse" : "animate-spin",
+);
 const lastMessagePreview = computed(() => {
   if (activeSession.value?.preview?.trim()) {
     return activeSession.value.preview.trim();
@@ -455,6 +484,99 @@ function showConversationNotice(type: "success" | "error", message: string) {
   }, 1800);
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, Math.max(0, ms));
+  });
+}
+
+function bumpForkSceneToken() {
+  forkSceneToken.value += 1;
+  return forkSceneToken.value;
+}
+
+function isForkSceneStale(token: number) {
+  return token !== forkSceneToken.value;
+}
+
+function resetForkSceneState() {
+  forkScenePhase.value = "idle";
+  forkSceneSwitching.value = false;
+  forkSceneTargetSessionId.value = "";
+}
+
+function triggerForkSessionHighlight() {
+  if (forkSessionHighlightTimer) {
+    clearTimeout(forkSessionHighlightTimer);
+  }
+  forkSessionHighlight.value = true;
+  forkSessionHighlightTimer = setTimeout(() => {
+    forkSessionHighlight.value = false;
+    forkSessionHighlightTimer = null;
+  }, FORK_SWITCH_HIGHLIGHT_MS);
+}
+
+async function playForkSceneSwitch(targetSessionId: string, applySession: () => void | Promise<void>) {
+  const normalizedTargetSessionId = String(targetSessionId || "").trim();
+  if (!normalizedTargetSessionId) {
+    await applySession();
+    return;
+  }
+
+  const token = bumpForkSceneToken();
+  forkSceneSwitching.value = true;
+  forkSceneTargetSessionId.value = normalizedTargetSessionId;
+
+  try {
+    forkScenePhase.value = "prepare";
+    await sleep(FORK_SCENE_PREPARE_MS);
+    if (isForkSceneStale(token)) {
+      return;
+    }
+
+    forkScenePhase.value = "leave";
+    await sleep(FORK_SCENE_LEAVE_MS);
+    if (isForkSceneStale(token)) {
+      return;
+    }
+
+    forkScenePhase.value = "swap";
+    await applySession();
+    if (isForkSceneStale(token)) {
+      return;
+    }
+
+    triggerForkSessionHighlight();
+    await nextTick();
+
+    forkScenePhase.value = "enter";
+    await sleep(FORK_SCENE_ENTER_MS);
+  } finally {
+    if (!isForkSceneStale(token)) {
+      resetForkSceneState();
+    }
+  }
+}
+
+async function switchForkSessionWithScene(
+  targetSessionId: string,
+  applySession: () => void | Promise<void>,
+  options: { startedAt?: number } = {},
+) {
+  const normalizedTargetSessionId = String(targetSessionId || "").trim();
+  if (!normalizedTargetSessionId) {
+    await applySession();
+    return;
+  }
+
+  const startedAt = Number.isFinite(Number(options.startedAt)) ? Number(options.startedAt) : Date.now();
+  const elapsed = Date.now() - startedAt;
+  if (elapsed < FORK_MIN_VISIBLE_MS) {
+    await sleep(FORK_MIN_VISIBLE_MS - elapsed);
+  }
+  await playForkSceneSwitch(normalizedTargetSessionId, applySession);
+}
+
 async function writeClipboardText(text: string) {
   const maybeWriter = (globalThis as Record<string, unknown>).__BRAIN_E2E_CLIPBOARD_WRITE;
   if (typeof maybeWriter === "function") {
@@ -561,6 +683,7 @@ async function handleForkMessage(payload: ChatMessageForkPayload) {
     return;
   }
   forkingMessageId.value = payload.id;
+  const startedAt = Date.now();
   try {
     const forked = await callRuntime<{
       sessionId: string | null;
@@ -569,11 +692,16 @@ async function handleForkMessage(payload: ChatMessageForkPayload) {
     }>("runtime.chat.message.fork", {
       messageId: payload.id,
     });
-    applyChatBootstrap({
+    const applyForkedSession = () => applyChatBootstrap({
       sessionId: forked.sessionId,
       runState: forked.runState ?? { status: "running" },
       messages: Array.isArray(forked.messages) ? forked.messages : [],
     });
+    if (forked.sessionId) {
+      await switchForkSessionWithScene(forked.sessionId, applyForkedSession, { startedAt });
+    } else {
+      applyForkedSession();
+    }
     activePane.value = "chat";
     showConversationNotice("success", "已创建分叉对话");
   } catch (error) {
@@ -620,6 +748,7 @@ async function handleEditSubmit(payload: ChatMessageEditPayload) {
     return;
   }
   editSubmitting.value = true;
+  const startedAt = Date.now();
   try {
     const edited = await callRuntime<{
       sessionId: string | null;
@@ -630,11 +759,16 @@ async function handleEditSubmit(payload: ChatMessageEditPayload) {
       messageId: payload.id,
       text,
     });
-    applyChatBootstrap({
+    const applyEditedSession = () => applyChatBootstrap({
       sessionId: edited.sessionId,
       runState: edited.runState ?? { status: "running" },
       messages: Array.isArray(edited.messages) ? edited.messages : [],
     });
+    if (edited.mode === "fork" && edited.sessionId) {
+      await switchForkSessionWithScene(edited.sessionId, applyEditedSession, { startedAt });
+    } else {
+      applyEditedSession();
+    }
     activePane.value = "chat";
     showConversationNotice("success", edited.mode === "fork" ? "已创建编辑分叉" : "已编辑并重跑");
     editingMessageId.value = "";
@@ -1948,12 +2082,22 @@ onUnmounted(() => {
   if (copiedMessageTimer) {
     clearTimeout(copiedMessageTimer);
   }
+  if (forkSessionHighlightTimer) {
+    clearTimeout(forkSessionHighlightTimer);
+  }
+  bumpForkSceneToken();
+  resetForkSceneState();
 });
 </script>
 
 <template>
   <div class="relative flex h-screen min-h-0 flex-col overflow-hidden bg-white text-slate-950">
-    <main class="relative flex min-h-0 flex-1 flex-col bg-white">
+    <main
+      class="chat-scene relative flex min-h-0 flex-1 flex-col bg-white"
+      :class="chatSceneClass"
+      :data-chat-scene-phase="forkScenePhase"
+      :aria-busy="isForkSceneActive ? 'true' : undefined"
+    >
       <header class="z-30 flex h-12 shrink-0 items-center border-b border-slate-200 bg-white px-3" role="banner">
         <div class="flex min-w-0 flex-1 items-center gap-2">
           <div v-if="activeForkSourceSessionId" class="group relative shrink-0">
@@ -1961,11 +2105,12 @@ onUnmounted(() => {
               tabindex="0"
               data-testid="fork-session-indicator"
               class="inline-grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[12px] font-semibold text-blue-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              :class="forkSessionHighlight ? 'border-blue-400 bg-blue-100 shadow-[0_0_0_1px_rgba(37,99,235,0.08)]' : ''"
               role="note"
               aria-label="当前会话来自分叉，悬浮可查看来源信息"
               title="分叉来源信息"
             >
-              ⑂
+              <span :class="forkSessionHighlight ? 'animate-pulse' : ''" aria-hidden="true">⑂</span>
             </span>
             <div class="pointer-events-none absolute left-0 top-full z-50 mt-1 w-64 max-w-[calc(100vw-24px)] rounded-md border border-slate-200 bg-white px-3 py-2 opacity-0 shadow-xl transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
               <p class="truncate text-[11px] font-semibold text-slate-950">
@@ -1981,7 +2126,7 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="ml-1 flex min-w-0 flex-1 flex-col justify-center">
-            <div class="flex min-w-0 items-center gap-2">
+            <div v-if="!titleRefreshing" class="flex min-w-0 items-center gap-2">
               <h1 class="truncate text-[15px] font-bold leading-5 tracking-normal text-slate-950">
                 {{ activeSessionTitle }}
               </h1>
@@ -1991,6 +2136,14 @@ onUnmounted(() => {
                 aria-label="当前会话来自微信"
               >
                 微信
+              </span>
+            </div>
+            <div v-else class="flex items-center gap-1.5 text-blue-700">
+              <span class="text-[13px] font-bold tracking-normal animate-pulse">正在重新生成标题</span>
+              <span class="flex gap-0.5" aria-hidden="true">
+                <span class="animate-bounce [animation-delay:-0.3s]">.</span>
+                <span class="animate-bounce [animation-delay:-0.15s]">.</span>
+                <span class="animate-bounce">.</span>
               </span>
             </div>
           </div>
@@ -2099,6 +2252,12 @@ onUnmounted(() => {
       >
         {{ chatState.error }}
       </div>
+
+      <div
+        data-ui-widget-slot="chat.scene.overlay"
+        class="pointer-events-none absolute inset-0 z-20"
+        aria-hidden="true"
+      />
 
       <div
         ref="listRef"
@@ -2456,6 +2615,27 @@ onUnmounted(() => {
           </button>
         </div>
       </footer>
+
+      <div
+        v-if="isForkSceneActive"
+        class="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
+        data-testid="chat-fork-switch-overlay"
+        :data-phase="forkScenePhase"
+        aria-hidden="true"
+      >
+        <div class="absolute inset-0 bg-white/60 backdrop-blur-[2px]" />
+        <div class="relative inline-flex items-center gap-3 rounded-full border border-blue-200 bg-white/85 px-3 py-2 shadow-[0_12px_30px_rgba(15,23,42,0.18)]">
+          <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[13px] font-semibold text-blue-700">
+            <span :class="forkSceneIconClass" aria-hidden="true">⑂</span>
+          </span>
+          <span class="h-1.5 w-[74px] overflow-hidden rounded-full bg-blue-100">
+            <span
+              class="block h-full rounded-full bg-blue-600 transition-[width] duration-180 ease-out"
+              :class="forkSceneProgressClass"
+            />
+          </span>
+        </div>
+      </div>
     </main>
 
     <SessionHistoryPane
@@ -3027,3 +3207,53 @@ onUnmounted(() => {
     </section>
   </div>
 </template>
+
+<style scoped>
+.chat-scene {
+  will-change: transform, opacity, filter;
+  transform-origin: center;
+  transition:
+    transform 170ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 170ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 170ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chat-scene--prepare {
+  transform: scale(0.994) translateY(1px);
+}
+
+.chat-scene--leave {
+  transform: translateX(-18px) scale(0.986);
+  opacity: 0;
+  filter: blur(1.2px);
+}
+
+.chat-scene--enter {
+  animation: chat-scene-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes chat-scene-enter {
+  from {
+    transform: translateX(20px) scale(0.986);
+    opacity: 0;
+    filter: blur(1.2px);
+  }
+
+  to {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-scene,
+  .chat-scene--enter {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+  }
+}
+</style>
