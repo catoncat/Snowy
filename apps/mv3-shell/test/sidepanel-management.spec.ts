@@ -187,6 +187,7 @@ describe("sidepanel management state", () => {
       items: [
         {
           skillId: "skill.cutover.catalog",
+          name: "Cutover Catalog",
           status: "enabled",
           enabled: true,
           trusted: false,
@@ -264,6 +265,7 @@ describe("sidepanel management state", () => {
     expect(catalog).toEqual([
       {
         skillId: "skill.cutover.catalog",
+        name: "Cutover Catalog",
         status: "enabled",
         enabled: true,
         trusted: false,
@@ -394,6 +396,7 @@ describe("sidepanel management state", () => {
           description: "检查当前页面状态",
           kind: "prompt",
           entry: "handler.js",
+          name: "页面巡检",
           id: "skill-demo",
         },
         null,

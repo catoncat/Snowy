@@ -3962,6 +3962,7 @@ describe("mv3-shell manifest", () => {
               uri: "mem://skills/skill.cutover.discoverable/skill.json",
               content: JSON.stringify({
                 id: "skill.cutover.discoverable",
+                name: "Discoverable Package",
                 version: 3,
                 permissions: ["tabs.get_active"],
                 description: "Discoverable manifest package",
@@ -4019,6 +4020,7 @@ describe("mv3-shell manifest", () => {
 
     const expectedSkillSummary = {
       skillId: "skill.cutover.discoverable",
+      name: "Discoverable Package",
       status: "enabled",
       enabled: true,
       trusted: false,

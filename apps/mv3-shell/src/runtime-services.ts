@@ -376,6 +376,7 @@ function normalizeSkillPackageManifest(skillId, packageUri, content) {
           .map((subscription) => normalizeManifestEventSubscription(subscription))
           .filter(Boolean)
       : [],
+    name: typeof manifest.name === "string" ? manifest.name : "",
     description: typeof manifest.description === "string" ? manifest.description : "",
     version: Number.isInteger(manifest.version) ? manifest.version : null,
     kind: typeof manifest.kind === "string" ? manifest.kind : "prompt",
@@ -485,6 +486,7 @@ async function buildPackageSkillVersionSurface(record, manifest, browserVfs) {
 function packageManifestToSkillSummary(record, manifest, versionSurface = null) {
   return {
     skillId: record.skillId,
+    name: manifest.name || null,
     status: record.status,
     enabled: record.status === "enabled",
     trusted: record.trusted === true,
@@ -514,6 +516,7 @@ function packageManifestToSkillSummary(record, manifest, versionSurface = null) 
 function lifecycleRecordToSkillSummary(record) {
   return {
     skillId: record.skillId,
+    name: null,
     status: record.status,
     enabled: record.status === "enabled",
     trusted: record.trusted === true,

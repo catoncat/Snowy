@@ -106,6 +106,7 @@ export interface SkillCatalogAction {
 
 export interface SkillCatalogItem {
   skillId: string;
+  name: string | null;
   status: string;
   enabled: boolean;
   trusted: boolean;
@@ -338,6 +339,7 @@ export function createSkillEditorSetupPlan(input: SkillEditorSetupInput): SkillP
       description: skillDescription,
       kind: "prompt",
       entry: "handler.js",
+      name: skillName,
     },
     handlerSource: input.handlerSource || DEFAULT_SKILL_HANDLER_SOURCE,
     skillMarkdown: composeSkillMarkdown({
@@ -435,6 +437,7 @@ export function listSkillCatalogItems(
 ): SkillCatalogItem[] {
   return (skillsSummary?.items ?? []).map((item) => ({
     skillId: item.skillId,
+    name: item.name ?? null,
     status: item.status,
     enabled: item.enabled,
     trusted: item.trusted,

@@ -1246,6 +1246,15 @@ describe("sidepanel chat transcript component", () => {
     expect(source).not.toContain("Handler JS");
   });
 
+  it("uses skill names as the primary old-product list label", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("function skillDisplayName(skill: SkillCatalogItem): string");
+    expect(source).toContain("skill.name?.trim() || skill.skillId");
+    expect(source).toContain("skillNameDraft.value = skillDisplayName(skill)");
+    expect(source).toContain("{{ skillDisplayName(skill) }}");
+  });
+
   it("keeps system settings shaped like the old product while using real runtime surfaces", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 

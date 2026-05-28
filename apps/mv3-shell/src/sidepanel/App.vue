@@ -976,7 +976,7 @@ function formatSkillVersionSurface(skill: SkillCatalogItem): string {
 }
 
 function skillDisplayName(skill: SkillCatalogItem): string {
-  return skill.skillId;
+  return skill.name?.trim() || skill.skillId;
 }
 
 function skillStatusLabel(skill: SkillCatalogItem): string {

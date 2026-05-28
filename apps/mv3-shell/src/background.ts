@@ -449,6 +449,7 @@ function normalizeSkillSummaryInput(entry) {
   if (typeof entry === "string") {
     return {
       skillId: entry,
+      name: null,
       status: "installed",
       enabled: false,
       trusted: false,
@@ -486,6 +487,7 @@ function normalizeSkillSummaryInput(entry) {
   const versionSurface = normalizeSkillVersionSurfaceInput(entry.versionSurface);
   return {
     skillId: id,
+    name: typeof entry.name === "string" ? entry.name : null,
     status,
     enabled: status === "enabled",
     trusted: entry.trusted === true,

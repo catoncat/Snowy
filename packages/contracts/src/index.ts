@@ -478,6 +478,7 @@ export interface SkillEventSubscriptionSummary {
 
 export interface SkillBootstrapSummaryItem {
   skillId: string;
+  name?: string | null;
   status: string;
   enabled: boolean;
   trusted: boolean;
