@@ -1251,6 +1251,11 @@ describe("sidepanel chat transcript component", () => {
 
     expect(source).toContain("function skillDisplayName(skill: SkillCatalogItem): string");
     expect(source).toContain("skill.name?.trim() || skill.skillId");
+    expect(source).toContain("function skillFilterTokens(skill: SkillCatalogItem): string[]");
+    expect(source).toContain(
+      "function compareSkillPickerItems(left: SkillCatalogItem, right: SkillCatalogItem): number",
+    );
+    expect(source).toContain("skillDisplayName(skill)");
     expect(source).toContain("skillNameDraft.value = skillDisplayName(skill)");
     expect(source).toContain("{{ skillDisplayName(skill) }}");
     expect(source).toContain(

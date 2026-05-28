@@ -352,15 +352,13 @@ const filteredSkills = computed(() => {
       if (left.enabled !== right.enabled) {
         return left.enabled ? -1 : 1;
       }
-      return left.skillId.localeCompare(right.skillId);
+      return compareSkillPickerItems(left, right);
     });
   if (!query) {
     return options;
   }
   return options.filter((skill) =>
-    [skill.skillId, skill.description ?? "", skill.kind ?? "", ...skill.tags].some((value) =>
-      value.toLowerCase().includes(query),
-    ),
+    skillFilterTokens(skill).some((value) => value.toLowerCase().includes(query)),
   );
 });
 const isSkillsManageMode = computed(() => skillCommandMode.value === "manage");
@@ -977,6 +975,24 @@ function formatSkillVersionSurface(skill: SkillCatalogItem): string {
 
 function skillDisplayName(skill: SkillCatalogItem): string {
   return skill.name?.trim() || skill.skillId;
+}
+
+function skillFilterTokens(skill: SkillCatalogItem): string[] {
+  return [
+    skillDisplayName(skill),
+    skill.skillId,
+    skill.description ?? "",
+    skill.kind ?? "",
+    ...skill.tags,
+  ];
+}
+
+function compareSkillPickerItems(left: SkillCatalogItem, right: SkillCatalogItem): number {
+  const displayCompare = skillDisplayName(left).localeCompare(skillDisplayName(right));
+  if (displayCompare !== 0) {
+    return displayCompare;
+  }
+  return left.skillId.localeCompare(right.skillId);
 }
 
 function skillStatusLabel(skill: SkillCatalogItem): string {
