@@ -2537,7 +2537,7 @@ onUnmounted(() => {
                 <SidepanelIcon name="wand-2" class-name="h-3.5 w-3.5" />
               </span>
               <span class="min-w-0 flex-1">
-                <span class="block truncate text-[12px] font-semibold text-slate-950">{{ skill.skillId }}</span>
+                <span class="block truncate text-[12px] font-semibold text-slate-950">{{ skillDisplayName(skill) }}</span>
                 <span class="block truncate text-[10px] font-mono leading-4 text-slate-400">/skill:{{ skill.skillId }}</span>
                 <span class="mt-0.5 block truncate text-[11px] leading-4 text-slate-500">{{ skillDescription(skill) }}</span>
               </span>

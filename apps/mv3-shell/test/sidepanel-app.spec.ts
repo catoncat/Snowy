@@ -1253,6 +1253,12 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("skill.name?.trim() || skill.skillId");
     expect(source).toContain("skillNameDraft.value = skillDisplayName(skill)");
     expect(source).toContain("{{ skillDisplayName(skill) }}");
+    expect(source).toContain(
+      '<span class="block truncate text-[12px] font-semibold text-slate-950">{{ skillDisplayName(skill) }}</span>',
+    );
+    expect(source).toContain(
+      '<span class="block truncate text-[10px] font-mono leading-4 text-slate-400">/skill:{{ skill.skillId }}</span>',
+    );
   });
 
   it("keeps system settings shaped like the old product while using real runtime surfaces", () => {
