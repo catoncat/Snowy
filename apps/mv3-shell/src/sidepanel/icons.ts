@@ -19,6 +19,7 @@ export type SidepanelIconName =
   | "message-square"
   | "more-vertical"
   | "pencil"
+  | "play"
   | "plus"
   | "refresh-ccw"
   | "search"
@@ -114,6 +115,7 @@ const iconPaths: Record<SidepanelIconName, IconPathFactory> = {
     }),
     h("path", { d: "m15 5 4 4" }),
   ],
+  play: () => [h("polygon", { points: "6 3 20 12 6 21 6 3" })],
   plus: () => [h("path", { d: "M5 12h14" }), h("path", { d: "M12 5v14" })],
   "refresh-ccw": () => [
     h("path", { d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }),

@@ -32,6 +32,7 @@ import {
   createInitialManagementState,
   createManagementActionMessage,
   createSkillPackageSetupPlan,
+  createSkillRunPrompt,
   listSkillCatalogItems,
   listPendingInterventions,
   listRuntimeAuditRows,
@@ -175,6 +176,8 @@ const showSkillList = ref(false);
 const focusedSkillIndex = ref(0);
 const skillCommandMode = ref<SkillCommandMode>("select");
 const skillActionPendingIds = ref<Set<string>>(new Set());
+const skillRunPendingIds = ref<Set<string>>(new Set());
+const skillRunArgs = ref("");
 const composerQueueItems = ref<ComposerQueueItem[]>([]);
 const chatSessions = ref<ChatSessionSummary[]>([]);
 const sessionsLoading = ref(false);
@@ -1273,6 +1276,20 @@ function setSkillActionPending(skillId: string, pending: boolean) {
   skillActionPendingIds.value = next;
 }
 
+function isSkillRunPending(skillId: string): boolean {
+  return skillRunPendingIds.value.has(skillId);
+}
+
+function setSkillRunPending(skillId: string, pending: boolean) {
+  const next = new Set(skillRunPendingIds.value);
+  if (pending) {
+    next.add(skillId);
+  } else {
+    next.delete(skillId);
+  }
+  skillRunPendingIds.value = next;
+}
+
 function removeSelectedSkill(skillId: string) {
   selectedSkills.value = selectedSkills.value.filter((skill) => skill.skillId !== skillId);
   collapseComposerContextIfEmpty();
@@ -1293,6 +1310,31 @@ function useSkillInComposer(skill: SkillCatalogItem) {
   addSelectedSkill(skill);
   activePane.value = "chat";
   void focusComposer();
+}
+
+async function runSkillFromManagement(skill: SkillCatalogItem) {
+  if (isSkillRunPending(skill.skillId) || sending.value) {
+    return;
+  }
+  if (!skill.enabled) {
+    managementError.value = "请先启用该技能。";
+    return;
+  }
+  setSkillRunPending(skill.skillId, true);
+  try {
+    managementError.value = null;
+    draft.value = createSkillRunPrompt(skill.skillId, skillRunArgs.value);
+    selectedTabs.value = [];
+    selectedSkills.value = [skill];
+    composerContextExpanded.value = false;
+    activePane.value = "chat";
+    await nextTick();
+    await sendPrompt("normal");
+  } catch (error) {
+    managementError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    setSkillRunPending(skill.skillId, false);
+  }
 }
 
 async function ensureSkillCatalogLoaded() {
@@ -2524,6 +2566,7 @@ onUnmounted(() => {
               </span>
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-[12px] font-semibold text-slate-950">{{ skill.skillId }}</span>
+                <span class="block truncate text-[10px] font-mono leading-4 text-slate-400">/skill:{{ skill.skillId }}</span>
                 <span class="mt-0.5 block truncate text-[11px] leading-4 text-slate-500">{{ skillDescription(skill) }}</span>
               </span>
               <span
@@ -3163,6 +3206,15 @@ onUnmounted(() => {
                 <p class="text-[11px] text-slate-500">enabled {{ skillsSummary?.enabledCount ?? 0 }} · trusted {{ skillsSummary?.trustedCount ?? 0 }}</p>
               </div>
 
+              <label class="block space-y-1.5">
+                <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">运行参数（可选）</span>
+                <input
+                  v-model="skillRunArgs"
+                  class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500"
+                  placeholder="会附加到下面任一技能的运行命令中"
+                />
+              </label>
+
               <div v-if="skillItems.length === 0" class="rounded-md border border-dashed border-slate-300 bg-slate-50/40 px-4 py-4 text-[13px] text-slate-600">
                 <p class="font-semibold text-slate-950">还没有已安装技能</p>
                 <p class="mt-1 text-[12px] text-slate-500">你可以先创建一个新技能，或粘贴已有技能包内容安装。</p>
@@ -3214,6 +3266,17 @@ onUnmounted(() => {
                       @click="useSkillInComposer(skill)"
                     >
                       用于对话
+                    </button>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-sm border border-slate-300 bg-white px-2.5 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                      :disabled="sending || isSkillRunPending(skill.skillId) || !skill.enabled"
+                      :aria-label="skill.enabled ? `运行 ${skillDisplayName(skill)}` : `${skillDisplayName(skill)} 已禁用，需先启用`"
+                      title="将该技能发送到当前对话运行"
+                      @click="runSkillFromManagement(skill)"
+                    >
+                      <SidepanelIcon name="play" class-name="h-3 w-3" />
+                      {{ isSkillRunPending(skill.skillId) ? '运行中' : '运行' }}
                     </button>
                     <button
                       v-if="skill.versionSurface?.rollbackTarget"

@@ -242,6 +242,12 @@ export function createInitialManagementState(): ManagementState {
   };
 }
 
+export function createSkillRunPrompt(skillIdValue: string, argsText = ""): string {
+  const skillId = requireNonEmptyString(skillIdValue, "skillId 不能为空");
+  const args = String(argsText || "").trim();
+  return args ? `/skill:${skillId} ${args}` : `/skill:${skillId}`;
+}
+
 export function listPendingInterventions(
   runtimeSummary: RuntimeSummary | null | undefined,
 ): InterventionRecord[] {

@@ -1210,6 +1210,12 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("openSkillCreateEditor");
     expect(source).toContain("openSkillImportEditor");
     expect(source).toContain("editSkillPackageDraft");
+    expect(source).toContain("skillRunArgs");
+    expect(source).toContain("运行参数（可选）");
+    expect(source).toContain("createSkillRunPrompt");
+    expect(source).toContain("runSkillFromManagement");
+    expect(source).toContain("selectedSkills.value = [skill]");
+    expect(source).toContain('await sendPrompt("normal")');
     expect(source).toContain("useSkillInComposer");
     expect(source).toContain("skills.enable");
     expect(source).toContain("skills.disable");

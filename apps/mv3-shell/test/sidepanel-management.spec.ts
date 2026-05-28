@@ -14,6 +14,7 @@ import {
   createInitialManagementState,
   createManagementActionMessage,
   createSkillPackageSetupPlan,
+  createSkillRunPrompt,
   listPendingInterventions,
   listRuntimeDebugTimeline,
   listSkillCatalogItems,
@@ -359,6 +360,14 @@ describe("sidepanel management state", () => {
       ],
       notes: ["from-studio"],
     });
+  });
+
+  it("builds old-product /skill run prompts from management run args", () => {
+    expect(createSkillRunPrompt("skill.cutover.catalog")).toBe("/skill:skill.cutover.catalog");
+    expect(createSkillRunPrompt(" skill.cutover.catalog ", " inspect active tab ")).toBe(
+      "/skill:skill.cutover.catalog inspect active tab",
+    );
+    expect(() => createSkillRunPrompt(" ")).toThrow("skillId 不能为空");
   });
 
   it("builds only approved control-plane action messages", () => {
