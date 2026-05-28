@@ -1,5 +1,8 @@
 export const SIDEPANEL_MANAGEMENT_RESOURCE_IDS: readonly [
   "runtime.summary",
+  "runtime.history",
+  "audit.tail",
+  "observability.replay",
   "config.summary",
   "skills.summary",
   "hosts.summary",

@@ -1221,7 +1221,7 @@ describe("sidepanel chat transcript component", () => {
   it("keeps system settings shaped like the old product while using real runtime surfaces", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
-    expect(source).toContain("系统设置");
+    expect(source).toContain("运行调试");
     expect(source).toContain("运行策略");
     expect(source).toContain("人工接管");
     expect(source).toContain("桥接连接");
@@ -1239,6 +1239,26 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("submitHostAction('hosts.set_default'");
     expect(source).not.toContain("微信通道");
     expect(source).not.toContain("导出备份");
+  });
+
+  it("inherits the old-product debug workbench with runtime history and audit backing", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+    const managementSource = readFileSync("apps/mv3-shell/src/sidepanel/management.ts", "utf8");
+
+    expect(source).toContain('aria-label="运行调试"');
+    expect(source).toContain("关键轨迹");
+    expect(source).toContain("最近事件（运行总线）");
+    expect(source).toContain("查看原始摘要 JSON");
+    expect(source).toContain("复制诊断信息");
+    expect(source).toContain("runtimeDebugTimeline");
+    expect(source).toContain("runtimeAuditRows");
+    expect(source).toContain("diagnosticsSnapshotJson");
+    expect(managementSource).toContain('"runtime.history"');
+    expect(managementSource).toContain('"audit.tail"');
+    expect(managementSource).toContain('"observability.replay"');
+    expect(managementSource).toContain("listRuntimeDebugTimeline");
+    expect(source).not.toContain("导出调试日志");
+    expect(source).not.toContain("复制调试链接");
   });
 
   it("exposes complete provider configuration fields without echoing stored API keys", () => {

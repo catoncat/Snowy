@@ -34,6 +34,8 @@ import {
   createSkillPackageSetupPlan,
   listSkillCatalogItems,
   listPendingInterventions,
+  listRuntimeAuditRows,
+  listRuntimeDebugTimeline,
   type SkillCatalogItem,
   type ManagementState,
 } from "./management";
@@ -259,6 +261,8 @@ const hostsSummary = computed(() => managementState.value.hosts?.data ?? null);
 const skillItems = computed(() => listSkillCatalogItems(skillsSummary.value));
 const hostItems = computed(() => hostsSummary.value?.items ?? []);
 const pendingInterventions = computed(() => listPendingInterventions(runtimeSummary.value));
+const runtimeDebugTimeline = computed(() => listRuntimeDebugTimeline(managementState.value));
+const runtimeAuditRows = computed(() => listRuntimeAuditRows(managementState.value));
 const activeTabId = computed(() => runtimeSummary.value?.activeTab?.tabId ?? null);
 const visibleChatItems = computed(() =>
   filterChatItemsForToolHistory(chatState.value.items, showToolHistory.value),
@@ -382,6 +386,28 @@ const providerApiLabel = computed(
 );
 const providerBaseUrlLabel = computed(
   () => configBaseUrlDraft.value || readStringField(configSummary.value?.values.model, "baseUrl") || "未配置",
+);
+const runtimeBridgeLabel = computed(() =>
+  hostsSummary.value?.connectedCount
+    ? `在线 ${hostsSummary.value.connectedCount}/${hostsSummary.value.totalCount}`
+    : "离线",
+);
+const runtimeBridgeDetail = computed(
+  () => hostsSummary.value?.defaultHostId || hostsSummary.value?.defaultExecHostId || "未配置执行主机",
+);
+const runtimeSessionLabel = computed(() => runtimeSummary.value?.sessionId ?? "当前没有会话");
+const runtimeLastErrorLabel = computed(() =>
+  runtimeSummary.value?.lastError ? "有错误" : "未发现错误",
+);
+const diagnosticsSnapshotJson = computed(
+  () =>
+    diagnosticsPayload.value ||
+    formatJson({
+      runtime: managementState.value.runtime,
+      runtimeHistory: managementState.value.runtimeHistory,
+      auditTail: managementState.value.auditTail,
+      observabilityReplay: managementState.value.observabilityReplay,
+    }),
 );
 const providerVisibleError = computed(() => providerEditorError.value || managementError.value);
 const providerEditorTitle = computed(() =>
@@ -3246,18 +3272,51 @@ onUnmounted(() => {
       </footer>
     </section>
 
-    <section v-if="activePane === 'runtime'" class="absolute inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="系统设置" @keydown.esc="closePanelOverlay">
+    <section v-if="activePane === 'runtime'" class="absolute inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="运行调试" @keydown.esc="closePanelOverlay">
       <header class="flex h-12 shrink-0 items-center border-b border-slate-200 px-2">
         <button type="button" class="grid h-9 w-9 place-items-center rounded-sm text-[20px] text-slate-600 hover:bg-slate-100" aria-label="返回" @click="closePanelOverlay">
           <SidepanelIcon name="arrow-left" class-name="h-5 w-5" />
         </button>
-        <h2 class="ml-2 text-[14px] font-bold tracking-normal">系统设置</h2>
+        <h2 class="ml-2 text-[14px] font-bold tracking-normal">运行调试</h2>
+        <div class="ml-auto flex items-center gap-1" role="toolbar" aria-label="调试操作">
+          <button type="button" class="grid h-9 w-9 place-items-center rounded-full text-slate-600 hover:bg-slate-100 disabled:opacity-50" :disabled="managementBusy" title="刷新" aria-label="刷新调试信息" @click="refreshManagement('运行调试已刷新。')">
+            <SidepanelIcon name="refresh-ccw" class-name="h-4 w-4" />
+          </button>
+          <button type="button" class="grid h-9 w-9 place-items-center rounded-full text-slate-600 hover:bg-slate-100 disabled:opacity-50" :disabled="diagnosticsCopying" title="复制诊断信息" aria-label="复制诊断信息" @click="handleCopyDiagnosticsSnapshot">
+            <SidepanelIcon name="copy" class-name="h-4 w-4" />
+          </button>
+        </div>
       </header>
       <main class="min-h-0 flex-1 overflow-y-auto p-4 sidepanel-scrollbar">
-        <section v-if="managementLoading" class="rounded-md border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">正在加载系统设置...</section>
-        <section v-else class="space-y-8">
+        <section v-if="managementLoading" class="rounded-md border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">正在加载运行调试...</section>
+        <section v-else class="space-y-4">
           <div v-if="managementError" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">{{ managementError }}</div>
           <div v-if="managementNotice" class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700">{{ managementNotice }}</div>
+
+          <section class="rounded-md border border-slate-200 bg-slate-50/40 p-3">
+            <div class="grid grid-cols-2 gap-2.5">
+              <div class="rounded-sm border border-slate-200 bg-white p-2.5">
+                <div class="text-[10px] font-bold uppercase tracking-normal text-slate-500">Bridge</div>
+                <p class="mt-1 text-[12px] font-semibold text-slate-950">{{ runtimeBridgeLabel }}</p>
+                <p class="truncate text-[10px] text-slate-500">{{ runtimeBridgeDetail }}</p>
+              </div>
+              <div class="rounded-sm border border-slate-200 bg-white p-2.5">
+                <div class="text-[10px] font-bold uppercase tracking-normal text-slate-500">LLM</div>
+                <p class="mt-1 text-[12px] font-semibold text-slate-950">{{ providerModelLabel }}</p>
+                <p class="truncate text-[10px] text-slate-500">{{ providerApiLabel }} · {{ providerBaseUrlLabel }}</p>
+              </div>
+              <div class="rounded-sm border border-slate-200 bg-white p-2.5">
+                <div class="text-[10px] font-bold uppercase tracking-normal text-slate-500">会话</div>
+                <p class="mt-1 truncate text-[12px] font-semibold text-slate-950">{{ runtimeSessionLabel }}</p>
+                <p class="text-[10px] text-slate-500">loop {{ runtimeSummary?.loopState ?? 'idle' }}</p>
+              </div>
+              <div class="rounded-sm border border-slate-200 bg-white p-2.5">
+                <div class="text-[10px] font-bold uppercase tracking-normal text-slate-500">最近错误</div>
+                <p class="mt-1 text-[12px] font-semibold" :class="runtimeSummary?.lastError ? 'text-rose-600' : 'text-emerald-700'">{{ runtimeLastErrorLabel }}</p>
+                <p class="break-all text-[10px] text-slate-500">{{ runtimeSummary?.lastError?.message ?? '未发现错误线索' }}</p>
+              </div>
+            </div>
+          </section>
 
           <section class="space-y-4">
             <div class="flex items-center gap-2 text-slate-500 opacity-70">
@@ -3289,6 +3348,16 @@ onUnmounted(() => {
                   <p class="mt-1 break-all text-slate-600">{{ runtimeSummary?.lastError?.code ?? 'none' }}<span v-if="runtimeSummary?.lastError"> · {{ runtimeSummary.lastError.message }}</span></p>
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section class="rounded-md border border-slate-200 bg-white">
+            <header class="border-b border-slate-200 px-3 py-2 text-[12px] font-semibold text-slate-950">关键轨迹</header>
+            <div class="max-h-64 overflow-y-auto px-3 py-2.5">
+              <ul v-if="runtimeDebugTimeline.length" class="space-y-1.5 text-[12px] text-slate-700">
+                <li v-for="line in runtimeDebugTimeline" :key="line" class="rounded-sm bg-slate-50 px-2 py-1.5">{{ line }}</li>
+              </ul>
+              <p v-else class="text-[12px] text-slate-500">暂无轨迹</p>
             </div>
           </section>
 
@@ -3350,6 +3419,16 @@ onUnmounted(() => {
             </div>
           </section>
 
+          <section class="rounded-md border border-slate-200 bg-white">
+            <header class="border-b border-slate-200 px-3 py-2 text-[12px] font-semibold text-slate-950">最近事件（运行总线）</header>
+            <div class="max-h-48 overflow-y-auto px-3 py-2.5">
+              <ul v-if="runtimeAuditRows.length" class="space-y-1 text-[11px] font-mono text-slate-500">
+                <li v-for="line in runtimeAuditRows" :key="line">{{ line }}</li>
+              </ul>
+              <p v-else class="text-[12px] text-slate-500">暂无事件</p>
+            </div>
+          </section>
+
           <section class="space-y-4">
             <div class="flex items-center gap-2 text-slate-500 opacity-70">
               <span class="text-[13px]" aria-hidden="true">●</span>
@@ -3360,11 +3439,17 @@ onUnmounted(() => {
               <p class="text-[12px] leading-5 text-slate-500">捕获当前 runtime、host、site 和最近错误状态，排查完成后可清除错误状态。</p>
               <div class="flex flex-wrap gap-2">
                 <button type="button" class="rounded-sm bg-slate-950 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50" :disabled="managementBusy" @click="captureDiagnostics">捕获诊断</button>
+                <button type="button" class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 disabled:opacity-50" :disabled="diagnosticsCopying" @click="handleCopyDiagnosticsSnapshot">复制诊断信息</button>
                 <button type="button" class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 disabled:opacity-50" :disabled="managementBusy || !runtimeSummary?.lastError" @click="clearRuntimeError">清除错误</button>
               </div>
               <pre v-if="diagnosticsPayload" class="mt-3 max-h-72 overflow-auto rounded-md bg-slate-950 px-3 py-3 text-[11px] leading-5 text-slate-100"><code>{{ diagnosticsPayload }}</code></pre>
             </div>
           </section>
+
+          <details class="rounded-md border border-slate-200 bg-slate-50/40">
+            <summary class="cursor-pointer select-none px-3 py-2 text-[11px] font-semibold text-slate-500">查看原始摘要 JSON</summary>
+            <pre class="max-h-64 overflow-auto border-t border-slate-200 px-3 py-2 text-[10px] leading-relaxed text-slate-600">{{ diagnosticsSnapshotJson }}</pre>
+          </details>
         </section>
       </main>
     </section>

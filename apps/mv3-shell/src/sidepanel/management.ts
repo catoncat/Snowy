@@ -1,7 +1,10 @@
 import type {
+  AuditTailResource,
   ConfigSummaryResource,
   HostsSummaryResource,
   InterventionRecord,
+  ObservabilityReplayResource,
+  RuntimeHistoryResource,
   RuntimeSummaryResource,
   SkillsSummaryResource,
 } from "@bbl-next/contracts";
@@ -19,6 +22,9 @@ export {
 
 type ManagementResourceDocument =
   | RuntimeSummaryResource
+  | RuntimeHistoryResource
+  | AuditTailResource
+  | ObservabilityReplayResource
   | ConfigSummaryResource
   | SkillsSummaryResource
   | HostsSummaryResource;
@@ -83,6 +89,9 @@ export type ManagementActionMessage =
 
 export interface ManagementState {
   runtime: RuntimeSummaryResource | null;
+  runtimeHistory: RuntimeHistoryResource | null;
+  auditTail: AuditTailResource | null;
+  observabilityReplay: ObservabilityReplayResource | null;
   config: ConfigSummaryResource | null;
   skills: SkillsSummaryResource | null;
   hosts: HostsSummaryResource | null;
@@ -224,6 +233,9 @@ export function createSkillPackageSetupPlan(
 export function createInitialManagementState(): ManagementState {
   return {
     runtime: null,
+    runtimeHistory: null,
+    auditTail: null,
+    observabilityReplay: null,
     config: null,
     skills: null,
     hosts: null,
@@ -236,6 +248,49 @@ export function listPendingInterventions(
   return (runtimeSummary?.interventions.active ?? []).filter(
     (entry) => entry.status === "requested",
   );
+}
+
+function formatRuntimeHistoryEntry(entry: RuntimeHistoryResource["data"]["entries"][number]) {
+  const status = entry.ok ? "ok" : entry.errorCode || "failed";
+  return `step ${entry.stepIndex} · ${entry.capabilityId} · ${status} · ${entry.durationMs}ms`;
+}
+
+function readEntrySubject(entry: Record<string, unknown>): string {
+  for (const field of ["capabilityId", "hostId", "skillId", "interventionId"]) {
+    const value = entry[field];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function formatAuditTailEntry(entry: AuditTailResource["data"]["entries"][number]) {
+  const record = entry as unknown as Record<string, unknown>;
+  const subject = readEntrySubject(record);
+  const durationMs = typeof record.durationMs === "number" ? `${record.durationMs}ms` : "";
+  return [entry.kind, entry.status, subject, durationMs].filter(Boolean).join(" · ");
+}
+
+function formatReplayEntry(entry: ObservabilityReplayResource["data"]["entries"][number]) {
+  return [`${entry.subsystem}:${entry.eventType}`, entry.status, entry.summary]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export function listRuntimeDebugTimeline(state: ManagementState, limit = 8): string[] {
+  return [
+    ...(state.runtimeHistory?.data.entries ?? []).map((entry) => formatRuntimeHistoryEntry(entry)),
+    ...(state.auditTail?.data.entries ?? []).map((entry) => formatAuditTailEntry(entry)),
+    ...(state.observabilityReplay?.data.entries ?? []).map((entry) => formatReplayEntry(entry)),
+  ].slice(-limit);
+}
+
+export function listRuntimeAuditRows(state: ManagementState, limit = 8): string[] {
+  return [
+    ...(state.auditTail?.data.entries ?? []).map((entry) => formatAuditTailEntry(entry)),
+    ...(state.observabilityReplay?.data.entries ?? []).map((entry) => formatReplayEntry(entry)),
+  ].slice(-limit);
 }
 
 function projectSkillCatalogAction(
@@ -287,6 +342,12 @@ export function applyManagementResourceDocument(
   switch (resource.id) {
     case "runtime.summary":
       return { ...state, runtime: resource };
+    case "runtime.history":
+      return { ...state, runtimeHistory: resource };
+    case "audit.tail":
+      return { ...state, auditTail: resource };
+    case "observability.replay":
+      return { ...state, observabilityReplay: resource };
     case "config.summary":
       return { ...state, config: resource };
     case "skills.summary":

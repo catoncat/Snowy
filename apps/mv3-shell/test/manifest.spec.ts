@@ -5571,6 +5571,9 @@ describe("mv3-shell manifest", () => {
   it("locks sidepanel management to shared AI-surface resources and control-plane actions", async () => {
     expect(SIDEPANEL_MANAGEMENT_RESOURCE_IDS).toEqual([
       "runtime.summary",
+      "runtime.history",
+      "audit.tail",
+      "observability.replay",
       "config.summary",
       "skills.summary",
       "hosts.summary",

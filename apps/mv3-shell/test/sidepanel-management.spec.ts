@@ -1,4 +1,9 @@
 import { listBootstrapResourceMetadata } from "@bbl-next/contracts";
+import type {
+  AuditTailResource,
+  ObservabilityReplayResource,
+  RuntimeHistoryResource,
+} from "@bbl-next/contracts";
 import { BUILTIN_CAPABILITIES } from "@bbl-next/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,6 +15,7 @@ import {
   createManagementActionMessage,
   createSkillPackageSetupPlan,
   listPendingInterventions,
+  listRuntimeDebugTimeline,
   listSkillCatalogItems,
 } from "../src/sidepanel/management";
 
@@ -17,6 +23,9 @@ describe("sidepanel management state", () => {
   it("bootstraps only through unified resource.read requests", () => {
     expect(SIDEPANEL_MANAGEMENT_RESOURCE_IDS).toEqual([
       "runtime.summary",
+      "runtime.history",
+      "audit.tail",
+      "observability.replay",
       "config.summary",
       "skills.summary",
       "hosts.summary",
@@ -24,6 +33,9 @@ describe("sidepanel management state", () => {
 
     expect(buildManagementBootstrapRequests()).toEqual([
       { kind: "resource.read", resourceId: "runtime.summary", world: "main" },
+      { kind: "resource.read", resourceId: "runtime.history", world: "main" },
+      { kind: "resource.read", resourceId: "audit.tail", world: "main" },
+      { kind: "resource.read", resourceId: "observability.replay", world: "main" },
       { kind: "resource.read", resourceId: "config.summary", world: "main" },
       { kind: "resource.read", resourceId: "skills.summary", world: "main" },
       { kind: "resource.read", resourceId: "hosts.summary", world: "main" },
@@ -132,7 +144,24 @@ describe("sidepanel management state", () => {
 
   it("management resource IDs match bootstrap resources from shared registry", () => {
     const bootstrapResourceIds = listBootstrapResourceMetadata().map((entry) => entry.id);
-    expect([...SIDEPANEL_MANAGEMENT_RESOURCE_IDS].sort()).toEqual([...bootstrapResourceIds].sort());
+    expect(bootstrapResourceIds).toEqual([
+      "runtime.summary",
+      "config.summary",
+      "skills.summary",
+      "hosts.summary",
+    ]);
+    for (const resourceId of bootstrapResourceIds) {
+      expect(SIDEPANEL_MANAGEMENT_RESOURCE_IDS).toContain(resourceId);
+    }
+    expect(SIDEPANEL_MANAGEMENT_RESOURCE_IDS).toEqual([
+      "runtime.summary",
+      "runtime.history",
+      "audit.tail",
+      "observability.replay",
+      "config.summary",
+      "skills.summary",
+      "hosts.summary",
+    ]);
   });
 
   it("management action kinds are all registered in the shared capability catalog", () => {
@@ -451,6 +480,81 @@ describe("sidepanel management state", () => {
       kind: "hosts.connect",
       hostId: "local",
     });
+  });
+
+  it("projects runtime history and audit resources into old-product debug timeline rows", () => {
+    let state = createInitialManagementState();
+
+    const runtimeHistory: RuntimeHistoryResource = {
+      id: "runtime.history",
+      primitive: "resource",
+      generatedAt: "2026-05-28T00:00:00.000Z",
+      data: {
+        status: "available",
+        totalCount: 1,
+        entries: [
+          {
+            stepIndex: 2,
+            capabilityId: "browser.click",
+            startedAt: "2026-05-28T00:00:00.000Z",
+            endedAt: "2026-05-28T00:00:01.000Z",
+            durationMs: 1000,
+            ok: true,
+          },
+        ],
+      },
+    };
+    const auditTail: AuditTailResource = {
+      id: "audit.tail",
+      primitive: "resource",
+      generatedAt: "2026-05-28T00:00:00.000Z",
+      data: {
+        status: "available",
+        totalCount: 1,
+        entries: [
+          {
+            timestamp: "2026-05-28T00:00:02.000Z",
+            sessionId: "session-1",
+            kind: "loop.step",
+            capabilityId: "runtime.chat",
+            status: "executed",
+            durationMs: 20,
+          },
+        ],
+      },
+    };
+    const observabilityReplay: ObservabilityReplayResource = {
+      id: "observability.replay",
+      primitive: "resource",
+      generatedAt: "2026-05-28T00:00:00.000Z",
+      data: {
+        status: "available",
+        totalCount: 1,
+        continuityCount: 0,
+        entries: [
+          {
+            id: "evt-1",
+            timestamp: "2026-05-28T00:00:03.000Z",
+            sessionId: "session-1",
+            subsystem: "intervention",
+            eventType: "intervention.requested",
+            status: "attention",
+            summary: "Manual review required",
+            interventionId: "ivr-1",
+          },
+        ],
+      },
+    };
+
+    state = applyManagementResourceDocument(state, runtimeHistory);
+    state = applyManagementResourceDocument(state, auditTail);
+    state = applyManagementResourceDocument(state, observabilityReplay);
+
+    expect(listRuntimeDebugTimeline(state)).toEqual([
+      "step 2 · browser.click · ok · 1000ms",
+      "loop.step · executed · runtime.chat · 20ms",
+      "intervention:intervention.requested · attention · Manual review required",
+    ]);
   });
 
   it("lists only pending interventions for the sidepanel handoff queue", () => {

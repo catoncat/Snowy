@@ -16,6 +16,9 @@ type SidepanelManagementControlPlaneAction =
 
 export const SIDEPANEL_MANAGEMENT_RESOURCE_IDS = [
   "runtime.summary",
+  "runtime.history",
+  "audit.tail",
+  "observability.replay",
   "config.summary",
   "skills.summary",
   "hosts.summary",
