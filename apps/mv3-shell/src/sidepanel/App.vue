@@ -31,12 +31,13 @@ import {
   buildManagementBootstrapRequests,
   createInitialManagementState,
   createManagementActionMessage,
-  createSkillPackageSetupPlan,
+  createSkillEditorSetupPlan,
   createSkillRunPrompt,
   listSkillCatalogItems,
   listPendingInterventions,
   listRuntimeAuditRows,
   listRuntimeDebugTimeline,
+  skillMarkdownLocationForId,
   type SkillCatalogItem,
   type ManagementState,
 } from "./management";
@@ -222,21 +223,10 @@ const providerDiscoveringModels = ref(false);
 const providerEditorError = ref("");
 const showProviderApiKey = ref(false);
 const skillIdDraft = ref("");
-const skillManifestDraft = ref(
-  JSON.stringify(
-    {
-      version: 1,
-      permissions: [],
-      description: "Sidepanel authored skill",
-      kind: "prompt",
-      entry: "handler.js",
-    },
-    null,
-    2,
-  ),
-);
-const skillHandlerDraft = ref("exports.default = async ({ input }) => ({ action: input.action, args: input.args });");
-const skillMarkdownDraft = ref("# Sidepanel Authored Skill\n");
+const skillNameDraft = ref("新技能");
+const skillDescriptionDraft = ref("描述这个技能要解决什么问题");
+const skillLocationDraft = ref(skillMarkdownLocationForId(skillIdDraft.value));
+const skillBodyDraft = ref("# SKILL\n1. 读取输入\n2. 执行步骤\n3. 输出结果\n");
 const skillEditorOpen = ref(false);
 const skillEditorMode = ref<"create" | "import" | "edit">("create");
 
@@ -1022,27 +1012,12 @@ function skillSourceLabel(skill: SkillCatalogItem): string {
   return String(skill.source || "runtime");
 }
 
-function skillDraftManifest(skill: SkillCatalogItem | null = null): string {
-  return JSON.stringify(
-    {
-      version: skill?.version ?? 1,
-      permissions: skill?.permissions ?? [],
-      description: skill?.description ?? "描述这个技能要解决什么问题",
-      kind: skill?.kind ?? "prompt",
-      entry: skill?.entry ?? "handler.js",
-      ...(skill?.tags.length ? { tags: skill.tags } : {}),
-      ...(skill?.matches.length ? { matches: skill.matches } : {}),
-    },
-    null,
-    2,
-  );
-}
-
 function resetSkillPackageDraft() {
   skillIdDraft.value = "skill.new";
-  skillManifestDraft.value = skillDraftManifest();
-  skillHandlerDraft.value = "exports.default = async ({ input }) => ({ action: input.action, args: input.args });";
-  skillMarkdownDraft.value = "# 新技能\n\n描述这个技能如何帮助当前对话。\n";
+  skillNameDraft.value = "新技能";
+  skillDescriptionDraft.value = "描述这个技能要解决什么问题";
+  skillLocationDraft.value = skillMarkdownLocationForId(skillIdDraft.value);
+  skillBodyDraft.value = "# SKILL\n1. 读取输入\n2. 执行步骤\n3. 输出结果\n";
 }
 
 function openSkillCreateEditor() {
@@ -1058,7 +1033,9 @@ function openSkillImportEditor() {
   managementNotice.value = null;
   resetSkillPackageDraft();
   skillEditorMode.value = "import";
-  skillMarkdownDraft.value = "# Imported Skill\n\n粘贴已有技能的 SKILL.md 内容。\n";
+  skillNameDraft.value = "导入技能";
+  skillDescriptionDraft.value = "粘贴已有技能的 SKILL.md 内容";
+  skillBodyDraft.value = "# SKILL\n1. 粘贴已有技能的正文\n2. 保存后自动安装\n";
   skillEditorOpen.value = true;
 }
 
@@ -1066,9 +1043,10 @@ function editSkillPackageDraft(skill: SkillCatalogItem) {
   managementError.value = null;
   managementNotice.value = null;
   skillIdDraft.value = skill.skillId;
-  skillManifestDraft.value = skillDraftManifest(skill);
-  skillHandlerDraft.value = "exports.default = async ({ input }) => ({ action: input.action, args: input.args });";
-  skillMarkdownDraft.value = `# ${skillDisplayName(skill)}\n\n${skillDescription(skill)}\n`;
+  skillNameDraft.value = skillDisplayName(skill);
+  skillDescriptionDraft.value = skillDescription(skill) || "描述这个技能要解决什么问题";
+  skillLocationDraft.value = skillMarkdownLocationForId(skill.skillId);
+  skillBodyDraft.value = "# SKILL\n1. 读取输入\n2. 执行步骤\n3. 输出结果\n";
   skillEditorMode.value = "edit";
   skillEditorOpen.value = true;
 }
@@ -1443,6 +1421,10 @@ watch(draft, (value) => {
     showMentionList.value = true;
     void refreshTabs();
   }
+});
+
+watch(skillIdDraft, (value) => {
+  skillLocationDraft.value = skillMarkdownLocationForId(value);
 });
 
 function syncConfigDraftsFromSummary() {
@@ -2067,32 +2049,22 @@ function submitSkillAction(kind: SkillActionKind, selectedSkillId = skillIdDraft
 }
 
 function submitSkillPackageInstall() {
-  const skillId = skillIdDraft.value.trim();
-  if (!skillId) {
-    managementError.value = "请先填写 skill id。";
-    return;
-  }
-  let manifest: Record<string, unknown>;
   try {
-    manifest = JSON.parse(skillManifestDraft.value || "{}") as Record<string, unknown>;
-  } catch (error) {
-    managementError.value = error instanceof Error ? error.message : String(error);
-    return;
-  }
-  try {
-    const setupPlan = createSkillPackageSetupPlan(skillId, {
-      manifest,
-      handlerSource: skillHandlerDraft.value,
-      skillMarkdown: skillMarkdownDraft.value,
-      notes: ["sidepanel-studio"],
+    const setupPlan = createSkillEditorSetupPlan({
+      skillId: skillIdDraft.value,
+      skillName: skillNameDraft.value,
+      skillDescription: skillDescriptionDraft.value,
+      body: skillBodyDraft.value,
     });
     void runManagementAction("skills.install", {
-      skillId,
+      skillId: setupPlan.skillId,
       setupPlan,
       metadata: {
-        source: "sidepanel.studio",
+        source: "sidepanel.skill-editor",
       },
     });
+    skillIdDraft.value = setupPlan.skillId;
+    skillLocationDraft.value = skillMarkdownLocationForId(setupPlan.skillId);
     skillEditorOpen.value = false;
   } catch (error) {
     managementError.value = error instanceof Error ? error.message : String(error);
@@ -3304,23 +3276,36 @@ onUnmounted(() => {
           <section v-else class="space-y-4 rounded-md border border-slate-200 bg-slate-50/40 p-4">
             <div class="space-y-1">
               <h3 class="text-[15px] font-semibold tracking-normal text-slate-950">{{ skillEditorTitle }}</h3>
-              <p class="text-[12px] leading-5 text-slate-500">当前 vNext 使用 package setup plan 安装技能；保存后会写入 mem://skills 并刷新列表。</p>
+              <p class="text-[12px] leading-5 text-slate-500">
+                {{ skillEditorMode === 'edit'
+                  ? '修改完成后保存并安装，列表中的同 ID 技能会更新为最新内容。'
+                  : '先填写基本信息，再补全 SKILL 正文；保存后会自动安装到当前列表。' }}
+              </p>
             </div>
             <label class="block space-y-1.5">
-              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">Skill ID</span>
+              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">名称</span>
+              <input v-model="skillNameDraft" class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500" placeholder="新技能" />
+            </label>
+            <label class="block space-y-1.5">
+              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">描述</span>
+              <input v-model="skillDescriptionDraft" class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500" placeholder="描述这个技能要解决什么问题" />
+            </label>
+            <label class="block space-y-1.5">
+              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">技能 ID</span>
               <input v-model="skillIdDraft" class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500" placeholder="skill.example" />
             </label>
+            <details class="rounded-md border border-slate-200 bg-white px-3 py-2">
+              <summary class="cursor-pointer select-none text-[12px] font-semibold text-slate-500">高级设置</summary>
+              <div class="mt-3 space-y-1.5">
+                <label class="block space-y-1.5">
+                  <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">文件位置</span>
+                  <input v-model="skillLocationDraft" readonly class="w-full rounded-sm border border-slate-300 bg-slate-50 px-3 py-2 text-[13px] text-slate-500 outline-none" />
+                </label>
+              </div>
+            </details>
             <label class="block space-y-1.5">
-              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">Manifest JSON</span>
-              <textarea v-model="skillManifestDraft" class="min-h-36 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none focus:border-blue-500" aria-label="Manifest JSON" />
-            </label>
-            <label class="block space-y-1.5">
-              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">Handler JS</span>
-              <textarea v-model="skillHandlerDraft" class="min-h-28 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none focus:border-blue-500" aria-label="Handler JS" />
-            </label>
-            <label class="block space-y-1.5">
-              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">SKILL.md</span>
-              <textarea v-model="skillMarkdownDraft" class="min-h-24 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none focus:border-blue-500" aria-label="SKILL.md" />
+              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">SKILL 正文</span>
+              <textarea v-model="skillBodyDraft" class="min-h-44 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none focus:border-blue-500" />
             </label>
           </section>
         </section>

@@ -145,6 +145,20 @@ export interface SkillPackageConventionInput {
   notes?: string[];
 }
 
+export interface SkillMarkdownEditorDraft {
+  skillId: string;
+  skillName: string;
+  skillDescription: string;
+  body: string;
+}
+
+export interface SkillEditorSetupInput extends SkillMarkdownEditorDraft {
+  handlerSource?: string;
+}
+
+const DEFAULT_SKILL_HANDLER_SOURCE =
+  "exports.default = async ({ input }) => ({ action: input.action, args: input.args });";
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -154,6 +168,83 @@ function requireNonEmptyString(value: unknown, message: string): string {
     throw new Error(message);
   }
   return value.trim();
+}
+
+export function normalizeSkillIdSeed(input: string): string {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function skillMarkdownLocationForId(skillIdValue: string): string {
+  const skillId = normalizeSkillIdSeed(skillIdValue);
+  return skillId ? `mem://skills/${skillId}/SKILL.md` : "mem://skills/new-skill/SKILL.md";
+}
+
+export function composeSkillMarkdown(input: SkillMarkdownEditorDraft): string {
+  const skillId = String(input.skillId || "").trim();
+  const skillName = String(input.skillName || "").trim();
+  const skillDescription = String(input.skillDescription || "").trim();
+  const body = String(input.body || "").trim();
+  return [
+    "---",
+    `id: ${skillId}`,
+    `name: ${skillName}`,
+    `description: ${skillDescription}`,
+    "---",
+    body || "# SKILL",
+  ].join("\n");
+}
+
+export function parseSkillMarkdown(content: string): SkillMarkdownEditorDraft {
+  const text = String(content || "");
+  const lines = text.split(/\r?\n/);
+  if (!lines.length || lines[0]?.trim() !== "---") {
+    return {
+      skillId: "",
+      skillName: "",
+      skillDescription: "",
+      body: text,
+    };
+  }
+
+  let endLine = -1;
+  const map: Record<string, string> = {};
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = String(lines[i] || "");
+    if (line.trim() === "---") {
+      endLine = i;
+      break;
+    }
+    const match = /^([a-zA-Z0-9._-]+)\s*:\s*(.*)$/.exec(line.trim());
+    if (!match) {
+      continue;
+    }
+    map[String(match[1] || "").toLowerCase()] = String(match[2] || "")
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
+  }
+
+  if (endLine < 0) {
+    return {
+      skillId: "",
+      skillName: "",
+      skillDescription: "",
+      body: text,
+    };
+  }
+
+  return {
+    skillId: String(map.id || "").trim(),
+    skillName: String(map.name || "").trim(),
+    skillDescription: String(map.description || "").trim(),
+    body: lines
+      .slice(endLine + 1)
+      .join("\n")
+      .trim(),
+  };
 }
 
 function normalizePackageRelativePath(value: unknown, message: string): string {
@@ -228,6 +319,35 @@ export function createSkillPackageSetupPlan(
     writes,
     notes: Array.isArray(input.notes) ? input.notes.map((note) => String(note)) : [],
   };
+}
+
+export function createSkillEditorSetupPlan(input: SkillEditorSetupInput): SkillPackageSetupPlan {
+  const skillId = normalizeSkillIdSeed(input.skillId);
+  const skillName = requireNonEmptyString(input.skillName, "skill name 不能为空");
+  const skillDescription = requireNonEmptyString(
+    input.skillDescription,
+    "skill description 不能为空",
+  );
+  if (!skillId) {
+    throw new Error("skill id 不能为空");
+  }
+  return createSkillPackageSetupPlan(skillId, {
+    manifest: {
+      version: 1,
+      permissions: [],
+      description: skillDescription,
+      kind: "prompt",
+      entry: "handler.js",
+    },
+    handlerSource: input.handlerSource || DEFAULT_SKILL_HANDLER_SOURCE,
+    skillMarkdown: composeSkillMarkdown({
+      skillId,
+      skillName,
+      skillDescription,
+      body: input.body,
+    }),
+    notes: ["sidepanel-skill-editor"],
+  });
 }
 
 export function createInitialManagementState(): ManagementState {

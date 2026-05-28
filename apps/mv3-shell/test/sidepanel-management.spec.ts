@@ -13,11 +13,13 @@ import {
   buildManagementBootstrapRequests,
   createInitialManagementState,
   createManagementActionMessage,
+  createSkillEditorSetupPlan,
   createSkillPackageSetupPlan,
   createSkillRunPrompt,
   listPendingInterventions,
   listRuntimeDebugTimeline,
   listSkillCatalogItems,
+  parseSkillMarkdown,
 } from "../src/sidepanel/management";
 
 describe("sidepanel management state", () => {
@@ -359,6 +361,71 @@ describe("sidepanel management state", () => {
         },
       ],
       notes: ["from-studio"],
+    });
+  });
+
+  it("builds install setup plans from old-product Skill editor fields", () => {
+    const plan = createSkillEditorSetupPlan({
+      skillId: "Skill Demo",
+      skillName: "页面巡检",
+      skillDescription: "检查当前页面状态",
+      body: "# SKILL\n1. 读取当前标签页\n2. 输出巡检结果\n",
+    });
+
+    expect(plan.skillId).toBe("skill-demo");
+    expect(plan.baseUri).toBe("mem://skills/skill-demo");
+    expect(plan.writes).toContainEqual({
+      uri: "mem://skills/skill-demo/SKILL.md",
+      content: [
+        "---",
+        "id: skill-demo",
+        "name: 页面巡检",
+        "description: 检查当前页面状态",
+        "---",
+        "# SKILL\n1. 读取当前标签页\n2. 输出巡检结果",
+      ].join("\n"),
+    });
+    expect(plan.writes).toContainEqual({
+      uri: "mem://skills/skill-demo/skill.json",
+      content: `${JSON.stringify(
+        {
+          version: 1,
+          permissions: [],
+          description: "检查当前页面状态",
+          kind: "prompt",
+          entry: "handler.js",
+          id: "skill-demo",
+        },
+        null,
+        2,
+      )}\n`,
+    });
+    expect(plan.writes).toContainEqual({
+      uri: "mem://skills/skill-demo/handler.js",
+      content:
+        "exports.default = async ({ input }) => ({ action: input.action, args: input.args });",
+    });
+    expect(plan.notes).toEqual(["sidepanel-skill-editor"]);
+  });
+
+  it("parses old-product frontmatter Skill markdown for editor fields", () => {
+    expect(
+      parseSkillMarkdown(
+        [
+          "---",
+          "id: skill.demo",
+          "name: 页面巡检",
+          "description: 检查当前页面状态",
+          "---",
+          "# SKILL",
+          "1. 读取当前标签页",
+        ].join("\n"),
+      ),
+    ).toEqual({
+      skillId: "skill.demo",
+      skillName: "页面巡检",
+      skillDescription: "检查当前页面状态",
+      body: "# SKILL\n1. 读取当前标签页",
     });
   });
 

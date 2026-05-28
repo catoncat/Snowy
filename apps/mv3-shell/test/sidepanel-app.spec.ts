@@ -1221,7 +1221,29 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("skills.disable");
     expect(source).toContain("skills.uninstall");
     expect(source).toContain("skills.rollback");
-    expect(source).toContain("createSkillPackageSetupPlan");
+    expect(source).toContain("createSkillEditorSetupPlan");
+  });
+
+  it("uses the old product Skill editor task flow instead of raw package internals", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    for (const label of [
+      "名称",
+      "描述",
+      "技能 ID",
+      "高级设置",
+      "文件位置",
+      "SKILL 正文",
+      "保存并安装",
+    ]) {
+      expect(source).toContain(label);
+    }
+    expect(source).toContain("skillNameDraft");
+    expect(source).toContain("skillDescriptionDraft");
+    expect(source).toContain("skillLocationDraft");
+    expect(source).toContain("createSkillEditorSetupPlan");
+    expect(source).not.toContain("Manifest JSON");
+    expect(source).not.toContain("Handler JS");
   });
 
   it("keeps system settings shaped like the old product while using real runtime surfaces", () => {
