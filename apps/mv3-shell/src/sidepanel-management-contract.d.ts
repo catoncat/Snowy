@@ -16,6 +16,7 @@ export const SIDEPANEL_MANAGEMENT_ACTION_KINDS: readonly [
   "config.update",
   "intervention.resolve",
   "intervention.cancel",
+  "skills.discover",
   "skills.install",
   "skills.enable",
   "skills.disable",

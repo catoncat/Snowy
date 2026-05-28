@@ -172,6 +172,7 @@ export interface ConfigModelProviderRoutingSurface {
 export const CONFIG_CONTROL_PLANE_ACTIONS = ["config.update"] as const;
 export type ConfigControlPlaneAction = (typeof CONFIG_CONTROL_PLANE_ACTIONS)[number];
 export const SKILL_CONTROL_PLANE_ACTIONS = [
+  "skills.discover",
   "skills.install",
   "skills.enable",
   "skills.disable",
@@ -256,6 +257,7 @@ export const SKILL_AUDIT_KINDS = [...SKILL_CONTROL_PLANE_ACTIONS] as const;
 export type SkillAuditKind = (typeof SKILL_AUDIT_KINDS)[number];
 
 export const SKILL_AUDIT_STATUSES = [
+  "discovered",
   "installed",
   "enabled",
   "disabled",
@@ -316,14 +318,26 @@ export interface ConfigAuditEntry extends ControlPlaneAuditEntryBase {
   changedFields: ConfigResourceField[];
 }
 
-export interface SkillAuditEntry extends ControlPlaneAuditEntryBase {
-  kind: SkillAuditKind;
+export interface SkillLifecycleAuditEntry extends ControlPlaneAuditEntryBase {
+  kind: Exclude<SkillAuditKind, "skills.discover">;
   skillId: string;
-  status: SkillAuditStatus;
+  status: Exclude<SkillAuditStatus, "discovered">;
   trusted?: boolean;
   versionId?: string;
   versionUri?: string;
 }
+
+export interface SkillDiscoverAuditEntry extends ControlPlaneAuditEntryBase {
+  kind: "skills.discover";
+  status: "discovered";
+  root: string;
+  scannedCount: number;
+  discoveredCount: number;
+  installedCount: number;
+  skippedCount: number;
+}
+
+export type SkillAuditEntry = SkillLifecycleAuditEntry | SkillDiscoverAuditEntry;
 
 export interface LoopStepAuditEntry extends ControlPlaneAuditEntryBase {
   kind: LoopAuditKind;

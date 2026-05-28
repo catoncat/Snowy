@@ -447,6 +447,7 @@ describe("sidepanel management state", () => {
       "config.update",
       "intervention.resolve",
       "intervention.cancel",
+      "skills.discover",
       "skills.install",
       "skills.enable",
       "skills.disable",
@@ -502,6 +503,18 @@ describe("sidepanel management state", () => {
       kind: "intervention.cancel",
       interventionId: "ivr-1",
       reason: "Rejected from sidepanel",
+    });
+    expect(
+      createManagementActionMessage("skills.discover", {
+        root: "mem://skills",
+        autoInstall: true,
+        replace: true,
+      }),
+    ).toEqual({
+      kind: "skills.discover",
+      root: "mem://skills",
+      autoInstall: true,
+      replace: true,
     });
     expect(createManagementActionMessage("skills.install", { skillId: "skill.demo" })).toEqual({
       kind: "skills.install",

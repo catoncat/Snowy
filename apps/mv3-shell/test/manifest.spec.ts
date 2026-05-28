@@ -4106,6 +4106,142 @@ describe("mv3-shell manifest", () => {
     secondHarness.cleanup();
   });
 
+  it("discovers BrowserVFS package roots through the shared skills control plane", async () => {
+    const storageArea = createStorageAreaHarness();
+    const harness = createChromeHarness({
+      activeTab: {
+        id: 53,
+        url: "https://fixture.test/discover-skill-package",
+        title: "Discover Skill Package",
+      },
+      storageArea,
+    });
+    const bridge = createBackgroundRunnerBridge({
+      chromeApi: harness.chromeApi,
+      timeoutMs: 50,
+    });
+    const dispose = bridge.registerRuntimeListener();
+    const skillId = "skill.cutover.discover-action";
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.install",
+        skillId,
+        setupPlan: {
+          skillId,
+          phase: "install",
+          baseUri: `mem://skills/${skillId}`,
+          writes: [
+            {
+              uri: `mem://skills/${skillId}/SKILL.md`,
+              content: "# Discover Action\n",
+            },
+            {
+              uri: `mem://skills/${skillId}/skill.json`,
+              content: JSON.stringify({
+                id: skillId,
+                name: "Discover Action",
+                version: 1,
+                permissions: [],
+                description: "Discoverable package action",
+                kind: "prompt",
+                entry: "handler.js",
+              }),
+            },
+            {
+              uri: `mem://skills/${skillId}/handler.js`,
+              content: "exports.default = async () => ({ ok: true });",
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.uninstall",
+        skillId,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "skills.discover",
+        root: "mem://skills",
+        autoInstall: true,
+        replace: true,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        counts: {
+          scanned: 1,
+          discovered: 1,
+          installed: 1,
+          skipped: 0,
+        },
+        installed: [
+          expect.objectContaining({
+            skillId,
+            status: "installed",
+          }),
+        ],
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "skills.summary",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "skills.summary",
+        data: {
+          installedCount: 1,
+          items: [
+            expect.objectContaining({
+              skillId,
+              name: "Discover Action",
+              status: "installed",
+              source: "package",
+            }),
+          ],
+        },
+      },
+    });
+
+    await expect(
+      harness.runtimeApi.sendMessage({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "audit.tail",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: {
+        id: "audit.tail",
+        data: {
+          entries: expect.arrayContaining([
+            expect.objectContaining({
+              kind: "skills.discover",
+              root: "mem://skills",
+              installedCount: 1,
+            }),
+          ]),
+        },
+      },
+    });
+
+    dispose();
+    harness.cleanup();
+  });
+
   it("dispatches runtime events to enabled package-backed skill subscriptions", async () => {
     const storageArea = createStorageAreaHarness();
     const skillId = "skill.legacy.send-success";
@@ -5586,6 +5722,7 @@ describe("mv3-shell manifest", () => {
       "config.update",
       "intervention.resolve",
       "intervention.cancel",
+      "skills.discover",
       "skills.install",
       "skills.enable",
       "skills.disable",

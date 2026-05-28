@@ -126,6 +126,28 @@ function normalizeAuditEntry(value) {
     return entry;
   }
 
+  if (value.kind === "skills.discover") {
+    if (!SKILL_AUDIT_STATUSES.includes(value.status) || typeof value.root !== "string") {
+      return null;
+    }
+    const entry = {
+      ...baseEntry,
+      root: value.root,
+      scannedCount: Number.isFinite(Number(value.scannedCount)) ? Number(value.scannedCount) : 0,
+      discoveredCount: Number.isFinite(Number(value.discoveredCount))
+        ? Number(value.discoveredCount)
+        : 0,
+      installedCount: Number.isFinite(Number(value.installedCount))
+        ? Number(value.installedCount)
+        : 0,
+      skippedCount: Number.isFinite(Number(value.skippedCount)) ? Number(value.skippedCount) : 0,
+    };
+    if (typeof value.error === "string" && value.error.length > 0) {
+      entry.error = value.error;
+    }
+    return entry;
+  }
+
   if (SKILL_AUDIT_KINDS.includes(value.kind)) {
     if (!SKILL_AUDIT_STATUSES.includes(value.status) || typeof value.skillId !== "string") {
       return null;
@@ -2824,6 +2846,29 @@ export function createBackgroundRunnerBridge({
           skillId: message.skillId,
           action: message.action,
           args: message.args,
+        });
+      case "skills.discover":
+        return routeAuditedRuntimeCapability({
+          capabilityId: message.kind,
+          input: {
+            ...(typeof message.root === "string" ? { root: message.root } : {}),
+            ...(Array.isArray(message.roots) ? { roots: message.roots } : {}),
+            ...(typeof message.autoInstall === "boolean"
+              ? { autoInstall: message.autoInstall }
+              : {}),
+            ...(typeof message.replace === "boolean" ? { replace: message.replace } : {}),
+            ...(typeof message.maxFiles === "number" ? { maxFiles: message.maxFiles } : {}),
+            ...(typeof message.timeoutMs === "number" ? { timeoutMs: message.timeoutMs } : {}),
+          },
+          buildAuditEntry: (data) => ({
+            kind: message.kind,
+            status: "discovered",
+            root: data?.roots?.[0]?.root ?? message.root ?? "mem://skills",
+            scannedCount: data?.counts?.scanned ?? 0,
+            discoveredCount: data?.counts?.discovered ?? 0,
+            installedCount: data?.counts?.installed ?? 0,
+            skippedCount: data?.counts?.skipped ?? 0,
+          }),
         });
       case "skills.install":
       case "skills.enable":

@@ -742,6 +742,7 @@ describe("contracts", () => {
     expect(CONFIG_AUDIT_KINDS).toEqual(["config.update"]);
     expect(CONFIG_AUDIT_STATUSES).toEqual(["updated"]);
     expect(SKILL_AUDIT_KINDS).toEqual([
+      "skills.discover",
       "skills.install",
       "skills.enable",
       "skills.disable",
@@ -749,6 +750,7 @@ describe("contracts", () => {
       "skills.rollback",
     ]);
     expect(SKILL_AUDIT_STATUSES).toEqual([
+      "discovered",
       "installed",
       "enabled",
       "disabled",
@@ -762,6 +764,7 @@ describe("contracts", () => {
       "hosts.disconnect",
       "hosts.set_default",
       "config.update",
+      "skills.discover",
       "skills.install",
       "skills.enable",
       "skills.disable",
@@ -776,6 +779,7 @@ describe("contracts", () => {
       "default_set",
       "failed",
       "updated",
+      "discovered",
       "installed",
       "enabled",
       "disabled",
@@ -869,6 +873,7 @@ describe("contracts", () => {
 
   it("locks the skill lifecycle control-plane action set", () => {
     expect(SKILL_CONTROL_PLANE_ACTIONS).toEqual([
+      "skills.discover",
       "skills.install",
       "skills.enable",
       "skills.disable",

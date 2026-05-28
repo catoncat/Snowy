@@ -60,7 +60,16 @@ type InterventionCancelAction = {
   reason?: string;
 };
 
-type SkillAction = {
+type SkillDiscoverAction = {
+  kind: "skills.discover";
+  root: string;
+  autoInstall?: boolean;
+  replace?: boolean;
+  maxFiles?: number;
+  timeoutMs?: number;
+};
+
+type SkillLifecycleAction = {
   kind:
     | "skills.install"
     | "skills.enable"
@@ -84,7 +93,8 @@ export type ManagementActionMessage =
   | ConfigUpdateAction
   | InterventionResolveAction
   | InterventionCancelAction
-  | SkillAction
+  | SkillDiscoverAction
+  | SkillLifecycleAction
   | HostAction;
 
 export interface ManagementState {
@@ -534,6 +544,17 @@ export function createManagementActionMessage(
           ? { reason: payload.reason.trim() }
           : {}),
       };
+    case "skills.discover": {
+      const root = requireNonEmptyString(payload.root ?? "mem://skills", `${kind} requires root`);
+      return {
+        kind,
+        root,
+        ...(payload.autoInstall === undefined ? {} : { autoInstall: payload.autoInstall === true }),
+        ...(payload.replace === undefined ? {} : { replace: payload.replace === true }),
+        ...(typeof payload.maxFiles === "number" ? { maxFiles: payload.maxFiles } : {}),
+        ...(typeof payload.timeoutMs === "number" ? { timeoutMs: payload.timeoutMs } : {}),
+      };
+    }
     case "skills.install":
     case "skills.enable":
     case "skills.disable":

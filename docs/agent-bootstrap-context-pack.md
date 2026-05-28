@@ -51,8 +51,9 @@
 - Site Runtime baseline
 - MV3 shell baseline
 - lightweight resource contracts/builders + lookup: `runtime.summary` / `config.summary` / `skills.summary` / `hosts.summary` / `audit.tail` / `audit.intervention` + `readAiSurfaceResource()` / MV3 `resource.read`
-- minimal product control-plane actions: `hosts.*`, `config.update`, `skills.install/enable/disable/uninstall`, `runtime.capture_diagnostics`, `runtime.clear_error`
+- minimal product control-plane actions: `hosts.*`, `config.update`, `skills.discover/install/enable/disable/uninstall/rollback`, `runtime.capture_diagnostics`, `runtime.clear_error`
 - representative executable Skill old-product loop: `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions/eventSubscriptions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke/runtime.event.dispatch → JS Runner → tabs.get_active/memfs.read/event handler result → audit.tail`
+- sidepanel Skills catalog 的旧产品式导入入口现在走 `skills.discover`：从 `mem://skills` 等目录扫描 package-backed skills 并自动安装，不再把粘贴 `SKILL.md` 当主路径
 - `ISSUE-177` 已把 `ISSUE-172` 到 `ISSUE-176` 的 old-product replacement proof 收口成 shipped-with-deferred-scope；后续不要把这条链重新拆成局部小票
 - `docs/level-2-cutover-acceptance-2026-05-27.md` 已把 `ISSUE-172` 到 `ISSUE-181` 映射为 repo-side Level 2 gate evidence complete；后续默认进入外部 release acceptance / UAT / 显式 deferred breadth 提升决策，不再自动产小票
 
@@ -60,7 +61,7 @@
 
 - 这些是 foundation
 - 不是完整旧产品全量生态迁移
-- `skills.*` lifecycle、`skills.invoke` shared runtime invocation、`runtime.summary.interventions`、`audit.intervention` 与 MV3 `resource.read` 已有最小 app integration path
+- `skills.*` lifecycle / discover、`skills.invoke` shared runtime invocation、`runtime.summary.interventions`、`audit.intervention` 与 MV3 `resource.read` 已有最小 app integration path
 - 更完整的 diagnostics / debug 主面仍未收口
 
 ## 5. 当前最重要的未收口区

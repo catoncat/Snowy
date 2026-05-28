@@ -24,7 +24,7 @@
 3. skill/workflow
 4. audit
 
-## 2. 当前 action surface (44 actions)
+## 2. 当前 action surface (46 actions)
 
 ### Browser-local substrate (memfs / page / tabs / site)
 
@@ -70,6 +70,7 @@
 ### Product control plane (config / skills / hosts)
 
 - `config.update`
+- `skills.discover`
 - `skills.install`
 - `skills.enable`
 - `skills.disable`
@@ -86,11 +87,12 @@
 ## 3. 当前已锁定的 skill lifecycle control-plane 边界
 
 - `skills.invoke` 是 runtime substrate action；在 MV3 shared runtime path 中，它只会调用已安装且已启用的 executable skill，并按 skill 声明权限触达真实 capability
-- `skills.install/enable/disable/uninstall/rollback` 现在都属于 northbound product control plane
+- `skills.discover/install/enable/disable/uninstall/rollback` 现在都属于 northbound product control plane
 - `skills.uninstall` 的语义是把 skill 从 active product library 归档到 `archived`
 - `skills.uninstall` 不等于物理删除 `mem://skills/...` 包内容
 - `skills.uninstall` 不等于清空 `@versions` 历史，也不改变 rollback / trusted version contract
 - `skills.rollback` 的语义是从 shared version surface 选择显式 `versionUri` 或 latest trusted rollback target，经 BrowserVFS rehydrate 还原 `mem://skills/<id>`，并保留原 lifecycle status / trusted 状态
+- `skills.discover` 的语义是扫描 `mem://skills` 之类的 BrowserVFS package roots，自动发现带 `SKILL.md` 标记的 package-backed skills，并通过同一 shared control plane 安装进 product library；它不是粘贴 `SKILL.md` 的私有导入流
 
 ## 4. 当前已落地的轻量 resources
 
@@ -116,7 +118,7 @@
 - `skills.summary` 现在包含 per-skill `items`。对 package-backed skills，items 会把 `skill.json` 的 `actions`、`eventSubscriptions`、`matches`、`requiresActiveTab`、`entry`、`version`、`kind`、`description`、`permissions` 与 `tags` 暴露给 AI/product consumers；malformed packages 只保留 lifecycle record，不暴露无效 action / subscription catalog。sidepanel management 的 Skills catalog 消费同一份 `skills.summary.items`，不维护 app-local package registry。
 - package-backed `skills.summary.items` 现在还暴露 `versionSurface`，把 active manifest version、canonical snapshot root、rollback policy、latest trusted rollback target（若存在）接到 shared AI Surface；sidepanel Skills catalog 只消费该 shared surface，并通过 `skills.rollback` 触发 rollback，不维护 app-local version/rollback truth。
 - `runtime.event.dispatch` 是当前 legacy hook pilot 的 runtime-event dispatch entry；它只投递给已安装且已启用的 package-backed Skill `eventSubscriptions`，并复用 `skills.invoke` + JS Runner，不引入私有 Plugin registry。
-- `audit.tail` 仍是当前 control-plane / execution evidence 主资源，最小覆盖 `hosts.*`、`config.update`、`skills.install/enable/disable/uninstall/rollback`，并通过 `loop.step` 记录 explicit `skills.invoke`、event-triggered `skills.invoke` 及其子 capability trace 的 operator-visible evidence；rollback audit entry 会记录 skill/version evidence
+- `audit.tail` 仍是当前 control-plane / execution evidence 主资源，最小覆盖 `hosts.*`、`config.update`、`skills.discover/install/enable/disable/uninstall/rollback`，并通过 `loop.step` 记录 explicit `skills.invoke`、event-triggered `skills.invoke` 及其子 capability trace 的 operator-visible evidence；`skills.discover` audit entry 会记录扫描 / 发现 / 安装 / 跳过计数，rollback audit entry 会记录 skill/version evidence
 - `runtime.summary` 现已包含 typed `interventions` summary；`audit.intervention` 是 intervention lifecycle 的 shared audit read path
 - `observability.replay` 负责把 loop telemetry、control-plane audit、intervention lifecycle 与 compaction continuity marker 按时间顺序 stitch 成统一 replay 文档
 - `observability.timeline` / `observability.summary` / `observability.rawEventTail` 现已通过 shared MV3 `resource.read` 暴露 runtime-owned observability export builder 的 operator-facing read path，并保持 `observability.replay` 作为更高层 stitched replay 文档

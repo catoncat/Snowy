@@ -158,6 +158,7 @@ describe("core", () => {
 
   it("keeps skill control-plane actions aligned with canonical contracts", () => {
     expect(SKILL_CONTROL_PLANE_ACTIONS).toEqual([
+      "skills.discover",
       "skills.install",
       "skills.enable",
       "skills.disable",
@@ -167,6 +168,7 @@ describe("core", () => {
     expect(getBuiltinsByNamespace("skills").map((entry) => entry.id)).toEqual([
       "skills.invoke",
       "skills.list",
+      "skills.discover",
       "skills.install",
       "skills.enable",
       "skills.disable",
@@ -1617,6 +1619,37 @@ describe("core", () => {
       action: "skills.install",
       input,
     });
+  });
+
+  it("passes skill discovery payloads to the runtime manager without requiring skillId", async () => {
+    const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+    const providers = new FamilyProviderRegistry();
+    const captured: Array<Record<string, unknown>> = [];
+    const ctx = createSkillRuntimeContext({
+      registry,
+      providers,
+      sessionId: "s1",
+      skillId: "skill.manager",
+      permissions: ["skills.discover"],
+      manageSkill: async (request) => {
+        captured.push(request as unknown as Record<string, unknown>);
+        return { ok: true };
+      },
+    });
+
+    const input = {
+      root: "mem://skills",
+      autoInstall: true,
+      replace: true,
+    };
+
+    await expect(ctx.skills.discover(input)).resolves.toEqual({ ok: true });
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({
+      action: "skills.discover",
+      input,
+    });
+    expect(captured[0]).not.toHaveProperty("skillId");
   });
 
   it("keeps string skill lifecycle helpers working while forwarding normalized input", async () => {

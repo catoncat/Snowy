@@ -100,7 +100,7 @@ export interface SkillInvocationRequest {
 }
 
 export interface SkillManagementRequest {
-  skillId: string;
+  skillId?: string;
   action: SkillControlPlaneAction;
   input: Record<string, unknown>;
   parentContext: SkillRuntimeContext;
@@ -139,6 +139,7 @@ export interface SkillRuntimeContext {
   skills: {
     invoke(skillId: string, action: string, args: unknown): Promise<unknown>;
     install(skillId: string, input?: Record<string, unknown>): Promise<unknown>;
+    discover(input?: Record<string, unknown>): Promise<unknown>;
     enable(skillId: string): Promise<unknown>;
     disable(skillId: string): Promise<unknown>;
     uninstall(skillId: string): Promise<unknown>;
@@ -1349,6 +1350,55 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       permissions: ["skills.list"],
       description: "List all installed skills",
       inputSchema: { type: "object" },
+    }),
+    catalogEntry({
+      id: "skills.discover",
+      family: "skills",
+      operation: "discover",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["skills.discover"],
+      description:
+        "Discover package-backed skills from BrowserVFS and install them into the product skill library",
+      inputSchema: {
+        type: "object",
+        properties: {
+          root: {
+            type: "string",
+            description: "BrowserVFS root to scan. Defaults to mem://skills.",
+          },
+          roots: {
+            type: "array",
+            description: "Optional list of BrowserVFS roots to scan.",
+          },
+          autoInstall: {
+            type: "boolean",
+            description:
+              "Whether discovered package markers should be installed into lifecycle state.",
+          },
+          replace: {
+            type: "boolean",
+            description:
+              "Whether active installed skills may be refreshed from discovered package content.",
+          },
+        },
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          counts: {
+            type: "object",
+            properties: {
+              scanned: { type: "number" },
+              discovered: { type: "number" },
+              installed: { type: "number" },
+              skipped: { type: "number" },
+            },
+            required: ["scanned", "discovered", "installed", "skipped"],
+          },
+        },
+        required: ["counts"],
+      },
     }),
     catalogEntry({
       id: "skills.install",
@@ -2678,6 +2728,24 @@ function controlPlaneAuditToReplayEntry(
           ...(entry.error ? { error: entry.error } : {}),
         },
       };
+    case "skills.discover":
+      return {
+        id: `audit:${entry.kind}:${entry.root}:${entry.timestamp}`,
+        timestamp: entry.timestamp,
+        sessionId: entry.sessionId,
+        subsystem: "skill",
+        eventType: entry.kind,
+        status: "succeeded",
+        summary: `${entry.kind} ${entry.root} · installed ${entry.installedCount}/${entry.discoveredCount}`,
+        details: {
+          root: entry.root,
+          scannedCount: entry.scannedCount,
+          discoveredCount: entry.discoveredCount,
+          installedCount: entry.installedCount,
+          skippedCount: entry.skippedCount,
+          ...(entry.error ? { error: entry.error } : {}),
+        },
+      };
     case "skills.install":
     case "skills.enable":
     case "skills.disable":
@@ -3270,6 +3338,17 @@ export function createSkillRuntimeContext(
       }
       case "list":
         return options.listSkills ? await options.listSkills() : [];
+      case "discover": {
+        if (!options.manageSkill) {
+          throw new CapabilityError("E_RUNTIME", "No skill manager configured for runtime context");
+        }
+        const payload = asRecord(input);
+        return options.manageSkill({
+          action: "skills.discover",
+          input: payload,
+          parentContext: ctx,
+        });
+      }
       case "install":
       case "enable":
       case "disable":
@@ -3362,6 +3441,7 @@ export function createSkillRuntimeContext(
     },
     skills: {
       invoke: async (skillId, action, args) => call("skills.invoke", { skillId, action, args }),
+      discover: async (input = {}) => call("skills.discover", input),
       install: async (skillId, input = {}) => call("skills.install", { ...input, skillId }),
       enable: async (skillId) => call("skills.enable", { skillId }),
       disable: async (skillId) => call("skills.disable", { skillId }),

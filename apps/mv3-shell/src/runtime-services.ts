@@ -3079,7 +3079,7 @@ export function createBackgroundRuntimeServices({
         const skillInvocationService = new SkillInvocationService({
           registry,
           providers,
-          manageSkill: async (request) => skillManager.manage(request),
+          manageSkill: manageSkillRequest,
         });
         for (const skillDefinition of Array.isArray(skillDefinitions) ? skillDefinitions : []) {
           skillInvocationService.register(skillDefinition);
@@ -3241,6 +3241,13 @@ export function createBackgroundRuntimeServices({
     return sessionPromise;
   }
 
+  async function manageSkillRequest(request) {
+    if (request?.action === "skills.discover") {
+      return discoverSkills(request.input);
+    }
+    return skillManager.manage(request);
+  }
+
   async function setActiveChatSession(session) {
     activeSessionId = session.id;
     sessionPromise = Promise.resolve(session);
@@ -3279,7 +3286,7 @@ export function createBackgroundRuntimeServices({
       skillId,
       permissions,
       listSkills: async () => skillManager.listActiveIds(),
-      manageSkill: async (request) => skillManager.manage(request),
+      manageSkill: manageSkillRequest,
       invokeSkill: async (request) => {
         await ensureSkillInvokable(request.skillId);
         return services.skillInvocationService.invoke({
@@ -3452,6 +3459,136 @@ export function createBackgroundRuntimeServices({
       throw new CapabilityError("E_PERMISSION_DENIED", `Skill is not enabled: ${skillId}`);
     }
     return record;
+  }
+
+  function normalizeSkillDiscoverRoots(input = {}) {
+    const explicitRoots = Array.isArray(input?.roots) ? input.roots : [];
+    const candidates =
+      explicitRoots.length > 0
+        ? explicitRoots
+        : [
+            {
+              root: typeof input?.root === "string" ? input.root : "mem://skills",
+              source: typeof input?.source === "string" ? input.source : "browser",
+            },
+          ];
+    const roots = candidates
+      .map((item) => {
+        const root =
+          typeof item === "string"
+            ? item.trim()
+            : typeof item?.root === "string"
+              ? item.root.trim()
+              : "";
+        if (!root) {
+          return null;
+        }
+        return {
+          root,
+          source:
+            typeof item === "object" && typeof item?.source === "string" && item.source.trim()
+              ? item.source.trim()
+              : "browser",
+        };
+      })
+      .filter(Boolean);
+    return roots.length > 0 ? roots : [{ root: "mem://skills", source: "browser" }];
+  }
+
+  async function discoverSkills(input = {}) {
+    const services = await ensureServices();
+    const roots = normalizeSkillDiscoverRoots(input);
+    const autoInstall = input?.autoInstall !== false;
+    const replace = input?.replace !== false;
+    const maxFiles =
+      typeof input?.maxFiles === "number" && Number.isFinite(input.maxFiles)
+        ? Math.max(0, Math.floor(input.maxFiles))
+        : null;
+    const discovered = [];
+    const installed = [];
+    const skipped = [];
+    let scanned = 0;
+    const lifecycleRecords = new Map(
+      (await skillManager.list()).map((record) => [record.skillId, record]),
+    );
+
+    for (const rootEntry of roots) {
+      const packages = await services.browserVfs.discoverPackages(rootEntry.root);
+      for (const packageInfo of maxFiles == null ? packages : packages.slice(0, maxFiles)) {
+        scanned += 1;
+        const record = {
+          skillId: packageInfo.id,
+          uri: packageInfo.uri,
+          root: rootEntry.root,
+          source: rootEntry.source,
+        };
+        if (!packageInfo.hasMarker) {
+          skipped.push({ ...record, reason: "missing_skill_marker" });
+          continue;
+        }
+        discovered.push(record);
+
+        if (!autoInstall) {
+          continue;
+        }
+
+        const previous = lifecycleRecords.get(packageInfo.id);
+        const activeInstalled = previous && previous.status !== "archived";
+        if (activeInstalled && !replace) {
+          skipped.push({ ...record, reason: "already_installed" });
+          continue;
+        }
+
+        const canonicalPackageUri = `mem://skills/${packageInfo.id}`;
+        if (packageInfo.uri !== canonicalPackageUri) {
+          if (
+            activeInstalled &&
+            replace &&
+            (await services.browserVfs.isPackageRoot(canonicalPackageUri))
+          ) {
+            await snapshotCurrentPackageForUpdate({
+              skillId: packageInfo.id,
+              vfs: services.browserVfs,
+            });
+          }
+          await services.browserVfs.copy(packageInfo.uri, canonicalPackageUri);
+        }
+
+        const result = await skillManager.manage({
+          action: "skills.install",
+          skillId: packageInfo.id,
+          input: {
+            metadata: {
+              source: "sidepanel.skill-discover",
+              root: rootEntry.root,
+            },
+          },
+        });
+        lifecycleRecords.set(packageInfo.id, {
+          skillId: result.skill.skillId,
+          status: result.skill.status,
+          trusted: result.skill.trusted,
+          recentChange: result.skill.recentChange,
+          lastChangedAt: new Date().toISOString(),
+        });
+        installed.push(result.skill);
+      }
+    }
+
+    return {
+      sessionId: activeSessionId ?? null,
+      roots,
+      counts: {
+        scanned,
+        discovered: discovered.length,
+        installed: installed.length,
+        skipped: skipped.length,
+      },
+      discovered,
+      installed,
+      skipped,
+      skills: await listSkills(),
+    };
   }
 
   function normalizeChatSendMode(mode) {

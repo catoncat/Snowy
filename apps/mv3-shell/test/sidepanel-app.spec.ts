@@ -1224,6 +1224,27 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain("createSkillEditorSetupPlan");
   });
 
+  it("restores the old-product Skill directory discover/import flow", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("showSkillDiscoverPanel");
+    expect(source).toContain("skillDiscoverRoot");
+    expect(source).toContain("openSkillDiscoverPanelAndFocus");
+    expect(source).toContain("toggleSkillDiscoverPanel");
+    expect(source).toContain("submitSkillDiscover");
+    expect(source).toContain('runManagementAction("skills.discover"');
+    expect(source).toContain("扫描目录");
+    expect(source).toContain("扫描并导入");
+    expect(source).toContain("收起导入面板");
+    expect(source).toContain('aria-controls="skills-discover-panel"');
+    expect(source).toContain('id="skills-discover-panel"');
+    expect(source).toContain("从指定目录扫描并安装技能");
+    expect(source).toContain("从目录导入已有技能");
+    expect(source).toContain('typeof result.counts === "object"');
+    expect(source).not.toContain("isPlainObject(result.counts)");
+    expect(source).not.toContain("粘贴已有技能的 SKILL.md 内容");
+  });
+
   it("uses the old product Skill editor task flow instead of raw package internals", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 

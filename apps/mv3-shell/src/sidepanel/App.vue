@@ -79,6 +79,7 @@ interface BootstrapChatOptions {
 }
 type HostActionKind = "hosts.connect" | "hosts.disconnect" | "hosts.set_default";
 type SkillActionKind =
+  | "skills.discover"
   | "skills.install"
   | "skills.enable"
   | "skills.disable"
@@ -179,6 +180,9 @@ const skillCommandMode = ref<SkillCommandMode>("select");
 const skillActionPendingIds = ref<Set<string>>(new Set());
 const skillRunPendingIds = ref<Set<string>>(new Set());
 const skillRunArgs = ref("");
+const showSkillDiscoverPanel = ref(false);
+const skillDiscoverRoot = ref("mem://skills");
+const skillDiscoverRootInputRef = ref<HTMLInputElement | null>(null);
 const composerQueueItems = ref<ComposerQueueItem[]>([]);
 const chatSessions = ref<ChatSessionSummary[]>([]);
 const sessionsLoading = ref(false);
@@ -1044,15 +1048,25 @@ function openSkillCreateEditor() {
   skillEditorOpen.value = true;
 }
 
-function openSkillImportEditor() {
+async function openSkillDiscoverPanelAndFocus() {
   managementError.value = null;
   managementNotice.value = null;
-  resetSkillPackageDraft();
-  skillEditorMode.value = "import";
-  skillNameDraft.value = "导入技能";
-  skillDescriptionDraft.value = "粘贴已有技能的 SKILL.md 内容";
-  skillBodyDraft.value = "# SKILL\n1. 粘贴已有技能的正文\n2. 保存后自动安装\n";
-  skillEditorOpen.value = true;
+  showSkillDiscoverPanel.value = true;
+  await nextTick();
+  skillDiscoverRootInputRef.value?.focus();
+  skillDiscoverRootInputRef.value?.select();
+}
+
+function toggleSkillDiscoverPanel() {
+  if (showSkillDiscoverPanel.value) {
+    showSkillDiscoverPanel.value = false;
+    return;
+  }
+  void openSkillDiscoverPanelAndFocus();
+}
+
+function openSkillImportEditor() {
+  void openSkillDiscoverPanelAndFocus();
 }
 
 function editSkillPackageDraft(skill: SkillCatalogItem) {
@@ -1872,6 +1886,16 @@ async function runManagementAction(kind: string, payload: Record<string, unknown
       return;
     }
 
+    if (kind === "skills.discover") {
+      await bootstrapManagement();
+      const counts =
+        result.counts && typeof result.counts === "object" && !Array.isArray(result.counts)
+          ? (result.counts as Record<string, unknown>)
+          : {};
+      managementNotice.value = `扫描 ${counts.scanned ?? 0} 个，发现 ${counts.discovered ?? 0} 个，安装 ${counts.installed ?? 0} 个，跳过 ${counts.skipped ?? 0} 个`;
+      return;
+    }
+
     await refreshManagement(`${kind} complete.`);
   } catch (error) {
     managementError.value = error instanceof Error ? error.message : String(error);
@@ -2062,6 +2086,14 @@ function submitSkillAction(kind: SkillActionKind, selectedSkillId = skillIdDraft
     return;
   }
   void runManagementAction(kind, { skillId });
+}
+
+function submitSkillDiscover() {
+  void runManagementAction("skills.discover", {
+    root: skillDiscoverRoot.value || "mem://skills",
+    autoInstall: true,
+    replace: true,
+  });
 }
 
 function submitSkillPackageInstall() {
@@ -3176,14 +3208,14 @@ onUnmounted(() => {
             <section class="space-y-3 rounded-md border border-slate-200 bg-slate-50/40 px-3 py-3">
               <div class="space-y-1">
                 <h3 class="text-[11px] font-bold uppercase tracking-normal text-slate-500">技能管理</h3>
-                <p class="text-[12px] leading-5 text-slate-500">先管理已有技能；需要新建或导入时，再进入编辑界面。</p>
+                <p class="text-[12px] leading-5 text-slate-500">先管理已有技能；需要新建或修改时，再进入编辑界面。</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <button type="button" class="rounded-md bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-slate-800" @click="openSkillCreateEditor">
                   新建技能
                 </button>
-                <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100" @click="openSkillImportEditor">
-                  导入已有技能
+                <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100" :aria-expanded="showSkillDiscoverPanel ? 'true' : 'false'" aria-controls="skills-discover-panel" @click="toggleSkillDiscoverPanel">
+                  {{ showSkillDiscoverPanel ? "收起导入面板" : "导入已有技能" }}
                 </button>
               </div>
             </section>
@@ -3205,10 +3237,10 @@ onUnmounted(() => {
 
               <div v-if="skillItems.length === 0" class="rounded-md border border-dashed border-slate-300 bg-slate-50/40 px-4 py-4 text-[13px] text-slate-600">
                 <p class="font-semibold text-slate-950">还没有已安装技能</p>
-                <p class="mt-1 text-[12px] text-slate-500">你可以先创建一个新技能，或粘贴已有技能包内容安装。</p>
+                <p class="mt-1 text-[12px] text-slate-500">你可以先创建一个新技能，或从技能目录扫描并安装已有技能。</p>
                 <div class="mt-3 flex flex-wrap gap-2">
                   <button type="button" class="rounded-md bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white" @click="openSkillCreateEditor">创建第一个技能</button>
-                  <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700" @click="openSkillImportEditor">导入已有技能</button>
+                  <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700" @click="openSkillImportEditor">从目录导入已有技能</button>
                 </div>
               </div>
 
@@ -3286,6 +3318,38 @@ onUnmounted(() => {
                   </div>
                 </li>
               </ul>
+            </section>
+
+            <section
+              v-if="showSkillDiscoverPanel"
+              id="skills-discover-panel"
+              class="space-y-3 rounded-md border border-slate-200 bg-slate-50/40 px-3 py-3"
+            >
+              <div class="space-y-1">
+                <h3 class="text-[11px] font-bold uppercase tracking-normal text-slate-500">发现 / 导入</h3>
+                <p class="text-[12px] leading-5 text-slate-500">从指定目录扫描并安装技能；若存在同 ID 项，会直接用最新内容覆盖。</p>
+              </div>
+              <label class="block space-y-1.5">
+                <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">扫描目录</span>
+                <div class="flex items-center gap-2">
+                  <input
+                    ref="skillDiscoverRootInputRef"
+                    v-model="skillDiscoverRoot"
+                    class="min-w-0 flex-1 rounded-sm border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-950 outline-none focus:border-blue-500"
+                    placeholder="mem://skills"
+                  />
+                  <button
+                    type="button"
+                    class="inline-flex shrink-0 items-center rounded-sm border border-slate-300 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    :disabled="managementBusy"
+                    aria-label="扫描并导入目录中的技能"
+                    @click="submitSkillDiscover"
+                  >
+                    <SidepanelIcon v-if="managementBusy" name="loader-2" class-name="mr-1 h-3.5 w-3.5 animate-spin" />
+                    扫描并导入
+                  </button>
+                </div>
+              </label>
             </section>
           </template>
 
