@@ -1448,12 +1448,23 @@ export function createBackgroundRunnerBridge({
           module: message.module,
           ...(message.verifier ? { verifier: message.verifier } : {}),
           ...(message.stabilization ? { stabilization: message.stabilization } : {}),
-          ...(message.intervention ? { intervention: message.intervention } : {}),
+          ...(message.handoff || message.intervention
+            ? { handoff: message.handoff ?? message.intervention }
+            : {}),
+          ...(Array.isArray(message.handoffs) ? { handoffs: message.handoffs } : {}),
         },
         runnerHost: createRunnerHostProxy(),
         installer: effectivePageHookBridge,
       });
       appendObservabilityExportEvents(result);
+      if (result?.handoff && typeof getRuntimeServices().requestSiteHandoff === "function") {
+        const requested = await getRuntimeServices().requestSiteHandoff(result.handoff);
+        const { handoff: _handoff, ...rest } = result;
+        return {
+          ...rest,
+          intervention: requested,
+        };
+      }
       return result;
     } finally {
       await teardownBackgroundAutomationTab(backgroundTab.tabId, automationTarget?.cleanup);
@@ -1945,6 +1956,17 @@ export function createBackgroundRunnerBridge({
       return describeLocalHost();
     }
     return describeRemoteHost(hostId, action);
+  }
+
+  function buildHostSummary({ generatedAt, items, status } = {}) {
+    return createBootstrapSummary({
+      generatedAt,
+      hosts: {
+        status,
+        defaultHostId: state.defaultHostId,
+        items: items ?? [],
+      },
+    }).hosts;
   }
 
   async function listHosts() {
@@ -2479,12 +2501,31 @@ export function createBackgroundRunnerBridge({
       };
     }
 
+    await syncConfiguredRemoteTransport();
+    const localHost = toLocalHostSnapshot({
+      checkedAt: capturedAt,
+      offscreenPresent,
+      reachable: Boolean(runner.reachable),
+      health: runner.health ?? null,
+      error: runner.error ?? null,
+    });
+    const remoteHosts = hasRemoteHost()
+      ? await Promise.all(
+          getRemoteHostIds().map((hostId) => describeRemoteHost(hostId, "runtime.diagnostics")),
+        )
+      : [];
+    const hosts = buildHostSummary({
+      generatedAt: capturedAt,
+      items: [localHost, ...remoteHosts],
+    });
+    const hostError = hosts.items.find((entry) => entry.error)?.error ?? null;
     const degraded =
       !offscreenPresent ||
       !runner.reachable ||
       runner.health?.status === "degraded" ||
+      hosts.status === "degraded" ||
       site.status === "degraded";
-    const runtimeError = runner.error ?? site.error ?? null;
+    const runtimeError = runner.error ?? site.error ?? hostError ?? null;
     if (runtimeError) {
       setRuntimeError(runtimeError);
     }
@@ -2495,6 +2536,7 @@ export function createBackgroundRunnerBridge({
         capturedAt,
         status: degraded ? "degraded" : "healthy",
         kernel: kernelDiagnostics,
+        hosts,
         bridge: buildBridgeState({
           offscreenPresent,
           offscreenPath,
@@ -2520,7 +2562,6 @@ export function createBackgroundRunnerBridge({
     }
 
     const runtimeDiagnostics = diagnosticsResult.data;
-    const runnerHealth = runtimeDiagnostics.runner?.health;
     const activeTabSummary = activeTab ? toBootstrapActiveTab(activeTab, world) : null;
     const runtimeLoopRun = runtimeDiagnostics.kernel?.run ?? null;
     const kernelSession = runtimeDiagnostics.kernel?.session ?? null;
@@ -2532,46 +2573,16 @@ export function createBackgroundRunnerBridge({
         : activeTabSummary
           ? "healthy"
           : "empty";
-    const runtimeError = runtimeDiagnostics.runner?.error ?? runtimeDiagnostics.site?.error ?? null;
+    const hostSummary = runtimeDiagnostics.hosts ?? buildHostSummary({ generatedAt, items: [] });
+    const hostError = hostSummary.items.find((entry) => entry.error)?.error ?? null;
+    const runtimeError =
+      runtimeDiagnostics.runner?.error ?? runtimeDiagnostics.site?.error ?? hostError ?? null;
 
     if (runtimeError) {
       setRuntimeError(runtimeError);
     }
     const effectiveError = getRuntimeError();
-
-    const localHost = toLocalHostSnapshot({
-      checkedAt: generatedAt,
-      offscreenPresent: runtimeDiagnostics.bridge.offscreenPresent,
-      reachable: Boolean(runtimeDiagnostics.runner?.reachable),
-      health: runnerHealth ?? null,
-      error: runtimeDiagnostics.bridge.offscreenPresent
-        ? (runtimeDiagnostics.runner?.error ?? null)
-        : null,
-    });
-    await syncConfiguredRemoteTransport();
-    const remoteHosts = hasRemoteHost()
-      ? await Promise.all(
-          getRemoteHostIds().map((hostId) => describeRemoteHost(hostId, "runtime.summary")),
-        )
-      : [];
-    const hostItems = [
-      {
-        hostId: localHost.hostId,
-        kind: localHost.kind,
-        connected: localHost.connected,
-        state: localHost.state,
-        isDefault: localHost.isDefault,
-        capabilities: localHost.capabilities,
-      },
-      ...remoteHosts.map((remoteHost) => ({
-        hostId: remoteHost.hostId,
-        kind: remoteHost.kind,
-        connected: remoteHost.connected,
-        state: remoteHost.state,
-        isDefault: remoteHost.isDefault,
-        capabilities: remoteHost.capabilities,
-      })),
-    ];
+    const hostItems = hostSummary.items.map((entry) => ({ ...entry }));
 
     const runtimeSkillEntries =
       typeof getRuntimeServices().listSkills === "function"
@@ -2607,7 +2618,9 @@ export function createBackgroundRunnerBridge({
         sessionId: sessionId ?? kernelSession?.id ?? null,
         activeTab: activeTabSummary,
         loopState:
-          runtimeLoopRun?.phase ?? runnerHealth?.status ?? (activeTabSummary ? "idle" : null),
+          runtimeLoopRun?.phase ??
+          runtimeDiagnostics.runner?.health?.status ??
+          (activeTabSummary ? "idle" : null),
         lastError: effectiveError
           ? {
               code: effectiveError.code,
@@ -2636,15 +2649,11 @@ export function createBackgroundRunnerBridge({
         items: activeSkillEntries.map((entry) => ({ ...entry })),
       },
       hosts: {
-        status: hostItems.some((entry) => entry.state === "degraded")
-          ? "degraded"
-          : hostItems.some((entry) => entry.connected)
-            ? "healthy"
-            : "empty",
-        defaultHostId: state.defaultHostId,
-        defaultExecHostId: getDefaultExecHostId(),
-        totalCount: hostItems.length,
-        connectedCount: hostItems.filter((entry) => entry.connected).length,
+        status: hostSummary.status,
+        defaultHostId: hostSummary.defaultHostId,
+        defaultExecHostId: hostSummary.defaultExecHostId,
+        totalCount: hostSummary.totalCount,
+        connectedCount: hostSummary.connectedCount,
         items: hostItems,
       },
       config: {

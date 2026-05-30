@@ -60,6 +60,7 @@ async function resolveMaybe(value) {
 
 const DEFAULT_INTERVENTION_TIMEOUT_MS = 5 * 60 * 1000;
 const INTERVENTION_SYNC_CHANNEL_NAME = "bbl-next.interventions.v1";
+const PAGE_ACTION_HANDOFF_ACTIONS = new Set(["query", "click", "fill"]);
 const SKILL_STATUS_BY_ACTION = {
   "skills.install": "installed",
   "skills.enable": "enabled",
@@ -1066,6 +1067,97 @@ function buildPageActionRequest({ action, input, tab, scriptPath }) {
     default:
       throw new CapabilityError("E_BAD_INPUT", `Unsupported page action: ${action}`);
   }
+}
+
+function normalizeSiteHandoffPolicy(value) {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  if (!["confirm", "takeover", "input"].includes(value.kind)) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "Site handoff kind must be confirm, takeover, or input",
+    );
+  }
+  if (value.trigger != null && !["verify_failed", "runtime_blocked"].includes(value.trigger)) {
+    throw new CapabilityError(
+      "E_BAD_INPUT",
+      "Site handoff trigger must be verify_failed or runtime_blocked",
+    );
+  }
+  if (typeof value.title !== "string" || !value.title.trim()) {
+    throw new CapabilityError("E_BAD_INPUT", "Site handoff requires title");
+  }
+  if (typeof value.message !== "string" || !value.message.trim()) {
+    throw new CapabilityError("E_BAD_INPUT", "Site handoff requires message");
+  }
+  return {
+    kind: value.kind,
+    title: value.title,
+    message: value.message,
+    ...(value.trigger ? { trigger: value.trigger } : {}),
+    ...(isPlainObject(value.payload) ? { payload: { ...value.payload } } : {}),
+  };
+}
+
+function normalizeSiteHandoffPolicies(value) {
+  if (value == null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new CapabilityError("E_BAD_INPUT", "Site handoffs must be an array");
+  }
+  return value.map((item) => normalizeSiteHandoffPolicy(item)).filter(Boolean);
+}
+
+function buildImplicitPageActionHandoffs(action) {
+  if (!PAGE_ACTION_HANDOFF_ACTIONS.has(action)) {
+    return [];
+  }
+  return [
+    {
+      kind: "takeover",
+      trigger: "verify_failed",
+      title: "Page action needs human handoff",
+      message: `Finish the page.${action} step manually before continuing.`,
+    },
+    {
+      kind: "takeover",
+      trigger: "runtime_blocked",
+      title: "Page action needs human handoff",
+      message: `Finish the page.${action} step manually before continuing.`,
+    },
+  ];
+}
+
+function buildInterventionRequestFromSiteHandoff(handoff) {
+  if (!isPlainObject(handoff)) {
+    throw new CapabilityError("E_BAD_INPUT", "Site handoff requires a structured request");
+  }
+  const trigger = handoff.trigger;
+  if (trigger !== "verify_failed" && trigger !== "runtime_blocked") {
+    throw new CapabilityError("E_BAD_INPUT", "Site handoff trigger is not supported");
+  }
+  const skillId = typeof handoff.skillId === "string" && handoff.skillId ? handoff.skillId : "site";
+  const action = typeof handoff.action === "string" && handoff.action ? handoff.action : "action";
+  const tabId = typeof handoff.tabId === "number" ? handoff.tabId : null;
+  const counter =
+    trigger === "verify_failed" && isPlainObject(handoff.payload) && handoff.payload.verifier
+      ? handoff.payload.verifier
+      : "request";
+
+  return {
+    id: `ivr:${skillId}:${action}:${trigger}:${String(tabId)}:${String(counter)}`,
+    kind: handoff.kind,
+    trigger,
+    status: "requested",
+    title: handoff.title,
+    message: handoff.message,
+    ...(skillId ? { skillId } : {}),
+    ...(action ? { action } : {}),
+    tabId,
+    ...(isPlainObject(handoff.payload) ? { payload: { ...handoff.payload } } : {}),
+  };
 }
 
 function normalizeSiteFetchWithSessionInput(input: unknown): SiteFetchWithSessionInput {
@@ -3152,9 +3244,8 @@ export function createBackgroundRuntimeServices({
                 plan: payload.plan,
                 module: payload.module,
                 ...(typeof payload.verifier === "string" ? { verifier: payload.verifier } : {}),
-                ...(isPlainObject(payload.intervention)
-                  ? { intervention: payload.intervention }
-                  : {}),
+                ...(isPlainObject(payload.handoff) ? { handoff: payload.handoff } : {}),
+                ...(Array.isArray(payload.handoffs) ? { handoffs: payload.handoffs } : {}),
                 executeRunner: async (request) => {
                   const runnerExecuted = await kernelRef.executeStep(sessionId, {
                     kind: "runner",
@@ -4417,6 +4508,20 @@ export function createBackgroundRuntimeServices({
     };
   }
 
+  async function requestSiteHandoff(handoff) {
+    const [{ kernel }, session] = await Promise.all([ensureServices(), ensureSession()]);
+    const requested = kernel.requestIntervention(
+      session.id,
+      buildInterventionRequestFromSiteHandoff(handoff),
+      {
+        timeoutMs: interventionTimeoutMs,
+        escalationMs: interventionEscalationMs,
+      },
+    );
+    await persistAndBroadcastInterventions(session.id);
+    return requested;
+  }
+
   async function invokeSiteSkill({
     skillId,
     action,
@@ -4426,6 +4531,8 @@ export function createBackgroundRuntimeServices({
     plan,
     module,
     verifier,
+    handoff,
+    handoffs,
     intervention,
   }) {
     if (!plan || !Array.isArray(plan.steps)) {
@@ -4440,6 +4547,8 @@ export function createBackgroundRuntimeServices({
 
     const [{ kernel }, session] = await Promise.all([ensureServices(), ensureSession()]);
     const resolvedTab = await resolveRuntimeInvokeTab(chromeApi, tab, "Site runtime invoke");
+    const handoffPolicy = normalizeSiteHandoffPolicy(handoff ?? intervention);
+    const handoffPolicies = normalizeSiteHandoffPolicies(handoffs);
     activateKernelRun(kernel, session.id);
     let executed: any;
     try {
@@ -4455,7 +4564,8 @@ export function createBackgroundRuntimeServices({
           plan,
           module,
           ...(verifier ? { verifier } : {}),
-          ...(intervention ? { intervention } : {}),
+          ...(handoffPolicy ? { handoff: handoffPolicy } : {}),
+          ...(handoffPolicies.length > 0 ? { handoffs: handoffPolicies } : {}),
         },
       });
     } finally {
@@ -4463,18 +4573,15 @@ export function createBackgroundRuntimeServices({
     }
     const result = unwrapKernelStepResult(executed, `Site runtime invoke failed for ${skillId}`);
 
-    if (!result.intervention) {
+    if (!result.handoff) {
       return result;
     }
 
-    const requested = kernel.requestIntervention(session.id, result.intervention, {
-      timeoutMs: interventionTimeoutMs,
-      escalationMs: interventionEscalationMs,
-    });
-    await persistAndBroadcastInterventions(session.id);
+    const requested = await requestSiteHandoff(result.handoff);
+    const { handoff: _handoff, ...rest } = result;
 
     return {
-      ...result,
+      ...rest,
       intervention: requested,
     };
   }
@@ -4533,6 +4640,7 @@ export function createBackgroundRuntimeServices({
       tab: toCanonicalTab(await requireActiveTab(chromeApi, `page.${action}`)),
       scriptPath: pageHookScriptPath,
     });
+    const implicitHandoffs = buildImplicitPageActionHandoffs(request.action);
     activateKernelRun(kernel, session.id);
     let executed: any;
     try {
@@ -4548,6 +4656,7 @@ export function createBackgroundRuntimeServices({
           plan: request.plan,
           module: request.module,
           ...(request.verifier ? { verifier: request.verifier } : {}),
+          ...(implicitHandoffs.length > 0 ? { handoffs: implicitHandoffs } : {}),
         },
       });
     } finally {
@@ -4555,18 +4664,15 @@ export function createBackgroundRuntimeServices({
     }
     const result = unwrapKernelStepResult(executed, `Page action failed for page.${action}`);
 
-    if (!result.intervention) {
+    if (!result.handoff) {
       return result;
     }
 
-    const requested = kernel.requestIntervention(session.id, result.intervention, {
-      timeoutMs: interventionTimeoutMs,
-      escalationMs: interventionEscalationMs,
-    });
-    await persistAndBroadcastInterventions(session.id);
+    const requested = await requestSiteHandoff(result.handoff);
+    const { handoff: _handoff, ...rest } = result;
 
     return {
-      ...result,
+      ...rest,
       intervention: requested,
     };
   }
@@ -4667,6 +4773,7 @@ export function createBackgroundRuntimeServices({
     readInterventionAudit,
     readReplayContinuityMarkers,
     refreshChatSessionTitle,
+    requestSiteHandoff,
     resolveIntervention,
     cancelIntervention,
     retryAssistantMessage,

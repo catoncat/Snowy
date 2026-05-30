@@ -1020,6 +1020,19 @@ describe("mv3-shell manifest", () => {
           hostReady: true,
           offscreenPresent: true,
         },
+        hosts: {
+          status: "healthy",
+          items: [
+            expect.objectContaining({
+              hostId: "local",
+              state: "connected",
+              health: {
+                status: "healthy",
+                checkedAt: expect.any(String),
+              },
+            }),
+          ],
+        },
         runner: {
           reachable: true,
           health: {
@@ -1114,6 +1127,19 @@ describe("mv3-shell manifest", () => {
         bridge: {
           hostReady: true,
           offscreenPresent: true,
+        },
+        hosts: {
+          status: "healthy",
+          items: [
+            expect.objectContaining({
+              hostId: "local",
+              state: "connected",
+              health: {
+                status: "healthy",
+                checkedAt: expect.any(String),
+              },
+            }),
+          ],
         },
         runner: {
           reachable: true,
@@ -1781,31 +1807,38 @@ describe("mv3-shell manifest", () => {
     ).resolves.toMatchObject({
       ok: true,
       data: {
-        status: "empty",
+        status: "degraded",
         resourceKeys: ["runtime", "config", "skills", "hosts"],
         runtime: {
           status: "empty",
           sessionId: expect.any(String),
           loopState: "idle",
           activeTab: null,
+          lastError: {
+            code: "E_RUNTIME",
+            message: "Offscreen document is not available",
+          },
         },
         skills: {
           status: "empty",
           installedCount: 0,
         },
         hosts: {
-          status: "empty",
+          status: "degraded",
           defaultHostId: null,
           totalCount: 1,
           connectedCount: 0,
           items: [
-            {
+            expect.objectContaining({
               hostId: "local",
               kind: "local",
               connected: false,
-              state: "disconnected",
+              state: "degraded",
               isDefault: false,
-            },
+              health: expect.objectContaining({
+                status: "degraded",
+              }),
+            }),
           ],
         },
         config: {
@@ -2543,6 +2576,68 @@ describe("mv3-shell manifest", () => {
     );
     expect(kernel.getStepCount(session.id)).toBe(8);
     expect(kernel.getRunState(session.id).phase).toBe("paused");
+
+    harness.cleanup();
+  });
+
+  it("creates page action intervention lifecycle from runtime-owned handoff policy", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 12,
+        url: "https://fixture.test/forms",
+        title: "Fixture Form",
+      },
+    });
+    const invokeRunner = vi.fn(async (invocation: { input: unknown }) => ({
+      ok: true,
+      data: {
+        ok: true,
+        result: {
+          result: invocation.input,
+          durationMs: 1,
+        },
+      },
+    }));
+    const pageHookBridge = {
+      install: vi.fn(async (step: { scriptId: string }) => ({
+        installationId: `${step.scriptId}:1`,
+      })),
+      invoke: vi.fn(async ({ input }: { input: unknown }) => input),
+      verify: vi.fn(async () => false),
+    };
+    const services = createBackgroundRuntimeServices({
+      chromeApi: harness.chromeApi,
+      invokeRunner,
+      pageHookBridge,
+      interventionTimeoutMs: 10_000,
+    });
+
+    const result = await services.invokePageAction({
+      action: "query",
+      input: {
+        selector: "#missing",
+      },
+    });
+    const [{ kernel }, session] = await Promise.all([
+      services.ensureServices(),
+      services.ensureSession(),
+    ]);
+
+    expect(result).toMatchObject({
+      verified: false,
+      intervention: {
+        id: "ivr:bbl.page:query:verify_failed:12:page_query",
+        kind: "takeover",
+        trigger: "verify_failed",
+        status: "requested",
+        sessionId: session.id,
+      },
+    });
+    expect(result).not.toHaveProperty("handoff");
+    expect(kernel.getInterventionSummary({ sessionId: session.id })).toMatchObject({
+      status: "requested",
+      activeCount: 1,
+    });
 
     harness.cleanup();
   });

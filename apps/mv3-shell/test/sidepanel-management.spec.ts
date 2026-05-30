@@ -328,6 +328,31 @@ describe("sidepanel management state", () => {
         },
         loopState: "idle",
         lastError: null,
+        hosts: {
+          status: "healthy",
+          defaultHostId: "local",
+          defaultExecHostId: null,
+          totalCount: 1,
+          connectedCount: 1,
+          items: [
+            {
+              hostId: "local",
+              kind: "local",
+              connected: true,
+              state: "connected",
+              isDefault: true,
+              capabilities: {
+                read: true,
+                write: true,
+                edit: true,
+                exec: false,
+              },
+              health: {
+                status: "healthy",
+              },
+            },
+          ],
+        },
         interventions: {
           status: "empty",
           totalCount: 0,
@@ -394,6 +419,9 @@ describe("sidepanel management state", () => {
               write: true,
               edit: true,
               exec: false,
+            },
+            health: {
+              status: "healthy",
             },
           },
         ],
@@ -921,6 +949,14 @@ describe("sidepanel management state", () => {
       activeTab: null,
       loopState: "paused",
       lastError: null,
+      hosts: {
+        status: "empty",
+        defaultHostId: null,
+        defaultExecHostId: null,
+        totalCount: 0,
+        connectedCount: 0,
+        items: [],
+      },
       interventions: {
         status: "requested",
         totalCount: 3,

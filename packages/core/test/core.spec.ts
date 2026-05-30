@@ -497,6 +497,14 @@ describe("core", () => {
             activeTab: null,
             loopState: "idle",
             lastError: null,
+            hosts: {
+              status: "empty",
+              defaultHostId: null,
+              defaultExecHostId: null,
+              totalCount: 0,
+              connectedCount: 0,
+              items: [],
+            },
             interventions: {
               status: "empty",
               totalCount: 0,
@@ -952,6 +960,9 @@ describe("core", () => {
             connected: true,
             state: "connected",
             isDefault: true,
+            health: {
+              checkedAt: "2026-03-29T00:00:00.000Z",
+            },
           },
         ],
       },
@@ -970,6 +981,23 @@ describe("core", () => {
           world: "main",
         },
         loopState: "idle",
+        hosts: {
+          status: "healthy",
+          defaultHostId: "local",
+          defaultExecHostId: null,
+          totalCount: 1,
+          connectedCount: 1,
+          items: [
+            expect.objectContaining({
+              hostId: "local",
+              state: "connected",
+              health: {
+                status: "healthy",
+                checkedAt: "2026-03-29T00:00:00.000Z",
+              },
+            }),
+          ],
+        },
         actionCapabilities: {
           total: BUILTIN_CAPABILITIES.length,
         },
@@ -1035,24 +1063,39 @@ describe("core", () => {
             connected: false,
             state: "degraded",
             isDefault: true,
+            health: {
+              status: "degraded",
+            },
+            error: {
+              code: "E_REMOTE_UNAVAILABLE",
+              message: "transport offline",
+            },
           },
         ],
       },
     });
 
-    expect(summary).toMatchObject({
+    expect(summary.status).toBe("degraded");
+    expect(summary.runtime).toMatchObject({
       status: "degraded",
-      runtime: {
-        status: "degraded",
-        sessionId: "session-2",
-        loopState: "degraded",
-        lastError: {
-          code: "E_RUNTIME",
-        },
+      sessionId: "session-2",
+      loopState: "degraded",
+      lastError: {
+        code: "E_RUNTIME",
       },
-      hosts: {
+    });
+    expect(summary.hosts).toMatchObject({
+      status: "degraded",
+      connectedCount: 0,
+    });
+    expect(summary.runtime.hosts).toEqual(summary.hosts);
+    expect(summary.hosts.items[0]).toMatchObject({
+      hostId: "local",
+      health: {
         status: "degraded",
-        connectedCount: 0,
+      },
+      error: {
+        code: "E_REMOTE_UNAVAILABLE",
       },
     });
   });

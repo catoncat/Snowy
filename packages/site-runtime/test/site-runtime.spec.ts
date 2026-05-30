@@ -1040,7 +1040,7 @@ describe("site-runtime", () => {
                 maxAttempts: 2,
                 intervalMs: 0,
               },
-              intervention: {
+              handoff: {
                 kind: "confirm",
                 title: "Manual readiness required",
                 message: "DOM never reached a ready state",
@@ -1090,9 +1090,9 @@ describe("site-runtime", () => {
         "stabilize:not_ready:1",
         "stabilize:not_ready:2",
         "stabilize:exhausted",
-        "intervention:confirm:runtime_blocked",
+        "handoff:confirm:runtime_blocked",
       ],
-      intervention: {
+      handoff: {
         trigger: "runtime_blocked",
         title: "Manual readiness required",
       },
@@ -2001,7 +2001,7 @@ describe("site-runtime", () => {
       expect(installs).toEqual(["gh.check:status:content"]);
     });
 
-    it("returns a takeover intervention request instead of throwing when verify failure is marked for handoff", async () => {
+    it("returns a takeover handoff draft instead of throwing when verify failure is marked for handoff", async () => {
       const registry = new SiteSkillRegistry([
         {
           skillId: "github.login",
@@ -2011,7 +2011,7 @@ describe("site-runtime", () => {
               name: "complete_login",
               worlds: ["content"],
               verifier: "login_complete",
-              intervention: {
+              handoff: {
                 kind: "takeover",
                 title: "Need human takeover",
                 message: "Verification failed after the automated login step.",
@@ -2046,10 +2046,9 @@ describe("site-runtime", () => {
         result: {
           step: "submitted",
         },
-        intervention: {
+        handoff: {
           kind: "takeover",
           trigger: "verify_failed",
-          status: "requested",
           title: "Need human takeover",
           message: "Verification failed after the automated login step.",
           skillId: "github.login",
@@ -2069,15 +2068,14 @@ describe("site-runtime", () => {
           "install:content:github.login:complete_login:content",
           "invoke:complete_login",
           "verify:login_complete",
-          "intervention:takeover:verify_failed",
+          "handoff:takeover:verify_failed",
         ],
       });
-      expect(result.intervention?.id).toMatch(
-        /^ivr:github\.login:complete_login:verify_failed:5:login_complete$/,
-      );
+      expect("id" in (result.handoff ?? {})).toBe(false);
+      expect("status" in (result.handoff ?? {})).toBe(false);
     });
 
-    it("returns an input intervention request when runtime blocking errors are marked for handoff", async () => {
+    it("returns an input handoff draft when runtime blocking errors are marked for handoff", async () => {
       const registry = new SiteSkillRegistry([
         {
           skillId: "twitter.login",
@@ -2085,7 +2083,7 @@ describe("site-runtime", () => {
           actions: [
             {
               name: "submit_2fa",
-              intervention: {
+              handoff: {
                 kind: "input",
                 trigger: "runtime_blocked",
                 title: "Need user input",
@@ -2119,10 +2117,9 @@ describe("site-runtime", () => {
       expect(result).toMatchObject({
         verified: false,
         result: null,
-        intervention: {
+        handoff: {
           kind: "input",
           trigger: "runtime_blocked",
-          status: "requested",
           title: "Need user input",
           message: "2FA code is required before the flow can continue.",
           skillId: "twitter.login",
@@ -2140,14 +2137,42 @@ describe("site-runtime", () => {
             },
           },
         },
-        trace: ["match:twitter.login", "intervention:input:runtime_blocked"],
+        trace: ["match:twitter.login", "handoff:input:runtime_blocked"],
       });
-      expect(result.intervention?.id).toMatch(
-        /^ivr:twitter\.login:submit_2fa:runtime_blocked:6:request$/,
-      );
+      expect("id" in (result.handoff ?? {})).toBe(false);
+      expect("status" in (result.handoff ?? {})).toBe(false);
     });
 
-    it("implicitly converts page.query verify failures into takeover handoff requests", async () => {
+    it("does not attach product-level page handoff unless caller supplies a policy", async () => {
+      await expect(
+        invokeSingleActionSiteSkill({
+          request: {
+            skillId: "bbl.page",
+            action: "query",
+            tab: { tabId: 8, url: "https://fixture.test/query", active: true },
+            input: {
+              selector: "#missing",
+            },
+            plan: {
+              skillId: "bbl.page",
+              action: "query",
+              steps: [],
+            },
+            module: {
+              id: "bbl.page.query",
+              source: "exports.default = async ({ input }) => ({ selector: input.selector });",
+            },
+            verifier: "page_query",
+          },
+          runnerHost: new JsRunnerHost(),
+          verifier: {
+            verify: async () => false,
+          },
+        }),
+      ).rejects.toThrow(/Verifier failed/);
+    });
+
+    it("uses caller-provided page.query handoff policy for verify failures", async () => {
       const result = await invokeSingleActionSiteSkill({
         request: {
           skillId: "bbl.page",
@@ -2166,6 +2191,11 @@ describe("site-runtime", () => {
             source: "exports.default = async ({ input }) => ({ selector: input.selector });",
           },
           verifier: "page_query",
+          handoff: {
+            kind: "takeover",
+            title: "Page action needs human handoff",
+            message: "Finish the page.query step manually before continuing.",
+          },
         },
         runnerHost: new JsRunnerHost(),
         verifier: {
@@ -2178,7 +2208,7 @@ describe("site-runtime", () => {
         result: {
           selector: "#missing",
         },
-        intervention: {
+        handoff: {
           kind: "takeover",
           trigger: "verify_failed",
           skillId: "bbl.page",
@@ -2196,12 +2226,12 @@ describe("site-runtime", () => {
           "match:bbl.page",
           "invoke:query",
           "verify:page_query",
-          "intervention:takeover:verify_failed",
+          "handoff:takeover:verify_failed",
         ],
       });
     });
 
-    it("implicitly converts page.click verify failures into takeover handoff requests", async () => {
+    it("uses caller-provided page.click handoff policy for verify failures", async () => {
       const result = await invokeSingleActionSiteSkill({
         request: {
           skillId: "bbl.page",
@@ -2220,6 +2250,11 @@ describe("site-runtime", () => {
             source: "exports.default = async ({ input }) => ({ uid: input.uid });",
           },
           verifier: "page_click",
+          handoff: {
+            kind: "takeover",
+            title: "Page action needs human handoff",
+            message: "Finish the page.click step manually before continuing.",
+          },
         },
         runnerHost: new JsRunnerHost(),
         verifier: {
@@ -2232,7 +2267,7 @@ describe("site-runtime", () => {
         result: {
           uid: "missing-button",
         },
-        intervention: {
+        handoff: {
           kind: "takeover",
           trigger: "verify_failed",
           skillId: "bbl.page",
@@ -2250,12 +2285,12 @@ describe("site-runtime", () => {
           "match:bbl.page",
           "invoke:click",
           "verify:page_click",
-          "intervention:takeover:verify_failed",
+          "handoff:takeover:verify_failed",
         ],
       });
     });
 
-    it("implicitly converts page.fill runtime failures into takeover handoff requests", async () => {
+    it("uses caller-provided page.fill handoff policy for runtime blocking failures", async () => {
       const result = await invokeSingleActionSiteSkill({
         request: {
           skillId: "bbl.page",
@@ -2274,6 +2309,12 @@ describe("site-runtime", () => {
             id: "bbl.page.fill",
             source: "exports.default = async () => ({ ok: true });",
           },
+          handoff: {
+            kind: "takeover",
+            trigger: "runtime_blocked",
+            title: "Page action needs human handoff",
+            message: "Finish the page.fill step manually before continuing.",
+          },
           executeRunner: async () => {
             throw new Error("input disappeared");
           },
@@ -2284,7 +2325,7 @@ describe("site-runtime", () => {
       expect(result).toMatchObject({
         verified: false,
         result: null,
-        intervention: {
+        handoff: {
           kind: "takeover",
           trigger: "runtime_blocked",
           skillId: "bbl.page",
@@ -2302,7 +2343,7 @@ describe("site-runtime", () => {
             },
           },
         },
-        trace: ["match:bbl.page", "intervention:takeover:runtime_blocked"],
+        trace: ["match:bbl.page", "handoff:takeover:runtime_blocked"],
       });
     });
 

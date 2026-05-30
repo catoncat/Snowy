@@ -1,8 +1,5 @@
 import {
   CapabilityError,
-  type InterventionKind,
-  type InterventionRequest,
-  type InterventionTrigger,
   type ObservabilityTimelineEvent,
   type RawEventTailEntry,
 } from "@bbl-next/contracts";
@@ -48,7 +45,8 @@ export interface SiteSkillAction {
   injectionSteps?: InjectionStep[];
   verifier?: string;
   stabilization?: SiteActionStabilizationPolicy;
-  intervention?: SiteActionInterventionPolicy;
+  handoff?: SiteActionHandoffPolicy;
+  handoffs?: SiteActionHandoffPolicy[];
 }
 
 export interface SiteSkillDefinition {
@@ -118,11 +116,25 @@ export type SiteVerificationResult =
   | SiteVerificationPending
   | SiteVerificationFailure;
 
-export interface SiteActionInterventionPolicy {
-  kind: InterventionKind;
+export type SiteActionHandoffKind = "confirm" | "takeover" | "input";
+export type SiteActionHandoffTrigger = "verify_failed" | "runtime_blocked";
+
+export interface SiteActionHandoffPolicy {
+  kind: SiteActionHandoffKind;
   title: string;
   message: string;
-  trigger?: Extract<InterventionTrigger, "verify_failed" | "runtime_blocked">;
+  trigger?: SiteActionHandoffTrigger;
+  payload?: Record<string, unknown>;
+}
+
+export interface SiteActionHandoffRequest {
+  kind: SiteActionHandoffKind;
+  trigger: SiteActionHandoffTrigger;
+  title: string;
+  message: string;
+  skillId?: string;
+  action?: string;
+  tabId?: number | null;
   payload?: Record<string, unknown>;
 }
 
@@ -146,19 +158,19 @@ export interface SiteInvocationSuccess {
   trace: string[];
   timelineEvents: ObservabilityTimelineEvent[];
   rawEvents: RawEventTailEntry[];
-  intervention?: undefined;
+  handoff?: undefined;
 }
 
-export interface SiteInvocationIntervention {
+export interface SiteInvocationHandoff {
   result: unknown;
   verified: false;
   trace: string[];
   timelineEvents: ObservabilityTimelineEvent[];
   rawEvents: RawEventTailEntry[];
-  intervention: InterventionRequest;
+  handoff: SiteActionHandoffRequest;
 }
 
-export type SiteInvocationResult = SiteInvocationSuccess | SiteInvocationIntervention;
+export type SiteInvocationResult = SiteInvocationSuccess | SiteInvocationHandoff;
 
 export interface SiteFetchWithSessionInput {
   url: string;
@@ -185,7 +197,8 @@ export interface SingleActionSiteSkillRequest {
   module: RunnerModule;
   verifier?: string;
   stabilization?: SiteActionStabilizationPolicy;
-  intervention?: SiteActionInterventionPolicy;
+  handoff?: SiteActionHandoffPolicy;
+  handoffs?: SiteActionHandoffPolicy[];
   executeRunner?: SiteActionRunnerExecutor;
 }
 
@@ -201,7 +214,6 @@ const DEFAULT_SITE_STABILIZATION_POLICY: Required<SiteActionStabilizationPolicy>
   intervalMs: 100,
   maxAttempts: 5,
 };
-const PAGE_ACTION_HANDOFF_ACTIONS = new Set(["query", "click", "fill"]);
 
 export function buildInjectionPlan(skillId: string, action: SiteSkillAction): InjectionPlan {
   if (action.injectionSteps && action.injectionSteps.length > 0) {
@@ -234,24 +246,17 @@ function patternToRegExp(pattern: string): RegExp {
   return new RegExp(`^${escaped}$`);
 }
 
-function buildInterventionRequest(input: {
-  policy: SiteActionInterventionPolicy;
-  trigger: Extract<InterventionTrigger, "verify_failed" | "runtime_blocked">;
+function buildHandoffRequest(input: {
+  policy: SiteActionHandoffPolicy;
+  trigger: SiteActionHandoffTrigger;
   skillId: string;
   action: string;
   tab: ActiveTabMetadata;
   payload?: Record<string, unknown>;
-}): InterventionRequest {
-  const counter =
-    input.trigger === "verify_failed" && input.payload?.verifier
-      ? input.payload.verifier
-      : "request";
-
+}): SiteActionHandoffRequest {
   return {
-    id: `ivr:${input.skillId}:${input.action}:${input.trigger}:${input.tab.tabId}:${String(counter)}`,
     kind: input.policy.kind,
     trigger: input.trigger,
-    status: "requested",
     title: input.policy.title,
     message: input.policy.message,
     skillId: input.skillId,
@@ -265,24 +270,7 @@ function buildInterventionRequest(input: {
   };
 }
 
-function buildImplicitPageActionInterventionPolicy(input: {
-  skillId: string;
-  action: string;
-  trigger: Extract<InterventionTrigger, "verify_failed" | "runtime_blocked">;
-}): SiteActionInterventionPolicy | null {
-  if (input.skillId !== "bbl.page" || !PAGE_ACTION_HANDOFF_ACTIONS.has(input.action)) {
-    return null;
-  }
-
-  return {
-    kind: "takeover",
-    trigger: input.trigger,
-    title: "Page action needs human handoff",
-    message: `Finish the page.${input.action} step manually before continuing.`,
-  };
-}
-
-function asInterventionPayload(value: unknown): Record<string, unknown> | undefined {
+function asHandoffPayload(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
@@ -292,7 +280,15 @@ function asInterventionPayload(value: unknown): Record<string, unknown> | undefi
 export function createSingleActionSiteSkillDefinition(
   request: Pick<
     SingleActionSiteSkillRequest,
-    "skillId" | "tab" | "action" | "plan" | "module" | "verifier" | "stabilization" | "intervention"
+    | "skillId"
+    | "tab"
+    | "action"
+    | "plan"
+    | "module"
+    | "verifier"
+    | "stabilization"
+    | "handoff"
+    | "handoffs"
   >,
 ): SiteSkillDefinition {
   return {
@@ -305,7 +301,10 @@ export function createSingleActionSiteSkillDefinition(
         injectionSteps: request.plan.steps,
         ...(request.verifier ? { verifier: request.verifier } : {}),
         ...(request.stabilization ? { stabilization: request.stabilization } : {}),
-        ...(request.intervention ? { intervention: request.intervention } : {}),
+        ...(request.handoff ? { handoff: request.handoff } : {}),
+        ...(request.handoffs
+          ? { handoffs: request.handoffs.map((handoff) => ({ ...handoff })) }
+          : {}),
       },
     ],
   };
@@ -618,22 +617,18 @@ export class SiteSkillRuntime {
       site,
     };
     const targetInstallation = site.installations[site.installations.length - 1];
-    const toInterventionResult = (
-      trigger: Extract<InterventionTrigger, "verify_failed" | "runtime_blocked">,
+    const toHandoffResult = (
+      trigger: SiteActionHandoffTrigger,
       payload?: Record<string, unknown>,
       result: unknown = null,
-    ): SiteInvocationIntervention | null => {
-      const policy =
-        action.intervention ??
-        buildImplicitPageActionInterventionPolicy({
-          skillId: request.skillId,
-          action: request.action,
-          trigger,
-        });
+    ): SiteInvocationHandoff | null => {
+      const policy = [action.handoff, ...(action.handoffs ?? [])]
+        .filter((item): item is SiteActionHandoffPolicy => Boolean(item))
+        .find((item) => (item.trigger ?? "verify_failed") === trigger);
       if (!policy || (policy.trigger ?? "verify_failed") !== trigger) {
         return null;
       }
-      const intervention = buildInterventionRequest({
+      const handoff = buildHandoffRequest({
         policy,
         trigger,
         skillId: request.skillId,
@@ -641,11 +636,11 @@ export class SiteSkillRuntime {
         tab: request.tab,
         payload,
       });
-      trace.push(`intervention:${policy.kind}:${trigger}`);
+      trace.push(`handoff:${policy.kind}:${trigger}`);
       eventRecorder.record({
-        eventType: "site.intervention",
+        eventType: "site.handoff",
         status: "attention",
-        summary: `Requested ${policy.kind} intervention for ${trigger}`,
+        summary: `Requested ${policy.kind} handoff for ${trigger}`,
         details: {
           kind: policy.kind,
           trigger,
@@ -658,7 +653,7 @@ export class SiteSkillRuntime {
         trace,
         timelineEvents: eventRecorder.timelineEvents,
         rawEvents: eventRecorder.rawEvents,
-        intervention,
+        handoff,
       };
     };
 
@@ -788,7 +783,7 @@ export class SiteSkillRuntime {
                 summary: `Stabilization exhausted for ${action.verifier}`,
                 details: stabilizationPayload,
               });
-              const intervention = toInterventionResult(
+              const handoff = toHandoffResult(
                 "runtime_blocked",
                 {
                   result,
@@ -796,8 +791,8 @@ export class SiteSkillRuntime {
                 },
                 result,
               );
-              if (intervention) {
-                return intervention;
+              if (handoff) {
+                return handoff;
               }
               throw new CapabilityError(
                 "E_RUNTIME",
@@ -822,7 +817,7 @@ export class SiteSkillRuntime {
                 : {}),
             },
           });
-          const intervention = toInterventionResult(
+          const handoff = toHandoffResult(
             "verify_failed",
             {
               result,
@@ -834,8 +829,8 @@ export class SiteSkillRuntime {
             },
             result,
           );
-          if (intervention) {
-            return intervention;
+          if (handoff) {
+            return handoff;
           }
           throw new CapabilityError(
             "E_VERIFY_FAILED",
@@ -860,7 +855,7 @@ export class SiteSkillRuntime {
                 message: error.message,
               }
             : { message: String(error) },
-        ...(asInterventionPayload(request.input)
+        ...(asHandoffPayload(request.input)
           ? { input: request.input as Record<string, unknown> }
           : {}),
       };
@@ -870,9 +865,9 @@ export class SiteSkillRuntime {
         summary: `Runtime blocked while invoking ${request.skillId}.${request.action}`,
         details: runtimeBlockedPayload,
       });
-      const intervention = toInterventionResult("runtime_blocked", runtimeBlockedPayload);
-      if (intervention) {
-        return intervention;
+      const handoff = toHandoffResult("runtime_blocked", runtimeBlockedPayload);
+      if (handoff) {
+        return handoff;
       }
       throw error;
     }

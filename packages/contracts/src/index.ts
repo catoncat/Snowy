@@ -215,6 +215,12 @@ export type ExecutionHostHealthStatus = "healthy" | "degraded" | "unknown";
 export const EXECUTION_HOST_OPERATIONS = ["read", "write", "edit", "exec"] as const;
 export type ExecutionHostOperation = (typeof EXECUTION_HOST_OPERATIONS)[number];
 
+export interface ExecutionHostError {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
 export interface ExecutionHostCapabilities {
   read: boolean;
   write: boolean;
@@ -233,6 +239,7 @@ export interface ExecutionHostRecord {
     status: ExecutionHostHealthStatus;
     checkedAt?: string;
   };
+  error?: ExecutionHostError | null;
 }
 
 export interface HostControlPlaneSnapshot {
@@ -458,6 +465,7 @@ export interface RuntimeBootstrapSummary {
     code: string;
     message: string;
   } | null;
+  hosts: HostsBootstrapSummary;
   interventions: InterventionSummary;
   actionCapabilities: {
     total: number;
@@ -520,6 +528,11 @@ export interface HostBootstrapSummaryItem {
   state: ExecutionHostState;
   isDefault: boolean;
   capabilities: ExecutionHostCapabilities;
+  health: {
+    status: ExecutionHostHealthStatus;
+    checkedAt?: string;
+  };
+  error?: ExecutionHostError | null;
 }
 
 export interface HostsBootstrapSummary {
@@ -714,6 +727,7 @@ export interface RuntimeDiagnosticsPayload {
   capturedAt: string;
   status: "healthy" | "degraded";
   kernel: KernelDiagnosticsSnapshot;
+  hosts: HostsBootstrapSummary;
   bridge: RuntimeDiagnosticsBridgeState;
   runner: RuntimeDiagnosticsRunnerState;
   site: RuntimeDiagnosticsSiteState;

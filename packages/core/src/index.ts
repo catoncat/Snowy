@@ -27,6 +27,7 @@ import {
   type ControlPlaneAuditEntry,
   type ExecutionBinding,
   type ExecutionHostCapabilities,
+  type ExecutionHostError,
   type ExecutionHostHealthStatus,
   type ExecutionHostKind,
   type ExecutionHostOperation,
@@ -554,6 +555,7 @@ export interface HostControlPlaneRecordInput {
     status?: ExecutionHostHealthStatus;
     checkedAt?: string;
   };
+  error?: ExecutionHostError | null;
 }
 
 export interface HostControlPlaneSnapshotInput {
@@ -1914,6 +1916,7 @@ function normalizeExecutionHostRecord(input: HostControlPlaneRecordInput): Execu
       status: healthStatus,
       ...(input.health?.checkedAt ? { checkedAt: input.health.checkedAt } : {}),
     },
+    ...(input.error ? { error: { ...input.error } } : {}),
   };
 }
 
@@ -1979,6 +1982,7 @@ export function connectExecutionHost(
       status: healthStatus,
       ...(health.checkedAt ? { checkedAt: health.checkedAt } : {}),
     },
+    error: null,
   }));
 }
 
@@ -2000,6 +2004,7 @@ export function disconnectExecutionHost(
       status: healthStatus,
       ...(health.checkedAt ? { checkedAt: health.checkedAt } : {}),
     },
+    error: null,
   }));
 }
 
@@ -2063,30 +2068,6 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
         }
       : null;
 
-  const runtimeStatus = input.runtime?.status ?? (activeTab ? "healthy" : "empty");
-  const runtime: RuntimeBootstrapSummary = {
-    status: runtimeStatus,
-    mode: "active-tab-only",
-    sessionId: input.runtime?.sessionId ?? null,
-    activeTab,
-    loopState: input.runtime?.loopState ?? null,
-    lastError: input.runtime?.lastError ?? null,
-    interventions: buildInterventionSummary(input.runtime?.interventions),
-    actionCapabilities: {
-      total: capabilityCatalog.length,
-      namespaces: actionNamespaces,
-    },
-  };
-
-  const skills: SkillsBootstrapSummary = {
-    status: (input.skills?.installedCount ?? 0) > 0 ? "healthy" : "empty",
-    installedCount: input.skills?.installedCount ?? 0,
-    enabledCount: input.skills?.enabledCount ?? 0,
-    trustedCount: input.skills?.trustedCount ?? 0,
-    recentChange: input.skills?.recentChange ?? null,
-    items: (input.skills?.items ?? []).map((item) => cloneSkillSummaryItem(item)),
-  };
-
   const hostItems = (input.hosts?.items ?? []).map((entry) => {
     const normalized = normalizeExecutionHostRecord(entry);
     return {
@@ -2096,6 +2077,8 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
       state: normalized.state,
       isDefault: normalized.isDefault,
       capabilities: normalized.capabilities,
+      health: normalized.health,
+      ...(normalized.error ? { error: normalized.error } : {}),
     };
   });
   const connectedCount = hostItems.filter((entry) => entry.connected).length;
@@ -2112,6 +2095,31 @@ export function createBootstrapSummary(input: BootstrapSummaryInput = {}): Boots
     totalCount: hostItems.length,
     connectedCount,
     items: hostItems,
+  };
+
+  const runtimeStatus = input.runtime?.status ?? (activeTab ? "healthy" : "empty");
+  const runtime: RuntimeBootstrapSummary = {
+    status: runtimeStatus,
+    mode: "active-tab-only",
+    sessionId: input.runtime?.sessionId ?? null,
+    activeTab,
+    loopState: input.runtime?.loopState ?? null,
+    lastError: input.runtime?.lastError ?? null,
+    hosts,
+    interventions: buildInterventionSummary(input.runtime?.interventions),
+    actionCapabilities: {
+      total: capabilityCatalog.length,
+      namespaces: actionNamespaces,
+    },
+  };
+
+  const skills: SkillsBootstrapSummary = {
+    status: (input.skills?.installedCount ?? 0) > 0 ? "healthy" : "empty",
+    installedCount: input.skills?.installedCount ?? 0,
+    enabledCount: input.skills?.enabledCount ?? 0,
+    trustedCount: input.skills?.trustedCount ?? 0,
+    recentChange: input.skills?.recentChange ?? null,
+    items: (input.skills?.items ?? []).map((item) => cloneSkillSummaryItem(item)),
   };
 
   const config = buildConfigBootstrapSummary(input.config);

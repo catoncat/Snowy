@@ -358,6 +358,52 @@ describe("contracts", () => {
         },
         loopState: "idle",
         lastError: null,
+        hosts: {
+          status: "degraded",
+          defaultHostId: "local",
+          defaultExecHostId: "remote",
+          connectedCount: 1,
+          totalCount: 2,
+          items: [
+            {
+              hostId: "local",
+              kind: "local",
+              connected: true,
+              isDefault: true,
+              state: "connected",
+              capabilities: {
+                read: true,
+                write: true,
+                edit: true,
+                exec: false,
+              },
+              health: {
+                status: "healthy",
+                checkedAt: "2026-03-30T00:00:00.000Z",
+              },
+            },
+            {
+              hostId: "remote",
+              kind: "remote",
+              connected: false,
+              isDefault: false,
+              state: "degraded",
+              capabilities: {
+                read: false,
+                write: false,
+                edit: false,
+                exec: true,
+              },
+              health: {
+                status: "degraded",
+              },
+              error: {
+                code: "E_REMOTE_UNAVAILABLE",
+                message: "transport offline",
+              },
+            },
+          ],
+        },
         interventions: {
           status: "empty",
           totalCount: 0,
@@ -516,6 +562,9 @@ describe("contracts", () => {
               edit: true,
               exec: false,
             },
+            health: {
+              status: "healthy",
+            },
           },
           {
             hostId: "remote",
@@ -528,6 +577,13 @@ describe("contracts", () => {
               write: false,
               edit: false,
               exec: true,
+            },
+            health: {
+              status: "degraded",
+            },
+            error: {
+              code: "E_REMOTE_UNAVAILABLE",
+              message: "transport offline",
             },
           },
         ],
@@ -681,6 +737,31 @@ describe("contracts", () => {
             },
           ],
         },
+      },
+      hosts: {
+        status: "healthy" as const,
+        defaultHostId: "local",
+        defaultExecHostId: null,
+        totalCount: 1,
+        connectedCount: 1,
+        items: [
+          {
+            hostId: "local",
+            kind: "local" as const,
+            connected: true,
+            state: "connected" as const,
+            isDefault: true,
+            capabilities: {
+              read: true,
+              write: true,
+              edit: true,
+              exec: false,
+            },
+            health: {
+              status: "healthy" as const,
+            },
+          },
+        ],
       },
       bridge: {
         hostReady: true,
