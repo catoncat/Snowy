@@ -32,6 +32,13 @@ import {
   invokeSingleActionSiteSkill,
 } from "@bbl-next/site-runtime";
 export {
+  BACKGROUND_CONTROL_PLANE_ACTION_KINDS,
+  BACKGROUND_CONTROL_PLANE_RESOURCE_IDS,
+  createBackgroundControlPlaneRoutePlan,
+  hasSidepanelManagementActionCoverage,
+  isBackgroundControlPlaneActionKind,
+} from "./background-control-plane-route-plan.js";
+export {
   SIDEPANEL_MANAGEMENT_ACTION_KINDS,
   SIDEPANEL_MANAGEMENT_RESOURCE_IDS,
   isSidepanelManagementActionKind,

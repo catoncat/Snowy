@@ -14,6 +14,7 @@ import {
 } from "@bbl-next/contracts";
 import { createBootstrapSummary, readAiSurfaceResource } from "@bbl-next/core";
 import { invokeSingleActionSiteSkill } from "@bbl-next/site-runtime";
+import { createBackgroundControlPlaneRoutePlan } from "./background-control-plane-route-plan.js";
 import { createPageHookBridge } from "./page-hook-bridge.js";
 import {
   createBackgroundRuntimeServices,
@@ -2752,6 +2753,190 @@ export function createBackgroundRunnerBridge({
     }
   }
 
+  const controlPlaneRoutePlan = createBackgroundControlPlaneRoutePlan({
+    readResource({ resourceId, world, limit }) {
+      if (resourceId === "loop.telemetry") {
+        return readRuntimeHistoryResource(limit);
+      }
+      return readResource({
+        resourceId,
+        world,
+        limit,
+      });
+    },
+    readAuditTail(message) {
+      return readResource({
+        resourceId: "audit.tail",
+        limit: message.limit,
+      });
+    },
+    async readHostAudit(message) {
+      return {
+        ok: true,
+        data: {
+          entries: (await readAuditTail(message.limit)).filter((entry) =>
+            HOST_AUDIT_KINDS.includes(entry.kind),
+          ),
+        },
+      };
+    },
+    readInterventionAudit(message) {
+      return readResource({
+        resourceId: "audit.intervention",
+        limit: message.limit,
+      });
+    },
+    bootstrap(message) {
+      return bootstrap({
+        world: message.world,
+      });
+    },
+    runtimeDiagnostics(message) {
+      return diagnostics({
+        tabId: message.tabId,
+        world: message.world,
+      });
+    },
+    clearRuntimeError() {
+      return {
+        ok: true,
+        data: clearRuntimeError(),
+      };
+    },
+    async updateConfig(message) {
+      const response = await routeAuditedRuntimeCapability({
+        capabilityId: "config.update",
+        input: {
+          patch: message.patch,
+        },
+        buildAuditEntry: () => ({
+          kind: "config.update",
+          status: "updated",
+          changedFields: Object.keys(message.patch ?? {}).filter((field) =>
+            CONFIG_RESOURCE_FIELDS.includes(field),
+          ),
+        }),
+      });
+      if (response.ok) {
+        await syncConfiguredRemoteTransport(true);
+      }
+      return response;
+    },
+    listHosts() {
+      return listHosts();
+    },
+    getHost(message) {
+      return getHost({
+        hostId: message.hostId,
+      });
+    },
+    connectHost(message) {
+      return connectHost({
+        hostId: message.hostId,
+      });
+    },
+    disconnectHost(message) {
+      return disconnectHost({
+        hostId: message.hostId,
+      });
+    },
+    setDefaultHost(message) {
+      return setDefaultHost({
+        hostId: message.hostId,
+      });
+    },
+    hostHealth(message) {
+      return hostHealth({
+        hostId: message.hostId,
+      });
+    },
+    discoverSkills(message) {
+      return routeAuditedRuntimeCapability({
+        capabilityId: message.kind,
+        input: {
+          ...(typeof message.root === "string" ? { root: message.root } : {}),
+          ...(Array.isArray(message.roots) ? { roots: message.roots } : {}),
+          ...(typeof message.autoInstall === "boolean" ? { autoInstall: message.autoInstall } : {}),
+          ...(typeof message.replace === "boolean" ? { replace: message.replace } : {}),
+          ...(typeof message.maxFiles === "number" ? { maxFiles: message.maxFiles } : {}),
+          ...(typeof message.timeoutMs === "number" ? { timeoutMs: message.timeoutMs } : {}),
+        },
+        buildAuditEntry: (data) => ({
+          kind: message.kind,
+          status: "discovered",
+          root: data?.roots?.[0]?.root ?? message.root ?? "mem://skills",
+          scannedCount: data?.counts?.scanned ?? 0,
+          discoveredCount: data?.counts?.discovered ?? 0,
+          installedCount: data?.counts?.installed ?? 0,
+          skippedCount: data?.counts?.skipped ?? 0,
+        }),
+      });
+    },
+    manageSkillLifecycle(message) {
+      return routeAuditedRuntimeCapability({
+        capabilityId: message.kind,
+        input: {
+          skillId: message.skillId,
+          ...(message.kind === "skills.install" && "setupPlan" in message
+            ? { setupPlan: message.setupPlan }
+            : {}),
+          ...(message.kind === "skills.install" && "metadata" in message
+            ? { metadata: message.metadata }
+            : {}),
+          ...(message.kind === "skills.rollback" && "versionUri" in message
+            ? { versionUri: message.versionUri }
+            : {}),
+        },
+        buildAuditEntry: (data) => ({
+          kind: message.kind,
+          skillId: data?.skill?.skillId ?? message.skillId,
+          status: message.kind === "skills.rollback" ? "rolled_back" : data?.skill?.status,
+          trusted: data?.skill?.trusted,
+          ...(data?.rollback?.versionId ? { versionId: data.rollback.versionId } : {}),
+          ...(data?.rollback?.versionUri ? { versionUri: data.rollback.versionUri } : {}),
+          ...(data?.update?.previousVersion?.versionId
+            ? { versionId: data.update.previousVersion.versionId }
+            : {}),
+          ...(data?.update?.previousVersion?.uri
+            ? { versionUri: data.update.previousVersion.uri }
+            : {}),
+        }),
+      });
+    },
+    async listInterventions() {
+      const snapshot = await readInterventionObservabilitySnapshot(getRuntimeServices());
+      return {
+        ok: true,
+        data: {
+          items: snapshot.items,
+          summary: snapshot.summary,
+        },
+      };
+    },
+    async resolveIntervention(message) {
+      return {
+        ok: true,
+        data: {
+          intervention: await getRuntimeServices().resolveIntervention({
+            id: message.interventionId ?? message.id,
+            resolution: message.resolution,
+          }),
+        },
+      };
+    },
+    async cancelIntervention(message) {
+      return {
+        ok: true,
+        data: {
+          intervention: await getRuntimeServices().cancelIntervention({
+            id: message.interventionId ?? message.id,
+            reason: message.reason,
+          }),
+        },
+      };
+    },
+  });
+
   async function route(message) {
     if (!message || message.target !== RUNNER_BACKGROUND_TARGET) {
       return undefined;
@@ -2798,47 +2983,19 @@ export function createBackgroundRunnerBridge({
           timeoutMs: message.timeoutMs,
         });
       case "hosts.list":
-        return listHosts();
+        return controlPlaneRoutePlan.route(message);
       case "hosts.get":
-        return getHost({
-          hostId: message.hostId,
-        });
+        return controlPlaneRoutePlan.route(message);
       case "hosts.connect":
-        return connectHost({
-          hostId: message.hostId,
-        });
+        return controlPlaneRoutePlan.route(message);
       case "hosts.disconnect":
-        return disconnectHost({
-          hostId: message.hostId,
-        });
+        return controlPlaneRoutePlan.route(message);
       case "hosts.set_default":
-        return setDefaultHost({
-          hostId: message.hostId,
-        });
+        return controlPlaneRoutePlan.route(message);
       case "hosts.health":
-        return hostHealth({
-          hostId: message.hostId,
-        });
+        return controlPlaneRoutePlan.route(message);
       case "config.update":
-        return (async () => {
-          const response = await routeAuditedRuntimeCapability({
-            capabilityId: "config.update",
-            input: {
-              patch: message.patch,
-            },
-            buildAuditEntry: () => ({
-              kind: "config.update",
-              status: "updated",
-              changedFields: Object.keys(message.patch ?? {}).filter((field) =>
-                CONFIG_RESOURCE_FIELDS.includes(field),
-              ),
-            }),
-          });
-          if (response.ok) {
-            await syncConfiguredRemoteTransport(true);
-          }
-          return response;
-        })();
+        return controlPlaneRoutePlan.route(message);
       case "skills.list":
         return routeRuntimeCapability("skills.list");
       case "skills.invoke":
@@ -2848,62 +3005,13 @@ export function createBackgroundRunnerBridge({
           args: message.args,
         });
       case "skills.discover":
-        return routeAuditedRuntimeCapability({
-          capabilityId: message.kind,
-          input: {
-            ...(typeof message.root === "string" ? { root: message.root } : {}),
-            ...(Array.isArray(message.roots) ? { roots: message.roots } : {}),
-            ...(typeof message.autoInstall === "boolean"
-              ? { autoInstall: message.autoInstall }
-              : {}),
-            ...(typeof message.replace === "boolean" ? { replace: message.replace } : {}),
-            ...(typeof message.maxFiles === "number" ? { maxFiles: message.maxFiles } : {}),
-            ...(typeof message.timeoutMs === "number" ? { timeoutMs: message.timeoutMs } : {}),
-          },
-          buildAuditEntry: (data) => ({
-            kind: message.kind,
-            status: "discovered",
-            root: data?.roots?.[0]?.root ?? message.root ?? "mem://skills",
-            scannedCount: data?.counts?.scanned ?? 0,
-            discoveredCount: data?.counts?.discovered ?? 0,
-            installedCount: data?.counts?.installed ?? 0,
-            skippedCount: data?.counts?.skipped ?? 0,
-          }),
-        });
+        return controlPlaneRoutePlan.route(message);
       case "skills.install":
       case "skills.enable":
       case "skills.disable":
       case "skills.uninstall":
       case "skills.rollback":
-        return routeAuditedRuntimeCapability({
-          capabilityId: message.kind,
-          input: {
-            skillId: message.skillId,
-            ...(message.kind === "skills.install" && "setupPlan" in message
-              ? { setupPlan: message.setupPlan }
-              : {}),
-            ...(message.kind === "skills.install" && "metadata" in message
-              ? { metadata: message.metadata }
-              : {}),
-            ...(message.kind === "skills.rollback" && "versionUri" in message
-              ? { versionUri: message.versionUri }
-              : {}),
-          },
-          buildAuditEntry: (data) => ({
-            kind: message.kind,
-            skillId: data?.skill?.skillId ?? message.skillId,
-            status: message.kind === "skills.rollback" ? "rolled_back" : data?.skill?.status,
-            trusted: data?.skill?.trusted,
-            ...(data?.rollback?.versionId ? { versionId: data.rollback.versionId } : {}),
-            ...(data?.rollback?.versionUri ? { versionUri: data.rollback.versionUri } : {}),
-            ...(data?.update?.previousVersion?.versionId
-              ? { versionId: data.update.previousVersion.versionId }
-              : {}),
-            ...(data?.update?.previousVersion?.uri
-              ? { versionUri: data.update.previousVersion.uri }
-              : {}),
-          }),
-        });
+        return controlPlaneRoutePlan.route(message);
       case "runtime.event.dispatch":
         return routeRuntimeEventDispatch(message);
       case "page.press_key":
@@ -2954,63 +3062,19 @@ export function createBackgroundRunnerBridge({
           url: message.url,
         });
       case "resource.read":
-        if (message.resourceId === "loop.telemetry") {
-          return readRuntimeHistoryResource(message.limit);
-        }
-        return readResource({
-          resourceId: message.resourceId,
-          world: message.world,
-          limit: message.limit,
-        });
+        return controlPlaneRoutePlan.route(message);
       case "audit.tail":
-        return readResource({
-          resourceId: "audit.tail",
-          limit: message.limit,
-        });
+        return controlPlaneRoutePlan.route(message);
       case "audit.host":
-        return {
-          ok: true,
-          data: {
-            entries: (await readAuditTail(message.limit)).filter((entry) =>
-              HOST_AUDIT_KINDS.includes(entry.kind),
-            ),
-          },
-        };
+        return controlPlaneRoutePlan.route(message);
       case "audit.intervention":
-        return readResource({
-          resourceId: "audit.intervention",
-          limit: message.limit,
-        });
-      case "intervention.list": {
-        const snapshot = await readInterventionObservabilitySnapshot(getRuntimeServices());
-        return {
-          ok: true,
-          data: {
-            items: snapshot.items,
-            summary: snapshot.summary,
-          },
-        };
-      }
+        return controlPlaneRoutePlan.route(message);
+      case "intervention.list":
+        return controlPlaneRoutePlan.route(message);
       case "intervention.resolve":
-        return {
-          ok: true,
-          data: {
-            intervention: await getRuntimeServices().resolveIntervention({
-              id: message.interventionId ?? message.id,
-              resolution: message.resolution,
-            }),
-          },
-        };
+        return controlPlaneRoutePlan.route(message);
       case "intervention.cancel":
-        return {
-          ok: true,
-          data: {
-            intervention: await getRuntimeServices().cancelIntervention({
-              id: message.interventionId ?? message.id,
-              reason: message.reason,
-            }),
-          },
-        };
+        return controlPlaneRoutePlan.route(message);
       case "site.runtime.invoke":
         return routeRuntimeService(() =>
           message?.automationTarget?.lane === "background"
@@ -3101,19 +3165,11 @@ export function createBackgroundRunnerBridge({
         );
       case "runtime.diagnostics":
       case "runtime.capture_diagnostics":
-        return diagnostics({
-          tabId: message.tabId,
-          world: message.world,
-        });
+        return controlPlaneRoutePlan.route(message);
       case "runtime.clear_error":
-        return {
-          ok: true,
-          data: clearRuntimeError(),
-        };
+        return controlPlaneRoutePlan.route(message);
       case "runtime.bootstrap":
-        return bootstrap({
-          world: message.world,
-        });
+        return controlPlaneRoutePlan.route(message);
       default:
         return {
           ok: false,

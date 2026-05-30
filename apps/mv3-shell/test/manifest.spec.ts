@@ -14,8 +14,11 @@ import {
 } from "../src/background.js";
 import { createDefaultOffscreenRunnerHost, createOffscreenRunnerBridge } from "../src/offscreen.js";
 import {
+  BACKGROUND_CONTROL_PLANE_ACTION_KINDS,
+  BACKGROUND_CONTROL_PLANE_RESOURCE_IDS,
   SIDEPANEL_MANAGEMENT_ACTION_KINDS,
   SIDEPANEL_MANAGEMENT_RESOURCE_IDS,
+  createBackgroundControlPlaneRoutePlan,
   createBackgroundRuntimeServices,
   createRemoteExecAdapter,
   createRemoteHostProbe,
@@ -5819,6 +5822,117 @@ describe("mv3-shell manifest", () => {
 
     dispose();
     harness.cleanup();
+  });
+
+  it("routes sidepanel management through a background control-plane route plan", () => {
+    expect(BACKGROUND_CONTROL_PLANE_RESOURCE_IDS).toEqual(SIDEPANEL_MANAGEMENT_RESOURCE_IDS);
+    expect(BACKGROUND_CONTROL_PLANE_ACTION_KINDS).toEqual(
+      expect.arrayContaining([...SIDEPANEL_MANAGEMENT_ACTION_KINDS]),
+    );
+
+    const routePlan = createBackgroundControlPlaneRoutePlan({
+      readResource: vi.fn(),
+      readAuditTail: vi.fn(),
+      readHostAudit: vi.fn(),
+      readInterventionAudit: vi.fn(),
+      bootstrap: vi.fn(),
+      runtimeDiagnostics: vi.fn(),
+      clearRuntimeError: vi.fn(),
+      updateConfig: vi.fn(),
+      listHosts: vi.fn(),
+      getHost: vi.fn(),
+      discoverSkills: vi.fn(),
+      manageSkillLifecycle: vi.fn(),
+      connectHost: vi.fn(),
+      disconnectHost: vi.fn(),
+      setDefaultHost: vi.fn(),
+      hostHealth: vi.fn(),
+      listInterventions: vi.fn(),
+      resolveIntervention: vi.fn(),
+      cancelIntervention: vi.fn(),
+    });
+
+    expect(routePlan.canRoute("resource.read")).toBe(true);
+    expect(routePlan.canRoute("runtime.capture_diagnostics")).toBe(true);
+    expect(routePlan.canRoute("runtime.clear_error")).toBe(true);
+    expect(routePlan.canRoute("config.update")).toBe(true);
+    expect(routePlan.canRoute("skills.discover")).toBe(true);
+    expect(routePlan.canRoute("skills.install")).toBe(true);
+    expect(routePlan.canRoute("skills.enable")).toBe(true);
+    expect(routePlan.canRoute("skills.disable")).toBe(true);
+    expect(routePlan.canRoute("skills.uninstall")).toBe(true);
+    expect(routePlan.canRoute("skills.rollback")).toBe(true);
+    expect(routePlan.canRoute("hosts.connect")).toBe(true);
+    expect(routePlan.canRoute("hosts.disconnect")).toBe(true);
+    expect(routePlan.canRoute("hosts.set_default")).toBe(true);
+    expect(routePlan.canRoute("intervention.resolve")).toBe(true);
+    expect(routePlan.canRoute("intervention.cancel")).toBe(true);
+    expect(routePlan.canRoute("runtime.chat.send")).toBe(false);
+  });
+
+  it("projects background control-plane messages to dedicated route handlers", async () => {
+    const handlers = {
+      readResource: vi.fn(async () => ({ ok: true, data: "resource" })),
+      readAuditTail: vi.fn(async () => ({ ok: true, data: "audit.tail" })),
+      readHostAudit: vi.fn(async () => ({ ok: true, data: "audit.host" })),
+      readInterventionAudit: vi.fn(async () => ({ ok: true, data: "audit.intervention" })),
+      bootstrap: vi.fn(async () => ({ ok: true, data: "bootstrap" })),
+      runtimeDiagnostics: vi.fn(async () => ({ ok: true, data: "diagnostics" })),
+      clearRuntimeError: vi.fn(async () => ({ ok: true, data: "cleared" })),
+      updateConfig: vi.fn(async () => ({ ok: true, data: "config" })),
+      listHosts: vi.fn(async () => ({ ok: true, data: "hosts.list" })),
+      getHost: vi.fn(async () => ({ ok: true, data: "hosts.get" })),
+      connectHost: vi.fn(async () => ({ ok: true, data: "hosts.connect" })),
+      disconnectHost: vi.fn(async () => ({ ok: true, data: "hosts.disconnect" })),
+      setDefaultHost: vi.fn(async () => ({ ok: true, data: "hosts.set_default" })),
+      hostHealth: vi.fn(async () => ({ ok: true, data: "hosts.health" })),
+      discoverSkills: vi.fn(async () => ({ ok: true, data: "skills.discover" })),
+      manageSkillLifecycle: vi.fn(async () => ({ ok: true, data: "skills.lifecycle" })),
+      listInterventions: vi.fn(async () => ({ ok: true, data: "intervention.list" })),
+      resolveIntervention: vi.fn(async () => ({ ok: true, data: "intervention.resolve" })),
+      cancelIntervention: vi.fn(async () => ({ ok: true, data: "intervention.cancel" })),
+    };
+    const routePlan = createBackgroundControlPlaneRoutePlan(handlers);
+
+    await expect(
+      routePlan.route({
+        kind: "resource.read",
+        resourceId: "skills.summary",
+        world: "main",
+        limit: 5,
+      }),
+    ).resolves.toEqual({ ok: true, data: "resource" });
+    expect(handlers.readResource).toHaveBeenCalledWith({
+      resourceId: "skills.summary",
+      world: "main",
+      limit: 5,
+    });
+
+    await expect(routePlan.route({ kind: "runtime.diagnostics" })).resolves.toEqual({
+      ok: true,
+      data: "diagnostics",
+    });
+    await expect(routePlan.route({ kind: "runtime.capture_diagnostics" })).resolves.toEqual({
+      ok: true,
+      data: "diagnostics",
+    });
+    await expect(
+      routePlan.route({ kind: "skills.rollback", skillId: "skill.demo" }),
+    ).resolves.toEqual({
+      ok: true,
+      data: "skills.lifecycle",
+    });
+    await expect(routePlan.route({ kind: "hosts.set_default", hostId: "local" })).resolves.toEqual({
+      ok: true,
+      data: "hosts.set_default",
+    });
+    await expect(
+      routePlan.route({ kind: "intervention.resolve", interventionId: "iv-1" }),
+    ).resolves.toEqual({
+      ok: true,
+      data: "intervention.resolve",
+    });
+    expect(routePlan.route({ kind: "runtime.chat.send" })).toBeUndefined();
   });
 
   it("lists and gets the local host without auto-connecting it", async () => {
