@@ -27,10 +27,7 @@ import {
 } from "./conversation-export";
 import { SidepanelIcon } from "./icons";
 import {
-  applyManagementResourceDocument,
-  buildManagementBootstrapRequests,
   createInitialManagementState,
-  createManagementActionMessage,
   createSkillEditorSetupPlan,
   createSkillRunPrompt,
   listSkillCatalogItems,
@@ -41,6 +38,7 @@ import {
   type SkillCatalogItem,
   type ManagementState,
 } from "./management";
+import { createSidepanelControlPlaneClient } from "./control-plane-client";
 
 const RUNNER_BACKGROUND_TARGET = "bbl-next.runner.background";
 const FORK_MIN_VISIBLE_MS = 620;
@@ -112,6 +110,7 @@ const chromeApi = (
 ).chrome;
 const runtimeApi = chromeApi?.runtime;
 const tabsApi = chromeApi?.tabs;
+const controlPlaneClient = createSidepanelControlPlaneClient(callRuntime);
 
 const suggestionCategories: { icon: string; title: string; items: SuggestionItem[] }[] = [
   {
@@ -1699,15 +1698,7 @@ async function refreshSessionTitle(sessionId = chatState.value.sessionId ?? "") 
 async function bootstrapManagement() {
   managementLoading.value = true;
   try {
-    let nextState = createInitialManagementState();
-    for (const request of buildManagementBootstrapRequests()) {
-      const resource = await callRuntime(request.kind, {
-        resourceId: request.resourceId,
-        world: request.world,
-      });
-      nextState = applyManagementResourceDocument(nextState, resource as never);
-    }
-    managementState.value = nextState;
+    managementState.value = await controlPlaneClient.bootstrap();
     syncConfigDraftsFromSummary();
     managementError.value = null;
   } catch (error) {
@@ -1875,28 +1866,18 @@ async function runManagementAction(kind: string, payload: Record<string, unknown
   managementError.value = null;
   managementNotice.value = null;
   try {
-    const message = createManagementActionMessage(kind, payload) as Record<string, unknown>;
-    const result = await callRuntime(kind, Object.fromEntries(
-      Object.entries(message).filter(([key]) => key !== "kind"),
-    ));
+    const actionResult = await controlPlaneClient.runAction(kind, payload);
 
-    if (kind === "runtime.capture_diagnostics") {
-      diagnosticsPayload.value = formatJson(result);
-      managementNotice.value = "Diagnostics captured.";
+    if (actionResult.diagnosticsSnapshot !== undefined) {
+      diagnosticsPayload.value = formatJson(actionResult.diagnosticsSnapshot);
+      managementNotice.value = actionResult.notice;
       return;
     }
 
-    if (kind === "skills.discover") {
+    if (actionResult.refresh) {
       await bootstrapManagement();
-      const counts =
-        result.counts && typeof result.counts === "object" && !Array.isArray(result.counts)
-          ? (result.counts as Record<string, unknown>)
-          : {};
-      managementNotice.value = `扫描 ${counts.scanned ?? 0} 个，发现 ${counts.discovered ?? 0} 个，安装 ${counts.installed ?? 0} 个，跳过 ${counts.skipped ?? 0} 个`;
-      return;
     }
-
-    await refreshManagement(`${kind} complete.`);
+    managementNotice.value = actionResult.notice;
   } catch (error) {
     managementError.value = error instanceof Error ? error.message : String(error);
   } finally {
@@ -1918,11 +1899,11 @@ async function handleCopyDiagnosticsSnapshot() {
   diagnosticsCopying.value = true;
   moreMenuOpen.value = false;
   try {
-    const result = await callRuntime("runtime.capture_diagnostics", {
+    const actionResult = await controlPlaneClient.runAction("runtime.capture_diagnostics", {
       world: "main",
       ...(typeof activeTabId.value === "number" ? { tabId: activeTabId.value } : {}),
     });
-    diagnosticsPayload.value = formatJson(result);
+    diagnosticsPayload.value = formatJson(actionResult.diagnosticsSnapshot ?? actionResult.result);
     await writeClipboardText(diagnosticsPayload.value);
     showConversationNotice("success", "调试快照已复制");
   } catch (error) {

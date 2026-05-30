@@ -6,6 +6,7 @@ import type {
 } from "@bbl-next/contracts";
 import { BUILTIN_CAPABILITIES } from "@bbl-next/core";
 import { describe, expect, it } from "vitest";
+import { createSidepanelControlPlaneClient } from "../src/sidepanel/control-plane-client";
 import {
   SIDEPANEL_MANAGEMENT_ACTION_KINDS,
   SIDEPANEL_MANAGEMENT_RESOURCE_IDS,
@@ -21,6 +22,269 @@ import {
   listSkillCatalogItems,
   parseSkillMarkdown,
 } from "../src/sidepanel/management";
+
+const MANAGEMENT_BOOTSTRAP_FIXTURES = {
+  "runtime.summary": {
+    id: "runtime.summary",
+    primitive: "resource",
+    generatedAt: "2026-05-30T00:00:00.000Z",
+    data: {
+      status: "healthy",
+      mode: "active-tab-only",
+      sessionId: "session-control-plane",
+      activeTab: null,
+      loopState: "idle",
+      lastError: null,
+      interventions: {
+        status: "empty",
+        totalCount: 0,
+        activeCount: 0,
+        recentCount: 0,
+        active: [],
+        recent: [],
+      },
+      actionCapabilities: {
+        total: 4,
+        namespaces: ["runtime", "config"],
+      },
+    },
+  },
+  "runtime.history": {
+    id: "runtime.history",
+    primitive: "resource",
+    generatedAt: "2026-05-30T00:00:00.000Z",
+    data: {
+      status: "available",
+      totalCount: 0,
+      entries: [],
+    },
+  },
+  "audit.tail": {
+    id: "audit.tail",
+    primitive: "resource",
+    generatedAt: "2026-05-30T00:00:00.000Z",
+    data: {
+      status: "available",
+      totalCount: 0,
+      entries: [],
+    },
+  },
+  "observability.replay": {
+    id: "observability.replay",
+    primitive: "resource",
+    generatedAt: "2026-05-30T00:00:00.000Z",
+    data: {
+      status: "available",
+      totalCount: 0,
+      continuityCount: 0,
+      entries: [],
+    },
+  },
+  "config.summary": {
+    id: "config.summary",
+    primitive: "resource",
+    generatedAt: "2026-05-30T00:00:00.000Z",
+    data: {
+      status: "ready",
+      fields: ["model"],
+      values: {
+        model: {
+          provider: "openai",
+          model: "gpt-5.4",
+        },
+      },
+      note: null,
+      updatedAt: "2026-05-30T00:00:00.000Z",
+    },
+  },
+  "skills.summary": {
+    id: "skills.summary",
+    primitive: "resource",
+    generatedAt: "2026-05-30T00:00:00.000Z",
+    data: {
+      status: "healthy",
+      installedCount: 1,
+      enabledCount: 1,
+      trustedCount: 0,
+      recentChange: "skills.discover",
+      items: [],
+    },
+  },
+  "hosts.summary": {
+    id: "hosts.summary",
+    primitive: "resource",
+    generatedAt: "2026-05-30T00:00:00.000Z",
+    data: {
+      status: "healthy",
+      defaultHostId: "local",
+      defaultExecHostId: null,
+      totalCount: 1,
+      connectedCount: 1,
+      items: [
+        {
+          hostId: "local",
+          kind: "local",
+          connected: true,
+          state: "connected",
+          isDefault: true,
+          capabilities: {
+            read: true,
+            write: true,
+            edit: true,
+            exec: false,
+          },
+        },
+      ],
+    },
+  },
+} as const;
+
+function cloneBootstrapFixture(resourceId: string): unknown {
+  const fixture =
+    MANAGEMENT_BOOTSTRAP_FIXTURES[resourceId as keyof typeof MANAGEMENT_BOOTSTRAP_FIXTURES];
+  if (!fixture) {
+    throw new Error(`Missing fixture for ${resourceId}`);
+  }
+  return structuredClone(fixture);
+}
+
+describe("sidepanel control-plane client", () => {
+  it("bootstraps management state through resource.read without app-local runtime truth", async () => {
+    const calls: Array<{ kind: string; payload: Record<string, unknown> }> = [];
+    const client = createSidepanelControlPlaneClient(async (kind, payload) => {
+      calls.push({ kind, payload });
+      expect(kind).toBe("resource.read");
+      return cloneBootstrapFixture(String(payload.resourceId));
+    });
+
+    const state = await client.bootstrap();
+
+    expect(calls).toEqual(
+      SIDEPANEL_MANAGEMENT_RESOURCE_IDS.map((resourceId) => ({
+        kind: "resource.read",
+        payload: {
+          resourceId,
+          world: "main",
+        },
+      })),
+    );
+    expect(state.runtime?.data.sessionId).toBe("session-control-plane");
+    expect(state.config?.data.values.model).toEqual({
+      provider: "openai",
+      model: "gpt-5.4",
+    });
+    expect(state.skills?.data.installedCount).toBe(1);
+    expect(state.hosts?.data.defaultHostId).toBe("local");
+  });
+
+  it("dispatches management actions through canonical action payloads", async () => {
+    const calls: Array<{ kind: string; payload: Record<string, unknown> }> = [];
+    const client = createSidepanelControlPlaneClient(async (kind, payload) => {
+      calls.push({ kind, payload });
+      return { ok: true };
+    });
+
+    const result = await client.runAction("config.update", {
+      patch: {
+        model: {
+          provider: "openai",
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      kind: "config.update",
+      result: { ok: true },
+      refresh: true,
+      notice: "config.update complete.",
+    });
+    expect(calls).toEqual([
+      {
+        kind: "config.update",
+        payload: {
+          patch: {
+            model: {
+              provider: "openai",
+            },
+          },
+        },
+      },
+    ]);
+  });
+
+  it("keeps diagnostics as a no-refresh control-plane action result", async () => {
+    const calls: Array<{ kind: string; payload: Record<string, unknown> }> = [];
+    const diagnostics = {
+      capturedAt: "2026-05-30T00:00:00.000Z",
+      runtime: {
+        ok: true,
+      },
+    };
+    const client = createSidepanelControlPlaneClient(async (kind, payload) => {
+      calls.push({ kind, payload });
+      return diagnostics;
+    });
+
+    await expect(
+      client.runAction("runtime.capture_diagnostics", {
+        world: "content",
+        tabId: 7,
+      }),
+    ).resolves.toEqual({
+      kind: "runtime.capture_diagnostics",
+      result: diagnostics,
+      refresh: false,
+      notice: "Diagnostics captured.",
+      diagnosticsSnapshot: diagnostics,
+    });
+    expect(calls).toEqual([
+      {
+        kind: "runtime.capture_diagnostics",
+        payload: {
+          world: "content",
+          tabId: 7,
+        },
+      },
+    ]);
+  });
+
+  it("marks skills.discover as refreshable and projects discovery counts for UI notices", async () => {
+    const client = createSidepanelControlPlaneClient(async () => ({
+      counts: {
+        scanned: 9,
+        discovered: 4,
+        installed: 3,
+        skipped: 1,
+      },
+    }));
+
+    await expect(
+      client.runAction("skills.discover", {
+        root: "mem://skills",
+        autoInstall: true,
+        replace: true,
+      }),
+    ).resolves.toEqual({
+      kind: "skills.discover",
+      result: {
+        counts: {
+          scanned: 9,
+          discovered: 4,
+          installed: 3,
+          skipped: 1,
+        },
+      },
+      refresh: true,
+      notice: "扫描 9 个，发现 4 个，安装 3 个，跳过 1 个",
+      counts: {
+        scanned: 9,
+        discovered: 4,
+        installed: 3,
+        skipped: 1,
+      },
+    });
+  });
+});
 
 describe("sidepanel management state", () => {
   it("bootstraps only through unified resource.read requests", () => {

@@ -1240,9 +1240,19 @@ describe("sidepanel chat transcript component", () => {
     expect(source).toContain('id="skills-discover-panel"');
     expect(source).toContain("从指定目录扫描并安装技能");
     expect(source).toContain("从目录导入已有技能");
-    expect(source).toContain('typeof result.counts === "object"');
+    expect(source).toContain("actionResult.notice");
+    expect(source).toContain("createSidepanelControlPlaneClient");
+    expect(source).not.toContain("actionResult.counts");
+    expect(source).not.toContain('typeof result.counts === "object"');
     expect(source).not.toContain("isPlainObject(result.counts)");
     expect(source).not.toContain("粘贴已有技能的 SKILL.md 内容");
+  });
+
+  it("routes sidepanel diagnostics capture through the control-plane client", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("controlPlaneClient.runAction");
+    expect(source).not.toContain('callRuntime("runtime.capture_diagnostics"');
   });
 
   it("uses the old product Skill editor task flow instead of raw package internals", () => {
