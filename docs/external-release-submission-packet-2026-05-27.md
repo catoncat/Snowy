@@ -43,43 +43,45 @@ bun scripts/release-package-mv3.ts --output .ml-cache/release-artifacts/browser-
 
 The package command normalizes ZIP metadata so repeated runs with the same extension contents produce the same SHA256.
 
-Latest generated upload bundle:
+Latest generated upload bundle candidate:
 
-- source_commit: `033570b28ac57f3280dd7e36bc891828c6d47003`
-- source_pr: https://github.com/catoncat/Snowy/pull/15
+- source_commit: `576a7ef06a3362890d9b4877d3db2c91f348e10f`
+- source_pr: https://github.com/catoncat/Snowy/pull/18
 - artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
-- sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
-- prepared_at: 2026-05-27T04:19:28.129Z
-- command: `bun run release:submission:prepare -- --channel external-store-or-deployment --source-pr https://github.com/catoncat/Snowy/pull/15`
-- deterministic_rerun_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
-- deterministic_rerun_generated_at: 2026-05-27T03:50:40.506Z
+- sha256: `df920371c30d663edf4aa8bceb5d7634594e8eba06de4a072673b8cfe35bb769`
+- prepared_at: 2026-05-31T06:19:38.815Z
+- command: `bun run release:submission:prepare -- --channel external-store-or-deployment --source-pr https://github.com/catoncat/Snowy/pull/18`
+- status: pre-merge PR candidate; after PR #18 lands, rerun the prepare command from the accepted release branch before external upload
 
-Latest generated handoff manifest:
+Latest generated handoff manifest candidate:
 
-- source_commit: `033570b28ac57f3280dd7e36bc891828c6d47003`
-- source_pr: https://github.com/catoncat/Snowy/pull/15
+- source_commit: `576a7ef06a3362890d9b4877d3db2c91f348e10f`
+- source_pr: https://github.com/catoncat/Snowy/pull/18
 - manifest: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.manifest.json`
-- generated_at: 2026-05-27T04:19:45.594Z
+- generated_at: 2026-05-31T06:19:54.427Z
 - channel: `external-store-or-deployment`
-- artifact_sha256: `556cbe724265a42e31233663cc064887363045cec1ade3cdf6048ff914ddb988`
+- artifact_sha256: `df920371c30d663edf4aa8bceb5d7634594e8eba06de4a072673b8cfe35bb769`
 - review_status: `ready_for_upload`
 
 Manifest summary:
 
-- name: `Browser Brain Loop Next`
+- name: `白雪 Snowy - AI 浏览器助手`
 - version: `0.0.1`
 - manifest_version: `3`
 - minimum_chrome_version: `116`
 - service_worker: `src/background.js`
-- permissions: `storage`, `tabs`, `activeTab`, `scripting`, `offscreen`
+- permissions: `storage`, `tabs`, `activeTab`, `scripting`, `offscreen`, `sidePanel`
 - sandbox page: `src/runner-sandbox.html`
 - side panel: `src/sidepanel.html`
 
 Packaged files:
 
 - `manifest.json`
-- `assets/sidepanel-management-contract-B-Hywnxw.js`
+- `assets/sidepanel-management-contract-Cbw7DlPw.js`
 - `assets/sidepanel.css`
+- `icon-16.png`
+- `icon-48.png`
+- `icon-128.png`
 - `src/background.js`
 - `src/offscreen.html`
 - `src/offscreen.js`
@@ -153,4 +155,15 @@ Latest command verification:
 - result: `ok: true`
 - profile_mode: `provided`
 - scenario: `real-profile-uat`
+- dispatched_count: 1
+
+Latest artifact-level smoke verification:
+
+- checked_at: 2026-05-31T06:24:39Z
+- command: `bun run release:smoke:mv3 -- --artifact .ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
+- artifact_sha256: `df920371c30d663edf4aa8bceb5d7634594e8eba06de4a072673b8cfe35bb769`
+- result: `ok: true`
+- extension_source_kind: `artifact`
+- profile_mode: `temporary`
+- scenario: `release-smoke`
 - dispatched_count: 1
