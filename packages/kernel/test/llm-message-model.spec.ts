@@ -335,4 +335,47 @@ describe("stepResultToToolMessagePayload", () => {
       toolName: "tabs_navigate",
     });
   });
+
+  it("strips debug-only evidence before persisting tool results for LLM context", () => {
+    const fn = (kernelExports as Record<string, unknown>).stepResultToToolMessagePayload;
+    expect(typeof fn).toBe("function");
+    if (typeof fn !== "function") return;
+
+    const result = fn(
+      {
+        ok: true,
+        data: {
+          result: {
+            clicked: true,
+            url: "https://example.com",
+          },
+          verified: true,
+          trace: ["match:bbl.page", "invoke:click"],
+          timelineEvents: [{ eventType: "site.invoke" }],
+          rawEvents: [{ type: "site.invoke", payload: { token: "secret" } }],
+          browserActionEvidence: {
+            schema: "bbl.browserActionEvidence.v1",
+            visibility: "debug_only",
+          },
+          screenshot: {
+            dataUrl: "data:image/png;base64,debug-only",
+          },
+        },
+      },
+      { toolCallId: "call_1", toolName: "page_click" },
+    );
+
+    expect(JSON.parse(result.text)).toEqual({
+      result: {
+        clicked: true,
+        url: "https://example.com",
+      },
+      verified: true,
+    });
+    expect(result.text).not.toContain("timelineEvents");
+    expect(result.text).not.toContain("rawEvents");
+    expect(result.text).not.toContain("browserActionEvidence");
+    expect(result.text).not.toContain("trace");
+    expect(result.text).not.toContain("data:image");
+  });
 });

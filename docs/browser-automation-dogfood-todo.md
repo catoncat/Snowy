@@ -60,9 +60,10 @@
 
 ### P0: Make Evidence Visible
 
-- [ ] 每个 browser action 输出统一 evidence envelope：action、input、tab、url、title、elapsed、result、error。
-- [ ] 对可视动作自动附带 before/after screenshot 引用，或明确记录没有截图的原因。
+- [x] 每个 browser action 在 observability debug event 中输出统一 evidence envelope：action、input、tab/url/title、elapsed、result、error。
+- [x] 对可视动作明确记录 before/after screenshot 暂未由当前 runtime path 捕获的原因；后续接入截图引用时仍必须保持 debug-only。
 - [ ] UI 中把 action evidence 展开给当前 Agent/用户看，不要只显示成功/失败。
+- [x] evidence envelope、raw events、trace、截图 data URL 不进入普通 Chat LLM context；normal chat tool event 也只保留瘦身后的 tool result。
 
 ### P1: Align Public Surface With Browser Harness
 

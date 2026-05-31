@@ -268,6 +268,155 @@ function summarizeError(error: unknown): Record<string, unknown> {
   };
 }
 
+function isBrowserActionCapability(capabilityId: string): boolean {
+  return capabilityId.startsWith("page.") || capabilityId.startsWith("tabs.");
+}
+
+function normalizeBrowserActionTab(value: unknown): Record<string, unknown> | undefined {
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+
+  const tabId =
+    typeof value.tabId === "number"
+      ? value.tabId
+      : typeof value.id === "number"
+        ? value.id
+        : undefined;
+  const url =
+    typeof value.url === "string"
+      ? value.url
+      : typeof value.tabUrl === "string"
+        ? value.tabUrl
+        : undefined;
+  const title = typeof value.title === "string" ? value.title : undefined;
+  const active = typeof value.active === "boolean" ? value.active : undefined;
+
+  if (typeof tabId !== "number" && !url && !title && typeof active !== "boolean") {
+    return undefined;
+  }
+
+  return {
+    ...(typeof tabId === "number" ? { tabId } : {}),
+    ...(url ? { url } : {}),
+    ...(title ? { title } : {}),
+    ...(typeof active === "boolean" ? { active } : {}),
+  };
+}
+
+function extractBrowserActionTab(data: unknown): Record<string, unknown> | undefined {
+  const direct = normalizeBrowserActionTab(data);
+  if (direct) {
+    return direct;
+  }
+
+  if (!isPlainObject(data)) {
+    return undefined;
+  }
+
+  for (const key of ["tab", "activeTab", "targetTab"]) {
+    const nested = normalizeBrowserActionTab(data[key]);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  if (isPlainObject(data.result)) {
+    const resultTab = normalizeBrowserActionTab(data.result);
+    if (resultTab) {
+      return resultTab;
+    }
+    for (const key of ["tab", "activeTab", "targetTab"]) {
+      const nested = normalizeBrowserActionTab(data.result[key]);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function summarizeBrowserActionResult(result: {
+  ok: boolean;
+  data?: unknown;
+  error?: string;
+  retryable?: boolean;
+  verified?: boolean;
+  timeout?: boolean;
+}): Record<string, unknown> {
+  const summary: Record<string, unknown> = {
+    ok: result.ok,
+  };
+
+  if (typeof result.verified === "boolean") {
+    summary.verified = result.verified;
+  }
+  if (typeof result.retryable === "boolean") {
+    summary.retryable = result.retryable;
+  }
+  if (typeof result.timeout === "boolean") {
+    summary.timeout = result.timeout;
+  }
+  if (result.error) {
+    summary.error = result.error;
+  }
+
+  if (isPlainObject(result.data)) {
+    if (typeof result.data.verified === "boolean" && typeof summary.verified !== "boolean") {
+      summary.verified = result.data.verified;
+    }
+    if ("result" in result.data) {
+      summary.output = result.data.result;
+    }
+  } else if (result.data !== undefined) {
+    summary.output = result.data;
+  }
+
+  return summary;
+}
+
+function buildBrowserActionEvidence(input: {
+  capabilityId: string;
+  toolName: string;
+  args: unknown;
+  result: {
+    ok: boolean;
+    data?: unknown;
+    error?: string;
+    retryable?: boolean;
+    verified?: boolean;
+    timeout?: boolean;
+  };
+  startedAt: Date;
+  endedAt: Date;
+  durationMs: number;
+}): Record<string, unknown> | undefined {
+  if (!isBrowserActionCapability(input.capabilityId)) {
+    return undefined;
+  }
+
+  const tab = extractBrowserActionTab(input.result.data);
+  return {
+    schema: "bbl.browserActionEvidence.v1",
+    visibility: "debug_only",
+    contextPolicy: "observability_only_not_llm_context",
+    action: input.capabilityId,
+    toolName: input.toolName,
+    input: input.args,
+    ...(tab ? { tab } : {}),
+    startedAt: input.startedAt.toISOString(),
+    endedAt: input.endedAt.toISOString(),
+    elapsedMs: input.durationMs,
+    result: summarizeBrowserActionResult(input.result),
+    screenshots: {
+      before: null,
+      after: null,
+      reason: "not_captured_by_current_runtime_path",
+    },
+  };
+}
+
 function resolveDebugRequestUrl(
   provider: LlmProviderAdapter,
   route: LlmResolvedRoute,
@@ -1296,6 +1445,15 @@ export async function runLoop(
         };
         telemetryEntries.push(telemetryEntry);
         await input.onStepTelemetry?.(telemetryEntry);
+        const browserActionEvidence = buildBrowserActionEvidence({
+          capabilityId,
+          toolName,
+          args,
+          result,
+          startedAt: stepStartedAt,
+          endedAt: stepEndedAt,
+          durationMs,
+        });
         await emitRuntimeObservability(input, {
           eventType: result.ok ? "runtime.tool.call.succeeded" : "runtime.tool.call.failed",
           status: result.ok ? "succeeded" : "failed",
@@ -1313,6 +1471,7 @@ export async function runLoop(
             ok: result.ok,
             durationMs,
             result,
+            ...(browserActionEvidence ? { browserActionEvidence } : {}),
             ...(telemetryEntry.errorCode ? { errorCode: telemetryEntry.errorCode } : {}),
           },
           rawType: "runtime.tool.call",
@@ -1324,6 +1483,7 @@ export async function runLoop(
             capabilityId,
             durationMs,
             result,
+            ...(browserActionEvidence ? { browserActionEvidence } : {}),
             ...(telemetryEntry.errorCode ? { errorCode: telemetryEntry.errorCode } : {}),
           },
         });

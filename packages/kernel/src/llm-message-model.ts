@@ -61,6 +61,45 @@ function assistantContentText(content: LlmAssistantContentBlock[]): string {
     .join("");
 }
 
+const LLM_CONTEXT_DEBUG_ONLY_KEYS = new Set([
+  "afterScreenshot",
+  "browserActionEvidence",
+  "beforeScreenshot",
+  "dataUrl",
+  "debugEvidence",
+  "observability",
+  "rawEventTail",
+  "rawEvents",
+  "screenshot",
+  "screenshots",
+  "screenshotDataUrl",
+  "timelineEvents",
+  "trace",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stripDebugOnlyFieldsForLlm(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripDebugOnlyFieldsForLlm(item));
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (LLM_CONTEXT_DEBUG_ONLY_KEYS.has(key)) {
+      continue;
+    }
+    result[key] = stripDebugOnlyFieldsForLlm(entryValue);
+  }
+  return result;
+}
+
 export function llmAssistantMessageToMessagePayload(message: LlmAssistantMessage): MessagePayload {
   return {
     role: "assistant",
@@ -73,11 +112,11 @@ export function stepResultToToolMessagePayload(
   result: StepResult,
   meta: { toolCallId: string; toolName: string },
 ): MessagePayload {
+  const llmSafeData =
+    result.data === undefined ? { ok: true } : stripDebugOnlyFieldsForLlm(result.data);
   return {
     role: "assistant",
-    text: result.ok
-      ? JSON.stringify(result.data ?? { ok: true })
-      : JSON.stringify({ error: result.error }),
+    text: result.ok ? JSON.stringify(llmSafeData) : JSON.stringify({ error: result.error }),
     toolCallId: meta.toolCallId,
     toolName: meta.toolName,
   };

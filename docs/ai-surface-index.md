@@ -124,6 +124,7 @@
 - `observability.timeline` / `observability.summary` / `observability.rawEventTail` 现已通过 shared MV3 `resource.read` 暴露 runtime-owned observability export builder 的 operator-facing read path，并保持 `observability.replay` 作为更高层 stitched replay 文档
 - 对话调试的当前等价 API 是 shared bridge 的 `resource.read`，不是旧仓 bridge HTTP server：一次 `runtime.chat.send` 后，读 `observability.timeline` 可看到 `runtime.chat.run.*`、`runtime.llm.*`、`runtime.tool.call.*` 调用链事件；读 `observability.rawEventTail` 可看到同一调用链的脱敏原始事件尾部；读 `runtime.history` / `audit.tail` 仍用于 loop step 与 operator evidence；读 `runtime.capture_diagnostics` 用于最新 runtime snapshot。
 - 对话 debug dogfood 回归入口是 `apps/mv3-shell/test/runtime-chat.spec.ts` 的 `dogfoods conversation backend debug events through observability resources`。该用例用项目自身的 `runtime.chat.send` + `resource.read` 路径验证 LLM request/response、tool call 和 run lifecycle 已进入共享观测面，并断言 raw tail 不泄露 `llmKey`。
+- Browser action evidence envelope 是 debug-only observability data：`runtime.tool.call.*` 的 details/raw payload 可以包含 `browserActionEvidence`，但 `StepResult -> tool message -> LLM context` 和 normal chat tool event 必须剥离 evidence envelope、raw events、trace 与截图 data URL。
 - `audit.host` 仅保留为 host-only compatibility alias
 - 当前 registry 仍是轻量 contract 层，不引入新的 descriptor family
 - provider/profile routing 当前不新增独立 `providers.*` namespace；northbound shared surface 复用 `config.summary.values.model` 与 `config.update.patch.model`

@@ -15,6 +15,7 @@
 2. **Agent 判断，不让代码判分**
    - 不实现 runtime-owned 成功评分器、置信分、智能排序、自动验收分或隐式质量标准。
    - 代码可以记录证据：截图、URL、title、tab、CDP 返回、错误、耗时、before/after 状态。
+   - 这些证据属于 debug / observability surface；不要把 evidence envelope、raw events、截图 data URL 或 trace 塞进普通 Chat 的 LLM context。
    - 是否成功、下一步怎么走，由当前对话里的 Codex Agent 基于证据显式判断；如果需要第二意见，也应调用另一个 Agent 体判断，而不是把判断写成普通业务代码。
 
 3. **不要重建旧仓的智能中间层**

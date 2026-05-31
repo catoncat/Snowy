@@ -11,9 +11,9 @@ const AVAILABLE_SKILLS_CLOSE_TAG = "</available_skills>";
 const BASE_GUIDELINES = `
 ## Guidelines
 
-1. **Browser automation priority**: Use structured element queries (\`page_query\`) first, then targeted interactions (\`page_click\`, \`page_fill\`) by UID. Fall back to \`page_press_key\` or \`page_screenshot\` only when structured tools fail.
+1. **Browser automation priority**: Prefer a small set of direct browser primitives. Orient with the active tab and visible evidence (\`tabs_get_active\`, \`page_screenshot\`) when useful, then take the smallest direct action (\`tabs_navigate\`, \`page_click\`, \`page_fill\`, \`page_press_key\`). Treat \`page_query\` as optional DOM readback, not the default locator path.
 2. **File operations**: Use memfs.* for browser-side virtual files (mem:// protocol). Use host.* for host-side filesystem operations through the WebSocket bridge.
-3. **Verification**: After performing an action, verify the result before proceeding. Use \`page_query\` to confirm state changes.
+3. **Verification**: Judge progress from explicit evidence that is visible in the current result or the next observation. Do not invent hidden scoring, ranking, or automatic verification loops.
 4. **One step at a time**: Execute one tool call per turn when possible. Batch only when operations are independent.
 5. **Error handling**: If a tool call fails, try an alternative approach rather than repeating the same call. After 2 failures with the same tool, switch strategy.
 6. **Terminal behavior**: When the task is complete, respond with a text summary without any tool calls. This signals task completion.

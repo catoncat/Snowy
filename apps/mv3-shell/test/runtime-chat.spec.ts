@@ -1772,9 +1772,12 @@ describe("mv3-shell end-to-end loop integration", () => {
     const sentMessages: unknown[] = [];
     const telemetryEntries: unknown[] = [];
     const timelineEvents: unknown[] = [];
+    const rawEvents: unknown[] = [];
+    const requestBodies: Array<Record<string, unknown>> = [];
     let fetchCallCount = 0;
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn(async () => {
+    globalThis.fetch = vi.fn(async (_url, options) => {
+      requestBodies.push(JSON.parse(String((options as { body?: unknown })?.body ?? "{}")));
       fetchCallCount += 1;
       if (fetchCallCount === 1) {
         return sseResponse([
@@ -1847,8 +1850,11 @@ describe("mv3-shell end-to-end loop integration", () => {
         onLoopTelemetry: (entry: unknown) => {
           telemetryEntries.push(entry);
         },
-        onObservabilityEvent: (event: unknown) => {
+        onObservabilityEvent: (event: unknown, rawEvent?: unknown) => {
           timelineEvents.push(event);
+          if (rawEvent) {
+            rawEvents.push(rawEvent);
+          }
         },
       });
 
@@ -1890,9 +1896,45 @@ describe("mv3-shell end-to-end loop integration", () => {
             eventType: "runtime.tool.call.succeeded",
             action: "page_click",
             capabilityId: "page.click",
+            details: expect.objectContaining({
+              browserActionEvidence: expect.objectContaining({
+                schema: "bbl.browserActionEvidence.v1",
+                visibility: "debug_only",
+                contextPolicy: "observability_only_not_llm_context",
+                action: "page.click",
+                toolName: "page_click",
+                input: { uid: "first-agent-bookmark-like" },
+                elapsedMs: expect.any(Number),
+                result: expect.objectContaining({
+                  ok: true,
+                  verified: true,
+                }),
+                tab: expect.objectContaining({
+                  url: expect.any(String),
+                }),
+              }),
+            }),
           }),
         ]),
       );
+      expect(rawEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "runtime.tool.call",
+            payload: expect.objectContaining({
+              browserActionEvidence: expect.objectContaining({
+                schema: "bbl.browserActionEvidence.v1",
+                action: "page.click",
+              }),
+            }),
+          }),
+        ]),
+      );
+      const llmRequestPayload = JSON.stringify(requestBodies);
+      expect(llmRequestPayload).not.toContain("browserActionEvidence");
+      expect(llmRequestPayload).not.toContain("timelineEvents");
+      expect(llmRequestPayload).not.toContain("rawEvents");
+      expect(llmRequestPayload).not.toContain('"trace"');
 
       const chatEvents = sentMessages
         .filter(
@@ -1924,6 +1966,11 @@ describe("mv3-shell end-to-end loop integration", () => {
           }),
         ]),
       );
+      const chatEventPayload = JSON.stringify(chatEvents);
+      expect(chatEventPayload).not.toContain("browserActionEvidence");
+      expect(chatEventPayload).not.toContain("timelineEvents");
+      expect(chatEventPayload).not.toContain("rawEvents");
+      expect(chatEventPayload).not.toContain('"trace"');
     } finally {
       globalThis.fetch = originalFetch;
     }

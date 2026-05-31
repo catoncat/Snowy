@@ -1338,6 +1338,47 @@ function summarizeChatToolDetail(detail) {
   return normalized.length > 96 ? `${normalized.slice(0, 93)}...` : normalized;
 }
 
+const CHAT_TOOL_DEBUG_ONLY_KEYS = new Set([
+  "afterScreenshot",
+  "browserActionEvidence",
+  "beforeScreenshot",
+  "dataUrl",
+  "debugEvidence",
+  "observability",
+  "rawEventTail",
+  "rawEvents",
+  "screenshot",
+  "screenshots",
+  "screenshotDataUrl",
+  "timelineEvents",
+  "trace",
+]);
+
+function stripDebugOnlyFieldsForChat(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripDebugOnlyFieldsForChat(item));
+  }
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  const result = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (CHAT_TOOL_DEBUG_ONLY_KEYS.has(key)) {
+      continue;
+    }
+    result[key] = stripDebugOnlyFieldsForChat(entryValue);
+  }
+  return result;
+}
+
+function serializeChatToolResult(resultData) {
+  if (typeof resultData === "string") {
+    return resultData;
+  }
+  return JSON.stringify(stripDebugOnlyFieldsForChat(resultData ?? null));
+}
+
 function normalizeChatContentBlocks(blocks) {
   if (!Array.isArray(blocks)) {
     return undefined;
@@ -4451,10 +4492,11 @@ export function createBackgroundRuntimeServices({
             },
             onToolResult(toolName, resultData) {
               const toolMsgId = claimPendingToolMessageId(toolName);
+              const detail = serializeChatToolResult(resultData);
               const summary = summarizeChatToolDetail(
                 resultData && typeof resultData === "object" && "data" in resultData
-                  ? JSON.stringify(resultData.data)
-                  : String(resultData ?? ""),
+                  ? JSON.stringify(stripDebugOnlyFieldsForChat(resultData.data))
+                  : detail,
               );
               void emitRuntimeChatEvent(chromeApi, {
                 type: "tool.result",
@@ -4463,8 +4505,7 @@ export function createBackgroundRuntimeServices({
                 toolCallId: toolMsgId,
                 toolName,
                 summary,
-                detail:
-                  typeof resultData === "string" ? resultData : JSON.stringify(resultData ?? null),
+                detail,
                 phase: "processing_result",
                 status: resultData?.ok === false ? "failed" : "done",
               });
