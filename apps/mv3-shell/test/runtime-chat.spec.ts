@@ -1632,6 +1632,141 @@ describe("mv3-shell end-to-end loop integration", () => {
     }
   });
 
+  it("dogfoods conversation backend debug events through observability resources", async () => {
+    const sentMessages: unknown[] = [];
+    let fetchCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      fetchCallCount += 1;
+      if (fetchCallCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_debug",
+              function: { name: "tabs_navigate", arguments: '{"url":"https://example.com"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([
+        chatChunk("Debug path complete."),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const chromeApi = {
+        runtime: {
+          getURL: (path: string) => path,
+          sendMessage: vi.fn(async (message) => {
+            sentMessages.push(message);
+            return undefined;
+          }),
+        },
+        tabs: {
+          query: vi.fn(async () => [
+            { id: 11, url: "https://fixture.test/start", active: true, title: "Fixture Start" },
+          ]),
+          update: vi.fn(async (tabId: number, updateInfo: { url: string }) => ({
+            id: tabId,
+            url: updateInfo.url,
+            active: true,
+            title: "Fixture Target",
+          })),
+        },
+        offscreen: {},
+      };
+
+      const bridge = createBackgroundRunnerBridge({
+        chromeApi,
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: TEST_PROFILE_CONFIG,
+      });
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "runtime.chat.send",
+          text: "Open example.com and report the debug path",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: { accepted: true },
+      });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      const timeline = await bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "observability.timeline",
+      });
+      const eventTypes = timeline.data.data.events.map(
+        (event: { eventType: string }) => event.eventType,
+      );
+      expect(eventTypes).toEqual(
+        expect.arrayContaining([
+          "runtime.chat.run.started",
+          "runtime.llm.request.started",
+          "runtime.llm.response.succeeded",
+          "runtime.tool.call.started",
+          "runtime.tool.call.succeeded",
+          "runtime.chat.run.finished",
+        ]),
+      );
+      expect(timeline.data.data.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: "runtime",
+            eventType: "runtime.llm.request.started",
+            status: "started",
+            sessionId: expect.any(String),
+            details: expect.objectContaining({
+              provider: "openai_compatible",
+              model: "test-model",
+              messageCount: expect.any(Number),
+              toolCount: expect.any(Number),
+            }),
+          }),
+          expect.objectContaining({
+            source: "runtime",
+            eventType: "runtime.tool.call.succeeded",
+            status: "succeeded",
+            capabilityId: "tabs.navigate",
+            action: "tabs_navigate",
+            durationMs: expect.any(Number),
+          }),
+        ]),
+      );
+
+      const rawTail = await bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "resource.read",
+        resourceId: "observability.rawEventTail",
+      });
+      const rawTypes = rawTail.data.data.entries.map((entry: { type: string }) => entry.type);
+      expect(rawTypes).toEqual(
+        expect.arrayContaining(["runtime.llm.request", "runtime.tool.call"]),
+      );
+      expect(JSON.stringify(rawTail.data.data.entries)).not.toContain("test-key");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("emits fallback message when no LLM config is set", async () => {
     const sentMessages: unknown[] = [];
 

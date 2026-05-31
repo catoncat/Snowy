@@ -3022,6 +3022,7 @@ export function createBackgroundRuntimeServices({
   profileConfig = undefined,
   configSummary = undefined,
   onLoopTelemetry = undefined,
+  onObservabilityEvent = undefined,
   workspaceId = "mv3-shell",
   interventionTimeoutMs = DEFAULT_INTERVENTION_TIMEOUT_MS,
   interventionEscalationMs = undefined,
@@ -4467,6 +4468,16 @@ export function createBackgroundRuntimeServices({
                 await onLoopTelemetry(entry);
               } catch {
                 // Telemetry should never break the primary loop.
+              }
+            },
+            async onObservabilityEvent(event, rawEvent) {
+              if (typeof onObservabilityEvent !== "function") {
+                return;
+              }
+              try {
+                await onObservabilityEvent(event, rawEvent);
+              } catch {
+                // Observability should never break the primary loop.
               }
             },
           },

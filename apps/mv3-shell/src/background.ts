@@ -1283,6 +1283,12 @@ export function createBackgroundRunnerBridge({
             ...(entry.errorCode ? { error: entry.errorCode } : {}),
           });
         },
+        onObservabilityEvent: async (event, rawEvent) => {
+          appendObservabilityExportEvents({
+            timelineEvents: [event],
+            rawEvents: rawEvent ? [rawEvent] : [],
+          });
+        },
         pageHookScriptPath: PAGE_HOOK_DEFAULT_FILE,
       });
       composedRuntimeServices = runtimeServices

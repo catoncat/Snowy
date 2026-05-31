@@ -9,6 +9,8 @@ import type {
   LlmToolCall,
   LoopTelemetryEntry,
   LoopTerminalStatus,
+  ObservabilityTimelineEvent,
+  RawEventTailEntry,
   ToolContract,
 } from "@bbl-next/contracts";
 import type { CapabilityRegistry } from "@bbl-next/core";
@@ -51,6 +53,10 @@ export interface RunLoopInput {
   onToolCall?: (toolName: string, args: unknown) => void;
   onToolResult?: (toolName: string, result: unknown) => void;
   onStepTelemetry?: (entry: LoopTelemetryEntry) => void | Promise<void>;
+  onObservabilityEvent?: (
+    event: ObservabilityTimelineEvent,
+    rawEvent?: Omit<RawEventTailEntry, "index">,
+  ) => void | Promise<void>;
   onIntervention?: (
     record: InterventionRecord,
     context: LoopInterventionContext & { phase: "requested" | "resolved" },
@@ -131,6 +137,215 @@ function applyInitialPromptOverride(
     return next;
   }
   return next;
+}
+
+const DEBUG_SECRET_KEY_PATTERN =
+  /api[-_]?key|authorization|bearer|credential|llmKey|password|secret|token/i;
+const DEBUG_MAX_STRING_LENGTH = 1000;
+const DEBUG_MAX_ARRAY_LENGTH = 20;
+const DEBUG_MAX_OBJECT_KEYS = 40;
+const DEBUG_MAX_DEPTH = 4;
+
+type RuntimeObservabilityEventInput = {
+  eventType: string;
+  status: ObservabilityTimelineEvent["status"];
+  summary: string;
+  sessionId?: string;
+  action?: string;
+  capabilityId?: string;
+  traceId?: string;
+  parentTraceId?: string;
+  durationMs?: number;
+  details?: Record<string, unknown>;
+  rawType?: string;
+  rawPayload?: unknown;
+};
+
+function isDebugRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeDebugValue(value: unknown, depth = 0): unknown {
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    return value.length > DEBUG_MAX_STRING_LENGTH
+      ? `${value.slice(0, DEBUG_MAX_STRING_LENGTH)}[truncated]`
+      : value;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+
+  if (typeof value === "undefined") {
+    return "[undefined]";
+  }
+
+  if (typeof value === "function" || typeof value === "symbol") {
+    return `[${typeof value}]`;
+  }
+
+  if (depth >= DEBUG_MAX_DEPTH) {
+    return "[truncated]";
+  }
+
+  if (Array.isArray(value)) {
+    const items = value
+      .slice(0, DEBUG_MAX_ARRAY_LENGTH)
+      .map((item) => sanitizeDebugValue(item, depth + 1));
+    if (value.length > DEBUG_MAX_ARRAY_LENGTH) {
+      items.push(`[${value.length - DEBUG_MAX_ARRAY_LENGTH} more]`);
+    }
+    return items;
+  }
+
+  if (isDebugRecord(value)) {
+    const entries = Object.entries(value);
+    const result: Record<string, unknown> = {};
+    for (const [key, entryValue] of entries.slice(0, DEBUG_MAX_OBJECT_KEYS)) {
+      result[key] = DEBUG_SECRET_KEY_PATTERN.test(key)
+        ? "[redacted]"
+        : sanitizeDebugValue(entryValue, depth + 1);
+    }
+    if (entries.length > DEBUG_MAX_OBJECT_KEYS) {
+      result.__truncatedKeys = entries.length - DEBUG_MAX_OBJECT_KEYS;
+    }
+    return result;
+  }
+
+  return String(value);
+}
+
+function sanitizeDebugRecord(
+  value: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const sanitized = sanitizeDebugValue(value);
+  return isDebugRecord(sanitized) ? sanitized : undefined;
+}
+
+function createRuntimeObservabilityId(eventType: string): string {
+  return `rto-${eventType.replace(/[^a-zA-Z0-9]+/g, "-")}-${crypto.randomUUID()}`;
+}
+
+function terminalStatusToObservabilityStatus(
+  status: LoopTerminalStatus | null,
+  error?: unknown,
+): ObservabilityTimelineEvent["status"] {
+  if (error) {
+    return "failed";
+  }
+  if (status === "done") {
+    return "succeeded";
+  }
+  if (status === "failed_execute" || status === "failed_verify" || status === "timeout") {
+    return "failed";
+  }
+  if (status === "stopped" || status === "progress_uncertain" || status === "max_steps") {
+    return "attention";
+  }
+  return "info";
+}
+
+function summarizeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+  return {
+    message: String(error ?? "unknown"),
+  };
+}
+
+function resolveDebugRequestUrl(
+  provider: LlmProviderAdapter,
+  route: LlmResolvedRoute,
+): string | undefined {
+  try {
+    return provider.resolveRequestUrl(route);
+  } catch {
+    return undefined;
+  }
+}
+
+function createRouteDebugDetails(
+  provider: LlmProviderAdapter,
+  route: LlmResolvedRoute,
+): Record<string, unknown> {
+  return {
+    profile: route.profile,
+    provider: route.provider,
+    providerAdapter: provider.id,
+    model: route.llmModel,
+    baseUrl: route.llmBase,
+    requestUrl: resolveDebugRequestUrl(provider, route),
+    role: route.role,
+    timeoutMs: route.llmTimeoutMs,
+    retryMaxAttempts: route.llmRetryMaxAttempts,
+    escalationPolicy: route.escalationPolicy,
+  };
+}
+
+function summarizeApiMessage(message: Record<string, unknown>): Record<string, unknown> {
+  const content = message.content;
+  return {
+    role: typeof message.role === "string" ? message.role : "unknown",
+    contentLength:
+      typeof content === "string" ? content.length : JSON.stringify(content ?? "").length,
+  };
+}
+
+async function emitRuntimeObservability(
+  input: RunLoopInput,
+  eventInput: RuntimeObservabilityEventInput,
+): Promise<void> {
+  if (!input.onObservabilityEvent) {
+    return;
+  }
+
+  const timestamp = new Date().toISOString();
+  const details = sanitizeDebugRecord(eventInput.details);
+  const event: ObservabilityTimelineEvent = {
+    id: createRuntimeObservabilityId(eventInput.eventType),
+    source: "runtime",
+    eventType: eventInput.eventType,
+    status: eventInput.status,
+    timestamp,
+    summary: eventInput.summary,
+    ...(eventInput.sessionId ? { sessionId: eventInput.sessionId } : {}),
+    ...(eventInput.action ? { action: eventInput.action } : {}),
+    ...(eventInput.capabilityId ? { capabilityId: eventInput.capabilityId } : {}),
+    ...(eventInput.traceId ? { traceId: eventInput.traceId } : {}),
+    ...(eventInput.parentTraceId ? { parentTraceId: eventInput.parentTraceId } : {}),
+    ...(typeof eventInput.durationMs === "number" ? { durationMs: eventInput.durationMs } : {}),
+    ...(details ? { details } : {}),
+  };
+  const rawEvent =
+    typeof eventInput.rawType === "string"
+      ? {
+          timestamp,
+          source: "runtime" as const,
+          type: eventInput.rawType,
+          payload: sanitizeDebugValue(eventInput.rawPayload ?? details ?? {}),
+        }
+      : undefined;
+
+  try {
+    await input.onObservabilityEvent(event, rawEvent);
+  } catch {
+    // Debug telemetry must never break the primary loop.
+  }
 }
 
 async function appendQueuedPrompts(
@@ -756,6 +971,30 @@ export async function runLoop(
   let overflowCompactionAttempts = 0;
   const actionFailures = new Map<string, ActionFailureHint>();
   const telemetryEntries: LoopTelemetryEntry[] = [];
+  const runStartedAt = new Date();
+  let loopError: unknown;
+
+  await emitRuntimeObservability(input, {
+    eventType: "runtime.chat.run.started",
+    status: "started",
+    summary: "Chat run started",
+    sessionId: input.sessionId,
+    details: {
+      promptLength: input.prompt.length,
+      historyLength: input.historyText?.length ?? 0,
+      profile: route.profile,
+      provider: route.provider,
+      model: route.llmModel,
+      toolCount: openAiTools.length,
+    },
+    rawType: "runtime.chat.run",
+    rawPayload: {
+      phase: "started",
+      sessionId: input.sessionId,
+      promptLength: input.prompt.length,
+      historyLength: input.historyText?.length ?? 0,
+    },
+  });
 
   try {
     while (!terminalStatus) {
@@ -800,6 +1039,32 @@ export async function runLoop(
         temperature: 0.2,
         stream: true,
       };
+      const llmStep = llmStepCount + 1;
+      const llmRequestStartedAt = new Date();
+
+      await emitRuntimeObservability(input, {
+        eventType: "runtime.llm.request.started",
+        status: "started",
+        summary: `LLM request started: ${route.provider}/${route.llmModel}`,
+        sessionId: input.sessionId,
+        details: {
+          ...createRouteDebugDetails(provider, route),
+          lane: "primary",
+          step: llmStep,
+          messageCount: fullMessages.length,
+          toolCount: openAiTools.length,
+          messages: fullMessages.map(summarizeApiMessage),
+        },
+        rawType: "runtime.llm.request",
+        rawPayload: {
+          phase: "started",
+          sessionId: input.sessionId,
+          step: llmStep,
+          route: createRouteDebugDetails(provider, route),
+          messageCount: fullMessages.length,
+          toolCount: openAiTools.length,
+        },
+      });
 
       // Send to LLM
       let requestResult: RequestLlmWithRetryResult;
@@ -813,10 +1078,32 @@ export async function runLoop(
           signal: input.signal ?? new AbortController().signal,
           lane: "primary",
           sessionId: input.sessionId,
-          step: llmStepCount + 1,
+          step: llmStep,
         });
       } catch (error) {
         if (isContextOverflowError(error)) {
+          await emitRuntimeObservability(input, {
+            eventType: "runtime.llm.request.failed",
+            status: "failed",
+            summary: "LLM request hit context overflow",
+            sessionId: input.sessionId,
+            durationMs: new Date().getTime() - llmRequestStartedAt.getTime(),
+            details: {
+              ...createRouteDebugDetails(provider, route),
+              lane: "primary",
+              step: llmStep,
+              error: summarizeError(error),
+              overflowCompactionAttempts,
+            },
+            rawType: "runtime.llm.request",
+            rawPayload: {
+              phase: "failed",
+              reason: "context_overflow",
+              sessionId: input.sessionId,
+              step: llmStep,
+              error: summarizeError(error),
+            },
+          });
           if (overflowCompactionAttempts >= MAX_OVERFLOW_COMPACTION_ATTEMPTS) {
             throw createPersistentOverflowError(error, overflowCompactionAttempts);
           }
@@ -824,6 +1111,26 @@ export async function runLoop(
           await kernel.triggerCompaction(input.sessionId, "overflow");
           continue;
         }
+        await emitRuntimeObservability(input, {
+          eventType: "runtime.llm.request.failed",
+          status: "failed",
+          summary: "LLM request failed",
+          sessionId: input.sessionId,
+          durationMs: new Date().getTime() - llmRequestStartedAt.getTime(),
+          details: {
+            ...createRouteDebugDetails(provider, route),
+            lane: "primary",
+            step: llmStep,
+            error: summarizeError(error),
+          },
+          rawType: "runtime.llm.request",
+          rawPayload: {
+            phase: "failed",
+            sessionId: input.sessionId,
+            step: llmStep,
+            error: summarizeError(error),
+          },
+        });
         throw error;
       }
       const response = requestResult.response;
@@ -843,6 +1150,34 @@ export async function runLoop(
         ...tc,
         id: normalizeToolCallId(tc.id),
       }));
+      await emitRuntimeObservability(input, {
+        eventType: "runtime.llm.response.succeeded",
+        status: "succeeded",
+        summary: `LLM response parsed: ${route.provider}/${route.llmModel}`,
+        sessionId: input.sessionId,
+        durationMs: new Date().getTime() - llmRequestStartedAt.getTime(),
+        details: {
+          ...createRouteDebugDetails(provider, route),
+          lane: "primary",
+          step: llmStep,
+          retryCount: requestResult.retryCount,
+          packetCount: streamResult.packetCount,
+          textLength: textContent.length,
+          toolCallCount: toolCalls.length,
+          rawBodyLength: streamResult.rawBody.length,
+        },
+        rawType: "runtime.llm.response",
+        rawPayload: {
+          phase: "succeeded",
+          sessionId: input.sessionId,
+          step: llmStep,
+          retryCount: requestResult.retryCount,
+          packetCount: streamResult.packetCount,
+          textLength: textContent.length,
+          toolCallCount: toolCalls.length,
+          rawBodyPreview: streamResult.rawBody,
+        },
+      });
       llmStepCount += 1;
 
       await kernel.appendMessage(
@@ -877,6 +1212,32 @@ export async function runLoop(
         } catch {
           args = {};
         }
+
+        await emitRuntimeObservability(input, {
+          eventType: "runtime.tool.call.started",
+          status: "started",
+          summary: `Tool call started: ${toolName}`,
+          sessionId: input.sessionId,
+          action: toolName,
+          capabilityId,
+          traceId: toolCallId,
+          details: {
+            toolCallId,
+            toolName,
+            capabilityId,
+            stepIndex: toolStepCount,
+            args,
+          },
+          rawType: "runtime.tool.call",
+          rawPayload: {
+            phase: "started",
+            sessionId: input.sessionId,
+            toolCallId,
+            toolName,
+            capabilityId,
+            args,
+          },
+        });
 
         input.onToolCall?.(toolName, args);
 
@@ -935,6 +1296,37 @@ export async function runLoop(
         };
         telemetryEntries.push(telemetryEntry);
         await input.onStepTelemetry?.(telemetryEntry);
+        await emitRuntimeObservability(input, {
+          eventType: result.ok ? "runtime.tool.call.succeeded" : "runtime.tool.call.failed",
+          status: result.ok ? "succeeded" : "failed",
+          summary: `Tool call ${result.ok ? "succeeded" : "failed"}: ${toolName}`,
+          sessionId: input.sessionId,
+          action: toolName,
+          capabilityId,
+          traceId: toolCallId,
+          durationMs,
+          details: {
+            toolCallId,
+            toolName,
+            capabilityId,
+            stepIndex: toolStepCount,
+            ok: result.ok,
+            durationMs,
+            result,
+            ...(telemetryEntry.errorCode ? { errorCode: telemetryEntry.errorCode } : {}),
+          },
+          rawType: "runtime.tool.call",
+          rawPayload: {
+            phase: result.ok ? "succeeded" : "failed",
+            sessionId: input.sessionId,
+            toolCallId,
+            toolName,
+            capabilityId,
+            durationMs,
+            result,
+            ...(telemetryEntry.errorCode ? { errorCode: telemetryEntry.errorCode } : {}),
+          },
+        });
 
         const failureKey = buildFailureHintKey(capabilityId, args);
         const failureTarget = extractFailureTarget(args);
@@ -1015,6 +1407,9 @@ export async function runLoop(
         }
       }
     }
+  } catch (error) {
+    loopError = error;
+    throw error;
   } finally {
     try {
       if (kernel.getRunState(input.sessionId).phase === "running") {
@@ -1023,6 +1418,31 @@ export async function runLoop(
     } catch {
       // Already stopped or not running
     }
+    await emitRuntimeObservability(input, {
+      eventType: "runtime.chat.run.finished",
+      status: terminalStatusToObservabilityStatus(terminalStatus, loopError),
+      summary: loopError ? "Chat run failed" : `Chat run finished: ${terminalStatus ?? "done"}`,
+      sessionId: input.sessionId,
+      durationMs: new Date().getTime() - runStartedAt.getTime(),
+      details: {
+        terminalStatus: terminalStatus ?? (loopError ? "failed" : "done"),
+        stepCount: kernel.getStepCount(input.sessionId),
+        llmStepCount,
+        toolStepCount,
+        telemetryCount: telemetryEntries.length,
+        ...(loopError ? { error: summarizeError(loopError) } : {}),
+      },
+      rawType: "runtime.chat.run",
+      rawPayload: {
+        phase: loopError ? "failed" : "finished",
+        sessionId: input.sessionId,
+        terminalStatus: terminalStatus ?? (loopError ? "failed" : "done"),
+        stepCount: kernel.getStepCount(input.sessionId),
+        llmStepCount,
+        toolStepCount,
+        ...(loopError ? { error: summarizeError(loopError) } : {}),
+      },
+    });
   }
 
   return {
