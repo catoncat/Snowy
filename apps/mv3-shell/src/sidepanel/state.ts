@@ -400,6 +400,17 @@ function upsertRunActivityItem(items: RunActivityItem[], item: RunActivityItem):
   return next;
 }
 
+function dedupeRunActivityItems(items: RunActivityItem[]): RunActivityItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) {
+      return false;
+    }
+    seen.add(item.id);
+    return true;
+  });
+}
+
 function updateStreamingItems(items: ChatItem[], nextState: ChatMessageItem["state"]): ChatItem[] {
   return items.map((item) =>
     item.kind === "message" && item.role === "assistant" && item.state === "streaming"
@@ -552,7 +563,7 @@ export function applyBootstrapState(state: ChatState, payload: ChatBootstrapPayl
         summary: payload.runState?.summary,
         currentActivityId: payload.runState?.currentActivityId,
       }),
-      items: [...explicitActivity, ...projectedActivity],
+      items: dedupeRunActivityItems([...explicitActivity, ...projectedActivity]),
     },
   };
 }

@@ -46,6 +46,48 @@ describe("sidepanel chat state", () => {
     ]);
   });
 
+  it("dedupes bootstrap run activity projected from persisted tool messages", () => {
+    const state = applyBootstrapState(createInitialChatState(), {
+      sessionId: "s-1",
+      runState: { status: "idle" },
+      messages: [
+        {
+          id: "tool-1",
+          kind: "tool",
+          toolName: "page.query",
+          summary: "Collected DOM snapshot",
+          detail: '{"ok":true}',
+          expanded: false,
+        },
+      ],
+      runActivity: {
+        items: [
+          {
+            id: "activity:tool:tool-1",
+            kind: "tool",
+            title: "page.query",
+            summary: "Persisted activity summary",
+            detail: '{"source":"persisted"}',
+            expanded: true,
+            status: "done",
+            severity: "info",
+            visibility: "default",
+            toolCallId: "tool-1",
+            toolName: "page.query",
+          },
+        ],
+      },
+    });
+
+    expect(state.runActivity.items).toHaveLength(1);
+    expect(state.runActivity.items[0]).toMatchObject({
+      id: "activity:tool:tool-1",
+      summary: "Persisted activity summary",
+      detail: '{"source":"persisted"}',
+      expanded: true,
+    });
+  });
+
   it("appends assistant deltas into one streaming message and completes it", () => {
     let state = createInitialChatState();
     state = applyChatEvent(state, {
