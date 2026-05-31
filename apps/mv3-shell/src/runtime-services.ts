@@ -3158,6 +3158,15 @@ export function createBackgroundRuntimeServices({
         });
 
         providers.register(createTabsCapabilityProvider(createChromeTabsTransport({ chromeApi })));
+        providers.register({
+          family: "page",
+          async invoke({ binding, input }) {
+            return invokePageAction({
+              action: binding.operation,
+              input,
+            });
+          },
+        });
         providers.register(
           createMemfsCapabilityProvider(createBrowserVfsMemfsTransport(browserVfs)),
         );

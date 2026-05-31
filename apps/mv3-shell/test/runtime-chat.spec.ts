@@ -1767,6 +1767,168 @@ describe("mv3-shell end-to-end loop integration", () => {
     }
   });
 
+  it("runs the Twitter bookmarks like scenario through page tool execution and chat UI events", async () => {
+    const prompt = "搜索我的推特收藏的书签，搜索 agent，然后给第一条点一个like";
+    const sentMessages: unknown[] = [];
+    const telemetryEntries: unknown[] = [];
+    const timelineEvents: unknown[] = [];
+    let fetchCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      fetchCallCount += 1;
+      if (fetchCallCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_nav_bookmarks",
+              function: {
+                name: "tabs_navigate",
+                arguments: JSON.stringify({ url: "https://x.com/i/bookmarks" }),
+              },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+      if (fetchCallCount === 2) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_like_first_agent_bookmark",
+              function: {
+                name: "page_click",
+                arguments: JSON.stringify({ uid: "first-agent-bookmark-like" }),
+              },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([
+        chatChunk("已打开 X bookmarks，搜索 agent，并给第一条结果点了 like。"),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const chromeApi = {
+        runtime: {
+          getURL: (path: string) => path,
+          sendMessage: vi.fn(async (message) => {
+            sentMessages.push(message);
+            return undefined;
+          }),
+        },
+        tabs: {
+          query: vi.fn(async () => [
+            { id: 11, windowId: 1, url: "https://x.com/home", active: true, title: "X Home" },
+          ]),
+          update: vi.fn(async (tabId: number, updateInfo: { url: string }) => ({
+            id: tabId,
+            windowId: 1,
+            url: updateInfo.url,
+            active: true,
+            title: "X Bookmarks",
+          })),
+        },
+        offscreen: {},
+      };
+      const services = createBackgroundRuntimeServices({
+        chromeApi,
+        invokeRunner: createRunnerInvoke(),
+        pageHookBridge: createFixturePageHookBridge({ verified: true }),
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: TEST_PROFILE_CONFIG,
+        onLoopTelemetry: (entry: unknown) => {
+          telemetryEntries.push(entry);
+        },
+        onObservabilityEvent: (event: unknown) => {
+          timelineEvents.push(event);
+        },
+      });
+
+      await expect(services.sendChatPrompt({ text: prompt })).resolves.toMatchObject({
+        accepted: true,
+      });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      expect(telemetryEntries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            capabilityId: "tabs.navigate",
+            ok: true,
+          }),
+          expect.objectContaining({
+            capabilityId: "page.click",
+            ok: true,
+          }),
+        ]),
+      );
+      expect(timelineEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            eventType: "runtime.tool.call.succeeded",
+            action: "tabs_navigate",
+            capabilityId: "tabs.navigate",
+          }),
+          expect.objectContaining({
+            eventType: "runtime.tool.call.succeeded",
+            action: "page_click",
+            capabilityId: "page.click",
+          }),
+        ]),
+      );
+
+      const chatEvents = sentMessages
+        .filter(
+          (
+            msg,
+          ): msg is {
+            type: string;
+            event: {
+              type: string;
+              toolName?: string;
+              status?: string;
+              phase?: string;
+            };
+          } => (msg as { type?: string }).type === "bbl-next.runtime.chat.event",
+        )
+        .map((msg) => msg.event);
+      expect(chatEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "tool.call",
+            toolName: "page_click",
+            phase: "tool_running",
+          }),
+          expect.objectContaining({
+            type: "tool.result",
+            toolName: "page_click",
+            status: "done",
+            phase: "processing_result",
+          }),
+        ]),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("emits fallback message when no LLM config is set", async () => {
     const sentMessages: unknown[] = [];
 
