@@ -45,6 +45,7 @@
 ## 2. Architecture North Star
 
 - Browser automation 第一性原则见 `docs/browser-automation-first-principles.md`；它高于旧仓迁移清单、AIPex alignment 文档和旧的 Tier 拆分表。
+- Browser automation 的当前可执行 To Do 见 `docs/browser-automation-dogfood-todo.md`；先跑最小 dogfood 场景，再决定保留、简化、删除或继续试。
 - Browser lane 的北极星是 Browser Harness 形态：给当前对话里的 Codex Agent 少数可靠动作和完整证据，而不是用普通代码重建半智能浏览器代理。
 - Browser action surface 默认收敛到 `page_info` / `screenshot` / `click_xy` / `type_text` / `press_key` / `scroll` / `js` / `cdp` / `tabs` / `wait` 这类粗粒度原语。
 - 不做 runtime-owned 成功评分器、置信分、智能 locator ranking、隐式 verify、自动 fallback tree 或 hidden recovery engine；当前 Codex Agent 根据截图、页面信息、JS/CDP 返回和错误证据自己判断下一步。需要第二意见时，调用另一个 Agent 体判断，而不是把判断写进业务代码。

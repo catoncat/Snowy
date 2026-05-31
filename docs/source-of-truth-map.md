@@ -67,6 +67,8 @@
 | 这仓库现在到底想成为什么 | `AGENTS.md` → `docs/start-here.md` → `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
 | 哪些原则不能变 | `AGENTS.md` → `docs/locked-decisions-2026-03-29.md` |
 | browser automation 该怎么设计 | `AGENTS.md` → `docs/browser-automation-first-principles.md` |
+| browser automation 接下来先做什么 | `docs/browser-automation-dogfood-todo.md` |
+| browser automation 最近 dogfood 证据 | `docs/browser-automation-dogfood-report-2026-05-31.md` |
 | workflow 必须跟踪哪些模块 | `docs/module-tracking-ledger.json` |
 | 当前主线为什么是 kernel | `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
 | 2026-03-30 那轮插件纠偏流由哪些 issue 承载 | `docs/reviews/2026-03-30-plugin-mainline-correction-control.md` |
