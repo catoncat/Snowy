@@ -1,26 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-31T04:04:00.327Z",
+  "generated_at": "2026-05-31T05:46:22.299Z",
   "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": [
-    {
-      "issue_id": "ISSUE-188",
-      "issue_path": "docs/backlog/2026-05-31-agent-run-ui-prd.md",
-      "title": "Agent Run UI PRD 与运行态交互模型",
-      "parallel_group": "mv3-shell",
-      "module_id": "ai-surface-control-plane",
-      "module_stage": "secondary",
-      "tracking_kind": "follow-up",
-      "check_cmd": "bunx vitest run apps/mv3-shell/test/sidepanel-state.spec.ts apps/mv3-shell/test/sidepanel-app.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "docs/prds/2026-05-31-agent-run-ui-prd.md",
-        "apps/mv3-shell/src/sidepanel/",
-        "apps/mv3-shell/src/runtime-services.ts",
-        "apps/mv3-shell/test/sidepanel-state.spec.ts",
-        "apps/mv3-shell/test/sidepanel-app.spec.ts",
-        "apps/mv3-shell/test/runtime-chat.spec.ts"
-      ]
-    }
-  ]
+  "entries": []
 }
