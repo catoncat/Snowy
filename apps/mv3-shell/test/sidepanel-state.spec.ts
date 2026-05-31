@@ -5,9 +5,11 @@ import {
   applyChatEvent,
   createInitialChatState,
   filterChatItemsForToolHistory,
+  filterRunActivityItems,
+  shouldAlwaysShowRunActivityItem,
   shouldAlwaysShowToolItem,
+  toggleRunActivityExpanded,
   toggleSystemMessageExpanded,
-  toggleToolExpanded,
 } from "../src/sidepanel/state";
 
 describe("sidepanel chat state", () => {
@@ -30,7 +32,18 @@ describe("sidepanel chat state", () => {
 
     expect(state.sessionId).toBe("s-1");
     expect(state.status).toBe("idle");
-    expect(state.items).toHaveLength(2);
+    expect(state.items).toEqual([
+      { id: "m-user", kind: "message", role: "user", text: "hello", state: "complete" },
+    ]);
+    expect(state.runActivity.items).toEqual([
+      expect.objectContaining({
+        id: "activity:tool:m-tool",
+        kind: "tool",
+        title: "runtime.bootstrap",
+        status: "done",
+        expanded: false,
+      }),
+    ]);
   });
 
   it("appends assistant deltas into one streaming message and completes it", () => {
@@ -65,7 +78,7 @@ describe("sidepanel chat state", () => {
     ]);
   });
 
-  it("adds tool result cards collapsed by default", () => {
+  it("projects tool result cards into run activity collapsed by default", () => {
     const state = applyChatEvent(createInitialChatState(), {
       type: "tool.result",
       sessionId: "s-1",
@@ -75,29 +88,38 @@ describe("sidepanel chat state", () => {
       detail: '{"status":"healthy"}',
     });
 
-    expect(state.items).toEqual([
+    expect(state.items).toEqual([]);
+    expect(state.runActivity.items).toEqual([
       expect.objectContaining({
-        id: "tool-1",
+        id: "activity:tool:tool-1",
         kind: "tool",
         toolName: "runtime.bootstrap",
+        title: "runtime.bootstrap",
         summary: "Runtime is healthy",
         expanded: false,
+        status: "done",
       }),
     ]);
   });
 
-  it("tracks old-product running tool placeholders and absorbs them into final assistant content", () => {
+  it("tracks tool lifecycle in activity while transcript absorbs final assistant content", () => {
     let state = applyChatEvent(createInitialChatState(), {
       type: "tool.call",
       sessionId: "s-1",
       messageId: "tc-1",
+      toolCallId: "tc-1",
       toolName: "tabs_navigate",
       detail: '{"url":"https://example.com"}',
     });
 
-    expect(state.items).toEqual([
+    expect(state.items).toEqual([]);
+    expect(state.runActivity.current).toMatchObject({
+      phase: "tool_running",
+      status: "running",
+    });
+    expect(state.runActivity.items).toEqual([
       expect.objectContaining({
-        id: "tc-1",
+        id: "activity:tool:tc-1",
         kind: "tool",
         toolName: "tabs_navigate",
         summary: "执行中 · tabs_navigate",
@@ -105,18 +127,19 @@ describe("sidepanel chat state", () => {
         expanded: false,
       }),
     ]);
-    expect(filterChatItemsForToolHistory(state.items, false)).toHaveLength(1);
+    expect(filterRunActivityItems(state.runActivity.items, false)).toHaveLength(1);
 
     state = applyChatEvent(state, {
       type: "tool.result",
       sessionId: "s-1",
       messageId: "tc-1",
+      toolCallId: "tc-1",
       toolName: "tabs_navigate",
       summary: "已打开标签页",
       detail: '{"ok":true}',
     });
-    expect(state.items[0]).toMatchObject({
-      id: "tc-1",
+    expect(state.runActivity.items[0]).toMatchObject({
+      id: "activity:tool:tc-1",
       kind: "tool",
       status: "done",
       summary: "已打开标签页",
@@ -144,6 +167,7 @@ describe("sidepanel chat state", () => {
       kind: "message",
       role: "assistant",
     });
+    expect(state.runActivity.items).toHaveLength(1);
   });
 
   it("toggles old-product system summary expansion state", () => {
@@ -203,7 +227,7 @@ describe("sidepanel chat state", () => {
     expect(rendered.html).not.toContain("<pre");
   });
 
-  it("formats tool trace details into readable sections and toggles expansion", () => {
+  it("formats activity trace details into readable sections and toggles expansion", () => {
     let state = applyChatEvent(createInitialChatState(), {
       type: "tool.result",
       sessionId: "s-1",
@@ -218,8 +242,8 @@ describe("sidepanel chat state", () => {
       }),
     });
 
-    state = toggleToolExpanded(state, "tool-2");
-    const toolItem = state.items.find((item) => item.kind === "tool" && item.id === "tool-2");
+    state = toggleRunActivityExpanded(state, "activity:tool:tool-2");
+    const toolItem = state.runActivity.items.find((item) => item.id === "activity:tool:tool-2");
     const trace = renderToolTrace(
       "Collected DOM snapshot",
       toolItem?.kind === "tool" ? toolItem.detail : "",
@@ -273,6 +297,52 @@ describe("sidepanel chat state", () => {
       "user-1",
       "tool-error",
       "assistant-1",
+    ]);
+  });
+
+  it("filters routine run activity while keeping running, failed, and intervention visible", () => {
+    const items = [
+      {
+        id: "activity:tool:ok",
+        kind: "tool",
+        title: "page.query",
+        summary: "Collected DOM snapshot",
+        detail: '{"ok":true}',
+        expanded: false,
+        status: "done",
+        severity: "info",
+        visibility: "default",
+      },
+      {
+        id: "activity:tool:running",
+        kind: "tool",
+        title: "page.click",
+        summary: "Clicking submit",
+        detail: '{"selector":"button"}',
+        expanded: false,
+        status: "running",
+        severity: "info",
+        visibility: "always",
+      },
+      {
+        id: "activity:error:blocked",
+        kind: "intervention",
+        title: "需要人工确认",
+        summary: "Permission required",
+        detail: "",
+        expanded: true,
+        status: "intervention",
+        severity: "warning",
+        visibility: "always",
+      },
+    ] as const;
+
+    expect(shouldAlwaysShowRunActivityItem(items[0])).toBe(false);
+    expect(shouldAlwaysShowRunActivityItem(items[1])).toBe(true);
+    expect(shouldAlwaysShowRunActivityItem(items[2])).toBe(true);
+    expect(filterRunActivityItems(items, false).map((item) => item.id)).toEqual([
+      "activity:tool:running",
+      "activity:error:blocked",
     ]);
   });
 });

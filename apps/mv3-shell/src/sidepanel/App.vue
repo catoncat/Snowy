@@ -5,7 +5,9 @@ import {
   applyChatEvent,
   createInitialChatState,
   filterChatItemsForToolHistory,
+  filterRunActivityItems,
   toggleSystemMessageExpanded,
+  toggleRunActivityExpanded,
   toggleToolExpanded,
   type ChatEvent,
   type ChatItem,
@@ -19,6 +21,7 @@ import {
   type ChatMessageRetryPayload,
   ChatTranscriptPane,
 } from "./chat-transcript-pane";
+import { RunActivityTimeline, RunStatusStrip } from "./run-activity-pane";
 import { SessionHistoryPane, type ChatSessionSummary } from "./session-history-pane";
 import {
   conversationMarkdownFileName,
@@ -263,12 +266,20 @@ const activeTabId = computed(() => runtimeSummary.value?.activeTab?.tabId ?? nul
 const visibleChatItems = computed(() =>
   filterChatItemsForToolHistory(chatState.value.items, showToolHistory.value),
 );
+const visibleRunActivityItems = computed(() =>
+  filterRunActivityItems(chatState.value.runActivity.items, showToolHistory.value),
+);
 const hasChatMessages = computed(() => visibleChatItems.value.length > 0);
 const hasExportableConversation = computed(() => hasConversationExportContent(chatState.value.items));
 const messageCount = computed(
   () => chatState.value.items.filter((item) => item.kind === "message").length,
 );
-const toolCount = computed(() => chatState.value.items.filter((item) => item.kind === "tool").length);
+const toolCount = computed(
+  () =>
+    chatState.value.items.filter((item) => item.kind === "tool").length +
+    chatState.value.runActivity.items.filter((item) => item.kind === "tool").length,
+);
+const runActivityCount = computed(() => chatState.value.runActivity.items.length);
 const toolHistoryToggleLabel = computed(() =>
   showToolHistory.value ? "隐藏工具轨迹" : "显示工具轨迹",
 );
@@ -2191,6 +2202,10 @@ function toggleTool(id: string) {
   chatState.value = toggleToolExpanded(chatState.value, id);
 }
 
+function toggleRunActivity(id: string) {
+  chatState.value = toggleRunActivityExpanded(chatState.value, id);
+}
+
 function toggleSystemMessage(payload: { id: string }) {
   chatState.value = toggleSystemMessageExpanded(chatState.value, payload.id);
 }
@@ -2470,6 +2485,18 @@ onUnmounted(() => {
         aria-label="对话历史记录"
       >
         <div class="w-full px-5 pb-8 pt-6">
+          <RunStatusStrip
+            v-if="runActivityCount > 0 || chatState.runActivity.current.status !== 'idle'"
+            :current="chatState.runActivity.current"
+            :activity-count="runActivityCount"
+          />
+
+          <RunActivityTimeline
+            v-if="visibleRunActivityItems.length > 0"
+            :items="visibleRunActivityItems"
+            @toggle="toggleRunActivity"
+          />
+
           <section v-if="loading && !hasChatMessages" class="flex min-h-[240px] items-center justify-center text-[13px] text-slate-500">
             正在加载对话...
           </section>

@@ -20,13 +20,20 @@ import {
   hasConversationExportContent,
 } from "../src/sidepanel/conversation-export";
 import { renderMessageRichText } from "../src/sidepanel/renderers";
+import { RunActivityTimeline, RunStatusStrip } from "../src/sidepanel/run-activity-pane";
 import {
   type ChatSessionSummary,
   SessionHistoryPane,
   filterAndSortSessions,
   formatSessionDate,
 } from "../src/sidepanel/session-history-pane";
-import { type ChatItem, applyChatEvent, createInitialChatState } from "../src/sidepanel/state";
+import {
+  type ChatItem,
+  type RunActivityItem,
+  type RunStatusView,
+  applyChatEvent,
+  createInitialChatState,
+} from "../src/sidepanel/state";
 
 interface MemoryNode {
   type: string;
@@ -851,6 +858,85 @@ describe("sidepanel chat transcript component", () => {
     ).not.toBeNull();
   });
 
+  it("renders current run status as a separate live strip", () => {
+    const current: RunStatusView = {
+      status: "running",
+      phase: "tool_running",
+      label: "正在运行工具",
+      summary: "page.click",
+      severity: "info",
+      currentActivityId: "activity:tool:tc-1",
+    };
+
+    const tree = mountComponentInMemory(RunStatusStrip, {
+      current,
+      activityCount: 2,
+    });
+
+    const strip = findFirst(tree, (node) => node.props["data-testid"] === "run-status-strip");
+    expect(strip?.props.role).toBe("status");
+    expect(strip?.props["aria-live"]).toBe("polite");
+    expect(textContent(strip)).toContain("正在运行工具");
+    expect(textContent(strip)).toContain("page.click");
+    expect(textContent(strip)).toContain("2");
+  });
+
+  it("renders run activity timeline with collapsed success and visible failed activity", () => {
+    const toggled: string[] = [];
+    const items: RunActivityItem[] = [
+      {
+        id: "activity:tool:ok",
+        kind: "tool",
+        title: "page.query",
+        summary: "Collected DOM snapshot",
+        detail: '{"ok":true}',
+        expanded: false,
+        status: "done",
+        severity: "info",
+        visibility: "default",
+      },
+      {
+        id: "activity:tool:failed",
+        kind: "tool",
+        title: "page.click",
+        summary: "Click failed",
+        detail: '{"ok":false,"error":"element not found"}',
+        expanded: true,
+        status: "failed",
+        severity: "error",
+        visibility: "always",
+      },
+    ];
+
+    const tree = mountComponentInMemory(RunActivityTimeline, {
+      items,
+      onToggle: (id: string) => toggled.push(id),
+    });
+
+    const timeline = findFirst(
+      tree,
+      (node) => node.props["data-testid"] === "run-activity-timeline",
+    );
+    expect(timeline?.props.role).toBe("region");
+    expect(timeline?.props["aria-label"]).toBe("运行活动");
+    expect(textContent(timeline)).toContain("page.query");
+    expect(textContent(timeline)).toContain("Click failed");
+    expect(
+      findFirst(
+        timeline as MemoryNode,
+        (node) => node.props["data-testid"] === "run-activity-detail",
+      ),
+    ).not.toBeNull();
+
+    const toggle = findFirst(
+      timeline as MemoryNode,
+      (node) => node.type === "button" && node.props["aria-label"] === "展开运行活动详情",
+    );
+    expect(toggle?.props["aria-expanded"]).toBe(false);
+    (toggle?.props.onClick as () => void)();
+    expect(toggled).toEqual(["activity:tool:ok"]);
+  });
+
   it("inherits old-product message layout and copies assistant turn tails only", () => {
     const emitted: ChatMessageCopyPayload[] = [];
     const items: ChatItem[] = [
@@ -933,8 +1019,12 @@ describe("sidepanel chat transcript component", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 
     expect(source).toContain("ChatTranscriptPane");
+    expect(source).toContain("RunStatusStrip");
+    expect(source).toContain("RunActivityTimeline");
     expect(source).toContain(':items="visibleChatItems"');
+    expect(source).toContain(':items="visibleRunActivityItems"');
     expect(source).toContain('@toggle-tool="toggleTool"');
+    expect(source).toContain('@toggle="toggleRunActivity"');
     expect(source).toContain(':copied-message-id="copiedMessageId"');
     expect(source).toContain('@copy-message="handleCopyMessage"');
     expect(source).toContain('@toggle-system="toggleSystemMessage"');

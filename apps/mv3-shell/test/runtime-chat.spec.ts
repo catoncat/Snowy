@@ -111,14 +111,27 @@ describe("mv3-shell runtime chat bridge", () => {
     expect(events).toContain("assistant.delta");
     expect(events).toContain("assistant.done");
 
+    const runningState = sentMessages
+      .filter(
+        (msg): msg is { type: string; event: { type: string; status?: string; phase?: string } } =>
+          (msg as { type?: string }).type === "bbl-next.runtime.chat.event" &&
+          (msg as { event?: { type?: string } }).event?.type === "run.state",
+      )
+      .map((msg) => msg.event)
+      .find((event) => event.status === "running");
+    expect(runningState).toMatchObject({
+      phase: "thinking",
+    });
+
     const doneEvent = sentMessages
       .filter(
-        (msg): msg is { type: string; event: { type: string; text?: string } } =>
+        (msg): msg is { type: string; event: { type: string; text?: string; phase?: string } } =>
           (msg as { type?: string }).type === "bbl-next.runtime.chat.event" &&
           (msg as { event?: { type?: string } }).event?.type === "assistant.done",
       )
       .map((msg) => msg.event);
     expect(doneEvent[0]?.text).toContain("No LLM provider is configured");
+    expect(doneEvent[0]?.phase).toBe("finalizing");
   });
 
   it("stops an active stream and emits stopped state", async () => {
@@ -1535,7 +1548,13 @@ describe("mv3-shell end-to-end loop integration", () => {
             msg,
           ): msg is {
             type: string;
-            event: { type: string; messageId?: string; toolName?: string };
+            event: {
+              type: string;
+              messageId?: string;
+              toolCallId?: string;
+              toolName?: string;
+              phase?: string;
+            };
           } => (msg as { type?: string }).type === "bbl-next.runtime.chat.event",
         )
         .map((msg) => msg.event);
@@ -1544,11 +1563,15 @@ describe("mv3-shell end-to-end loop integration", () => {
       expect(toolCallEvent).toMatchObject({
         type: "tool.call",
         toolName: "tabs_navigate",
+        phase: "tool_running",
+        toolCallId: expect.any(String),
       });
       expect(toolResultEvent).toMatchObject({
         type: "tool.result",
         toolName: "tabs_navigate",
         messageId: toolCallEvent?.messageId,
+        toolCallId: toolCallEvent?.toolCallId,
+        phase: "processing_result",
       });
 
       await expect(
