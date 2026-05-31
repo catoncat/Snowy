@@ -44,6 +44,13 @@
 
 ## 2. Architecture North Star
 
+- Browser automation 第一性原则见 `docs/browser-automation-first-principles.md`；它高于旧仓迁移清单、AIPex alignment 文档和旧的 Tier 拆分表。
+- Browser lane 的北极星是 Browser Harness 形态：给当前对话里的 Codex Agent 少数可靠动作和完整证据，而不是用普通代码重建半智能浏览器代理。
+- Browser action surface 默认收敛到 `page_info` / `screenshot` / `click_xy` / `type_text` / `press_key` / `scroll` / `js` / `cdp` / `tabs` / `wait` 这类粗粒度原语。
+- 不做 runtime-owned 成功评分器、置信分、智能 locator ranking、隐式 verify、自动 fallback tree 或 hidden recovery engine；当前 Codex Agent 根据截图、页面信息、JS/CDP 返回和错误证据自己判断下一步。需要第二意见时，调用另一个 Agent 体判断，而不是把判断写进业务代码。
+- `page.query` 只能作为简单 DOM 读取辅助，不得演化成旧仓 `search_elements` / UID ranking / score / stabilizer 主线。
+- Browser lane dogfood 必须从最小动作开始：观察 → 当前 Agent 决策 → 执行一个原语 → 再观察 → 当前 Agent 自评；测试代码只锁接口和回归，不替 Agent 打分。
+- 不因为旧仓写过、当前仓已经实现、测试已经断言或文档已经列过就默认保留 browser abstraction；不写防御性兼容代码，只保留 dogfood 后证明简单、好用、可调试的路径。
 - `CapabilityDescriptor` 是 action canonical model。
 - `ToolContract` 是 action projection，不是完整 AI Surface 本体。
 - 产品 AI Surface 同时包含 actions、resources、events/audit、skills/workflows。
@@ -64,6 +71,7 @@
 - 先写测试，再补实现；默认 TDD。
 - 新能力先进入 public capability namespace，不要新增私有平行入口。
 - 少量强原语 + 足够上下文，优先于细碎 capability 设计。
+- 涉及 browser automation 时，先用 `docs/browser-automation-first-principles.md` 过一遍：如果方案在增加评分器、智能中间层、隐藏 verify 或防御性兼容层，默认退回 Browser Harness 式少数原语 + Agent 判断。
 - 触及 `contracts/core/mv3-shell` 或 public surface 时，必须过 Doc Freshness Gate。
 - issue 完成前必须过 Definition Of Done，并判断是否需要 follow-up issue。
 - 不要重新引入 `Plugin` 作为主概念；统一收敛为 executable skill。

@@ -31,6 +31,7 @@
 - `Execution Host` 可以是本地，也可以是远程
 - `host.*` 保持粗粒度原语，默认围绕 `read/write/edit/exec`
 - `page.*` / `tabs.*` / `site.*` 仍然是浏览器本地能力
+- Browser automation lane 以 `docs/browser-automation-first-principles.md` 为第一性原则：少数 Browser Harness 式原语 + 完整证据 + 当前 Codex Agent 自评，不做代码评分器、智能 locator ranking、隐式 verify、hidden fallback/recovery engine 或防御性兼容层。
 
 ## BrowserVFS
 

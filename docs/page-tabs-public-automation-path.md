@@ -1,17 +1,19 @@
 # Page/Tabs Public Automation Path
 
+> 2026-05-31 修正：browser automation 的第一性原则以 `docs/browser-automation-first-principles.md` 为准。本文中关于 UID strategy、Tier 1 DOM query 和 verify pipe 的历史设计只作为迁移背景；后续新设计不得沿着旧仓 `search_elements` / UID ranking / score / stabilizer 路线继续扩张，也不得为了保留既有实现而写防御性兼容层。
+
 本文件回答 ISSUE-037 的核心问题：
 
 > 在 ISSUE-036 锁定 cutover boundary 后，`page.*` / `tabs.*` 的最小 public automation path 是什么？
 
 ## 设计原则
 
-1. **少量强原语 + 足够上下文**（locked decision）
+1. **Browser Harness lane 优先**：少数强原语 + 完整证据 + 当前 Codex Agent 判断；不要用 runtime 代码替 Agent 做成功评分、智能 locator 或隐式 verify。
 2. **active-tab metadata only**（locked decision）
 3. **`page.*` / `tabs.*` / `site.*` 仍然是浏览器本地能力**（locked decision）
-4. **UID-based selector strategy**：沿用旧仓的 `data-brain-uid` 范式——snapshot 先打标→LLM 拿 UID→action 用 UID 定位
-5. **不在 public namespace 膨胀过程工具**：scroll_to, highlight, bounding_box 等辅助工具不进入 Tier 1 public path
-6. **execution lane 收敛**：cutover 前只用 `chrome.scripting.executeScript` lane（DOM action）+ `chrome.tabs` API（tab 管理），不引入 CDP lane
+4. **坐标/截图/JS/CDP 是一等调试路径**：优先让当前 Agent 看 screenshot/page_info 后选择最小动作；DOM query 只是辅助读状态。
+5. **不在 public namespace 膨胀过程工具或智能中间层**：scroll_to、highlight、bounding_box、ranking、score、stabilizer、fallback planner 都不进入主线。
+6. **dogfood 由当前 Agent 自评**：真实场景先观察、再动作、再观察；测试只锁接口和回归，不替 Agent 打分。
 
 ## 旧仓 page/tabs 工具映射
 

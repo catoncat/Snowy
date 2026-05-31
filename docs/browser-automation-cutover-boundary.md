@@ -1,16 +1,18 @@
 # Browser Automation Cutover Boundary
 
+> 2026-05-31 修正：browser automation 的第一性原则以 `docs/browser-automation-first-principles.md` 为准。本文保留为 cutover 历史边界；其中 `page.query`、verify pipe、intervention 等条目不得被解释为继续扩张旧仓评分器、智能 locator、UID ranking、hidden recovery engine 或防御性兼容层的授权。
+
 本文件回答 Soft Gate 2（`docs/cutover-readiness-criteria.md`）的核心问题：
 
 > 哪些旧 browser automation 能力属于 cutover 前必需？
 
 ## 裁决原则
 
-1. **少量强原语 + 足够上下文**（locked decision）
+1. **Browser Harness lane 优先**：少数强原语 + 完整证据 + 当前 Codex Agent 判断；不做代码评分器、智能 locator、隐式 verify、hidden fallback/recovery 或防御性兼容。
 2. **active-tab metadata only**（locked decision）
 3. **explicit invoke 才注入**（locked decision）
 4. 旧仓 ~39 tools 不原样平移；新仓收敛为 public capability namespace
-5. cutover 前只需证明"核心自动化能闭环"，不需证明"所有旧工具都已迁完"
+5. cutover 前只需证明"核心原语 + dogfood 观察闭环"可用，不需证明"所有旧工具都已迁完"
 
 ## 旧仓能力全景（~39 tools）
 

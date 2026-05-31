@@ -29,6 +29,8 @@
 
 - `AGENTS.md` + `docs/locked-decisions-2026-03-29.md`
   - 定义不能改口的仓库边界
+- `docs/browser-automation-first-principles.md`
+  - 定义 browser automation lane 的第一性原则；优先级高于旧仓迁移清单、AIPex alignment 和历史 Tier 拆分
 - `docs/module-tracking-ledger.json`
   - 定义 planning 必须持续跟踪的模块、阶段和默认顺序
 - `docs/workflow/live-queue.json`
@@ -64,6 +66,7 @@
 |---|---|
 | 这仓库现在到底想成为什么 | `AGENTS.md` → `docs/start-here.md` → `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
 | 哪些原则不能变 | `AGENTS.md` → `docs/locked-decisions-2026-03-29.md` |
+| browser automation 该怎么设计 | `AGENTS.md` → `docs/browser-automation-first-principles.md` |
 | workflow 必须跟踪哪些模块 | `docs/module-tracking-ledger.json` |
 | 当前主线为什么是 kernel | `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
 | 2026-03-30 那轮插件纠偏流由哪些 issue 承载 | `docs/reviews/2026-03-30-plugin-mainline-correction-control.md` |
