@@ -3817,6 +3817,12 @@ export function createBackgroundRuntimeServices({
       messages: toChatTranscriptItems(context.messages),
       runState: {
         status: normalizeChatRunStatus(chatRunStatus),
+        phase:
+          normalizeChatRunStatus(chatRunStatus) === "running"
+            ? "thinking"
+            : normalizeChatRunStatus(chatRunStatus) === "stopped"
+              ? "stopped"
+              : "idle",
       },
     };
   }
@@ -4256,12 +4262,13 @@ export function createBackgroundRuntimeServices({
     };
   }
 
-  async function emitChatRunState(sessionId, status) {
+  async function emitChatRunState(sessionId, status, activity = {}) {
     chatRunStatus = normalizeChatRunStatus(status);
     await emitRuntimeChatEvent(chromeApi, {
       type: "run.state",
       sessionId,
       status: chatRunStatus,
+      ...activity,
     });
   }
 
@@ -4309,7 +4316,10 @@ export function createBackgroundRuntimeServices({
       controller,
     };
 
-    await emitChatRunState(session.id, "running");
+    await emitChatRunState(session.id, "running", {
+      phase: "thinking",
+      summary: "准备请求模型",
+    });
 
     const hasLlmConfig =
       activeProfile?.ok === true &&
@@ -4332,6 +4342,7 @@ export function createBackgroundRuntimeServices({
             sessionId: session.id,
             messageId: assistantMessageId,
             chunk: fallbackText,
+            phase: "model_streaming",
           });
 
           await kernel.appendMessage(session.id, {
@@ -4348,11 +4359,15 @@ export function createBackgroundRuntimeServices({
             sessionId: session.id,
             messageId: assistantMessageId,
             text: fallbackText,
+            phase: "finalizing",
           });
 
           if (activeChatRun?.id === runId) {
             activeChatRun = null;
-            await emitChatRunState(session.id, "idle");
+            await emitChatRunState(session.id, "idle", {
+              phase: "completed",
+              summary: "回复完成",
+            });
           }
           return;
         }
@@ -4401,6 +4416,7 @@ export function createBackgroundRuntimeServices({
                 sessionId: session.id,
                 messageId: assistantMessageId,
                 chunk,
+                phase: "model_streaming",
               });
             },
             onToolCall(toolName, args) {
@@ -4416,9 +4432,11 @@ export function createBackgroundRuntimeServices({
                 type: "tool.call",
                 sessionId: session.id,
                 messageId: toolMsgId,
+                toolCallId: toolMsgId,
                 toolName,
                 summary: `执行中 · ${toolName}`,
                 detail,
+                phase: "tool_running",
               });
             },
             onToolResult(toolName, resultData) {
@@ -4432,10 +4450,13 @@ export function createBackgroundRuntimeServices({
                 type: "tool.result",
                 sessionId: session.id,
                 messageId: toolMsgId,
+                toolCallId: toolMsgId,
                 toolName,
                 summary,
                 detail:
                   typeof resultData === "string" ? resultData : JSON.stringify(resultData ?? null),
+                phase: "processing_result",
+                status: resultData?.ok === false ? "failed" : "done",
               });
             },
             async onStepTelemetry(entry) {
@@ -4458,11 +4479,15 @@ export function createBackgroundRuntimeServices({
           text: finalAssistantText,
           terminalStatus: result.terminalStatus,
           stepCount: result.stepCount,
+          phase: "finalizing",
         });
 
         if (activeChatRun?.id === runId) {
           activeChatRun = null;
-          await emitChatRunState(session.id, "idle");
+          await emitChatRunState(session.id, "idle", {
+            phase: result.terminalStatus === "done" ? "completed" : "stopped",
+            summary: `terminalStatus=${result.terminalStatus}`,
+          });
         }
       } catch (error) {
         if (controller.signal.aborted) {
@@ -4480,7 +4505,10 @@ export function createBackgroundRuntimeServices({
           sessionId: session.id,
           message: error instanceof Error ? error.message : String(error),
         });
-        await emitChatRunState(session.id, "idle");
+        await emitChatRunState(session.id, "idle", {
+          phase: "failed",
+          summary: error instanceof Error ? error.message : String(error),
+        });
       }
     })();
 
@@ -4499,7 +4527,10 @@ export function createBackgroundRuntimeServices({
       activeChatRun.controller.abort();
       activeChatRun = null;
     }
-    await emitChatRunState(session.id, "stopped");
+    await emitChatRunState(session.id, "stopped", {
+      phase: "stopped",
+      summary: "用户停止运行",
+    });
     return {
       sessionId: session.id,
       runState: {
