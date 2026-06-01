@@ -101,6 +101,21 @@ const TEST_DESCRIPTOR = {
   executionBinding: { family: "tabs", operation: "navigate" },
 };
 
+const TEST_UNDERSCORE_DESCRIPTOR = {
+  id: "tabs.get_active",
+  version: 1,
+  description: "Get active tab",
+  inputSchema: { type: "object", properties: {} },
+  risk: "low" as const,
+  sideEffects: "reads" as const,
+  permissions: [],
+  supportsVerify: false,
+  supportsStreaming: false,
+  outputSchema: { type: "object" },
+  exportable: false,
+  executionBinding: { family: "tabs", operation: "get_active" },
+};
+
 const TEST_HIGH_RISK_DESCRIPTOR = {
   id: "tabs.close.tab",
   version: 1,
@@ -599,6 +614,61 @@ describe("runLoop", () => {
     expect(result.terminalStatus).toBe("done");
     expect(callCount).toBe(2);
     expect(toolCalls).toEqual(["tabs_navigate"]);
+  });
+
+  it("resolves tool names from the projected contract instead of splitting underscores", async () => {
+    let callCount = 0;
+    const storage: SessionStorage = new InMemorySessionStorage();
+    const registry = new CapabilityRegistry([TEST_UNDERSCORE_DESCRIPTOR]);
+    const providers = new FamilyProviderRegistry();
+    const invokedOperations: string[] = [];
+    providers.register({
+      family: "tabs",
+      invoke: async ({ binding }) => {
+        invokedOperations.push(binding.operation);
+        return { active: true, tabId: 1, url: "https://example.com" };
+      },
+    });
+    const kernel = createKernel({
+      storage,
+      llm: { complete: async () => "" },
+      registry,
+      providers,
+    });
+    const provider: LlmProviderAdapter = {
+      id: "test",
+      resolveRequestUrl: () => "https://test.api/v1/chat/completions",
+      send: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return sseResponse([
+            chatChunk(undefined, [
+              {
+                index: 0,
+                id: "tc_1",
+                function: { name: "tabs_get_active", arguments: "{}" },
+              },
+            ]),
+            chatChunk(undefined, undefined, "stop"),
+            "[DONE]",
+          ]);
+        }
+        return sseResponse([
+          chatChunk("Observed active tab."),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      },
+    };
+
+    const session = await kernel.createSession();
+    const result = await runLoop(
+      { kernel, registry, provider, profileConfig: TEST_PROFILE_CONFIG },
+      { sessionId: session.id, prompt: "What tab is active?" },
+    );
+
+    expect(result.terminalStatus).toBe("done");
+    expect(invokedOperations).toEqual(["get_active"]);
   });
 
   it("applies queued steering before the next llm turn", async () => {
@@ -1674,6 +1744,20 @@ describe("buildSystemPromptBase", () => {
   it("uses actual tool names in guidance", () => {
     const tools: ToolContract[] = [
       {
+        name: "page_info",
+        capabilityId: "page.info",
+        description: "i",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        annotations: {
+          risk: "low",
+          sideEffects: "reads",
+          supportsVerify: false,
+          supportsStreaming: false,
+          ...BASE_TOOL_ANNOTATIONS,
+        },
+      },
+      {
         name: "page_query",
         capabilityId: "page.query",
         description: "q",
@@ -1760,12 +1844,14 @@ describe("buildSystemPromptBase", () => {
     ];
 
     const prompt = buildSystemPromptBase(tools);
+    expect(prompt).toContain("page_info");
     expect(prompt).toContain("page_query");
     expect(prompt).toContain("page_click");
     expect(prompt).toContain("page_fill");
     expect(prompt).toContain("page_press_key");
     expect(prompt).toContain("page_screenshot");
     expect(prompt).toContain("tabs_navigate");
+    expect(prompt).not.toContain("page.info");
     expect(prompt).not.toContain("page.query");
     expect(prompt).not.toContain("tabs.navigate");
   });

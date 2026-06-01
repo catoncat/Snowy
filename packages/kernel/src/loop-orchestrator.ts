@@ -96,8 +96,15 @@ export interface LoopInterventionPolicy {
   afterStep?(context: LoopInterventionContext): InterventionRequest | null;
 }
 
-function toolNameToCapabilityId(toolName: string): string {
-  return toolName.replace(/_/g, ".");
+function buildToolNameCapabilityMap(tools: ToolContract[]): Map<string, string> {
+  return new Map(tools.map((tool) => [tool.name, tool.capabilityId]));
+}
+
+function resolveCapabilityIdForToolName(
+  toolName: string,
+  toolNameCapabilityMap: Map<string, string>,
+): string {
+  return toolNameCapabilityMap.get(toolName) ?? toolName.replace(/_/g, ".");
 }
 
 function defaultSystemPrompt(tools: ToolContract[], promptOptions?: PromptBuilderOptions): string {
@@ -1083,6 +1090,7 @@ export async function runLoop(
 
   // Project tools
   const tools = registry.projectTools({ audience: "chat", defaultExposedOnly: true });
+  const toolNameCapabilityMap = buildToolNameCapabilityMap(tools);
   const openAiTools = toolContractsToOpenAiTools(tools);
   const systemPromptMessages = opts.systemPromptBuilder
     ? [buildSystemPrompt(tools)]
@@ -1352,7 +1360,7 @@ export async function runLoop(
       for (const tc of toolCalls) {
         const toolCallId = tc.id;
         const toolName = tc.function.name;
-        const capabilityId = toolNameToCapabilityId(toolName);
+        const capabilityId = resolveCapabilityIdForToolName(toolName, toolNameCapabilityMap);
         const descriptor = registry.get(capabilityId);
 
         let args: unknown;

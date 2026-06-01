@@ -41,6 +41,7 @@
       "packages/**/*.ts",
       "apps/**/*.ts",
       "apps/**/*.js",
+      "scripts/**/*.js",
       ".agents/**/*.ts",
       "*.ts",
       "*.json"

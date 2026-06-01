@@ -192,20 +192,17 @@ describe("LoopEngine", () => {
       expect(engine.checkTerminal(sid, succeeded)).toBeNull();
     });
 
-    it("returns progress_uncertain when no-progress budget is exhausted", () => {
-      const engine2 = new LoopEngine({
-        noProgressContinueBudget: { repeat_signature: 0 },
-      });
-
+    it("does not terminate a run on no-progress detection", () => {
       for (let i = 0; i < 3; i++) {
-        const turn = engine2.createTurn(sid, { capabilityId: "page.click" });
-        engine2.recordTurnResult(turn, { ok: true, data: "same" });
+        const turn = engine.createTurn(sid, { capabilityId: "page.click" });
+        engine.recordTurnResult(turn, { ok: true, data: "same" });
       }
 
-      const turn = engine2.createTurn(sid, { capabilityId: "page.click" });
-      const succeeded = engine2.recordTurnResult(turn, { ok: true, data: "same" });
+      const turn = engine.createTurn(sid, { capabilityId: "page.click" });
+      const succeeded = engine.recordTurnResult(turn, { ok: true, data: "same" });
 
-      expect(engine2.checkTerminal(sid, succeeded)).toBe("progress_uncertain");
+      expect(engine.checkNoProgress(sid)).toBe("repeat_signature");
+      expect(engine.checkTerminal(sid, succeeded)).toBeNull();
     });
   });
 
@@ -214,19 +211,13 @@ describe("LoopEngine", () => {
       expect(engine.checkNoProgress(sid)).toBeNull();
     });
 
-    it("detects repeat_signature after budget exhaustion with old-repo-aligned threshold", () => {
-      // Default threshold = 2, budget = 1:
-      // third identical result should terminate (2 repeats after the first turn)
+    it("detects repeat_signature without mutating diagnostic state", () => {
       for (let i = 0; i < 2; i++) {
         const turn = engine.createTurn(sid, { capabilityId: "page.click" });
         engine.recordTurnResult(turn, { ok: true, data: "same" });
       }
 
-      expect(engine.checkNoProgress(sid)).toBeNull();
-
-      const turn = engine.createTurn(sid, { capabilityId: "page.click" });
-      engine.recordTurnResult(turn, { ok: true, data: "same" });
-
+      expect(engine.checkNoProgress(sid)).toBe("repeat_signature");
       expect(engine.checkNoProgress(sid)).toBe("repeat_signature");
     });
 
@@ -241,7 +232,7 @@ describe("LoopEngine", () => {
         engine2.recordTurnResult(turn, { ok: true, data: "same" });
       }
 
-      expect(engine2.checkNoProgress(sid)).toBeNull();
+      expect(engine2.checkNoProgress(sid)).toBe("repeat_signature");
 
       const turn = engine2.createTurn(sid, { capabilityId: "page.click" });
       engine2.recordTurnResult(turn, { ok: true, data: "same" });
@@ -259,13 +250,8 @@ describe("LoopEngine", () => {
       expect(engine.checkNoProgress(sid)).toBeNull();
     });
 
-    it("detects ping_pong pattern with zero budget", () => {
-      // Zero budget for ping_pong means immediate detection
-      const engine2 = new LoopEngine({
-        maxSteps: 50,
-        noProgressContinueBudget: { ping_pong: 0 },
-      });
-
+    it("detects ping_pong pattern", () => {
+      const engine2 = new LoopEngine({ maxSteps: 50 });
       const actions = ["page.click", "page.fill", "page.click", "page.fill"];
       for (const cap of actions) {
         const turn = engine2.createTurn(sid, { capabilityId: cap });

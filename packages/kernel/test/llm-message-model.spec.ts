@@ -357,6 +357,13 @@ describe("stepResultToToolMessagePayload", () => {
             schema: "bbl.browserActionEvidence.v1",
             visibility: "debug_only",
           },
+          externalPageEvidence: {
+            artifactPath: ".ml-cache/dogfood/task-page-query.json",
+            taskTabProof: {
+              url: "https://x.com/i/bookmarks",
+            },
+          },
+          networkEvents: [{ url: "https://x.com/i/api/graphql/secret" }],
           screenshot: {
             dataUrl: "data:image/png;base64,debug-only",
           },
@@ -375,6 +382,9 @@ describe("stepResultToToolMessagePayload", () => {
     expect(result.text).not.toContain("timelineEvents");
     expect(result.text).not.toContain("rawEvents");
     expect(result.text).not.toContain("browserActionEvidence");
+    expect(result.text).not.toContain("externalPageEvidence");
+    expect(result.text).not.toContain("networkEvents");
+    expect(result.text).not.toContain("taskTabProof");
     expect(result.text).not.toContain("trace");
     expect(result.text).not.toContain("data:image");
   });

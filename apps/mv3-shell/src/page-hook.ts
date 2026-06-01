@@ -12,8 +12,12 @@
     verifications: [],
     keyEvents: [],
     queryResults: [],
+    infoEvents: [],
     clickEvents: [],
+    clickXyEvents: [],
     fillEvents: [],
+    typeTextEvents: [],
+    scrollEvents: [],
     fetchEvents: [],
   };
 
@@ -27,8 +31,19 @@
   function getKeyboardTarget() {
     const documentRef = globalScope.document;
     return (
-      documentRef?.activeElement ?? documentRef?.body ?? documentRef?.documentElement ?? documentRef
+      getDeepActiveElement(documentRef) ??
+      documentRef?.body ??
+      documentRef?.documentElement ??
+      documentRef
     );
+  }
+
+  function getDeepActiveElement(documentRef) {
+    let active = documentRef?.activeElement;
+    while (active?.shadowRoot?.activeElement) {
+      active = active.shadowRoot.activeElement;
+    }
+    return active;
   }
 
   function dispatchKeyboardPress(installed, key, ctx) {
@@ -73,6 +88,86 @@
     };
   }
 
+  function boxForElement(el) {
+    if (!el || typeof el.getBoundingClientRect !== "function") {
+      return null;
+    }
+    const rect = el.getBoundingClientRect();
+    return {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      centerX: Math.round(rect.x + rect.width / 2),
+      centerY: Math.round(rect.y + rect.height / 2),
+    };
+  }
+
+  function compactText(value, maxLength) {
+    const text = String(value || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+  }
+
+  function serializeInfoElement(el, uid) {
+    const attrs = {};
+    for (const name of [
+      "aria-label",
+      "data-testid",
+      "href",
+      "name",
+      "placeholder",
+      "role",
+      "title",
+      "type",
+      "value",
+    ]) {
+      const value = typeof el.getAttribute === "function" ? el.getAttribute(name) : null;
+      if (typeof value === "string" && value.length > 0) {
+        attrs[name] = value.slice(0, 160);
+      }
+    }
+    return {
+      uid,
+      tagName: (el.tagName || "UNKNOWN").toLowerCase(),
+      textContent: compactText(el.textContent, 160),
+      ariaLabel: typeof el.getAttribute === "function" ? el.getAttribute("aria-label") : null,
+      role: typeof el.getAttribute === "function" ? el.getAttribute("role") : null,
+      testId: typeof el.getAttribute === "function" ? el.getAttribute("data-testid") : null,
+      box: boxForElement(el),
+      attributes: attrs,
+    };
+  }
+
+  function isVisibleBoxInViewport(box) {
+    if (!box || box.width <= 0 || box.height <= 0) {
+      return false;
+    }
+    const width = Number(globalScope.innerWidth || 0);
+    const height = Number(globalScope.innerHeight || 0);
+    return box.x < width && box.x + box.width > 0 && box.y < height && box.y + box.height > 0;
+  }
+
+  function collectInteractiveElements(root, selector, seen) {
+    if (!root || typeof root.querySelectorAll !== "function") {
+      return [];
+    }
+    const collected = [];
+    for (const element of Array.from(root.querySelectorAll(selector))) {
+      if (!seen.has(element)) {
+        seen.add(element);
+        collected.push(element);
+      }
+    }
+    for (const element of Array.from(root.querySelectorAll("*"))) {
+      if (element.shadowRoot) {
+        collected.push(...collectInteractiveElements(element.shadowRoot, selector, seen));
+      }
+    }
+    return collected;
+  }
+
   function normalizeStringMap(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return undefined;
@@ -84,6 +179,55 @@
       }
     }
     return Object.keys(normalized).length > 0 ? normalized : undefined;
+  }
+
+  function normalizeScrollNumber(value, fallback) {
+    if (value == null) {
+      return fallback;
+    }
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      throw new Error("page.scroll requires finite numeric deltas");
+    }
+    return number;
+  }
+
+  function normalizeCoordinate(value, name) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      throw new Error(`page.click_xy requires finite numeric ${name}`);
+    }
+    return number;
+  }
+
+  function dispatchMouseClick(target, x, y) {
+    const MouseEventCtor = globalScope.MouseEvent || globalScope.Event;
+    for (const type of ["mousedown", "mouseup", "click"]) {
+      target.dispatchEvent(
+        new MouseEventCtor(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+        }),
+      );
+    }
+  }
+
+  function dispatchInputEvents(target) {
+    if (typeof target.dispatchEvent !== "function") {
+      return;
+    }
+    if (typeof globalScope.InputEvent === "function") {
+      target.dispatchEvent(new globalScope.InputEvent("input", { bubbles: true }));
+    } else {
+      target.dispatchEvent(
+        new (globalScope.Event || globalScope.Object)("input", { bubbles: true }),
+      );
+    }
+    target.dispatchEvent(
+      new (globalScope.Event || globalScope.Object)("change", { bubbles: true }),
+    );
   }
 
   function install(step, tab) {
@@ -129,6 +273,163 @@
       };
       state.invocations.push(keyResult);
       return keyResult;
+    }
+
+    if (action === "info") {
+      const doc = globalScope.document;
+      if (!doc || typeof doc.querySelectorAll !== "function") {
+        throw new Error("document.querySelectorAll is not available");
+      }
+      const maxElements = Math.max(1, Math.min(Number(input?.maxElements ?? 30), 50));
+      const maxTextChars = Math.max(200, Math.min(Number(input?.maxTextChars ?? 1200), 1800));
+      const interactiveSelector =
+        'button,[role="button"],a,input,textarea,select,[contenteditable="true"],[tabindex]:not([tabindex="-1"]),[aria-label]';
+      const candidates = collectInteractiveElements(doc, interactiveSelector, new Set())
+        .map((element) => ({ element, box: boxForElement(element) }))
+        .filter(({ box }) => isVisibleBoxInViewport(box))
+        .sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x)
+        .map(({ element }) => element)
+        .slice(0, maxElements);
+      const interactiveElements = candidates.map((element) => {
+        const uid = `e-${++elementCounter}`;
+        elementRefs[uid] = element;
+        return serializeInfoElement(element, uid);
+      });
+      const infoResult = {
+        ok: true,
+        action,
+        title: String(doc.title || ""),
+        url: String(globalScope.location?.href || ctx?.tab?.url || installed.url),
+        visibleText: compactText(doc.body?.innerText, maxTextChars),
+        viewport: {
+          width: Number(globalScope.innerWidth || 0),
+          height: Number(globalScope.innerHeight || 0),
+          scrollX: Number(globalScope.scrollX || 0),
+          scrollY: Number(globalScope.scrollY || 0),
+          documentWidth: Number(doc.documentElement?.scrollWidth || doc.body?.scrollWidth || 0),
+          documentHeight: Number(doc.documentElement?.scrollHeight || doc.body?.scrollHeight || 0),
+        },
+        interactiveElements,
+        interactiveCount: interactiveElements.length,
+        limits: {
+          maxElements,
+          maxTextChars,
+        },
+        installationId,
+        installedScriptId: installed.scriptId,
+        tabUrl: String(ctx?.tab?.url || installed.url),
+        installCount: state.installs.length,
+      };
+      state.infoEvents.push(infoResult);
+      state.invocations.push(infoResult);
+      return infoResult;
+    }
+
+    if (action === "scroll") {
+      const deltaX = normalizeScrollNumber(input?.deltaX, 0);
+      const deltaY = normalizeScrollNumber(input?.deltaY, 0);
+      const behavior =
+        input && input.behavior === "smooth"
+          ? "smooth"
+          : input && input.behavior === "instant"
+            ? "instant"
+            : "auto";
+      if (typeof globalScope.scrollBy !== "function") {
+        throw new Error("window.scrollBy is not available");
+      }
+      globalScope.scrollBy({ left: deltaX, top: deltaY, behavior });
+      const doc = globalScope.document;
+      const scrollResult = {
+        ok: true,
+        action,
+        input: {
+          deltaX,
+          deltaY,
+          behavior,
+        },
+        scrollX: Number(globalScope.scrollX || 0),
+        scrollY: Number(globalScope.scrollY || 0),
+        viewportWidth: Number(globalScope.innerWidth || 0),
+        viewportHeight: Number(globalScope.innerHeight || 0),
+        documentWidth: Number(doc?.documentElement?.scrollWidth || doc?.body?.scrollWidth || 0),
+        documentHeight: Number(doc?.documentElement?.scrollHeight || doc?.body?.scrollHeight || 0),
+        installationId,
+        installedScriptId: installed.scriptId,
+        tabUrl: String(ctx?.tab?.url || installed.url),
+        installCount: state.installs.length,
+      };
+      state.scrollEvents.push(scrollResult);
+      state.invocations.push(scrollResult);
+      return scrollResult;
+    }
+
+    if (action === "click_xy") {
+      const x = normalizeCoordinate(input?.x, "x");
+      const y = normalizeCoordinate(input?.y, "y");
+      const doc = globalScope.document;
+      if (!doc || typeof doc.elementFromPoint !== "function") {
+        throw new Error("document.elementFromPoint is not available");
+      }
+      const el = doc.elementFromPoint(x, y);
+      if (!el || typeof el.dispatchEvent !== "function") {
+        throw new Error(`No clickable element at (${x}, ${y})`);
+      }
+      if (typeof el.focus === "function") {
+        el.focus();
+      }
+      dispatchMouseClick(el, x, y);
+      const clickResult = {
+        ok: true,
+        action,
+        x,
+        y,
+        tagName: (el.tagName || "").toLowerCase(),
+        textContent: (el.textContent || "").slice(0, 200),
+        installationId,
+        installedScriptId: installed.scriptId,
+        tabUrl: String(ctx?.tab?.url || installed.url),
+        installCount: state.installs.length,
+      };
+      state.clickXyEvents.push(clickResult);
+      state.invocations.push(clickResult);
+      return clickResult;
+    }
+
+    if (action === "type_text") {
+      const text = input && typeof input.text === "string" ? input.text : undefined;
+      if (typeof text !== "string") {
+        throw new Error("page.type_text requires input.text");
+      }
+      const doc = globalScope.document;
+      const el = getDeepActiveElement(doc);
+      if (!el) {
+        throw new Error("page.type_text requires a focused editable element");
+      }
+      const tagName = (el.tagName || "").toLowerCase();
+      if (tagName === "input" || tagName === "textarea") {
+        el.value = `${el.value || ""}${text}`;
+      } else if (el.isContentEditable === true) {
+        el.textContent = `${el.textContent || ""}${text}`;
+      } else {
+        throw new Error(
+          "page.type_text requires a focused input, textarea, or contenteditable element",
+        );
+      }
+      dispatchInputEvents(el);
+      const typeResult = {
+        ok: true,
+        action,
+        text,
+        tagName,
+        value: tagName === "input" || tagName === "textarea" ? String(el.value || "") : undefined,
+        installationId,
+        installedScriptId: installed.scriptId,
+        tabUrl: String(ctx?.tab?.url || installed.url),
+        installCount: state.installs.length,
+      };
+      state.typeTextEvents.push(typeResult);
+      state.invocations.push(typeResult);
+      return typeResult;
     }
 
     if (action === "query") {
@@ -375,12 +676,24 @@
     if (verified && action === "query") {
       verified = Array.isArray(result.elements) && typeof result.count === "number";
     }
+    if (verified && action === "info") {
+      verified =
+        Array.isArray(result.interactiveElements) &&
+        typeof result.visibleText === "string" &&
+        state.infoEvents.some((entry) => entry.installationId === installationId);
+    }
     if (verified && action === "click") {
       verified =
         typeof result.uid === "string" &&
         state.clickEvents.some(
           (entry) => entry.installationId === installationId && entry.uid === result.uid,
         );
+    }
+    if (verified && action === "click_xy") {
+      verified =
+        typeof result.x === "number" &&
+        typeof result.y === "number" &&
+        state.clickXyEvents.some((entry) => entry.installationId === installationId);
     }
     if (verified && action === "fill") {
       verified =
@@ -389,6 +702,16 @@
         state.fillEvents.some(
           (entry) => entry.installationId === installationId && entry.uid === result.uid,
         );
+    }
+    if (verified && action === "scroll") {
+      verified =
+        typeof result.scrollY === "number" &&
+        state.scrollEvents.some((entry) => entry.installationId === installationId);
+    }
+    if (verified && action === "type_text") {
+      verified =
+        typeof result.text === "string" &&
+        state.typeTextEvents.some((entry) => entry.installationId === installationId);
     }
     if (verified && action === "fetch_with_session") {
       verified =

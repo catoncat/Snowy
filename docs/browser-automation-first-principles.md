@@ -14,8 +14,10 @@
 
 2. **Agent 判断，不让代码判分**
    - 不实现 runtime-owned 成功评分器、置信分、智能排序、自动验收分或隐式质量标准。
-   - 代码可以记录证据：截图、URL、title、tab、CDP 返回、错误、耗时、before/after 状态。
+   - 代码可以记录证据：截图、URL、title、tab、网络请求/响应/失败、CDP 返回、错误、耗时、before/after 状态。
    - 这些证据属于 debug / observability surface；不要把 evidence envelope、raw events、截图 data URL 或 trace 塞进普通 Chat 的 LLM context。
+   - 真实页面的完整 DOM/query/screenshot/network 证据只进 artifact；普通 Chat LLM context 只能拿压缩后的观察结果和可执行下一步所需的最小字段。
+   - `no_progress` / repeat-signature / ping-pong 这类模式只能作为 debug 诊断信号；不能由 runtime 自动终止 browser task。
    - 是否成功、下一步怎么走，由当前对话里的 Codex Agent 基于证据显式判断；如果需要第二意见，也应调用另一个 Agent 体判断，而不是把判断写成普通业务代码。
 
 3. **不要重建旧仓的智能中间层**
@@ -29,6 +31,11 @@
 
 5. **Dogfood 从最简单动作开始**
    - 每个 browser lane 改动都要能用真实或近真实场景 dogfood：先截图/读状态，再做一个最小动作，再重新观察。
+   - 本地假页面只能作为 extension 管线 smoke；不能替代真实站点、真实登录态、真实网络请求和真实 UI 输出。
+   - 手动或外部 browser 操作只能作为 diagnostic control：确认真实网站状态、可行路径和预期证据；不能算产品通过。
+   - 需要登录态时优先使用 dogfood 专用固定 browser profile；如果站点限制导致无法重新登录，可以 claim 用户已打开的真实 Chrome tab，但产品侧仍必须走 MV3 sidepanel/chat/kernel/tool-call 路径。
+   - claim 用户真实 Chrome tab 只能作为显式 debug bridge：不读取 cookies、localStorage、profile secrets 或密码；它只负责执行产品发出的少数 browser 原语，并把完整证据落 artifact。
+   - 若 dogfood 需要更宽 host 权限，必须通过显式 debug-only extension 副本完成；不要把该权限静默写回正常产品 manifest。
    - 可以发散多个场景，但每个场景都应保持“动作少、证据清楚、当前 Agent 自己判断路径优劣”。
    - dogfood 结论用当前 Agent 的自评和证据说明表达；测试代码只锁接口和回归，不替 Agent 打分。
 

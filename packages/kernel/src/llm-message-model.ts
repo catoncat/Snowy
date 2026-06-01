@@ -63,16 +63,21 @@ function assistantContentText(content: LlmAssistantContentBlock[]): string {
 
 const LLM_CONTEXT_DEBUG_ONLY_KEYS = new Set([
   "afterScreenshot",
+  "artifactPath",
   "browserActionEvidence",
   "beforeScreenshot",
   "dataUrl",
   "debugEvidence",
+  "externalPageEvidence",
+  "externalPageRequest",
+  "networkEvents",
   "observability",
   "rawEventTail",
   "rawEvents",
   "screenshot",
   "screenshots",
   "screenshotDataUrl",
+  "taskTabProof",
   "timelineEvents",
   "trace",
 ]);

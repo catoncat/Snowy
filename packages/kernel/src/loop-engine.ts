@@ -55,18 +55,12 @@ export interface LoopEngineOptions {
   maxSteps?: number;
   noProgressSignatureHistoryLimit?: number;
   noProgressRepeatSignatureThreshold?: number;
-  noProgressContinueBudget?: Partial<Record<NoProgressReason, number>>;
   executor?: StepExecutor;
 }
 
 const DEFAULT_MAX_STEPS = 50;
 const DEFAULT_SIGNATURE_HISTORY_LIMIT = 6;
 const DEFAULT_REPEAT_SIGNATURE_THRESHOLD = 2;
-const DEFAULT_NO_PROGRESS_BUDGET: Record<NoProgressReason, number> = {
-  repeat_signature: 1,
-  ping_pong: 0,
-};
-
 function generateTurnId(): string {
   return `t-${crypto.randomUUID()}`;
 }
@@ -75,9 +69,7 @@ export class LoopEngine {
   readonly #maxSteps: number;
   readonly #signatureHistoryLimit: number;
   readonly #repeatSignatureThreshold: number;
-  readonly #noProgressBudget: Record<NoProgressReason, number>;
   readonly #executor?: StepExecutor;
-  readonly #noProgressCounts = new Map<string, Record<NoProgressReason, number>>();
   readonly #stepCounts = new Map<string, number>();
   readonly #signatureHistory = new Map<string, string[]>();
 
@@ -89,10 +81,6 @@ export class LoopEngine {
       2,
       opts?.noProgressRepeatSignatureThreshold ?? DEFAULT_REPEAT_SIGNATURE_THRESHOLD,
     );
-    this.#noProgressBudget = {
-      ...DEFAULT_NO_PROGRESS_BUDGET,
-      ...opts?.noProgressContinueBudget,
-    };
     this.#executor = opts?.executor;
   }
 
@@ -209,11 +197,6 @@ export class LoopEngine {
       return "max_steps";
     }
 
-    const noProgress = this.checkNoProgress(sessionId);
-    if (noProgress) {
-      return "progress_uncertain";
-    }
-
     return null;
   }
 
@@ -229,7 +212,7 @@ export class LoopEngine {
         history[len - 2] === history[len - 4] &&
         history[len - 1] !== history[len - 2]
       ) {
-        return this.#applyBudget(sessionId, "ping_pong");
+        return "ping_pong";
       }
     }
 
@@ -243,7 +226,7 @@ export class LoopEngine {
       repeatCount += 1;
     }
     if (repeatCount >= this.#repeatSignatureThreshold) {
-      return this.#applyBudget(sessionId, "repeat_signature");
+      return "repeat_signature";
     }
 
     return null;
@@ -260,20 +243,6 @@ export class LoopEngine {
   resetSession(sessionId: string): void {
     this.#stepCounts.delete(sessionId);
     this.#signatureHistory.delete(sessionId);
-    this.#noProgressCounts.delete(sessionId);
-  }
-
-  #applyBudget(sessionId: string, reason: NoProgressReason): NoProgressReason | null {
-    const counts = this.#noProgressCounts.get(sessionId) ?? {
-      repeat_signature: 0,
-      ping_pong: 0,
-    };
-    if (counts[reason] < this.#noProgressBudget[reason]) {
-      counts[reason] += 1;
-      this.#noProgressCounts.set(sessionId, counts);
-      return null; // budget not exhausted, continue
-    }
-    return reason;
   }
 
   #resolveCapabilityId(step: StepRequest): string | undefined {

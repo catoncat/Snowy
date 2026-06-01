@@ -61,6 +61,8 @@ async function resolveMaybe(value) {
 const DEFAULT_INTERVENTION_TIMEOUT_MS = 5 * 60 * 1000;
 const INTERVENTION_SYNC_CHANNEL_NAME = "bbl-next.interventions.v1";
 const PAGE_ACTION_HANDOFF_ACTIONS = new Set(["query", "click", "fill"]);
+const DOGFOOD_EXTERNAL_PAGE_DEFAULT_TIMEOUT_MS = 120_000;
+const DOGFOOD_EXTERNAL_PAGE_LEASE_MS = 30_000;
 const SKILL_STATUS_BY_ACTION = {
   "skills.install": "installed",
   "skills.enable": "enabled",
@@ -801,19 +803,19 @@ function activateKernelRun(kernel, sessionId) {
   switch (state.phase) {
     case "idle":
       kernel.startRun(sessionId);
-      break;
+      return true;
     case "paused":
       kernel.resume(sessionId);
-      break;
+      return true;
     case "running":
-      break;
+      return false;
     default:
       throw new CapabilityError("E_RUNTIME", `Kernel run is unavailable while ${state.phase}`);
   }
 }
 
-function settleKernelRun(kernel, sessionId) {
-  if (kernel.getRunState(sessionId).phase === "running") {
+function settleKernelRun(kernel, sessionId, shouldPause) {
+  if (shouldPause && kernel.getRunState(sessionId).phase === "running") {
     kernel.pause(sessionId);
   }
 }
@@ -939,6 +941,45 @@ async function resolveRuntimeInvokeTab(chromeApi, requestedTab, actionKind) {
 
 function buildPageActionRequest({ action, input, tab, scriptPath }) {
   switch (action) {
+    case "info": {
+      const maxElements =
+        isPlainObject(input) && input.maxElements != null ? Number(input.maxElements) : undefined;
+      const maxTextChars =
+        isPlainObject(input) && input.maxTextChars != null ? Number(input.maxTextChars) : undefined;
+      if (maxElements != null && !Number.isFinite(maxElements)) {
+        throw new CapabilityError("E_BAD_INPUT", "page.info maxElements must be numeric");
+      }
+      if (maxTextChars != null && !Number.isFinite(maxTextChars)) {
+        throw new CapabilityError("E_BAD_INPUT", "page.info maxTextChars must be numeric");
+      }
+      return {
+        skillId: "bbl.page",
+        action: "info",
+        tab,
+        input: {
+          ...(maxElements == null ? {} : { maxElements }),
+          ...(maxTextChars == null ? {} : { maxTextChars }),
+        },
+        plan: {
+          skillId: "bbl.page",
+          action: "info",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: scriptPath,
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "bbl.page.info",
+          source:
+            "exports.default = async ({ input }) => ({ maxElements: input.maxElements, maxTextChars: input.maxTextChars });",
+        },
+        verifier: "page_query",
+      };
+    }
     case "query":
       if (
         !isPlainObject(input) ||
@@ -1001,6 +1042,42 @@ function buildPageActionRequest({ action, input, tab, scriptPath }) {
         },
         verifier: "page_click",
       };
+    case "click_xy": {
+      if (!isPlainObject(input)) {
+        throw new CapabilityError("E_BAD_INPUT", "page.click_xy requires an object input");
+      }
+      const x = Number(input.x);
+      const y = Number(input.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        throw new CapabilityError("E_BAD_INPUT", "page.click_xy requires finite numeric x and y");
+      }
+      return {
+        skillId: "bbl.page",
+        action: "click_xy",
+        tab,
+        input: {
+          x,
+          y,
+        },
+        plan: {
+          skillId: "bbl.page",
+          action: "click_xy",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: scriptPath,
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "bbl.page.click_xy",
+          source: "exports.default = async ({ input }) => ({ x: input.x, y: input.y });",
+        },
+        verifier: "page_click_xy",
+      };
+    }
     case "fill":
       if (!isPlainObject(input) || typeof input.uid !== "string" || input.uid.length === 0) {
         throw new CapabilityError("E_BAD_INPUT", "page.fill requires a non-empty uid");
@@ -1035,6 +1112,35 @@ function buildPageActionRequest({ action, input, tab, scriptPath }) {
         },
         verifier: "page_fill",
       };
+    case "type_text":
+      if (!isPlainObject(input) || typeof input.text !== "string") {
+        throw new CapabilityError("E_BAD_INPUT", "page.type_text requires input.text");
+      }
+      return {
+        skillId: "bbl.page",
+        action: "type_text",
+        tab,
+        input: {
+          text: input.text,
+        },
+        plan: {
+          skillId: "bbl.page",
+          action: "type_text",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: scriptPath,
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "bbl.page.type_text",
+          source: "exports.default = async ({ input }) => ({ text: input.text });",
+        },
+        verifier: "page_type_text",
+      };
     case "press_key":
       if (!isPlainObject(input) || typeof input.key !== "string" || input.key.length === 0) {
         throw new CapabilityError("E_BAD_INPUT", "page.press_key requires a non-empty key");
@@ -1064,6 +1170,46 @@ function buildPageActionRequest({ action, input, tab, scriptPath }) {
         },
         verifier: "page_press_key",
       };
+    case "scroll": {
+      if (!isPlainObject(input)) {
+        throw new CapabilityError("E_BAD_INPUT", "page.scroll requires an object input");
+      }
+      const deltaX = input.deltaX == null ? 0 : Number(input.deltaX);
+      const deltaY = input.deltaY == null ? 0 : Number(input.deltaY);
+      if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY)) {
+        throw new CapabilityError("E_BAD_INPUT", "page.scroll requires finite numeric deltas");
+      }
+      const behavior =
+        input.behavior === "smooth" || input.behavior === "instant" ? input.behavior : "auto";
+      return {
+        skillId: "bbl.page",
+        action: "scroll",
+        tab,
+        input: {
+          deltaX,
+          deltaY,
+          behavior,
+        },
+        plan: {
+          skillId: "bbl.page",
+          action: "scroll",
+          steps: [
+            {
+              world: "main",
+              scriptId: "bbl-next.page-hook.page",
+              jsPath: scriptPath,
+              runAt: "document_idle",
+            },
+          ],
+        },
+        module: {
+          id: "bbl.page.scroll",
+          source:
+            "exports.default = async ({ input }) => ({ deltaX: input.deltaX, deltaY: input.deltaY, behavior: input.behavior });",
+        },
+        verifier: "page_scroll",
+      };
+    }
     default:
       throw new CapabilityError("E_BAD_INPUT", `Unsupported page action: ${action}`);
   }
@@ -1340,16 +1486,21 @@ function summarizeChatToolDetail(detail) {
 
 const CHAT_TOOL_DEBUG_ONLY_KEYS = new Set([
   "afterScreenshot",
+  "artifactPath",
   "browserActionEvidence",
   "beforeScreenshot",
   "dataUrl",
   "debugEvidence",
+  "externalPageEvidence",
+  "externalPageRequest",
+  "networkEvents",
   "observability",
   "rawEventTail",
   "rawEvents",
   "screenshot",
   "screenshots",
   "screenshotDataUrl",
+  "taskTabProof",
   "timelineEvents",
   "trace",
 ]);
@@ -3095,6 +3246,216 @@ export function createBackgroundRuntimeServices({
   const packageSkillManifests = new Map();
   const resolvedInterventionSyncChannel = createInterventionSyncChannel(interventionSyncChannel);
   const interventionSyncSourceId = crypto.randomUUID();
+  const dogfoodExternalPage = {
+    enabled: false,
+    syntheticTabId: 900_001,
+    tab: null,
+    timeoutMs: DOGFOOD_EXTERNAL_PAGE_DEFAULT_TIMEOUT_MS,
+    requests: [],
+    pending: new Map(),
+    sequence: 0,
+  };
+
+  function cloneDogfoodValue(value) {
+    if (value == null) {
+      return value;
+    }
+    if (typeof structuredClone === "function") {
+      return structuredClone(value);
+    }
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function normalizeDogfoodExternalPageTab(tab) {
+    if (!isPlainObject(tab)) {
+      throw new CapabilityError("E_BAD_INPUT", "dogfood external page requires tab metadata");
+    }
+    const rawId = tab.tabId ?? tab.id;
+    const numericId = Number(rawId);
+    const tabId = Number.isFinite(numericId) ? numericId : dogfoodExternalPage.syntheticTabId;
+    const url = typeof tab.url === "string" ? tab.url.trim() : "";
+    const title = typeof tab.title === "string" ? tab.title.trim() : "";
+    if (!url && !title) {
+      throw new CapabilityError("E_BAD_INPUT", "dogfood external page tab requires title or url");
+    }
+    return {
+      tabId,
+      url,
+      active: tab.active !== false,
+      title: title || `External tab ${tabId}`,
+      ...(rawId != null && !Number.isFinite(numericId) ? { externalTabId: String(rawId) } : {}),
+    };
+  }
+
+  function getDogfoodExternalPageState() {
+    return {
+      enabled: dogfoodExternalPage.enabled,
+      tab: dogfoodExternalPage.tab ? { ...dogfoodExternalPage.tab } : null,
+      pendingCount: dogfoodExternalPage.pending.size,
+      queuedCount: dogfoodExternalPage.requests.filter((request) => !request.resolvedAt).length,
+      timeoutMs: dogfoodExternalPage.timeoutMs,
+    };
+  }
+
+  function rejectDogfoodExternalPagePending(reason) {
+    for (const [requestId, pending] of dogfoodExternalPage.pending.entries()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new CapabilityError("E_RUNTIME", reason));
+      dogfoodExternalPage.pending.delete(requestId);
+    }
+    dogfoodExternalPage.requests = [];
+  }
+
+  function configureDogfoodExternalPageProvider(config = {}) {
+    if (config?.enabled === false) {
+      dogfoodExternalPage.enabled = false;
+      dogfoodExternalPage.tab = null;
+      rejectDogfoodExternalPagePending("dogfood external page provider was disabled");
+      return getDogfoodExternalPageState();
+    }
+
+    const tab = normalizeDogfoodExternalPageTab(config?.tab);
+    const timeoutMs = Number(config?.timeoutMs);
+    dogfoodExternalPage.enabled = true;
+    dogfoodExternalPage.tab = tab;
+    dogfoodExternalPage.timeoutMs =
+      Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? timeoutMs
+        : DOGFOOD_EXTERNAL_PAGE_DEFAULT_TIMEOUT_MS;
+    return getDogfoodExternalPageState();
+  }
+
+  function takeDogfoodExternalPageRequest() {
+    const now = Date.now();
+    const request = dogfoodExternalPage.requests.find((entry) => {
+      if (entry.resolvedAt) {
+        return false;
+      }
+      if (!entry.leasedAt) {
+        return true;
+      }
+      return now - Date.parse(entry.leasedAt) > DOGFOOD_EXTERNAL_PAGE_LEASE_MS;
+    });
+    if (!request) {
+      return { request: null, state: getDogfoodExternalPageState() };
+    }
+    request.leasedAt = new Date(now).toISOString();
+    return {
+      request: cloneDogfoodValue(request),
+      state: getDogfoodExternalPageState(),
+    };
+  }
+
+  function resolveDogfoodExternalPageRequest({ requestId, id, ok = true, data, error } = {}) {
+    const resolvedRequestId = typeof requestId === "string" ? requestId : id;
+    if (typeof resolvedRequestId !== "string" || !resolvedRequestId) {
+      throw new CapabilityError("E_BAD_INPUT", "dogfood external page resolve requires requestId");
+    }
+    const pending = dogfoodExternalPage.pending.get(resolvedRequestId);
+    if (!pending) {
+      return {
+        resolved: false,
+        requestId: resolvedRequestId,
+        state: getDogfoodExternalPageState(),
+      };
+    }
+    clearTimeout(pending.timeout);
+    dogfoodExternalPage.pending.delete(resolvedRequestId);
+    const request = dogfoodExternalPage.requests.find((entry) => entry.id === resolvedRequestId);
+    if (request) {
+      request.resolvedAt = new Date().toISOString();
+    }
+    dogfoodExternalPage.requests = dogfoodExternalPage.requests.filter(
+      (entry) => !entry.resolvedAt,
+    );
+    if (ok === false) {
+      const message =
+        typeof error === "string"
+          ? error
+          : isPlainObject(error) && typeof error.message === "string"
+            ? error.message
+            : `dogfood external page request failed: ${resolvedRequestId}`;
+      pending.reject(new CapabilityError("E_RUNTIME", message));
+      return {
+        resolved: true,
+        requestId: resolvedRequestId,
+        ok: false,
+        state: getDogfoodExternalPageState(),
+      };
+    }
+    pending.resolve(cloneDogfoodValue(data));
+    return {
+      resolved: true,
+      requestId: resolvedRequestId,
+      ok: true,
+      state: getDogfoodExternalPageState(),
+    };
+  }
+
+  async function invokeDogfoodExternalPage({ family, action, input = {} }) {
+    if (!dogfoodExternalPage.enabled || !dogfoodExternalPage.tab) {
+      throw new CapabilityError("E_RUNTIME", "dogfood external page provider is not configured");
+    }
+    const requestId = `dogfood-external-page-${++dogfoodExternalPage.sequence}`;
+    const createdAt = new Date().toISOString();
+    const request = {
+      id: requestId,
+      family,
+      action,
+      input: cloneDogfoodValue(input),
+      tab: { ...dogfoodExternalPage.tab },
+      createdAt,
+    };
+    dogfoodExternalPage.requests.push(request);
+    return await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        dogfoodExternalPage.pending.delete(requestId);
+        dogfoodExternalPage.requests = dogfoodExternalPage.requests.filter(
+          (entry) => entry.id !== requestId,
+        );
+        reject(
+          new CapabilityError(
+            "E_RUNTIME",
+            `dogfood external page request timed out: ${family}.${action}`,
+          ),
+        );
+      }, dogfoodExternalPage.timeoutMs);
+      dogfoodExternalPage.pending.set(requestId, { resolve, reject, timeout });
+    });
+  }
+
+  async function invokeDogfoodExternalTabsCapability({ binding, input }) {
+    switch (binding.operation) {
+      case "list":
+        return dogfoodExternalPage.tab ? [{ ...dogfoodExternalPage.tab }] : [];
+      case "get_active":
+        if (!dogfoodExternalPage.tab) {
+          throw new CapabilityError("E_RUNTIME", "dogfood external page tab is not configured");
+        }
+        return { ...dogfoodExternalPage.tab };
+      case "navigate": {
+        if (!isPlainObject(input) || typeof input.url !== "string" || !input.url.trim()) {
+          throw new CapabilityError("E_BAD_INPUT", "tabs.navigate requires a non-empty url");
+        }
+        const response = await invokeDogfoodExternalPage({
+          family: "tabs",
+          action: "navigate",
+          input: { url: input.url.trim() },
+        });
+        const nextTab = normalizeDogfoodExternalPageTab(
+          response?.tab ??
+            response ?? {
+              ...dogfoodExternalPage.tab,
+              url: input.url.trim(),
+            },
+        );
+        dogfoodExternalPage.tab = nextTab;
+        return nextTab;
+      }
+      default:
+        throw new CapabilityError("E_RUNTIME", `Unsupported tabs operation: ${binding.operation}`);
+    }
+  }
 
   async function persistAndBroadcastInterventions(sessionId, opts = undefined) {
     const { kernel } = await ensureServices();
@@ -3198,10 +3559,28 @@ export function createBackgroundRuntimeServices({
           },
         });
 
-        providers.register(createTabsCapabilityProvider(createChromeTabsTransport({ chromeApi })));
+        const chromeTabsProvider = createTabsCapabilityProvider(
+          createChromeTabsTransport({ chromeApi }),
+        );
+        providers.register({
+          family: "tabs",
+          async invoke(request) {
+            if (dogfoodExternalPage.enabled) {
+              return invokeDogfoodExternalTabsCapability(request);
+            }
+            return chromeTabsProvider.invoke(request);
+          },
+        });
         providers.register({
           family: "page",
           async invoke({ binding, input }) {
+            if (dogfoodExternalPage.enabled) {
+              return invokeDogfoodExternalPage({
+                family: "page",
+                action: binding.operation,
+                input,
+              });
+            }
             return invokePageAction({
               action: binding.operation,
               input,
@@ -4641,7 +5020,7 @@ export function createBackgroundRuntimeServices({
     const resolvedTab = await resolveRuntimeInvokeTab(chromeApi, tab, "Site runtime invoke");
     const handoffPolicy = normalizeSiteHandoffPolicy(handoff ?? intervention);
     const handoffPolicies = normalizeSiteHandoffPolicies(handoffs);
-    activateKernelRun(kernel, session.id);
+    const shouldSettleKernelRun = activateKernelRun(kernel, session.id);
     let executed: any;
     try {
       executed = await kernel.executeStep(session.id, {
@@ -4661,7 +5040,7 @@ export function createBackgroundRuntimeServices({
         },
       });
     } finally {
-      settleKernelRun(kernel, session.id);
+      settleKernelRun(kernel, session.id, shouldSettleKernelRun);
     }
     const result = unwrapKernelStepResult(executed, `Site runtime invoke failed for ${skillId}`);
 
@@ -4733,7 +5112,7 @@ export function createBackgroundRuntimeServices({
       scriptPath: pageHookScriptPath,
     });
     const implicitHandoffs = buildImplicitPageActionHandoffs(request.action);
-    activateKernelRun(kernel, session.id);
+    const shouldSettleKernelRun = activateKernelRun(kernel, session.id);
     let executed: any;
     try {
       executed = await kernel.executeStep(session.id, {
@@ -4752,7 +5131,7 @@ export function createBackgroundRuntimeServices({
         },
       });
     } finally {
-      settleKernelRun(kernel, session.id);
+      settleKernelRun(kernel, session.id, shouldSettleKernelRun);
     }
     const result = unwrapKernelStepResult(executed, `Page action failed for page.${action}`);
 
@@ -4846,6 +5225,7 @@ export function createBackgroundRuntimeServices({
 
   return {
     bootstrapChat: buildChatBootstrap,
+    configureDogfoodExternalPageProvider,
     createChatSession,
     deleteChatSession,
     dispatchCapability,
@@ -4865,6 +5245,7 @@ export function createBackgroundRuntimeServices({
     readInterventionAudit,
     readReplayContinuityMarkers,
     refreshChatSessionTitle,
+    resolveDogfoodExternalPageRequest,
     requestSiteHandoff,
     resolveIntervention,
     cancelIntervention,
@@ -4872,6 +5253,7 @@ export function createBackgroundRuntimeServices({
     selectChatSession,
     sendChatPrompt,
     stopChatRun,
+    takeDogfoodExternalPageRequest,
     updateChatSessionTitle,
     updateLlmConfig,
   };

@@ -3410,4 +3410,137 @@ describe("mv3-shell intervention bridge integration", () => {
       },
     });
   });
+
+  it("routes dogfood page capabilities through an explicit external page request queue", async () => {
+    const services = createBackgroundRuntimeServices({
+      sessionStorage: new InMemorySessionStorage(),
+      chromeApi: {
+        runtime: {
+          sendMessage: vi.fn(async () => undefined),
+        },
+      },
+    });
+
+    expect(
+      services.configureDogfoodExternalPageProvider({
+        enabled: true,
+        tab: {
+          id: "user-chrome-tab-1",
+          title: "X Bookmarks",
+          url: "https://x.com/i/bookmarks",
+        },
+        timeoutMs: 10_000,
+      }),
+    ).toMatchObject({
+      enabled: true,
+      tab: {
+        active: true,
+        externalTabId: "user-chrome-tab-1",
+        tabId: 900001,
+        title: "X Bookmarks",
+        url: "https://x.com/i/bookmarks",
+      },
+    });
+
+    await expect(
+      services.dispatchCapability({
+        capabilityId: "tabs.get_active",
+        input: {},
+      }),
+    ).resolves.toMatchObject({
+      externalTabId: "user-chrome-tab-1",
+      tabId: 900001,
+      url: "https://x.com/i/bookmarks",
+    });
+
+    const infoPromise = services.dispatchCapability({
+      capabilityId: "page.info",
+      input: { maxElements: 10 },
+    });
+
+    let infoQueued: any = null;
+    await waitFor(() => {
+      infoQueued = services.takeDogfoodExternalPageRequest();
+      return Boolean(infoQueued?.request);
+    }, 2000);
+    expect(infoQueued.request).toMatchObject({
+      action: "info",
+      family: "page",
+      input: { maxElements: 10 },
+      tab: {
+        externalTabId: "user-chrome-tab-1",
+        url: "https://x.com/i/bookmarks",
+      },
+    });
+
+    expect(
+      services.resolveDogfoodExternalPageRequest({
+        requestId: infoQueued.request.id,
+        data: {
+          result: {
+            action: "info",
+            interactiveElements: [{ uid: "ext-1", tagName: "input" }],
+            title: "X Bookmarks",
+            url: "https://x.com/i/bookmarks",
+            visibleText: "Bookmarks",
+          },
+          verified: true,
+        },
+      }),
+    ).toMatchObject({ ok: true, resolved: true });
+
+    await expect(infoPromise).resolves.toMatchObject({
+      result: {
+        action: "info",
+        visibleText: "Bookmarks",
+      },
+      verified: true,
+    });
+
+    const queryPromise = services.dispatchCapability({
+      capabilityId: "page.query",
+      input: { selector: "body" },
+    });
+
+    let queued: any = null;
+    await waitFor(() => {
+      queued = services.takeDogfoodExternalPageRequest();
+      return Boolean(queued?.request);
+    }, 2000);
+    expect(queued.request).toMatchObject({
+      action: "query",
+      family: "page",
+      input: { selector: "body" },
+      tab: {
+        externalTabId: "user-chrome-tab-1",
+        url: "https://x.com/i/bookmarks",
+      },
+    });
+
+    const resolved = services.resolveDogfoodExternalPageRequest({
+      requestId: queued.request.id,
+      data: {
+        result: {
+          action: "query",
+          count: 1,
+          selector: "body",
+        },
+        verified: true,
+        trace: ["external-page:query"],
+        externalPageEvidence: {
+          artifactPath: ".ml-cache/dogfood/task-page-query.json",
+        },
+      },
+    });
+    expect(resolved).toMatchObject({ ok: true, resolved: true });
+
+    await expect(queryPromise).resolves.toMatchObject({
+      result: {
+        action: "query",
+        count: 1,
+        selector: "body",
+      },
+      verified: true,
+    });
+  });
 });

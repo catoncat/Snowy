@@ -1132,6 +1132,35 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
   ],
   page: [
     catalogEntry({
+      id: "page.info",
+      family: "page",
+      operation: "info",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["page.info"],
+      description:
+        "Read a compact visible-page summary with URL, title, viewport, visible text, and basic interactive element boxes",
+      inputSchema: {
+        type: "object",
+        properties: {
+          maxElements: { type: "number", minimum: 1, maximum: 80, default: 40 },
+          maxTextChars: { type: "number", minimum: 200, maximum: 4000, default: 1800 },
+        },
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          title: { type: "string" },
+          url: { type: "string" },
+          visibleText: { type: "string" },
+          interactiveCount: { type: "number" },
+          interactiveElements: { type: "array" },
+        },
+        required: ["ok", "title", "url", "visibleText", "interactiveElements"],
+      },
+    }),
+    catalogEntry({
       id: "page.query",
       family: "page",
       operation: "query",
@@ -1156,6 +1185,34 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] },
     }),
     catalogEntry({
+      id: "page.click_xy",
+      family: "page",
+      operation: "click_xy",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["page.click_xy"],
+      description: "Click active page coordinates",
+      inputSchema: {
+        type: "object",
+        properties: {
+          x: { type: "number" },
+          y: { type: "number" },
+        },
+        required: ["x", "y"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          x: { type: "number" },
+          y: { type: "number" },
+          tagName: { type: "string" },
+        },
+        required: ["ok", "x", "y"],
+      },
+      supportsVerify: true,
+    }),
+    catalogEntry({
       id: "page.fill",
       family: "page",
       operation: "fill",
@@ -1168,6 +1225,31 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
         properties: { uid: { type: "string" }, value: { type: "string" } },
         required: ["uid", "value"],
       },
+    }),
+    catalogEntry({
+      id: "page.type_text",
+      family: "page",
+      operation: "type_text",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["page.type_text"],
+      description: "Type text into the focused editable element",
+      inputSchema: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          text: { type: "string" },
+          tagName: { type: "string" },
+          value: { type: "string" },
+        },
+        required: ["ok", "text"],
+      },
+      supportsVerify: true,
     }),
     catalogEntry({
       id: "page.press_key",
@@ -1193,6 +1275,39 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
           ok: { type: "boolean" },
         },
         required: ["ok"],
+      },
+      supportsVerify: true,
+    }),
+    catalogEntry({
+      id: "page.scroll",
+      family: "page",
+      operation: "scroll",
+      risk: "low",
+      sideEffects: "writes",
+      permissions: ["page.scroll"],
+      description: "Scroll the active page by a delta",
+      inputSchema: {
+        type: "object",
+        properties: {
+          deltaX: { type: "number", default: 0 },
+          deltaY: { type: "number", default: 0 },
+          behavior: {
+            type: "string",
+            enum: ["auto", "instant", "smooth"],
+            default: "auto",
+          },
+        },
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          scrollX: { type: "number" },
+          scrollY: { type: "number" },
+          viewportHeight: { type: "number" },
+          documentHeight: { type: "number" },
+        },
+        required: ["ok", "scrollX", "scrollY"],
       },
       supportsVerify: true,
     }),
@@ -3591,6 +3706,7 @@ export interface BuiltinCapabilityMap {
     rehydrate: CapabilityFn;
   };
   page: {
+    info: CapabilityFn;
     query: CapabilityFn;
     click: CapabilityFn;
     fill: CapabilityFn;

@@ -2580,6 +2580,114 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
+  it("routes page.info through kernel-owned runner as a compact visible page summary", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 22,
+        url: "https://fixture.test/info",
+        title: "Fixture Info",
+      },
+    });
+    const invokeRunner = vi.fn(async (invocation: { module: { id: string }; input: unknown }) => ({
+      ok: true,
+      data: {
+        ok: true,
+        result: {
+          result: invocation.input,
+          durationMs: 1,
+        },
+      },
+    }));
+    const services = createBackgroundRuntimeServices({
+      chromeApi: harness.chromeApi,
+      invokeRunner,
+      pageHookBridge: createPageHookBridge({
+        chromeApi: harness.chromeApi,
+      }),
+    });
+
+    const infoResult = await services.invokePageAction({
+      action: "info",
+      input: {
+        maxElements: 10,
+      },
+    });
+
+    expect(infoResult).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "info",
+        title: expect.any(String),
+        url: "https://fixture.test/info",
+        visibleText: expect.any(String),
+        interactiveElements: expect.any(Array),
+      },
+      trace: [
+        "match:bbl.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:info",
+        "verify:page_query",
+      ],
+    });
+    expect(invokeRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        module: expect.objectContaining({
+          id: "bbl.page.info",
+        }),
+        input: {
+          maxElements: 10,
+        },
+      }),
+    );
+
+    harness.cleanup();
+  });
+
+  it("keeps an already running chat loop active after a nested page action", async () => {
+    const harness = createIntegratedChromeHarness({
+      activeTab: {
+        id: 23,
+        url: "https://fixture.test/running",
+        title: "Fixture Running",
+      },
+    });
+    const invokeRunner = vi.fn(async (invocation: { module: { id: string }; input: unknown }) => ({
+      ok: true,
+      data: {
+        ok: true,
+        result: {
+          result: invocation.input,
+          durationMs: 1,
+        },
+      },
+    }));
+    const services = createBackgroundRuntimeServices({
+      chromeApi: harness.chromeApi,
+      invokeRunner,
+      pageHookBridge: createPageHookBridge({
+        chromeApi: harness.chromeApi,
+      }),
+    });
+    const [{ kernel }, session] = await Promise.all([
+      services.ensureServices(),
+      services.ensureSession(),
+    ]);
+    kernel.startRun(session.id);
+
+    await services.invokePageAction({
+      action: "info",
+      input: {
+        maxElements: 3,
+      },
+    });
+
+    expect(kernel.getRunState(session.id).phase).toBe("running");
+
+    harness.cleanup();
+  });
+
   it("creates page action intervention lifecycle from runtime-owned handoff policy", async () => {
     const harness = createIntegratedChromeHarness({
       activeTab: {

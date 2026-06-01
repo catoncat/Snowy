@@ -3029,6 +3029,13 @@ export function createBackgroundRunnerBridge({
         return controlPlaneRoutePlan.route(message);
       case "runtime.event.dispatch":
         return routeRuntimeEventDispatch(message);
+      case "page.info":
+        return routeRuntimeService(() =>
+          invokePageActionResource("info", {
+            maxElements: message.maxElements,
+            maxTextChars: message.maxTextChars,
+          }),
+        );
       case "page.press_key":
         return routeRuntimeService(() =>
           invokePageActionResource("press_key", {
@@ -3152,6 +3159,26 @@ export function createBackgroundRunnerBridge({
             text: message.text,
             mode: message.mode,
             context: message.context,
+          }),
+        );
+      case "dogfood.externalPage.configure":
+        return routeRuntimeService(() =>
+          getRuntimeServices().configureDogfoodExternalPageProvider({
+            enabled: message.enabled,
+            tab: message.tab,
+            timeoutMs: message.timeoutMs,
+          }),
+        );
+      case "dogfood.externalPage.take":
+        return routeRuntimeService(() => getRuntimeServices().takeDogfoodExternalPageRequest());
+      case "dogfood.externalPage.resolve":
+        return routeRuntimeService(() =>
+          getRuntimeServices().resolveDogfoodExternalPageRequest({
+            requestId: message.requestId,
+            id: message.id,
+            ok: message.ok,
+            data: message.data,
+            error: message.error,
           }),
         );
       case "runtime.chat.stop":
