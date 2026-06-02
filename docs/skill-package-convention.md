@@ -55,7 +55,7 @@ The manifest declares identity, permissions, and optional site bindings.
 | Field | Type | Description |
 |-------|------|-------------|
 | `entry` | `string` | Runtime handler file relative to package root. Default: `handler.js` |
-| `kind` | `"prompt" \| "site" \| "mcp" \| "hybrid"` | Skill type. Default: `"prompt"` |
+| `kind` | `"prompt" \| "site" \| "hybrid"` | Skill type. Default: `"prompt"` |
 | `tags` | `string[]` | Discovery tags |
 | `matches` | `string[]` | URL patterns for site skills |
 | `requiresActiveTab` | `boolean` | Whether the skill needs an active tab match |

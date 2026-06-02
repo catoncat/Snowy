@@ -51,20 +51,20 @@ import { invokeSingleActionSiteSkill } from "../../site-runtime/src/index";
 
 function descriptor(overrides: Partial<CapabilityDescriptor> = {}): CapabilityDescriptor {
   return {
-    id: "page.click",
+    id: "page.click_xy",
     version: 1,
-    description: "Click",
+    description: "Click coordinates",
     inputSchema: { type: "object" },
     outputSchema: { type: "object" },
     risk: "medium",
     sideEffects: "writes",
-    permissions: ["page.click"],
-    supportsVerify: true,
+    permissions: ["page.click_xy"],
+    supportsVerify: false,
     supportsStreaming: false,
     exportable: false,
     executionBinding: {
       family: "page",
-      operation: "click",
+      operation: "click_xy",
     },
     ...overrides,
   };
@@ -250,8 +250,8 @@ describe("core", () => {
 
     expect(registry.projectTools()).toMatchObject([
       {
-        name: "page_click",
-        capabilityId: "page.click",
+        name: "page_click_xy",
+        capabilityId: "page.click_xy",
       },
     ]);
   });
@@ -259,13 +259,14 @@ describe("core", () => {
   it("lists and projects action capabilities by audience and default exposure", () => {
     const registry = new CapabilityRegistry([
       descriptor({
-        id: "page.query",
-        description: "Query page",
+        id: "page.info",
+        description: "Read compact page info",
         sideEffects: "reads",
         exportable: true,
+        permissions: ["page.info"],
         executionBinding: {
           family: "page",
-          operation: "query",
+          operation: "info",
         },
       }),
       descriptor({
@@ -304,7 +305,7 @@ describe("core", () => {
           audience: "chat",
         })
         .map((entry) => entry.id),
-    ).toEqual(["page.query", "runner.invoke"]);
+    ).toEqual(["page.info", "runner.invoke"]);
     expect(
       registry
         .projectTools({
@@ -312,7 +313,7 @@ describe("core", () => {
           defaultExposedOnly: true,
         })
         .map((entry) => entry.capabilityId),
-    ).toEqual(["page.query"]);
+    ).toEqual(["page.info"]);
     expect(
       registry
         .listByProjection({
@@ -584,7 +585,7 @@ describe("core", () => {
       skillId: "skill.runtime",
       permissions: ["page.*"],
     });
-    await ctx.call("page.click", { uid: "login-button" });
+    await ctx.call("page.click_xy", { x: 100, y: 160 });
 
     const siteResult = await invokeSingleActionSiteSkill({
       request: {
@@ -669,7 +670,7 @@ describe("core", () => {
         expect.objectContaining({
           source: "skill-runtime",
           eventType: "skill.capability",
-          capabilityId: "page.click",
+          capabilityId: "page.click_xy",
           skillId: "skill.runtime",
           status: "succeeded",
         }),
@@ -696,7 +697,7 @@ describe("core", () => {
           succeeded: 4,
           info: 1,
         },
-        capabilityIds: ["page.click"],
+        capabilityIds: ["page.click_xy"],
         skillIds: ["site.twitter", "skill.runtime"],
         lastError: null,
       },
@@ -724,7 +725,7 @@ describe("core", () => {
           source: "skill-runtime",
           type: "skill.capability",
           payload: {
-            capabilityId: "page.click",
+            capabilityId: "page.click_xy",
           },
         },
         {
@@ -1173,47 +1174,43 @@ describe("core", () => {
       },
     });
 
-    expect(updated.config).toMatchObject({
-      status: "ready",
-      values: {
-        automation: {
-          activeTabOnly: true,
-        },
-        preferences: {
-          theme: "dark",
-        },
+    expect(updated.config.status).toBe("ready");
+    expect(typeof updated.config.updatedAt).toBe("string");
+    expect(updated.config.values).toMatchObject({
+      automation: {
+        activeTabOnly: true,
       },
-      updatedAt: expect.any(String),
+      preferences: {
+        theme: "dark",
+      },
     });
-    expect(persistedSnapshots).toEqual([
-      expect.objectContaining({
-        status: "ready",
-        values: {
-          automation: {
-            activeTabOnly: true,
-          },
-          preferences: {
-            theme: "dark",
-          },
-        },
-      }),
-    ]);
+    expect(persistedSnapshots).toHaveLength(1);
+    const persistedConfig = persistedSnapshots[0] as ConfigBootstrapSummary;
+    expect(persistedConfig.status).toBe("ready");
+    expect(persistedConfig.updatedAt).toBe(updated.config.updatedAt);
+    expect(persistedConfig.values).toMatchObject({
+      automation: {
+        activeTabOnly: true,
+      },
+      preferences: {
+        theme: "dark",
+      },
+    });
 
     const rehydrated = createConfigControlPlane({
-      summary: async () => persistedSummary,
+      summary: async () => persistedConfig,
     });
 
-    await expect(rehydrated.getBootstrapSummary()).resolves.toMatchObject({
-      status: "ready",
-      values: {
-        automation: {
-          activeTabOnly: true,
-        },
-        preferences: {
-          theme: "dark",
-        },
+    const rehydratedSummary = await rehydrated.getBootstrapSummary();
+    expect(rehydratedSummary.status).toBe("ready");
+    expect(rehydratedSummary.updatedAt).toBe(updated.config.updatedAt);
+    expect(rehydratedSummary.values).toMatchObject({
+      automation: {
+        activeTabOnly: true,
       },
-      updatedAt: expect.any(String),
+      preferences: {
+        theme: "dark",
+      },
     });
   });
 
@@ -1465,9 +1462,11 @@ describe("core", () => {
     const registry = new CapabilityRegistry([
       descriptor({
         id: "runtime.summary",
+        description: "Runtime summary",
         risk: "low",
         sideEffects: "reads",
         permissions: ["runtime.summary"],
+        supportsVerify: false,
         exportable: true,
         exportName: "runtime_summary",
         exportRisk: "medium",
@@ -1477,7 +1476,7 @@ describe("core", () => {
         },
       }),
       descriptor({
-        id: "page.click",
+        id: "page.click_xy",
         exportable: false,
       }),
       descriptor({
@@ -1499,14 +1498,14 @@ describe("core", () => {
       {
         capabilityId: "runtime.summary",
         exportName: "runtime_summary",
-        description: "Click",
+        description: "Runtime summary",
         inputSchema: { type: "object" },
         outputSchema: { type: "object" },
         risk: "medium",
         permissions: ["runtime.summary"],
         annotations: {
           sideEffects: "reads",
-          supportsVerify: true,
+          supportsVerify: false,
           supportsStreaming: false,
           audiences: ["chat", "skill", "system", "mcp"],
           defaultExposed: true,
@@ -1520,19 +1519,19 @@ describe("core", () => {
   it("routes MCP export invocations by exportName through the concrete projection path", async () => {
     const registry = new CapabilityRegistry([
       descriptor({
-        id: "page.query",
-        description: "Query page",
+        id: "page.info",
+        description: "Read compact page info",
         sideEffects: "reads",
-        permissions: ["page.query"],
+        permissions: ["page.info"],
         exportable: true,
-        exportName: "page_query",
+        exportName: "page_info",
         executionBinding: {
           family: "page",
-          operation: "query",
+          operation: "info",
         },
       }),
       descriptor({
-        id: "page.click",
+        id: "page.click_xy",
         exportable: false,
       }),
     ]);
@@ -1550,18 +1549,18 @@ describe("core", () => {
     await expect(
       projection.invoke({
         sessionId: "session-mcp",
-        exportName: "page_query",
-        input: { text: "Search" },
+        exportName: "page_info",
+        input: { maxElements: 10 },
       }),
     ).resolves.toEqual({
-      operation: "query",
-      input: { text: "Search" },
+      operation: "info",
+      input: { maxElements: 10 },
     });
     await expect(
       projection.invoke({
         sessionId: "session-mcp",
-        exportName: "page_click",
-        input: { uid: "u1" },
+        exportName: "page_click_xy",
+        input: { x: 100, y: 160 },
       }),
     ).rejects.toMatchObject({
       code: "E_CAPABILITY_NOT_FOUND",
@@ -1572,12 +1571,12 @@ describe("core", () => {
     const registry = new CapabilityRegistry([
       descriptor(),
       descriptor({
-        id: "page.query",
+        id: "page.info",
         sideEffects: "reads",
-        permissions: ["page.query"],
+        permissions: ["page.info"],
         executionBinding: {
           family: "page",
-          operation: "query",
+          operation: "info",
         },
       }),
     ]);
@@ -1595,17 +1594,17 @@ describe("core", () => {
       permissions: ["page.*"],
     });
 
-    await expect(ctx.call("page.click", { uid: "u1" })).resolves.toEqual({
-      operation: "click",
-      input: { uid: "u1" },
+    await expect(ctx.call("page.click_xy", { x: 100, y: 160 })).resolves.toEqual({
+      operation: "click_xy",
+      input: { x: 100, y: 160 },
     });
     await expect(
-      (ctx.capabilities.page as { query(input: unknown): Promise<unknown> }).query({
-        text: "Search",
+      (ctx.capabilities.page as { info(input: unknown): Promise<unknown> }).info({
+        maxElements: 10,
       }),
     ).resolves.toEqual({
-      operation: "query",
-      input: { text: "Search" },
+      operation: "info",
+      input: { maxElements: 10 },
     });
   });
 
@@ -1622,13 +1621,13 @@ describe("core", () => {
         registry,
         providers,
         sessionId: "s1",
-        capabilityId: "page.click",
-        input: { uid: "u1" },
+        capabilityId: "page.click_xy",
+        input: { x: 100, y: 160 },
         skillId: "kernel.loop",
       }),
     ).resolves.toEqual({
-      operation: "click",
-      input: { uid: "u1" },
+      operation: "click_xy",
+      input: { x: 100, y: 160 },
     });
   });
 
@@ -1753,10 +1752,10 @@ describe("core", () => {
       providers,
       sessionId: "s1",
       skillId: "skill.page",
-      permissions: ["page.query"],
+      permissions: ["page.info"],
     });
 
-    await expect(ctx.call("page.click", { uid: "u1" })).rejects.toMatchObject({
+    await expect(ctx.call("page.click_xy", { x: 100, y: 160 })).rejects.toMatchObject({
       code: "E_PERMISSION_DENIED",
     });
   });
@@ -1862,14 +1861,14 @@ describe("core", () => {
       permissions: ["page.*"],
     });
 
-    await ctx.call("page.click", { uid: "u1" });
+    await ctx.call("page.click_xy", { x: 100, y: 160 });
 
     expect(ctx.trace).toHaveLength(1);
     expect(ctx.trace[0]).toMatchObject({
       traceId: ctx.traceId,
-      capabilityId: "page.click",
+      capabilityId: "page.click_xy",
       status: "succeeded",
-      output: { ok: true, input: { uid: "u1" } },
+      output: { ok: true, input: { x: 100, y: 160 } },
     });
   });
 
@@ -1889,7 +1888,7 @@ describe("core", () => {
       permissions: ["page.*"],
     });
 
-    await ctx.call("page.click", { uid: "u1" });
+    await ctx.call("page.click_xy", { x: 100, y: 160 });
 
     expect(ctx.traceId).toMatch(/^trace-/);
     expect(ctx.trace[0]?.traceId).toBe(ctx.traceId);
@@ -1912,7 +1911,7 @@ describe("core", () => {
       traceId: "trace-explicit",
     });
 
-    await ctx.call("page.click", { uid: "u1" });
+    await ctx.call("page.click_xy", { x: 100, y: 160 });
 
     expect(ctx.traceId).toBe("trace-explicit");
     expect(ctx.trace[0]?.traceId).toBe("trace-explicit");
@@ -2000,6 +1999,7 @@ describe("core", () => {
       expect(BUILTIN_EXPORT_HANDOFFS.map((entry) => entry.capabilityId)).not.toEqual(
         expect.arrayContaining([
           "page.click",
+          "page.click_xy",
           "memfs.write",
           "runner.invoke",
           "host.exec",
@@ -2008,6 +2008,44 @@ describe("core", () => {
       );
       expect(BUILTIN_EXPORT_HANDOFFS.every((entry) => entry.exportName.trim().length > 0)).toBe(
         true,
+      );
+    });
+
+    it("keeps default chat tool surface focused on Browser Harness and explicit diagnostics", () => {
+      const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
+      const defaultChatToolIds = registry
+        .projectTools({ audience: "chat", defaultExposedOnly: true })
+        .map((entry) => entry.capabilityId);
+
+      expect(defaultChatToolIds).toEqual([
+        "page.info",
+        "page.click_xy",
+        "page.type_text",
+        "page.press_key",
+        "page.scroll",
+        "page.screenshot",
+        "tabs.list",
+        "tabs.get_active",
+        "tabs.navigate",
+        "runtime.capture_diagnostics",
+        "debug.bundle",
+      ]);
+      expect(defaultChatToolIds).not.toEqual(
+        expect.arrayContaining([
+          "config.update",
+          "host.exec",
+          "hosts.connect",
+          "intervention.resolve",
+          "memfs.list",
+          "page.query",
+          "page.click",
+          "page.fill",
+          "skills.invoke",
+          "site.fetch_with_session",
+        ]),
+      );
+      expect(BUILTIN_CAPABILITIES.map((entry) => entry.id)).not.toEqual(
+        expect.arrayContaining(["page.click", "page.fill"]),
       );
     });
 
@@ -2110,7 +2148,7 @@ describe("core", () => {
         id: "skill.greet",
         permissions: ["page.*"],
         handler: async (ctx, action, args) => {
-          const clicked = await ctx.call("page.click", { uid: "btn1" });
+          const clicked = await ctx.call("page.click_xy", { x: 100, y: 160 });
           return { action, args, clicked };
         },
       });
@@ -2125,12 +2163,12 @@ describe("core", () => {
       expect(result.result).toMatchObject({
         action: "run",
         args: { name: "world" },
-        clicked: { operation: "click", input: { uid: "btn1" } },
+        clicked: { operation: "click_xy", input: { x: 100, y: 160 } },
       });
       expect(result.trace).toHaveLength(1);
       expect(result.trace[0]).toMatchObject({
         traceId: result.traceId,
-        capabilityId: "page.click",
+        capabilityId: "page.click_xy",
         status: "succeeded",
       });
       expect(result.depth).toBe(1);
@@ -2157,7 +2195,7 @@ describe("core", () => {
         id: "skill.readonly",
         permissions: ["memfs.read"],
         handler: async (ctx) => {
-          await ctx.call("page.click", { uid: "u1" });
+          await ctx.call("page.click_xy", { x: 100, y: 160 });
           return "should not reach";
         },
       });
@@ -2212,11 +2250,11 @@ describe("core", () => {
       });
       service.register({
         id: "skill.child",
-        permissions: ["memfs.read", "page.click"],
+        permissions: ["memfs.read", "page.click_xy"],
         handler: async (ctx) => ({
           permissions: ctx.permissions,
           canRead: typeof (ctx.capabilities.memfs as { read?: unknown } | undefined)?.read,
-          canClick: typeof (ctx.capabilities.page as { click?: unknown } | undefined)?.click,
+          canClick: typeof (ctx.capabilities.page as { click_xy?: unknown } | undefined)?.click_xy,
         }),
       });
 
@@ -2281,7 +2319,7 @@ describe("core", () => {
         id: "skill.parent",
         permissions: ["page.*", "skills.*"],
         handler: async (ctx) => {
-          await ctx.call("page.click", { uid: "p1" });
+          await ctx.call("page.click_xy", { x: 100, y: 160 });
           await ctx.skills.invoke("skill.child", "run", {});
           return "done";
         },
@@ -2292,7 +2330,7 @@ describe("core", () => {
         handler: async (ctx) => {
           childTraceId = ctx.traceId;
           childParentTraceId = ctx.parentTraceId;
-          await ctx.call("page.click", { uid: "c1" });
+          await ctx.call("page.click_xy", { x: 120, y: 180 });
           return "child done";
         },
       });
@@ -2307,8 +2345,8 @@ describe("core", () => {
       expect(result.trace).toHaveLength(2);
       expect(result.trace[0]).toMatchObject({
         traceId: result.traceId,
-        capabilityId: "page.click",
-        input: { uid: "p1" },
+        capabilityId: "page.click_xy",
+        input: { x: 100, y: 160 },
       });
       expect(result.trace[1]).toMatchObject({
         traceId: result.traceId,
@@ -2335,8 +2373,8 @@ describe("core", () => {
       });
       service.register({
         id: "skill.child",
-        permissions: ["page.click"],
-        handler: async (ctx) => ctx.call("page.click", { uid: "u1" }),
+        permissions: ["page.click_xy"],
+        handler: async (ctx) => ctx.call("page.click_xy", { x: 100, y: 160 }),
       });
 
       await expect(
@@ -2381,9 +2419,13 @@ describe("core", () => {
       expect(typeof caps.memfs?.stat).toBe("function");
       expect(typeof caps.memfs?.stage).toBe("function");
 
-      // page namespace should have query, click, fill
+      // page namespace should expose Browser Harness primitives, not UID-only actions
       expect(caps.page).toBeDefined();
-      expect(typeof caps.page?.click).toBe("function");
+      expect(typeof caps.page?.click_xy).toBe("function");
+      expect(typeof caps.page?.type_text).toBe("function");
+      const pageCaps = caps.page as Record<string, unknown> | undefined;
+      expect(pageCaps?.click).toBeUndefined();
+      expect(pageCaps?.fill).toBeUndefined();
 
       // call through typed accessor should work
       const result = await caps.memfs!.read!({ uri: "mem://test" });

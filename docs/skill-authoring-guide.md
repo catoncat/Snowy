@@ -198,7 +198,7 @@ handler: async (ctx, action, args) => {
   const files = await ctx.capabilities.memfs.list({ uri: "mem://workspace/" });
 
   // Or use ctx.call() for any capability by id
-  const result = await ctx.call("page.click", { uid: "submit-btn" });
+  const result = await ctx.call("page.click_xy", { x: 420, y: 240 });
 
   return { files, result };
 }

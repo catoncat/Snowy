@@ -35,6 +35,7 @@
    - 手动或外部 browser 操作只能作为 diagnostic control：确认真实网站状态、可行路径和预期证据；不能算产品通过。
    - 需要登录态时优先使用 dogfood 专用固定 browser profile；如果站点限制导致无法重新登录，可以 claim 用户已打开的真实 Chrome tab，但产品侧仍必须走 MV3 sidepanel/chat/kernel/tool-call 路径。
    - claim 用户真实 Chrome tab 只能作为显式 debug bridge：不读取 cookies、localStorage、profile secrets 或密码；它只负责执行产品发出的少数 browser 原语，并把完整证据落 artifact。
+   - X/已登录态 dogfood 不能把“临时 Chrome for Testing profile 里的产品 sidepanel”与“用户真实 Chrome 登录态 tab”混合后算作产品通过；该混合模式只能标为 diagnostic/control。产品通过必须来自同一个已登录 Chrome profile 内的产品 MV3 sidepanel/runtime，或明确记录为阻断。
    - 若 dogfood 需要更宽 host 权限，必须通过显式 debug-only extension 副本完成；不要把该权限静默写回正常产品 manifest。
    - 可以发散多个场景，但每个场景都应保持“动作少、证据清楚、当前 Agent 自己判断路径优劣”。
    - dogfood 结论用当前 Agent 的自评和证据说明表达；测试代码只锁接口和回归，不替 Agent 打分。

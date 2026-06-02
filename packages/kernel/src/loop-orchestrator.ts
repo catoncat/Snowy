@@ -28,6 +28,7 @@ import type { LlmProviderRegistry } from "./llm-provider-registry.js";
 import { readLlmMessageFromSseStream } from "./llm-stream-parser.js";
 import {
   type ActionFailureHint,
+  type CompletedToolCallSummary,
   type PromptBuilderOptions,
   buildSystemPromptBase,
   buildSystemPromptMessages,
@@ -279,6 +280,31 @@ function isBrowserActionCapability(capabilityId: string): boolean {
   return capabilityId.startsWith("page.") || capabilityId.startsWith("tabs.");
 }
 
+function extractBrowserActionTrace(data: unknown): string[] {
+  if (!isPlainObject(data)) {
+    return [];
+  }
+  const trace = Array.isArray(data.trace) ? data.trace : [];
+  return trace.filter((entry): entry is string => typeof entry === "string");
+}
+
+function inferBrowserActionLane(capabilityId: string, data: unknown): string {
+  const trace = extractBrowserActionTrace(data);
+  if (trace.some((entry) => entry.startsWith("external-page:"))) {
+    return "external-browser-harness";
+  }
+  if (capabilityId === "page.screenshot") {
+    return "chrome.tabs.captureVisibleTab";
+  }
+  if (capabilityId.startsWith("page.")) {
+    return "mv3-scripting/page-hook";
+  }
+  if (capabilityId.startsWith("tabs.")) {
+    return "chrome.tabs";
+  }
+  return "other";
+}
+
 function normalizeBrowserActionTab(value: unknown): Record<string, unknown> | undefined {
   if (!isPlainObject(value)) {
     return undefined;
@@ -410,6 +436,7 @@ function buildBrowserActionEvidence(input: {
     contextPolicy: "observability_only_not_llm_context",
     action: input.capabilityId,
     toolName: input.toolName,
+    lane: inferBrowserActionLane(input.capabilityId, input.result.data),
     input: input.args,
     ...(tab ? { tab } : {}),
     startedAt: input.startedAt.toISOString(),
@@ -536,8 +563,13 @@ function extractFailureTarget(args: unknown): string | undefined {
   }
 
   const target = args as Record<string, unknown>;
-  if (typeof target.uid === "string" && target.uid.trim()) {
-    return `uid ${target.uid.trim()}`;
+  if (
+    typeof target.x === "number" &&
+    Number.isFinite(target.x) &&
+    typeof target.y === "number" &&
+    Number.isFinite(target.y)
+  ) {
+    return `coordinates ${target.x},${target.y}`;
   }
   if (typeof target.url === "string" && target.url.trim()) {
     return `url ${target.url.trim()}`;
@@ -558,6 +590,32 @@ function extractFailureTarget(args: unknown): string | undefined {
 function buildFailureHintKey(capabilityId: string, args: unknown): string {
   const target = extractFailureTarget(args);
   return target ? `${capabilityId}::${target}` : capabilityId;
+}
+
+const COMPLETED_TOOL_PROGRESS_LIMIT = 12;
+const COMPLETED_TOOL_VALUE_LIMIT = 600;
+
+function summarizeCompletedToolValue(value: unknown): string | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return value.length > COMPLETED_TOOL_VALUE_LIMIT
+      ? `${value.slice(0, COMPLETED_TOOL_VALUE_LIMIT)}[truncated]`
+      : value;
+  }
+
+  try {
+    const text = JSON.stringify(sanitizeDebugValue(value));
+    return text.length > COMPLETED_TOOL_VALUE_LIMIT
+      ? `${text.slice(0, COMPLETED_TOOL_VALUE_LIMIT)}[truncated]`
+      : text;
+  } catch {
+    const text = String(value);
+    return text.length > COMPLETED_TOOL_VALUE_LIMIT
+      ? `${text.slice(0, COMPLETED_TOOL_VALUE_LIMIT)}[truncated]`
+      : text;
+  }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1127,6 +1185,7 @@ export async function runLoop(
   let toolStepCount = 0;
   let overflowCompactionAttempts = 0;
   const actionFailures = new Map<string, ActionFailureHint>();
+  const completedToolCalls: CompletedToolCallSummary[] = [];
   const telemetryEntries: LoopTelemetryEntry[] = [];
   const runStartedAt = new Date();
   let loopError: unknown;
@@ -1177,6 +1236,7 @@ export async function runLoop(
         toolStep: toolStepCount,
         retryAttempt: runState.retry.attempt,
         retryMaxAttempts: runState.retry.maxAttempts,
+        completedToolCalls,
         actionFailureHints: sortedFailureHints(actionFailures),
       });
 
@@ -1510,10 +1570,18 @@ export async function runLoop(
           });
         }
 
-        await kernel.appendMessage(
-          input.sessionId,
-          stepResultToToolMessagePayload(result, { toolCallId, toolName }),
-        );
+        const toolMessagePayload = stepResultToToolMessagePayload(result, { toolCallId, toolName });
+        await kernel.appendMessage(input.sessionId, toolMessagePayload);
+        completedToolCalls.push({
+          toolName,
+          capabilityId,
+          ok: result.ok,
+          argsSummary: summarizeCompletedToolValue(args),
+          resultSummary: summarizeCompletedToolValue(toolMessagePayload.text),
+        });
+        if (completedToolCalls.length > COMPLETED_TOOL_PROGRESS_LIMIT) {
+          completedToolCalls.splice(0, completedToolCalls.length - COMPLETED_TOOL_PROGRESS_LIMIT);
+        }
         toolStepCount += 1;
 
         input.onToolResult?.(toolName, result);

@@ -10,7 +10,8 @@ const defaultPluginRoot = "/Users/envvar/.codex/plugins/cache/openai-bundled/chr
 const target = "bbl-next.runner.background";
 
 const defaultPrompt =
-  "搜索我的推特收藏的书签，搜索 agent，然后确认第一条结果已经 liked；如果还没有 liked 才点 like。";
+  "只读观察当前已登录 Chrome 标签页。不要点赞、发帖、评论、关注、私信、提交表单、点击按钮或输入文字；如果需要任何外部可见动作，先停下来请求用户确认。完成后显式调用 debug_bundle，参数 includeTimeline=true。";
+const defaultAllowedExternalActions = new Set(["page.info", "page.screenshot", "page.scroll"]);
 const queryLlmResultLimits = {
   bodyTextChars: 900,
   elementTextChars: 120,
@@ -343,6 +344,18 @@ function networkSummary(events) {
   };
 }
 
+async function captureDebugBundleArtifact(sidepanelPage, extensionId, artifactDir) {
+  const diagnostics = await runtimeSend(sidepanelPage, extensionId, {
+    kind: "runtime.capture_diagnostics",
+  });
+  const debugBundle = diagnostics.ok
+    ? (diagnostics.data?.debug?.bundle ?? diagnostics.data?.debug ?? diagnostics.data)
+    : diagnostics;
+  const debugBundlePath = resolve(artifactDir, "debug-bundle.json");
+  writeFileSync(debugBundlePath, JSON.stringify(debugBundle, null, 2));
+  return { debugBundle, debugBundlePath };
+}
+
 function compactString(value, maxChars) {
   const text = String(value ?? "");
   return text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
@@ -368,7 +381,6 @@ function compactElementForLlm(element) {
     tagName: element.tagName,
     testId: element.testId ?? null,
     textContent: compactString(element.textContent, queryLlmResultLimits.elementTextChars),
-    uid: element.uid,
   };
 }
 
@@ -402,7 +414,7 @@ function compactQuerySnapshotForLlm(snapshot) {
   };
 }
 
-async function inspectPageInfo(tab, input, elementStore) {
+async function inspectPageInfo(tab, input) {
   const maxElements = Math.max(1, Math.min(Number(input.maxElements ?? 30), 50));
   const maxTextChars = Math.max(200, Math.min(Number(input.maxTextChars ?? 1200), 1800));
   const snapshot = await tab.playwright.evaluate(
@@ -511,11 +523,7 @@ async function inspectPageInfo(tab, input, elementStore) {
     { maxElements, maxTextChars },
   );
 
-  snapshot.interactiveElements = (snapshot.interactiveElements ?? []).map((element) => {
-    const uid = `ext-${elementStore.nextId++}`;
-    elementStore.items.set(uid, element);
-    return { uid, ...element };
-  });
+  snapshot.interactiveElements = snapshot.interactiveElements ?? [];
   return snapshot;
 }
 
@@ -630,7 +638,7 @@ async function serviceExternalPageRequest({ artifactDir, elementStore, request, 
   }
 
   if (action === "info") {
-    const snapshot = await inspectPageInfo(tab, input, elementStore);
+    const snapshot = await inspectPageInfo(tab, input);
     const path = resolve(artifactDir, `external-page-${request.id}-info.json`);
     writeFileSync(path, JSON.stringify(snapshot, null, 2));
     return {
@@ -670,52 +678,6 @@ async function serviceExternalPageRequest({ artifactDir, elementStore, request, 
         trace: [`external-page:${action}`],
       },
       log: { action, family: request.family, input, query: path, startedAt, status: "ok" },
-    };
-  }
-
-  if (action === "click") {
-    const item = elementStore.items.get(input.uid);
-    if (!item?.box) throw new Error(`Unknown external element uid: ${input.uid}`);
-    await tab.cua.click({ x: item.box.centerX, y: item.box.centerY });
-    await tab.playwright.waitForTimeout(800);
-    return {
-      data: {
-        result: {
-          action,
-          ok: true,
-          uid: input.uid,
-          x: item.box.centerX,
-          y: item.box.centerY,
-          textContent: item.textContent,
-        },
-        verified: true,
-        trace: [`external-page:${action}`],
-      },
-      log: { action, family: request.family, input, startedAt, status: "ok" },
-    };
-  }
-
-  if (action === "fill") {
-    const item = elementStore.items.get(input.uid);
-    if (!item?.box) throw new Error(`Unknown external element uid: ${input.uid}`);
-    await tab.cua.click({ x: item.box.centerX, y: item.box.centerY });
-    await tab.cua.keypress({ keys: ["ControlOrMeta+A"] }).catch(() => undefined);
-    await tab.cua.type({ text: String(input.value ?? "") });
-    await tab.playwright.waitForTimeout(800);
-    return {
-      data: {
-        result: {
-          action,
-          ok: true,
-          uid: input.uid,
-          value: String(input.value ?? ""),
-          x: item.box.centerX,
-          y: item.box.centerY,
-        },
-        verified: true,
-        trace: [`external-page:${action}`],
-      },
-      log: { action, family: request.family, input, startedAt, status: "ok" },
     };
   }
 
@@ -789,6 +751,24 @@ async function serviceExternalPageRequest({ artifactDir, elementStore, request, 
   throw new Error(`Unsupported external page action: ${action}`);
 }
 
+function externalActionKey(request) {
+  return `${request.family}.${request.action}`;
+}
+
+function assertExternalActionAllowed(request, allowedExternalActions) {
+  if (!allowedExternalActions) return;
+  const actionKey = externalActionKey(request);
+  if (allowedExternalActions.has(actionKey)) return;
+  throw new Error(`Blocked external page action by dogfood safety policy: ${actionKey}`);
+}
+
+function normalizeAllowedExternalActions(value) {
+  if (value == null) return new Set(defaultAllowedExternalActions);
+  if (value instanceof Set) return value;
+  if (Array.isArray(value)) return new Set(value);
+  throw new Error("allowedExternalActions must be an array or Set when provided");
+}
+
 async function setupUserChrome(pluginRoot) {
   if (!globalThis.nodeRepl) {
     throw new Error(
@@ -816,25 +796,169 @@ function findTargetTab(tabs, { tabTitleMatch, tabUrlMatch }) {
   });
 }
 
+function productSidepanelUrlFromOptions({ productExtensionId, productSidepanelUrl }) {
+  if (productSidepanelUrl) return productSidepanelUrl;
+  if (productExtensionId) return `chrome-extension://${productExtensionId}/src/sidepanel.html`;
+  return null;
+}
+
+function findProductSidepanelTab(
+  tabs,
+  { productExtensionId, productSidepanelUrl, productSidepanelUrlMatch },
+) {
+  const sidepanelUrl =
+    productSidepanelUrlMatch ??
+    productSidepanelUrl ??
+    (productExtensionId ? `chrome-extension://${productExtensionId}/src/sidepanel.html` : null);
+  if (sidepanelUrl) {
+    return tabs.find((tab) => String(tab.url ?? "").includes(sidepanelUrl));
+  }
+  return tabs.find((tab) => {
+    const title = String(tab.title ?? "");
+    const url = String(tab.url ?? "");
+    return (
+      /^chrome-extension:\/\/[^/]+\/src\/sidepanel\.html/u.test(url) && /白雪|Snowy/u.test(title)
+    );
+  });
+}
+
+async function openProductSidepanelTab(userBrowser, { productExtensionId, productSidepanelUrl }) {
+  const sidepanelUrl = productSidepanelUrlFromOptions({ productExtensionId, productSidepanelUrl });
+  if (!sidepanelUrl) return null;
+  if (!/^chrome-extension:\/\/[^/]+\/src\/sidepanel\.html$/u.test(sidepanelUrl)) {
+    throw new Error(
+      `productSidepanelUrl must be a chrome-extension://*/src/sidepanel.html URL: ${sidepanelUrl}`,
+    );
+  }
+  const tab = await userBrowser.tabs.new();
+  await tab.goto(sidepanelUrl);
+  await tab.playwright.waitForLoadState({ state: "domcontentloaded", timeoutMs: 15_000 });
+  return tab;
+}
+
+function writeBlockedArtifact(artifactDir, blocker) {
+  const blockerPath = resolve(artifactDir, "blocked.json");
+  writeFileSync(blockerPath, `${JSON.stringify(blocker, null, 2)}\n`, "utf8");
+  const reportPath = resolve(artifactDir, "report.md");
+  writeFileSync(
+    reportPath,
+    [
+      "# Existing Chrome MV3 Dogfood Blocked",
+      "",
+      `- Classification: ${blocker.classification}`,
+      `- Blocked at: ${blocker.blockedAt}`,
+      `- First real blocker: ${blocker.firstBlocker}`,
+      `- Required product path: ${blocker.requiredProductPath}`,
+      `- Diagnostic note: ${blocker.diagnosticNote}`,
+      "",
+      "## Evidence",
+      "",
+      "```json",
+      JSON.stringify(blocker.evidence ?? {}, null, 2),
+      "```",
+    ].join("\n"),
+    "utf8",
+  );
+  return { blockerPath, reportPath };
+}
+
+function buildProductEntryProof({
+  extensionId,
+  mode,
+  openedProductSidepanelTab,
+  preparedExtensionDir,
+  productSidepanelTabInfo,
+  userDataDir,
+}) {
+  const diagnosticTempProductProfile = mode === "diagnostic-temp-product-profile";
+  return {
+    classification: diagnosticTempProductProfile ? "diagnostic-control" : "product-path",
+    diagnosticTempProductProfile,
+    extensionId,
+    mode,
+    openedProductSidepanelTab,
+    productPathAcceptedForLoggedInDogfood: !diagnosticTempProductProfile,
+    productSidepanelTab: productSidepanelTabInfo
+      ? {
+          externalTabId: productSidepanelTabInfo.id,
+          title: productSidepanelTabInfo.title ?? null,
+          url: productSidepanelTabInfo.url ?? null,
+        }
+      : null,
+    preparedExtensionDir: preparedExtensionDir ?? null,
+    userDataDir: userDataDir ?? null,
+  };
+}
+
 export async function runExistingChromeDogfood(options = {}) {
   const artifactDir =
     options.artifactDir ??
     resolve(repoRoot, ".ml-cache/dogfood", `existing-chrome-mv3-${timestampForPath()}`);
   mkdirSync(artifactDir, { recursive: true });
 
-  const extensionDir = resolve(repoRoot, expandPath(options.extensionDir ?? defaultExtensionDir));
-  requireBuiltExtension(extensionDir);
-  const preparedExtensionDir = prepareExtensionDir(extensionDir, artifactDir);
+  const diagnosticTempProductProfile = options.diagnosticTempProductProfile === true;
+  const allowedExternalActions = normalizeAllowedExternalActions(options.allowedExternalActions);
   const userBrowser = await setupUserChrome(options.pluginRoot ?? defaultPluginRoot);
   const openTabs = await userBrowser.user.openTabs();
   const targetTabInfo = findTargetTab(openTabs, {
     tabTitleMatch: options.tabTitleMatch,
     tabUrlMatch: options.tabUrlMatch ?? "https://x.com/i/bookmarks",
   });
+  let openedProductSidepanelTab = null;
+  let productSidepanelTabInfo = findProductSidepanelTab(openTabs, {
+    productExtensionId: options.productExtensionId,
+    productSidepanelUrl: options.productSidepanelUrl,
+    productSidepanelUrlMatch: options.productSidepanelUrlMatch,
+  });
   assert(
     targetTabInfo,
     `No matching existing Chrome tab. Open the logged-in task page first; saw ${openTabs.length} tabs.`,
   );
+
+  if (!diagnosticTempProductProfile && !productSidepanelTabInfo) {
+    openedProductSidepanelTab = await openProductSidepanelTab(userBrowser, {
+      productExtensionId: options.productExtensionId,
+      productSidepanelUrl: options.productSidepanelUrl,
+    });
+    if (openedProductSidepanelTab) {
+      productSidepanelTabInfo = {
+        id: openedProductSidepanelTab.id,
+        title: await openedProductSidepanelTab.title(),
+        url: await openedProductSidepanelTab.url(),
+      };
+    }
+  }
+
+  if (!diagnosticTempProductProfile && !productSidepanelTabInfo) {
+    const { blockerPath, reportPath } = writeBlockedArtifact(artifactDir, {
+      blockedAt: new Date().toISOString(),
+      classification: "blocked",
+      diagnosticNote:
+        "The runner refused to start a temporary Chrome for Testing product profile. X logged-in dogfood must use the product MV3 sidepanel/runtime installed in the user's existing Chrome profile.",
+      evidence: {
+        matchingTaskTab: {
+          id: targetTabInfo.id,
+          title: targetTabInfo.title ?? null,
+          url: targetTabInfo.url ?? null,
+        },
+        openTabCount: openTabs.length,
+        productExtensionId: options.productExtensionId ?? null,
+        productSidepanelUrl: options.productSidepanelUrl ?? null,
+        productSidepanelUrlMatch: options.productSidepanelUrlMatch ?? null,
+      },
+      firstBlocker: "product_sidepanel_tab_missing_in_existing_chrome_profile",
+      requiredProductPath:
+        "Open the repo MV3 product sidepanel in the same logged-in Chrome profile, or pass productExtensionId/productSidepanelUrl so the runner opens chrome-extension://*/src/sidepanel.html in that same profile.",
+    });
+    return {
+      artifactDir,
+      blocked: true,
+      blocker: "product_sidepanel_tab_missing_in_existing_chrome_profile",
+      blockerPath,
+      reportPath,
+    };
+  }
+
   const taskTab = await userBrowser.user.claimTab(targetTabInfo);
   const taskTabProof = {
     mode: "attached-user-chrome-tab",
@@ -850,28 +974,66 @@ export async function runExistingChromeDogfood(options = {}) {
     },
   };
 
-  const userDataDir =
-    options.userDataDir ?? resolve(tmpdir(), `bbl-existing-chrome-product-${Date.now()}`);
-  const context = await chromium.launchPersistentContext(userDataDir, {
-    args: [
-      `--disable-extensions-except=${preparedExtensionDir}`,
-      `--load-extension=${preparedExtensionDir}`,
-      "--no-default-browser-check",
-      "--no-first-run",
-    ],
-    headless: false,
-    viewport: { width: 1360, height: 920 },
-  });
-  const networkEvents = recordNetworkEvents(context);
+  const extensionDir = resolve(repoRoot, expandPath(options.extensionDir ?? defaultExtensionDir));
+  let context = null;
+  let extensionId = options.productExtensionId ?? null;
+  let preparedExtensionDir = null;
+  let sidepanelPage = null;
+  let productEntryProof = null;
+  let userDataDir = null;
+
+  if (diagnosticTempProductProfile) {
+    requireBuiltExtension(extensionDir);
+    preparedExtensionDir = prepareExtensionDir(extensionDir, artifactDir);
+    userDataDir =
+      options.userDataDir ?? resolve(tmpdir(), `bbl-existing-chrome-product-${Date.now()}`);
+    context = await chromium.launchPersistentContext(userDataDir, {
+      args: [
+        `--disable-extensions-except=${preparedExtensionDir}`,
+        `--load-extension=${preparedExtensionDir}`,
+        "--no-default-browser-check",
+        "--no-first-run",
+      ],
+      headless: false,
+      viewport: { width: 1360, height: 920 },
+    });
+    const worker = await waitForExtensionWorker(context);
+    extensionId = new URL(worker.url()).host;
+    sidepanelPage = await context.newPage();
+    await sidepanelPage.goto(`chrome-extension://${extensionId}/src/sidepanel.html`);
+  } else {
+    const sidepanelTab =
+      openedProductSidepanelTab ?? (await userBrowser.user.claimTab(productSidepanelTabInfo));
+    sidepanelPage = sidepanelTab.playwright;
+    if (!extensionId) {
+      extensionId = new URL(await sidepanelTab.url()).host;
+    }
+  }
+
+  const networkContext =
+    context ??
+    (typeof taskTab.playwright?.context === "function" ? taskTab.playwright.context() : null);
+  const networkEvents = networkContext ? recordNetworkEvents(networkContext) : [];
   const externalRequestLogs = [];
   const elementStore = { items: new Map(), nextId: 1 };
 
   try {
-    const worker = await waitForExtensionWorker(context);
-    const extensionId = new URL(worker.url()).host;
-    const sidepanelPage = await context.newPage();
-    await sidepanelPage.goto(`chrome-extension://${extensionId}/src/sidepanel.html`);
     await sidepanelPage.waitForFunction(() => Boolean(globalThis.chrome?.runtime));
+    productEntryProof = buildProductEntryProof({
+      extensionId,
+      mode: diagnosticTempProductProfile
+        ? "diagnostic-temp-product-profile"
+        : "attached-product-extension",
+      openedProductSidepanelTab: Boolean(openedProductSidepanelTab),
+      preparedExtensionDir,
+      productSidepanelTabInfo,
+      userDataDir,
+    });
+    writeFileSync(
+      resolve(artifactDir, "product-entry-proof.json"),
+      `${JSON.stringify(productEntryProof, null, 2)}\n`,
+      "utf8",
+    );
 
     const llmConfig = await maybeConfigureLlm(sidepanelPage, extensionId, options);
     await runtimeSend(sidepanelPage, extensionId, { kind: "runtime.chat.session.create" });
@@ -925,6 +1087,7 @@ export async function runExistingChromeDogfood(options = {}) {
       const request = pending.ok ? pending.data?.request : null;
       if (request) {
         try {
+          assertExternalActionAllowed(request, allowedExternalActions);
           const serviced = await serviceExternalPageRequest({
             artifactDir,
             elementStore,
@@ -987,6 +1150,11 @@ export async function runExistingChromeDogfood(options = {}) {
       limit: 200,
       resourceId: "observability.rawEventTail",
     });
+    const { debugBundle, debugBundlePath } = await captureDebugBundleArtifact(
+      sidepanelPage,
+      extensionId,
+      artifactDir,
+    );
     writeFileSync(resolve(artifactDir, "chat-bootstrap.json"), JSON.stringify(bootstrap, null, 2));
     writeFileSync(
       resolve(artifactDir, "external-page-requests.json"),
@@ -1012,18 +1180,25 @@ export async function runExistingChromeDogfood(options = {}) {
       [
         "# Existing Chrome MV3 Dogfood Evidence",
         "",
-        "This run uses the product MV3/chat/kernel path while page actions are serviced by an explicit external-page dogfood bridge against the user's already-open Chrome tab.",
+        productEntryProof.productPathAcceptedForLoggedInDogfood
+          ? "This run uses the product MV3/chat/kernel path from the user's existing Chrome profile while page actions are serviced by an explicit external-page dogfood bridge against the user's already-open Chrome tab."
+          : "This run uses a temporary Chrome for Testing product profile and is diagnostic/control evidence only; it must not be counted as the X logged-in product-path dogfood pass.",
         "",
+        `- Classification: ${productEntryProof.classification}`,
+        `- Product entry mode: ${productEntryProof.mode}`,
+        `- Accepted for logged-in dogfood: ${productEntryProof.productPathAcceptedForLoggedInDogfood}`,
         `- Prompt: ${prompt}`,
         `- Matched tab: ${taskTabProof.tab.title} (${taskTabProof.tab.url})`,
         `- Extension ID: ${extensionId}`,
-        `- Extension dir: ${preparedExtensionDir}`,
+        `- Extension dir: ${preparedExtensionDir ?? "(existing Chrome profile)"}`,
         `- LLM config: ${JSON.stringify(llmConfig)}`,
         `- Latest assistant text: ${latestAssistantText(bootstrap) || "(empty)"}`,
         `- External page requests: ${externalRequestLogs.length}`,
         `- Task before screenshot: ${beforePath}`,
         `- Task after screenshot: ${afterPath}`,
         `- Sidepanel screenshot: ${sidepanelPath}`,
+        `- Debug bundle: ${debugBundlePath}`,
+        `- Debug bundle lanes: ${JSON.stringify(debugBundle?.laneMap ?? [])}`,
         `- Product network requests: ${summary.requestCount}`,
         `- Product network responses: ${summary.responseCount}`,
         `- Product network failures: ${summary.failedCount}`,
@@ -1043,11 +1218,13 @@ export async function runExistingChromeDogfood(options = {}) {
     }).catch(() => undefined);
 
     if (!options.keepProductOpen) {
-      await context.close();
+      await context?.close();
     }
-    await userBrowser.tabs
-      .finalize({ keep: [{ status: "handoff", tab: taskTab }] })
-      .catch(() => undefined);
+    const keepTabs = [{ status: "handoff", tab: taskTab }];
+    if (options.keepProductOpen && openedProductSidepanelTab) {
+      keepTabs.push({ status: "handoff", tab: openedProductSidepanelTab });
+    }
+    await userBrowser.tabs.finalize({ keep: keepTabs }).catch(() => undefined);
 
     return {
       artifactDir,
@@ -1061,8 +1238,8 @@ export async function runExistingChromeDogfood(options = {}) {
     };
   } finally {
     if (!options.keepProductOpen) {
-      await context.close().catch(() => undefined);
-      rmSync(userDataDir, { recursive: true, force: true });
+      await context?.close().catch(() => undefined);
+      if (userDataDir) rmSync(userDataDir, { recursive: true, force: true });
     }
   }
 }

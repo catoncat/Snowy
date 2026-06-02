@@ -91,20 +91,20 @@ import { describe, expect, it } from "vitest";
 
 function buildDescriptor(overrides: Partial<CapabilityDescriptor> = {}): CapabilityDescriptor {
   return {
-    id: "page.click",
+    id: "page.click_xy",
     version: 1,
-    description: "Click an element on the page",
+    description: "Click viewport coordinates on the page",
     inputSchema: { type: "object" },
     outputSchema: { type: "object" },
     risk: "medium",
     sideEffects: "writes",
     permissions: ["page.*"],
-    supportsVerify: true,
+    supportsVerify: false,
     supportsStreaming: false,
     exportable: false,
     executionBinding: {
       family: "page",
-      operation: "click",
+      operation: "click_xy",
     },
     ...overrides,
   };
@@ -127,12 +127,12 @@ describe("contracts", () => {
     const tool = descriptorToToolContract(buildDescriptor());
 
     expect(tool).toMatchObject({
-      name: "page_click",
-      capabilityId: "page.click",
+      name: "page_click_xy",
+      capabilityId: "page.click_xy",
       annotations: {
         risk: "medium",
         sideEffects: "writes",
-        supportsVerify: true,
+        supportsVerify: false,
         supportsStreaming: false,
       },
     });
@@ -157,7 +157,7 @@ describe("contracts", () => {
       executionTarget: "runner",
     });
     expect(descriptorToToolContract(descriptor)).toMatchObject({
-      capabilityId: "page.click",
+      capabilityId: "page.click_xy",
       annotations: {
         audiences: ["chat", "skill", "system"],
         defaultExposed: false,
@@ -171,7 +171,7 @@ describe("contracts", () => {
     const projected = filterCapabilityDescriptorsByProjection(
       [
         buildDescriptor({
-          id: "page.click",
+          id: "page.click_xy",
           projection: {
             executionTarget: "browser",
           },
@@ -209,12 +209,12 @@ describe("contracts", () => {
       },
     );
 
-    expect(projected.map((descriptor) => descriptor.id)).toEqual(["page.click"]);
+    expect(projected.map((descriptor) => descriptor.id)).toEqual(["page.click_xy"]);
     expect(
       filterCapabilityDescriptorsByProjection(projected, {
         executionTarget: "browser",
       }).map((descriptor) => descriptor.id),
-    ).toEqual(["page.click"]);
+    ).toEqual(["page.click_xy"]);
   });
 
   it("requires the mcp audience in addition to exportable for MCP handoffs", () => {
@@ -1125,7 +1125,7 @@ describe("contracts", () => {
   });
 
   it("extracts the namespace from a capability id", () => {
-    expect(capabilityNamespace("page.click")).toBe("page");
+    expect(capabilityNamespace("page.click_xy")).toBe("page");
     expect(capabilityNamespace("memfs.read")).toBe("memfs");
     expect(capabilityNamespace("runtime.list_capabilities")).toBe("runtime");
   });
@@ -1444,7 +1444,7 @@ describe("contracts", () => {
         turnId: "t-001",
         sessionId: "s-001",
         stepIndex: 0,
-        capabilityId: "page.click",
+        capabilityId: "page.click_xy",
         status: "executing",
         startedAt: "2026-03-29T00:00:00.000Z",
       };

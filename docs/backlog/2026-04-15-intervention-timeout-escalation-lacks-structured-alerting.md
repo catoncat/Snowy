@@ -49,7 +49,7 @@ merges: [ISSUE-142]
    - 既有 `audit.tail` resource 新增 intervention escalation 结构化条目
    - 既有 `runtime.summary.interventions` / `audit.intervention` 继续沿用原有 resource id，不新增 public capability namespace
 2. 影响的消费者：
-   - chat / UI / MCP 读取 `audit.tail` 时可看到 intervention 的 stale / timeout 升级条目
+   - chat / UI / system 读取 `audit.tail` 时可看到 intervention 的 stale / timeout 升级条目
    - 多 tab/window 的 runtime service 实例可共享 intervention 状态并跨端 resolve
 3. 控制面文档同步：
    - 已执行 Doc Freshness Gate；因未新增 resource id、action namespace 或 cutover 判定，仅扩展既有 resource payload，当前无需同步控制面文档

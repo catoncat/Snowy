@@ -53,7 +53,7 @@ check_cmd: "bun run check"
 ## Impact Note
 
 - 影响的 northbound surface：`config.update`、`tabs.get_active`、`tabs.navigate`、`page.press_key`、`site.runtime.invoke` 的 app integration path。
-- 影响的消费者：聊天 Agent、Skill runtime、后续 MV3 bridge / UI / MCP 复用同一路径的消费者。
+- 影响的消费者：聊天 Agent、Skill runtime、后续 MV3 bridge / UI / system 复用同一路径的消费者。
 - 控制面文档同步：已执行 Doc Freshness Gate；本次不改 public capability catalog、workflow、cutover 状态，控制面文档无需改写。
 
 ## 工作总结

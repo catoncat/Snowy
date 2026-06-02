@@ -114,7 +114,6 @@
 - `brain.skill.*`
 - `brain.plugin.*`
 - `brain.debug.*`
-- `brain.mcp.*`
 - `brain.channel.*`
 - `brain.agent.run`
 
@@ -499,7 +498,7 @@
 ### 6.1 推荐的新顶层分层
 
 ```text
-Chat UI / Skill / External Client / Future MCP
+Chat UI / Skill / External Client
                     │
                     ▼
               AI Surface Layer

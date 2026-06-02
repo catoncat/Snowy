@@ -175,7 +175,6 @@ Do not reopen these as default queue filler:
 - Tier 2 / Tier 3 browser automation breadth
 - screenshot/download composites
 - bulk debug export
-- bridge-side MCP server/transport
 - broad provider-policy hardening
 
 These are post-cutover or explicitly promoted product breadth. They are not blockers for the current Level 2 replacement proof.

@@ -1767,8 +1767,439 @@ describe("mv3-shell end-to-end loop integration", () => {
     }
   });
 
-  it("runs the Twitter bookmarks like scenario through page tool execution and chat UI events", async () => {
-    const prompt = "搜索我的推特收藏的书签，搜索 agent，然后给第一条点一个like";
+  it("exposes a browser debug bundle as an explicit LLM tool without raw dumps in normal chat context", async () => {
+    const sentMessages: unknown[] = [];
+    const requestBodies: Array<Record<string, unknown>> = [];
+    let fetchCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (_url, options) => {
+      requestBodies.push(JSON.parse(String((options as { body?: unknown })?.body ?? "{}")));
+      fetchCallCount += 1;
+      if (fetchCallCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_nav_for_debug_bundle",
+              function: { name: "tabs_navigate", arguments: '{"url":"https://example.com"}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+      if (fetchCallCount === 2) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_debug_bundle",
+              function: { name: "debug_bundle", arguments: '{"includeTimeline":true}' },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([
+        chatChunk("Debug bundle read."),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const chromeApi = {
+        runtime: {
+          getURL: (path: string) => path,
+          sendMessage: vi.fn(async (message) => {
+            sentMessages.push(message);
+            return undefined;
+          }),
+        },
+        tabs: {
+          query: vi.fn(async () => [
+            { id: 11, url: "https://fixture.test/start", active: true, title: "Fixture Start" },
+          ]),
+          update: vi.fn(async (tabId: number, updateInfo: { url: string }) => ({
+            id: tabId,
+            url: updateInfo.url,
+            active: true,
+            title: "Fixture Target",
+          })),
+        },
+        offscreen: {},
+      };
+
+      const bridge = createBackgroundRunnerBridge({
+        chromeApi,
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: TEST_PROFILE_CONFIG,
+      });
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "runtime.chat.send",
+          text: "Open example.com, then read the browser debug bundle.",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: { accepted: true },
+      });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      expect(JSON.stringify(requestBodies[0]?.tools)).toContain("debug_bundle");
+      const firstRequestToolNames = (
+        (requestBodies[0]?.tools as Array<{ name?: string; function?: { name?: string } }>) ?? []
+      )
+        .map((tool) => tool.name ?? tool.function?.name)
+        .filter(Boolean);
+      expect(firstRequestToolNames).toEqual([
+        "page_info",
+        "page_click_xy",
+        "page_type_text",
+        "page_press_key",
+        "page_scroll",
+        "page_screenshot",
+        "tabs_list",
+        "tabs_get_active",
+        "tabs_navigate",
+        "runtime_capture_diagnostics",
+        "debug_bundle",
+      ]);
+      expect(firstRequestToolNames).not.toEqual(
+        expect.arrayContaining([
+          "config_update",
+          "host_exec",
+          "hosts_connect",
+          "intervention_resolve",
+          "memfs_list",
+          "skills_invoke",
+          "site_fetch_with_session",
+        ]),
+      );
+      const debugToolRequestPayload = JSON.stringify(requestBodies[2] ?? {});
+      expect(debugToolRequestPayload).toContain("debug_bundle");
+      expect(debugToolRequestPayload).toContain("debugBundleId");
+      expect(debugToolRequestPayload).toContain("observability.timeline");
+      expect(debugToolRequestPayload).toContain("runtime.history");
+      expect(debugToolRequestPayload).toContain("tabs.navigate");
+      expect(debugToolRequestPayload).toContain("chrome.tabs");
+      expect(debugToolRequestPayload).not.toContain("screenshotDataUrl");
+      expect(debugToolRequestPayload).not.toContain("data:image/");
+      expect(debugToolRequestPayload).not.toContain("rawBodyPreview");
+
+      const toolResultEvents = sentMessages
+        .filter(
+          (
+            msg,
+          ): msg is {
+            type: string;
+            event: { type?: string; toolName?: string; detail?: string; status?: string };
+          } => (msg as { type?: string }).type === "bbl-next.runtime.chat.event",
+        )
+        .map((msg) => msg.event)
+        .filter((event) => event.type === "tool.result" && event.toolName === "debug_bundle");
+      expect(toolResultEvents[0]).toMatchObject({
+        type: "tool.result",
+        toolName: "debug_bundle",
+        status: "done",
+      });
+      expect(toolResultEvents[0]?.detail).toContain("debugBundleId");
+      expect(toolResultEvents[0]?.detail).not.toContain("rawEvents");
+
+      const diagnostics = await bridge.route({
+        target: RUNNER_BACKGROUND_TARGET,
+        kind: "runtime.capture_diagnostics",
+      });
+      expect(diagnostics).toMatchObject({
+        ok: true,
+        data: {
+          debug: {
+            bundle: {
+              schema: "bbl.debugBundle.v1",
+              resourceRefs: expect.arrayContaining([
+                expect.objectContaining({ resourceId: "observability.timeline" }),
+                expect.objectContaining({ resourceId: "runtime.history" }),
+              ]),
+            },
+          },
+        },
+      });
+      const diagnosticsPayload = JSON.stringify(diagnostics);
+      expect(diagnosticsPayload).toContain("tabs.navigate");
+      expect(diagnosticsPayload).toContain("chrome.tabs");
+      expect(diagnosticsPayload).not.toContain("data:image/");
+      expect(diagnosticsPayload).not.toContain("rawBodyPreview");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("routes runtime_capture_diagnostics as an LLM tool through the product diagnostics lane", async () => {
+    const sentMessages: unknown[] = [];
+    const requestBodies: Array<Record<string, unknown>> = [];
+    let fetchCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      requestBodies.push(JSON.parse(String(init?.body ?? "{}")));
+      fetchCallCount += 1;
+      if (fetchCallCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_runtime_diagnostics",
+              function: { name: "runtime_capture_diagnostics", arguments: "{}" },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+      return sseResponse([
+        chatChunk("Runtime diagnostics read."),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const bridge = createBackgroundRunnerBridge({
+        chromeApi: {
+          runtime: {
+            getURL: (path: string) => path,
+            getContexts: vi.fn(async () => []),
+            sendMessage: vi.fn(async (message) => {
+              sentMessages.push(message);
+              return undefined;
+            }),
+          },
+          tabs: {
+            query: vi.fn(async () => [
+              { id: 11, url: "https://fixture.test/start", active: true, title: "Fixture Start" },
+            ]),
+          },
+          offscreen: {},
+        },
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: TEST_PROFILE_CONFIG,
+      });
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "runtime.chat.send",
+          text: "Read runtime diagnostics.",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: { accepted: true },
+      });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      const runtimeToolResult = sentMessages
+        .filter(
+          (
+            msg,
+          ): msg is {
+            type: string;
+            event: { type?: string; toolName?: string; detail?: string; status?: string };
+          } => (msg as { type?: string }).type === "bbl-next.runtime.chat.event",
+        )
+        .map((msg) => msg.event)
+        .find(
+          (event) =>
+            event.type === "tool.result" && event.toolName === "runtime_capture_diagnostics",
+        );
+
+      expect(runtimeToolResult).toMatchObject({
+        status: "done",
+      });
+      expect(runtimeToolResult?.detail).toContain('"debug"');
+      expect(runtimeToolResult?.detail).toContain("runtimeDiagnosticsProjection.v1");
+      expect(runtimeToolResult?.detail).toContain("debugBundleId");
+      expect(runtimeToolResult?.detail).not.toContain("No provider registered for family runtime");
+      expect(runtimeToolResult?.detail).not.toContain("recentAudit");
+      expect(runtimeToolResult?.detail).not.toContain("snapshot");
+
+      const secondRequestInput = Array.isArray(requestBodies[1]?.input)
+        ? (requestBodies[1].input as Array<{ type?: string; output?: string }>)
+        : [];
+      const runtimeToolOutput = secondRequestInput.find(
+        (item) => item.type === "function_call_output",
+      )?.output;
+      expect(runtimeToolOutput).toContain("runtimeDiagnosticsProjection.v1");
+      expect(runtimeToolOutput).toContain("debugBundleId");
+      expect(runtimeToolOutput).toContain("resourceRefs");
+      expect(runtimeToolOutput).not.toContain("recentAudit");
+      expect(runtimeToolOutput).not.toContain("snapshot");
+      expect(runtimeToolOutput).not.toContain("rawEvents");
+      expect(runtimeToolOutput).not.toContain("timelineEvents");
+      expect(runtimeToolOutput).not.toContain("rawBodyPreview");
+      expect(runtimeToolOutput).not.toContain("data:image/");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("tells the next LLM turn that runtime diagnostics were already captured", async () => {
+    const sentMessages: unknown[] = [];
+    const requestBodies: Array<Record<string, unknown>> = [];
+    let fetchCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      requestBodies.push(JSON.parse(String(init?.body ?? "{}")));
+      fetchCallCount += 1;
+      if (fetchCallCount === 1) {
+        return sseResponse([
+          chatChunk(undefined, [
+            {
+              index: 0,
+              id: "tc_runtime_diagnostics",
+              function: { name: "runtime_capture_diagnostics", arguments: "{}" },
+            },
+          ]),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+
+      if (fetchCallCount === 2) {
+        const secondTurnPayload = JSON.stringify(requestBodies[1] ?? {});
+        if (
+          !secondTurnPayload.includes("completed_tool_calls") ||
+          !secondTurnPayload.includes("runtime_capture_diagnostics") ||
+          !secondTurnPayload.includes("runtime.capture_diagnostics") ||
+          !secondTurnPayload.includes("debugBundleId") ||
+          !secondTurnPayload.includes("resourceRefs")
+        ) {
+          return sseResponse([
+            chatChunk(undefined, [
+              {
+                index: 0,
+                id: "tc_duplicate_runtime_diagnostics",
+                function: { name: "runtime_capture_diagnostics", arguments: "{}" },
+              },
+            ]),
+            chatChunk(undefined, undefined, "stop"),
+            "[DONE]",
+          ]);
+        }
+        return sseResponse([
+          chatChunk("Runtime diagnostics are already available."),
+          chatChunk(undefined, undefined, "stop"),
+          "[DONE]",
+        ]);
+      }
+
+      return sseResponse([
+        chatChunk("Repeated runtime diagnostics."),
+        chatChunk(undefined, undefined, "stop"),
+        "[DONE]",
+      ]);
+    }) as typeof fetch;
+
+    try {
+      const bridge = createBackgroundRunnerBridge({
+        chromeApi: {
+          runtime: {
+            getURL: (path: string) => path,
+            getContexts: vi.fn(async () => []),
+            sendMessage: vi.fn(async (message) => {
+              sentMessages.push(message);
+              return undefined;
+            }),
+          },
+          tabs: {
+            query: vi.fn(async () => [
+              { id: 11, url: "https://fixture.test/start", active: true, title: "Fixture Start" },
+            ]),
+          },
+          offscreen: {},
+        },
+        sessionStorage: new InMemorySessionStorage(),
+        profileConfig: TEST_PROFILE_CONFIG,
+      });
+
+      await expect(
+        bridge.route({
+          target: RUNNER_BACKGROUND_TARGET,
+          kind: "runtime.chat.send",
+          text: "Read runtime diagnostics, then continue with a concise summary.",
+        }),
+      ).resolves.toMatchObject({
+        ok: true,
+        data: { accepted: true },
+      });
+
+      await waitFor(
+        () =>
+          sentMessages.some(
+            (msg) =>
+              (msg as { type?: string; event?: { type?: string } }).type ===
+                "bbl-next.runtime.chat.event" &&
+              (msg as { event?: { type?: string } }).event?.type === "assistant.done",
+          ),
+        2000,
+      );
+
+      expect(fetchCallCount).toBe(2);
+      const runtimeToolResults = sentMessages
+        .filter(
+          (
+            msg,
+          ): msg is {
+            type: string;
+            event: { type?: string; toolName?: string; detail?: string; status?: string };
+          } => (msg as { type?: string }).type === "bbl-next.runtime.chat.event",
+        )
+        .map((msg) => msg.event)
+        .filter(
+          (event) =>
+            event.type === "tool.result" && event.toolName === "runtime_capture_diagnostics",
+        );
+      expect(runtimeToolResults).toHaveLength(1);
+
+      const secondTurnPayload = JSON.stringify(requestBodies[1] ?? {});
+      expect(secondTurnPayload).toContain("completed_tool_calls");
+      expect(secondTurnPayload).toContain("runtime_capture_diagnostics");
+      expect(secondTurnPayload).toContain("runtime.capture_diagnostics");
+      expect(secondTurnPayload).toContain("debugBundleId");
+      expect(secondTurnPayload).toContain("resourceRefs");
+      expect(secondTurnPayload).not.toContain("rawEvents");
+      expect(secondTurnPayload).not.toContain("timelineEvents");
+      expect(secondTurnPayload).not.toContain("rawBodyPreview");
+      expect(secondTurnPayload).not.toContain("data:image/");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("runs a read-only X bookmarks observation through page tool execution and chat UI events", async () => {
+    const prompt =
+      "只读观察我的 X bookmarks 页面，确认当前页面并总结可见内容，不要点赞、评论、关注、私信或提交表单";
     const sentMessages: unknown[] = [];
     const telemetryEntries: unknown[] = [];
     const timelineEvents: unknown[] = [];
@@ -1800,10 +2231,10 @@ describe("mv3-shell end-to-end loop integration", () => {
           chatChunk(undefined, [
             {
               index: 0,
-              id: "tc_like_first_agent_bookmark",
+              id: "tc_observe_x_bookmarks",
               function: {
-                name: "page_click",
-                arguments: JSON.stringify({ uid: "first-agent-bookmark-like" }),
+                name: "page_info",
+                arguments: JSON.stringify({ maxElements: 10 }),
               },
             },
           ]),
@@ -1812,7 +2243,7 @@ describe("mv3-shell end-to-end loop integration", () => {
         ]);
       }
       return sseResponse([
-        chatChunk("已打开 X bookmarks，搜索 agent，并给第一条结果点了 like。"),
+        chatChunk("已只读观察 X bookmarks 页面，并总结了可见内容。"),
         chatChunk(undefined, undefined, "stop"),
         "[DONE]",
       ]);
@@ -1880,7 +2311,7 @@ describe("mv3-shell end-to-end loop integration", () => {
             ok: true,
           }),
           expect.objectContaining({
-            capabilityId: "page.click",
+            capabilityId: "page.info",
             ok: true,
           }),
         ]),
@@ -1894,16 +2325,16 @@ describe("mv3-shell end-to-end loop integration", () => {
           }),
           expect.objectContaining({
             eventType: "runtime.tool.call.succeeded",
-            action: "page_click",
-            capabilityId: "page.click",
+            action: "page_info",
+            capabilityId: "page.info",
             details: expect.objectContaining({
               browserActionEvidence: expect.objectContaining({
                 schema: "bbl.browserActionEvidence.v1",
                 visibility: "debug_only",
                 contextPolicy: "observability_only_not_llm_context",
-                action: "page.click",
-                toolName: "page_click",
-                input: { uid: "first-agent-bookmark-like" },
+                action: "page.info",
+                toolName: "page_info",
+                input: { maxElements: 10 },
                 elapsedMs: expect.any(Number),
                 result: expect.objectContaining({
                   ok: true,
@@ -1924,7 +2355,7 @@ describe("mv3-shell end-to-end loop integration", () => {
             payload: expect.objectContaining({
               browserActionEvidence: expect.objectContaining({
                 schema: "bbl.browserActionEvidence.v1",
-                action: "page.click",
+                action: "page.info",
               }),
             }),
           }),
@@ -1955,12 +2386,12 @@ describe("mv3-shell end-to-end loop integration", () => {
         expect.arrayContaining([
           expect.objectContaining({
             type: "tool.call",
-            toolName: "page_click",
+            toolName: "page_info",
             phase: "tool_running",
           }),
           expect.objectContaining({
             type: "tool.result",
-            toolName: "page_click",
+            toolName: "page_info",
             status: "done",
             phase: "processing_result",
           }),
@@ -3479,7 +3910,7 @@ describe("mv3-shell intervention bridge integration", () => {
         data: {
           result: {
             action: "info",
-            interactiveElements: [{ uid: "ext-1", tagName: "input" }],
+            interactiveElements: [{ tagName: "input" }],
             title: "X Bookmarks",
             url: "https://x.com/i/bookmarks",
             visibleText: "Bookmarks",

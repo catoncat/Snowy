@@ -62,7 +62,7 @@ This is intentionally one vertical milestone. Do not split it into separate disp
 - Full visual Skill Studio.
 - Version selection or rollback UI.
 - Package authoring/editor UI.
-- Bridge-side MCP export.
+- Bridge-side external export.
 
 ## 工作总结
 

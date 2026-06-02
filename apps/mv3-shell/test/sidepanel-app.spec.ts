@@ -574,7 +574,7 @@ describe("sidepanel chat transcript component", () => {
         {
           id: "tool-1",
           kind: "tool",
-          toolName: "page.query",
+          toolName: "page.info",
           summary: "Collected DOM snapshot",
           detail: '{"status":"ok"}',
           expanded: false,
@@ -733,7 +733,7 @@ describe("sidepanel chat transcript component", () => {
         {
           id: "tool-1",
           kind: "tool",
-          toolName: "page.query",
+          toolName: "page.info",
           summary: "Collected DOM snapshot",
           detail: '{"status":"ok","durationMs":12,"output":{"count":2}}',
           expanded: false,
@@ -766,7 +766,7 @@ describe("sidepanel chat transcript component", () => {
         {
           id: "tool-1",
           kind: "tool",
-          toolName: "page.query",
+          toolName: "page.info",
           summary: "Collected DOM snapshot",
           detail: '{"status":"ok","durationMs":12,"output":{"count":2}}',
           expanded: true,
@@ -863,7 +863,7 @@ describe("sidepanel chat transcript component", () => {
       status: "running",
       phase: "tool_running",
       label: "正在运行工具",
-      summary: "page.click",
+      summary: "page.click_xy",
       severity: "info",
       currentActivityId: "activity:tool:tc-1",
     };
@@ -877,7 +877,7 @@ describe("sidepanel chat transcript component", () => {
     expect(strip?.props.role).toBe("status");
     expect(strip?.props["aria-live"]).toBe("polite");
     expect(textContent(strip)).toContain("正在运行工具");
-    expect(textContent(strip)).toContain("page.click");
+    expect(textContent(strip)).toContain("page.click_xy");
     expect(textContent(strip)).toContain("2");
   });
 
@@ -887,7 +887,7 @@ describe("sidepanel chat transcript component", () => {
       {
         id: "activity:tool:ok",
         kind: "tool",
-        title: "page.query",
+        title: "page.info",
         summary: "Collected DOM snapshot",
         detail: '{"ok":true}',
         expanded: false,
@@ -898,7 +898,7 @@ describe("sidepanel chat transcript component", () => {
       {
         id: "activity:tool:failed",
         kind: "tool",
-        title: "page.click",
+        title: "page.click_xy",
         summary: "Click failed",
         detail: '{"ok":false,"error":"element not found"}',
         expanded: true,
@@ -919,7 +919,7 @@ describe("sidepanel chat transcript component", () => {
     );
     expect(timeline?.props.role).toBe("region");
     expect(timeline?.props["aria-label"]).toBe("运行活动");
-    expect(textContent(timeline)).toContain("page.query");
+    expect(textContent(timeline)).toContain("page.info");
     expect(textContent(timeline)).toContain("Click failed");
     expect(
       findFirst(
@@ -957,7 +957,7 @@ describe("sidepanel chat transcript component", () => {
       {
         id: "tool-1",
         kind: "tool",
-        toolName: "page.query",
+        toolName: "page.info",
         summary: "读取页面快照",
         detail: "{}",
         expanded: false,
@@ -1570,7 +1570,7 @@ describe("sidepanel chat transcript component", () => {
       {
         id: "tool-1",
         kind: "tool",
-        toolName: "page.query",
+        toolName: "page.info",
         summary: "读取页面快照",
         detail: "{}",
         expanded: false,

@@ -977,7 +977,7 @@ function buildPageActionRequest({ action, input, tab, scriptPath }) {
           source:
             "exports.default = async ({ input }) => ({ maxElements: input.maxElements, maxTextChars: input.maxTextChars });",
         },
-        verifier: "page_query",
+        verifier: "page_info",
       };
     }
     case "query":
@@ -1012,35 +1012,6 @@ function buildPageActionRequest({ action, input, tab, scriptPath }) {
           source: "exports.default = async ({ input }) => ({ selector: input.selector });",
         },
         verifier: "page_query",
-      };
-    case "click":
-      if (!isPlainObject(input) || typeof input.uid !== "string" || input.uid.length === 0) {
-        throw new CapabilityError("E_BAD_INPUT", "page.click requires a non-empty uid");
-      }
-      return {
-        skillId: "bbl.page",
-        action: "click",
-        tab,
-        input: {
-          uid: input.uid,
-        },
-        plan: {
-          skillId: "bbl.page",
-          action: "click",
-          steps: [
-            {
-              world: "main",
-              scriptId: "bbl-next.page-hook.page",
-              jsPath: scriptPath,
-              runAt: "document_idle",
-            },
-          ],
-        },
-        module: {
-          id: "bbl.page.click",
-          source: "exports.default = async ({ input }) => ({ uid: input.uid });",
-        },
-        verifier: "page_click",
       };
     case "click_xy": {
       if (!isPlainObject(input)) {
@@ -1078,40 +1049,6 @@ function buildPageActionRequest({ action, input, tab, scriptPath }) {
         verifier: "page_click_xy",
       };
     }
-    case "fill":
-      if (!isPlainObject(input) || typeof input.uid !== "string" || input.uid.length === 0) {
-        throw new CapabilityError("E_BAD_INPUT", "page.fill requires a non-empty uid");
-      }
-      if (typeof input.value !== "string") {
-        throw new CapabilityError("E_BAD_INPUT", "page.fill requires input.value");
-      }
-      return {
-        skillId: "bbl.page",
-        action: "fill",
-        tab,
-        input: {
-          uid: input.uid,
-          value: input.value,
-        },
-        plan: {
-          skillId: "bbl.page",
-          action: "fill",
-          steps: [
-            {
-              world: "main",
-              scriptId: "bbl-next.page-hook.page",
-              jsPath: scriptPath,
-              runAt: "document_idle",
-            },
-          ],
-        },
-        module: {
-          id: "bbl.page.fill",
-          source:
-            "exports.default = async ({ input }) => ({ uid: input.uid, value: input.value });",
-        },
-        verifier: "page_fill",
-      };
     case "type_text":
       if (!isPlainObject(input) || typeof input.text !== "string") {
         throw new CapabilityError("E_BAD_INPUT", "page.type_text requires input.text");
@@ -3215,6 +3152,8 @@ export function createBackgroundRuntimeServices({
   configSummary = undefined,
   onLoopTelemetry = undefined,
   onObservabilityEvent = undefined,
+  captureRuntimeDiagnostics = undefined,
+  clearRuntimeError = undefined,
   workspaceId = "mv3-shell",
   interventionTimeoutMs = DEFAULT_INTERVENTION_TIMEOUT_MS,
   interventionEscalationMs = undefined,
@@ -3255,6 +3194,9 @@ export function createBackgroundRuntimeServices({
     pending: new Map(),
     sequence: 0,
   };
+  const runtimeObservabilityTimelineEvents = [];
+  const runtimeObservabilityRawEvents = [];
+  let debugBundleSequence = 0;
 
   function cloneDogfoodValue(value) {
     if (value == null) {
@@ -3264,6 +3206,412 @@ export function createBackgroundRuntimeServices({
       return structuredClone(value);
     }
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function pushBounded(list, value, limit = 256) {
+    list.push(value);
+    while (list.length > limit) {
+      list.shift();
+    }
+  }
+
+  function rememberRuntimeObservabilityEvent(event, rawEvent) {
+    if (event) {
+      pushBounded(runtimeObservabilityTimelineEvents, cloneDogfoodValue(event));
+    }
+    if (rawEvent) {
+      pushBounded(runtimeObservabilityRawEvents, cloneDogfoodValue(rawEvent));
+    }
+  }
+
+  function normalizeDebugBundleLimit(input = {}) {
+    const rawLimit = Number(isPlainObject(input) ? input.limit : undefined);
+    if (!Number.isFinite(rawLimit)) {
+      return 20;
+    }
+    return Math.max(1, Math.min(50, Math.floor(rawLimit)));
+  }
+
+  function laneForCapability(capabilityId, resultData = undefined) {
+    if (isPlainObject(resultData)) {
+      const trace = Array.isArray(resultData.trace) ? resultData.trace : [];
+      if (trace.some((entry) => typeof entry === "string" && entry.startsWith("external-page:"))) {
+        return "external-browser-harness";
+      }
+      const nestedEvidence = resultData.browserActionEvidence ?? resultData.debugEvidence;
+      if (isPlainObject(nestedEvidence) && typeof nestedEvidence.lane === "string") {
+        return nestedEvidence.lane;
+      }
+    }
+    if (capabilityId === "page.screenshot") {
+      return "chrome.tabs.captureVisibleTab";
+    }
+    if (typeof capabilityId === "string" && capabilityId.startsWith("page.")) {
+      return "mv3-scripting/page-hook";
+    }
+    if (typeof capabilityId === "string" && capabilityId.startsWith("site.")) {
+      return "mv3-scripting/page-hook";
+    }
+    if (typeof capabilityId === "string" && capabilityId.startsWith("tabs.")) {
+      return "chrome.tabs";
+    }
+    if (typeof capabilityId === "string" && capabilityId.startsWith("host.")) {
+      return "host bridge";
+    }
+    return "other";
+  }
+
+  function toolCallSummaryFromTimelineEvent(event) {
+    if (!isPlainObject(event) || typeof event.eventType !== "string") {
+      return null;
+    }
+    if (!event.eventType.startsWith("runtime.tool.call.")) {
+      return null;
+    }
+    const details = isPlainObject(event.details) ? event.details : {};
+    const result = isPlainObject(details.result) ? details.result : {};
+    const capabilityId =
+      typeof event.capabilityId === "string"
+        ? event.capabilityId
+        : typeof details.capabilityId === "string"
+          ? details.capabilityId
+          : null;
+    const toolName =
+      typeof event.action === "string"
+        ? event.action
+        : typeof details.toolName === "string"
+          ? details.toolName
+          : capabilityId;
+    const explicitLane =
+      isPlainObject(details.browserActionEvidence) &&
+      typeof details.browserActionEvidence.lane === "string"
+        ? details.browserActionEvidence.lane
+        : null;
+    const lane = explicitLane ?? laneForCapability(capabilityId, result.data ?? result);
+    return {
+      eventId: typeof event.id === "string" ? event.id : null,
+      eventType: event.eventType,
+      status: typeof event.status === "string" ? event.status : "info",
+      action: toolName,
+      toolName,
+      capabilityId,
+      lane,
+      startedAt: typeof event.startedAt === "string" ? event.startedAt : null,
+      timestamp: typeof event.timestamp === "string" ? event.timestamp : null,
+      durationMs: typeof event.durationMs === "number" ? event.durationMs : null,
+      ok: typeof details.ok === "boolean" ? details.ok : undefined,
+      result: stripDebugOnlyFieldsForChat({
+        ok: typeof result.ok === "boolean" ? result.ok : details.ok,
+        verified:
+          typeof result.verified === "boolean"
+            ? result.verified
+            : isPlainObject(result.data) && typeof result.data.verified === "boolean"
+              ? result.data.verified
+              : undefined,
+        output:
+          isPlainObject(result.data) && "result" in result.data ? result.data.result : undefined,
+      }),
+    };
+  }
+
+  function compactDiagnosticsError(error) {
+    if (!isPlainObject(error)) {
+      return null;
+    }
+    return {
+      code: typeof error.code === "string" ? error.code : "E_RUNTIME",
+      message:
+        typeof error.message === "string"
+          ? error.message
+          : String(error.message ?? "Runtime error"),
+      ...(typeof error.capturedAt === "string" ? { capturedAt: error.capturedAt } : {}),
+    };
+  }
+
+  function compactRuntimeDiagnosticsKernel(kernel) {
+    if (!isPlainObject(kernel)) {
+      return null;
+    }
+    const session = isPlainObject(kernel.session) ? kernel.session : null;
+    const run = isPlainObject(kernel.run) ? kernel.run : null;
+    const loop = isPlainObject(kernel.loop) ? kernel.loop : null;
+    const interventions = isPlainObject(kernel.interventions) ? kernel.interventions : null;
+    const provider = isPlainObject(kernel.provider) ? kernel.provider : null;
+    const providerRoute = isPlainObject(provider?.route) ? provider.route : null;
+    const registeredProviders = Array.isArray(provider?.registered) ? provider.registered : [];
+
+    return {
+      session: session
+        ? {
+            id: typeof session.id === "string" ? session.id : null,
+            title: typeof session.title === "string" ? session.title : null,
+            model: typeof session.model === "string" ? session.model : null,
+          }
+        : null,
+      run: run
+        ? {
+            phase: typeof run.phase === "string" ? run.phase : null,
+            queuedPrompts: isPlainObject(run.queuedPrompts)
+              ? {
+                  steer: typeof run.queuedPrompts.steer === "number" ? run.queuedPrompts.steer : 0,
+                  followUp:
+                    typeof run.queuedPrompts.followUp === "number" ? run.queuedPrompts.followUp : 0,
+                }
+              : { steer: 0, followUp: 0 },
+            retry: isPlainObject(run.retry)
+              ? {
+                  active: run.retry.active === true,
+                  attempt: typeof run.retry.attempt === "number" ? run.retry.attempt : 0,
+                  maxAttempts:
+                    typeof run.retry.maxAttempts === "number" ? run.retry.maxAttempts : 0,
+                }
+              : { active: false, attempt: 0, maxAttempts: 0 },
+          }
+        : null,
+      loop: loop
+        ? {
+            stepCount: typeof loop.stepCount === "number" ? loop.stepCount : 0,
+            noProgress: typeof loop.noProgress === "string" ? loop.noProgress : null,
+            maxSteps: typeof loop.maxSteps === "number" ? loop.maxSteps : 0,
+          }
+        : null,
+      interventions: interventions
+        ? {
+            status: typeof interventions.status === "string" ? interventions.status : "empty",
+            totalCount: typeof interventions.totalCount === "number" ? interventions.totalCount : 0,
+            activeCount:
+              typeof interventions.activeCount === "number" ? interventions.activeCount : 0,
+            recentCount:
+              typeof interventions.recentCount === "number" ? interventions.recentCount : 0,
+          }
+        : null,
+      provider: {
+        route: providerRoute
+          ? {
+              status: typeof providerRoute.status === "string" ? providerRoute.status : "empty",
+              profile: typeof providerRoute.profile === "string" ? providerRoute.profile : null,
+              provider: typeof providerRoute.provider === "string" ? providerRoute.provider : null,
+              llmModel: typeof providerRoute.llmModel === "string" ? providerRoute.llmModel : null,
+            }
+          : null,
+        registeredCount: registeredProviders.length,
+      },
+    };
+  }
+
+  function compactRuntimeDiagnosticsHosts(hosts) {
+    if (!isPlainObject(hosts)) {
+      return null;
+    }
+    const items = Array.isArray(hosts.items) ? hosts.items : [];
+    const errors = items
+      .filter((item) => isPlainObject(item) && isPlainObject(item.error))
+      .map((item) => ({
+        hostId: typeof item.hostId === "string" ? item.hostId : null,
+        state: typeof item.state === "string" ? item.state : null,
+        error: compactDiagnosticsError(item.error),
+      }));
+    return {
+      status: typeof hosts.status === "string" ? hosts.status : "unknown",
+      totalCount: typeof hosts.totalCount === "number" ? hosts.totalCount : items.length,
+      connectedCount: typeof hosts.connectedCount === "number" ? hosts.connectedCount : 0,
+      defaultHostId: typeof hosts.defaultHostId === "string" ? hosts.defaultHostId : null,
+      errors,
+    };
+  }
+
+  function compactRuntimeDiagnosticsBridge(bridge) {
+    if (!isPlainObject(bridge)) {
+      return null;
+    }
+    return {
+      hostReady: bridge.hostReady === true,
+      offscreenPresent: bridge.offscreenPresent === true,
+      offscreenPath: typeof bridge.offscreenPath === "string" ? bridge.offscreenPath : null,
+    };
+  }
+
+  function compactRuntimeDiagnosticsRunner(runner) {
+    if (!isPlainObject(runner)) {
+      return null;
+    }
+    const health = isPlainObject(runner.health) ? runner.health : null;
+    return {
+      reachable: runner.reachable === true,
+      ready: runner.ready === true,
+      healthStatus: typeof health?.status === "string" ? health.status : null,
+      error: compactDiagnosticsError(runner.error),
+    };
+  }
+
+  function compactRuntimeDiagnosticsSite(site) {
+    if (!isPlainObject(site)) {
+      return null;
+    }
+    return {
+      status: typeof site.status === "string" ? site.status : "unknown",
+      tabId: typeof site.tabId === "number" ? site.tabId : null,
+      world: typeof site.world === "string" ? site.world : null,
+      stateAvailable: isPlainObject(site.snapshot) || site.snapshot === null,
+      error: compactDiagnosticsError(site.error),
+    };
+  }
+
+  function compactRuntimeDebugBundle(bundle) {
+    if (!isPlainObject(bundle)) {
+      return null;
+    }
+    return {
+      debugBundleId: typeof bundle.debugBundleId === "string" ? bundle.debugBundleId : null,
+      schema: typeof bundle.schema === "string" ? bundle.schema : "bbl.debugBundle.v1",
+      generatedAt: typeof bundle.generatedAt === "string" ? bundle.generatedAt : null,
+      summary: isPlainObject(bundle.summary) ? stripDebugOnlyFieldsForChat(bundle.summary) : {},
+      laneMap: Array.isArray(bundle.laneMap)
+        ? bundle.laneMap.map((entry) => stripDebugOnlyFieldsForChat(entry))
+        : [],
+      resourceRefs: Array.isArray(bundle.resourceRefs)
+        ? bundle.resourceRefs.map((entry) => stripDebugOnlyFieldsForChat(entry))
+        : [],
+      artifactRefs: isPlainObject(bundle.artifactRefs)
+        ? stripDebugOnlyFieldsForChat(bundle.artifactRefs)
+        : {},
+      contextPolicy:
+        typeof bundle.contextPolicy === "string"
+          ? bundle.contextPolicy
+          : "compact_projection_by_default_full_evidence_on_explicit_debug_read",
+    };
+  }
+
+  function compactRuntimeDiagnosticsForChatTool(snapshot, input = {}) {
+    const diagnostics = isPlainObject(snapshot) ? snapshot : {};
+    const debug = isPlainObject(diagnostics.debug) ? diagnostics.debug : {};
+    const bundle = isPlainObject(debug.bundle)
+      ? debug.bundle
+      : buildDebugBundle({
+          ...(isPlainObject(input) ? input : {}),
+          includeTimeline: false,
+        });
+    const runner = compactRuntimeDiagnosticsRunner(diagnostics.runner);
+    const site = compactRuntimeDiagnosticsSite(diagnostics.site);
+    const hosts = compactRuntimeDiagnosticsHosts(diagnostics.hosts);
+    const debugError = isPlainObject(debug.error) ? debug.error : null;
+    const reasons = [
+      runner?.error ? { source: "runner", error: runner.error } : null,
+      site?.error ? { source: "site", error: site.error } : null,
+      ...(hosts?.errors ?? []).map((entry) => ({ source: "host", ...entry })),
+      isPlainObject(debugError?.lastError)
+        ? { source: "runtime", error: compactDiagnosticsError(debugError.lastError) }
+        : null,
+    ].filter(Boolean);
+
+    return {
+      schema: "bbl.runtimeDiagnosticsProjection.v1",
+      capturedAt:
+        typeof diagnostics.capturedAt === "string"
+          ? diagnostics.capturedAt
+          : new Date().toISOString(),
+      status: typeof diagnostics.status === "string" ? diagnostics.status : "unknown",
+      summary: {
+        degraded: diagnostics.status !== "healthy",
+        reasonCount: reasons.length,
+        reasons,
+      },
+      kernel: compactRuntimeDiagnosticsKernel(diagnostics.kernel),
+      hosts,
+      bridge: compactRuntimeDiagnosticsBridge(diagnostics.bridge),
+      runner,
+      site,
+      debug: {
+        error: debugError
+          ? {
+              status: typeof debugError.status === "string" ? debugError.status : "unknown",
+              lastError: compactDiagnosticsError(debugError.lastError),
+              clearedAt: typeof debugError.clearedAt === "string" ? debugError.clearedAt : null,
+            }
+          : null,
+        bundle: compactRuntimeDebugBundle(bundle),
+      },
+      contextPolicy: "compact_projection_by_default_full_evidence_on_explicit_debug_read",
+    };
+  }
+
+  function buildDebugBundle(input = {}) {
+    const limit = normalizeDebugBundleLimit(input);
+    const timeline = runtimeObservabilityTimelineEvents.slice(-limit);
+    const rawTail = runtimeObservabilityRawEvents.slice(-limit);
+    const toolCalls = timeline.map(toolCallSummaryFromTimelineEvent).filter(Boolean);
+    const laneMap = [];
+    const seen = new Set();
+    for (const call of toolCalls) {
+      const key = `${call.capabilityId ?? call.toolName ?? "unknown"}:${call.lane}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      laneMap.push({
+        capabilityId: call.capabilityId,
+        toolName: call.toolName,
+        lane: call.lane,
+        productPath: call.lane !== "external-browser-harness",
+      });
+    }
+
+    return {
+      debugBundleId: `debug-bundle-${++debugBundleSequence}`,
+      schema: "bbl.debugBundle.v1",
+      generatedAt: new Date().toISOString(),
+      summary: {
+        timelineEventCount: runtimeObservabilityTimelineEvents.length,
+        rawEventTailCount: runtimeObservabilityRawEvents.length,
+        toolCallCount: toolCalls.length,
+        laneCount: laneMap.length,
+      },
+      laneMap,
+      toolCalls,
+      resourceRefs: [
+        {
+          toolName: "resource_read",
+          resourceId: "observability.timeline",
+          arguments: { resourceId: "observability.timeline", limit },
+        },
+        {
+          toolName: "resource_read",
+          resourceId: "observability.rawEventTail",
+          arguments: { resourceId: "observability.rawEventTail", limit },
+        },
+        {
+          toolName: "resource_read",
+          resourceId: "runtime.history",
+          arguments: { resourceId: "runtime.history", limit },
+        },
+        {
+          toolName: "resource_read",
+          resourceId: "audit.tail",
+          arguments: { resourceId: "audit.tail", limit },
+        },
+        {
+          toolName: "runtime_capture_diagnostics",
+          arguments: {},
+        },
+      ],
+      artifactRefs: {
+        screenshot: {
+          status: "not_auto_embedded",
+          readWith: "page_screenshot",
+        },
+        network: {
+          status: "not_auto_embedded",
+          readWith: "observability/raw artifact resource",
+        },
+      },
+      contextPolicy: "compact_projection_by_default_full_evidence_on_explicit_debug_read",
+      ...(isPlainObject(input) && input.includeTimeline === true
+        ? { timeline: timeline.map((event) => stripDebugOnlyFieldsForChat(event)) }
+        : {}),
+      ...(isPlainObject(input) && input.includeRawTail === true
+        ? { rawTail: rawTail.map((event) => stripDebugOnlyFieldsForChat(event)) }
+        : {}),
+    };
   }
 
   function normalizeDogfoodExternalPageTab(tab) {
@@ -3592,6 +3940,43 @@ export function createBackgroundRuntimeServices({
         );
         providers.register(createConfigCapabilityProvider(configControlPlane));
         providers.register({
+          family: "runtime",
+          async invoke({ binding, input }) {
+            switch (binding.operation) {
+              case "capture_diagnostics":
+                if (typeof captureRuntimeDiagnostics === "function") {
+                  return compactRuntimeDiagnosticsForChatTool(
+                    await captureRuntimeDiagnostics(input),
+                    input,
+                  );
+                }
+                return compactRuntimeDiagnosticsForChatTool({
+                  capturedAt: new Date().toISOString(),
+                  status: "available",
+                  kernel: kernelRef?.captureDiagnostics?.(activeSessionId) ?? null,
+                  debug: {
+                    bundle: buildDebugBundle({
+                      ...(isPlainObject(input) ? input : {}),
+                      includeTimeline: true,
+                    }),
+                  },
+                  contextPolicy:
+                    "compact_projection_by_default_full_evidence_on_explicit_debug_read",
+                });
+              case "clear_error":
+                if (typeof clearRuntimeError === "function") {
+                  return clearRuntimeError();
+                }
+                return { cleared: false };
+              default:
+                throw new CapabilityError(
+                  "E_RUNTIME",
+                  `Unsupported runtime operation: ${binding.operation}`,
+                );
+            }
+          },
+        });
+        providers.register({
           family: "site",
           async invoke({ binding, input }) {
             switch (binding.operation) {
@@ -3601,6 +3986,20 @@ export function createBackgroundRuntimeServices({
                 throw new CapabilityError(
                   "E_RUNTIME",
                   `Unsupported site operation: ${binding.operation}`,
+                );
+            }
+          },
+        });
+        providers.register({
+          family: "debug",
+          async invoke({ binding, input }) {
+            switch (binding.operation) {
+              case "bundle":
+                return buildDebugBundle(input);
+              default:
+                throw new CapabilityError(
+                  "E_RUNTIME",
+                  `Unsupported debug operation: ${binding.operation}`,
                 );
             }
           },
@@ -4900,6 +5299,7 @@ export function createBackgroundRuntimeServices({
               }
             },
             async onObservabilityEvent(event, rawEvent) {
+              rememberRuntimeObservabilityEvent(event, rawEvent);
               if (typeof onObservabilityEvent !== "function") {
                 return;
               }
@@ -5225,6 +5625,7 @@ export function createBackgroundRuntimeServices({
 
   return {
     bootstrapChat: buildChatBootstrap,
+    captureDebugBundle: buildDebugBundle,
     configureDogfoodExternalPageProvider,
     createChatSession,
     deleteChatSession,

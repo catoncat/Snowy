@@ -54,7 +54,7 @@ describe("sidepanel chat state", () => {
         {
           id: "tool-1",
           kind: "tool",
-          toolName: "page.query",
+          toolName: "page.info",
           summary: "Collected DOM snapshot",
           detail: '{"ok":true}',
           expanded: false,
@@ -65,7 +65,7 @@ describe("sidepanel chat state", () => {
           {
             id: "activity:tool:tool-1",
             kind: "tool",
-            title: "page.query",
+            title: "page.info",
             summary: "Persisted activity summary",
             detail: '{"source":"persisted"}',
             expanded: true,
@@ -73,7 +73,7 @@ describe("sidepanel chat state", () => {
             severity: "info",
             visibility: "default",
             toolCallId: "tool-1",
-            toolName: "page.query",
+            toolName: "page.info",
           },
         ],
       },
@@ -118,6 +118,35 @@ describe("sidepanel chat state", () => {
         state: "complete",
       }),
     ]);
+  });
+
+  it("does not project blank non-done assistant completion as normal success", () => {
+    const state = applyChatEvent(createInitialChatState(), {
+      type: "assistant.done",
+      sessionId: "s-1",
+      messageId: "m-assistant",
+      text: "",
+      phase: "finalizing",
+      terminalStatus: "max_steps",
+      stepCount: 12,
+    } as Parameters<typeof applyChatEvent>[1]);
+
+    expect(state.items).toEqual([
+      expect.objectContaining({
+        id: "m-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "",
+        state: "stopped",
+      }),
+    ]);
+    expect(state.runActivity.current).toMatchObject({
+      status: "stopped",
+      phase: "stopped",
+      label: "已停止",
+      summary: "terminalStatus=max_steps; stepCount=12",
+      severity: "warning",
+    });
   });
 
   it("projects tool result cards into run activity collapsed by default", () => {
@@ -274,7 +303,7 @@ describe("sidepanel chat state", () => {
       type: "tool.result",
       sessionId: "s-1",
       messageId: "tool-2",
-      toolName: "page.query",
+      toolName: "page.info",
       summary: "Collected DOM snapshot",
       detail: JSON.stringify({
         status: "ok",
@@ -305,7 +334,7 @@ describe("sidepanel chat state", () => {
       {
         id: "tool-ok",
         kind: "tool",
-        toolName: "page.query",
+        toolName: "page.info",
         summary: "Collected DOM snapshot",
         detail: '{"status":"ok","output":{"count":2}}',
         expanded: false,
@@ -313,7 +342,7 @@ describe("sidepanel chat state", () => {
       {
         id: "tool-error",
         kind: "tool",
-        toolName: "page.click",
+        toolName: "page.click_xy",
         summary: "Click failed",
         detail: '{"ok":false,"error":"element not found"}',
         expanded: false,
@@ -347,7 +376,7 @@ describe("sidepanel chat state", () => {
       {
         id: "activity:tool:ok",
         kind: "tool",
-        title: "page.query",
+        title: "page.info",
         summary: "Collected DOM snapshot",
         detail: '{"ok":true}',
         expanded: false,
@@ -358,7 +387,7 @@ describe("sidepanel chat state", () => {
       {
         id: "activity:tool:running",
         kind: "tool",
-        title: "page.click",
+        title: "page.click_xy",
         summary: "Clicking submit",
         detail: '{"selector":"button"}',
         expanded: false,

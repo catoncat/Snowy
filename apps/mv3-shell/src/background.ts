@@ -1289,6 +1289,17 @@ export function createBackgroundRunnerBridge({
             rawEvents: rawEvent ? [rawEvent] : [],
           });
         },
+        captureRuntimeDiagnostics: async (input = {}) => {
+          const result = await diagnostics(input);
+          if (!result.ok) {
+            throw new CapabilityError(
+              result.error?.code ?? "E_RUNTIME",
+              result.error?.message ?? "runtime.capture_diagnostics failed",
+            );
+          }
+          return result.data;
+        },
+        clearRuntimeError,
         pageHookScriptPath: PAGE_HOOK_DEFAULT_FILE,
       });
       composedRuntimeServices = runtimeServices
@@ -2535,6 +2546,20 @@ export function createBackgroundRunnerBridge({
     if (runtimeError) {
       setRuntimeError(runtimeError);
     }
+    let debugBundle = null;
+    if (typeof runtimeServiceApi?.captureDebugBundle === "function") {
+      try {
+        debugBundle = await runtimeServiceApi.captureDebugBundle({
+          includeTimeline: true,
+          limit: 20,
+        });
+      } catch (error) {
+        debugBundle = {
+          status: "unavailable",
+          error: toBridgeError(error),
+        };
+      }
+    }
 
     return {
       ok: true,
@@ -2551,6 +2576,7 @@ export function createBackgroundRunnerBridge({
         site,
         debug: {
           error: createDiagnosticsErrorSummary(),
+          bundle: debugBundle,
         },
       },
     };
@@ -3036,29 +3062,38 @@ export function createBackgroundRunnerBridge({
             maxTextChars: message.maxTextChars,
           }),
         );
+      case "page.click_xy":
+        return routeRuntimeService(() =>
+          invokePageActionResource("click_xy", {
+            x: message.x,
+            y: message.y,
+            button: message.button,
+          }),
+        );
+      case "page.type_text":
+        return routeRuntimeService(() =>
+          invokePageActionResource("type_text", {
+            text: message.text,
+          }),
+        );
       case "page.press_key":
         return routeRuntimeService(() =>
           invokePageActionResource("press_key", {
             key: message.key,
           }),
         );
+      case "page.scroll":
+        return routeRuntimeService(() =>
+          invokePageActionResource("scroll", {
+            deltaX: message.deltaX,
+            deltaY: message.deltaY,
+            behavior: message.behavior,
+          }),
+        );
       case "page.query":
         return routeRuntimeService(() =>
           invokePageActionResource("query", {
             selector: message.selector,
-          }),
-        );
-      case "page.click":
-        return routeRuntimeService(() =>
-          invokePageActionResource("click", {
-            uid: message.uid,
-          }),
-        );
-      case "page.fill":
-        return routeRuntimeService(() =>
-          invokePageActionResource("fill", {
-            uid: message.uid,
-            value: message.value,
           }),
         );
       case "page.screenshot":

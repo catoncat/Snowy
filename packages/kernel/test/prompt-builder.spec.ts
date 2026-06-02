@@ -19,9 +19,9 @@ const BASE_TOOL_ANNOTATIONS = {
 
 const TEST_TOOLS: ToolContract[] = [
   {
-    name: "page_query",
-    capabilityId: "page.query",
-    description: "Query page state",
+    name: "page_info",
+    capabilityId: "page.info",
+    description: "Read compact visible page state",
     inputSchema: { type: "object" },
     outputSchema: { type: "object" },
     annotations: {
@@ -35,6 +35,18 @@ const TEST_TOOLS: ToolContract[] = [
 ];
 
 describe("buildSystemPromptBase", () => {
+  it("does not advertise unlisted legacy or host tools in the default chat prompt", () => {
+    const prompt = buildSystemPromptBase(TEST_TOOLS);
+
+    expect(prompt).toContain("Available Tools");
+    expect(prompt).toContain("page_info");
+    expect(prompt).not.toContain("memfs");
+    expect(prompt).not.toContain("host.*");
+    expect(prompt).not.toContain("page_query");
+    expect(prompt).not.toContain("WebSocket bridge");
+    expect(prompt).not.toContain("read and write files");
+  });
+
   it("injects available skills as compact xml context", () => {
     const prompt = buildSystemPromptBase(TEST_TOOLS, {
       availableSkills: [
@@ -85,25 +97,53 @@ describe("buildAvailableSkillsPrompt", () => {
 });
 
 describe("buildTaskProgressMessage", () => {
-  it("includes strategy hints for repeated action failures", () => {
+  it("includes completed tool calls as concrete progress evidence", () => {
+    const message = buildTaskProgressMessage({
+      llmStep: 2,
+      maxLoopSteps: 50,
+      toolStep: 1,
+      completedToolCalls: [
+        {
+          toolName: "runtime_capture_diagnostics",
+          capabilityId: "runtime.capture_diagnostics",
+          ok: true,
+          argsSummary: "{}",
+          resultSummary:
+            '{"schema":"bbl.runtimeDiagnosticsProjection.v1","debug":{"bundle":{"debugBundleId":"debug-bundle-1","resourceRefs":[{"resourceId":"observability.timeline"}]}}}',
+        },
+      ],
+    } as Parameters<typeof buildTaskProgressMessage>[0]);
+
+    expect(message).toContain("completed_tool_calls");
+    expect(message).toContain("runtime_capture_diagnostics");
+    expect(message).toContain("runtime.capture_diagnostics");
+    expect(message).toContain("status=ok");
+    expect(message).toContain("args={}");
+    expect(message).toContain("debug-bundle-1");
+    expect(message).toContain("observability.timeline");
+    expect(message).toContain("Use completed tool results above");
+  });
+
+  it("includes repeated action failures as diagnostics only", () => {
     const message = buildTaskProgressMessage({
       llmStep: 3,
       maxLoopSteps: 50,
       toolStep: 2,
       actionFailureHints: [
         {
-          toolName: "page_click",
-          capabilityId: "page.click",
-          target: "uid submit-button",
+          toolName: "page_click_xy",
+          capabilityId: "page.click_xy",
+          target: "coordinates 420,240",
           failureCount: 2,
         },
       ],
     });
 
-    expect(message).toContain("STRATEGY HINT");
-    expect(message).toContain("page_click");
-    expect(message).toContain("uid submit-button");
+    expect(message).toContain("DIAGNOSTIC");
+    expect(message).toContain("page_click_xy");
+    expect(message).toContain("coordinates 420,240");
     expect(message).toContain("failed 2 times");
+    expect(message).toContain("evidence only");
   });
 });
 

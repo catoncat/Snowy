@@ -154,12 +154,12 @@ describe("SessionStore", () => {
       await store.appendEntry(session.id, "message", {
         role: "assistant",
         text: "result",
-        toolName: "page_click",
+        toolName: "page_click_xy",
         toolCallId: "tc-001",
       } satisfies MessagePayload);
 
       const ctx = await store.buildContext(session.id);
-      expect(ctx.messages[0].toolName).toBe("page_click");
+      expect(ctx.messages[0].toolName).toBe("page_click_xy");
       expect(ctx.messages[0].toolCallId).toBe("tc-001");
     });
   });

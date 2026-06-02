@@ -63,7 +63,7 @@ This is intentionally one vertical milestone. It should prove a package can be i
 - TypeScript compilation of arbitrary package authoring source.
 - Version selection UI or rollback UI.
 - Loading every historical plugin format from the old repo.
-- Bridge-side MCP export.
+- Bridge-side external export.
 
 ## 工作总结
 

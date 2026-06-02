@@ -71,7 +71,7 @@
 2. Agent 能直接调用产品动作
 3. UI 可以复用同一套控制面
 4. Skill 不需要知道一堆私有实现细节
-5. 外部系统也能通过 MCP 或别的投影接入
+5. 外部系统如需接入，应另行定义明确的产品边界和投影方式
 
 ## 3. 基本判断
 
@@ -98,7 +98,6 @@
 - tool
 - resource
 - event stream
-- MCP export
 - SDK method
 - UI action
 
@@ -284,9 +283,12 @@ Actions 分 3 层：
 
 这些是浏览器原生专业动作：
 
-- `page.query`
-- `page.click`
-- `page.fill`
+- `page.info`
+- `page.click_xy`
+- `page.type_text`
+- `page.scroll`
+- `page.screenshot`
+- `page.query`（仅非默认 debug readback）
 - `tabs.list`
 - `site.fetch_with_session`
 
@@ -539,7 +541,6 @@ AI-native 不等于把所有 capability 都直接摊成工具面板。
 - 聊天默认动作
 - skill runtime 可见动作
 - UI 内部动作
-- MCP export 动作
 
 建议后续给 action descriptor 增加最小投影控制：
 

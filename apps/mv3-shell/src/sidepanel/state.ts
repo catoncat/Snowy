@@ -135,6 +135,8 @@ export type ChatEvent =
       contentBlocks?: ChatMessageContentBlock[];
       toolResults?: Record<string, string>;
       phase?: RunActivityPhase | string;
+      terminalStatus?: string;
+      stepCount?: number;
     } & ChatEventBase)
   | ({
       type: "tool.call";
@@ -282,6 +284,30 @@ function createRunStatusView({
     severity: runPhaseSeverity(normalizedPhase),
     ...(currentActivityId ? { currentActivityId } : {}),
   };
+}
+
+function normalizeTerminalStatus(status: string | null | undefined): string | null {
+  const value = String(status ?? "").trim();
+  return value || null;
+}
+
+function terminalStatusPhase(status: string | null): RunActivityPhase {
+  if (status === "failed_execute" || status === "failed_verify" || status === "timeout") {
+    return "failed";
+  }
+  return "stopped";
+}
+
+function terminalStatusMessageState(status: string | null): ChatMessageItem["state"] {
+  return terminalStatusPhase(status) === "failed" ? "error" : "stopped";
+}
+
+function formatTerminalStatusSummary(status: string, stepCount?: number): string {
+  const parts = [`terminalStatus=${status}`];
+  if (typeof stepCount === "number" && Number.isFinite(stepCount)) {
+    parts.push(`stepCount=${stepCount}`);
+  }
+  return parts.join("; ");
 }
 
 function createInitialRunActivity(): RunActivityProjection {
@@ -642,6 +668,11 @@ export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState {
     }
     case "assistant.done": {
       const text = String(event.text ?? "");
+      const terminalStatus = normalizeTerminalStatus(event.terminalStatus);
+      const nonDoneTerminalStatus = terminalStatus !== null && terminalStatus !== "done";
+      const messageState = nonDoneTerminalStatus
+        ? terminalStatusMessageState(terminalStatus)
+        : "complete";
       const items = [...state.items];
       const existingIndex = items.findIndex(
         (item) => item.kind === "message" && item.id === event.messageId,
@@ -653,7 +684,7 @@ export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState {
         items[existingIndex] = {
           ...existing,
           text,
-          state: "complete",
+          state: messageState,
           ...(contentBlocks ? { contentBlocks } : {}),
           ...(toolResults ? { toolResults } : {}),
         };
@@ -663,7 +694,7 @@ export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState {
           kind: "message",
           role: "assistant",
           text,
-          state: "complete",
+          state: messageState,
           ...(contentBlocks ? { contentBlocks } : {}),
           ...(toolResults ? { toolResults } : {}),
         });
@@ -682,12 +713,17 @@ export function applyChatEvent(state: ChatState, event: ChatEvent): ChatState {
       return {
         ...state,
         sessionId: nextSessionId,
+        status: nonDoneTerminalStatus ? "stopped" : state.status,
         runActivity: {
           ...state.runActivity,
           current: createRunStatusView({
-            status: state.status,
-            phase: event.phase ?? "finalizing",
-            summary: "正在整理最终回复",
+            status: nonDoneTerminalStatus ? "stopped" : state.status,
+            phase: nonDoneTerminalStatus
+              ? terminalStatusPhase(terminalStatus)
+              : (event.phase ?? "finalizing"),
+            summary: nonDoneTerminalStatus
+              ? formatTerminalStatusSummary(terminalStatus ?? "unknown", event.stepCount)
+              : "正在整理最终回复",
           }),
         },
         items:

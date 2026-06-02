@@ -176,19 +176,6 @@ function createDomSandbox(options?: {
   };
 }
 
-function getFirstElementUid(result: unknown): string {
-  const elements = Array.from(
-    (((result as { elements?: ArrayLike<{ uid?: string }> } | null)?.elements ?? []) as ArrayLike<{
-      uid?: string;
-    }>) ?? [],
-  );
-  const first = elements[0];
-  if (!first?.uid) {
-    throw new Error("Expected query result to include at least one element uid");
-  }
-  return first.uid;
-}
-
 function createMessageBus() {
   const listeners: MessageListener[] = [];
 
@@ -2419,7 +2406,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("routes page.query → fill → click through kernel-owned runner and site steps in runtime services", async () => {
+  it("routes Browser Harness primitives through kernel-owned runner and site steps in runtime services", async () => {
     const harness = createIntegratedChromeHarness({
       activeTab: {
         id: 12,
@@ -2437,39 +2424,82 @@ describe("mv3-shell manifest", () => {
         },
       },
     }));
+    const pageHookBridge = {
+      install: vi.fn(async (step: { scriptId: string }) => ({
+        installationId: `${step.scriptId}:1`,
+      })),
+      invoke: vi.fn(
+        async ({
+          installation,
+          action,
+          input,
+          tab,
+        }: {
+          installation: { step: { scriptId: string }; result: { installationId: string } };
+          action: string;
+          input: Record<string, unknown>;
+          tab: { url: string };
+        }) => ({
+          ok: true,
+          action,
+          ...input,
+          ...(action === "info"
+            ? {
+                title: "Fixture Form",
+                url: tab.url,
+                visibleText: "Email Submit",
+                interactiveElements: [
+                  {
+                    tagName: "input",
+                    text: "",
+                    box: { x: 100, y: 120, width: 240, height: 32 },
+                  },
+                  {
+                    tagName: "button",
+                    text: "Submit",
+                    box: { x: 100, y: 180, width: 90, height: 32 },
+                  },
+                ],
+              }
+            : {}),
+          ...(action === "click_xy" ? { clicked: true, tagName: "input" } : {}),
+          ...(action === "type_text" ? { value: input.text, tagName: "input" } : {}),
+          ...(action === "press_key" ? { dispatchCount: 2 } : {}),
+          installationId: installation.result.installationId,
+          installedScriptId: installation.step.scriptId,
+        }),
+      ),
+      verify: vi.fn(async () => true),
+    };
     const services = createBackgroundRuntimeServices({
       chromeApi: harness.chromeApi,
       invokeRunner,
-      pageHookBridge: createPageHookBridge({
-        chromeApi: harness.chromeApi,
-      }),
+      pageHookBridge,
     });
 
-    const queryInputResult = await services.invokePageAction({
-      action: "query",
+    const infoResult = await services.invokePageAction({
+      action: "info",
       input: {
-        selector: "input",
+        maxElements: 10,
       },
     });
-    const inputUid = getFirstElementUid(queryInputResult.result);
-    const fillResult = await services.invokePageAction({
-      action: "fill",
-      input: {
-        uid: inputUid,
-        value: "demo@example.com",
-      },
-    });
-    const queryButtonResult = await services.invokePageAction({
-      action: "query",
-      input: {
-        selector: "button",
-      },
-    });
-    const buttonUid = getFirstElementUid(queryButtonResult.result);
     const clickResult = await services.invokePageAction({
-      action: "click",
+      action: "click_xy",
       input: {
-        uid: buttonUid,
+        x: 100,
+        y: 120,
+      },
+    });
+    const typeResult = await services.invokePageAction({
+      action: "type_text",
+      input: {
+        text: "demo@example.com",
+      },
+    });
+    const pressKeyResult = await services.invokePageAction({
+      action: "press_key",
+      input: {
+        key: "Enter",
       },
     });
     const [{ kernel }, session] = await Promise.all([
@@ -2477,14 +2507,16 @@ describe("mv3-shell manifest", () => {
       services.ensureSession(),
     ]);
 
-    expect(queryInputResult).toMatchObject({
+    expect(infoResult).toMatchObject({
       verified: true,
       result: {
         ok: true,
-        action: "query",
-        selector: "input",
-        count: 1,
-        elements: [expect.objectContaining({ tagName: "input" })],
+        action: "info",
+        title: "Fixture Form",
+        visibleText: "Email Submit",
+        interactiveElements: expect.arrayContaining([
+          expect.objectContaining({ tagName: "input" }),
+        ]),
         installationId: "bbl-next.page-hook.page:1",
         installedScriptId: "bbl-next.page-hook.page",
       },
@@ -2492,16 +2524,34 @@ describe("mv3-shell manifest", () => {
         "match:bbl.page",
         "plan:1_steps",
         "install:main:bbl-next.page-hook.page",
-        "invoke:query",
-        "verify:page_query",
+        "invoke:info",
+        "verify:page_info",
       ],
     });
-    expect(fillResult).toMatchObject({
+    expect(clickResult).toMatchObject({
       verified: true,
       result: {
         ok: true,
-        action: "fill",
-        uid: inputUid,
+        action: "click_xy",
+        x: 100,
+        y: 120,
+        clicked: true,
+        tagName: "input",
+      },
+      trace: [
+        "match:bbl.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:click_xy",
+        "verify:page_click_xy",
+      ],
+    });
+    expect(typeResult).toMatchObject({
+      verified: true,
+      result: {
+        ok: true,
+        action: "type_text",
+        text: "demo@example.com",
         value: "demo@example.com",
         tagName: "input",
       },
@@ -2509,34 +2559,34 @@ describe("mv3-shell manifest", () => {
         "match:bbl.page",
         "plan:1_steps",
         "install:main:bbl-next.page-hook.page",
-        "invoke:fill",
-        "verify:page_fill",
+        "invoke:type_text",
+        "verify:page_type_text",
       ],
     });
-    expect(clickResult).toMatchObject({
+    expect(pressKeyResult).toMatchObject({
       verified: true,
       result: {
         ok: true,
-        action: "click",
-        uid: buttonUid,
-        tagName: "button",
+        action: "press_key",
+        key: "Enter",
+        dispatchCount: 2,
       },
       trace: [
         "match:bbl.page",
         "plan:1_steps",
         "install:main:bbl-next.page-hook.page",
-        "invoke:click",
-        "verify:page_click",
+        "invoke:press_key",
+        "verify:page_press_key",
       ],
     });
     expect(invokeRunner).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         module: expect.objectContaining({
-          id: "bbl.page.query",
+          id: "bbl.page.info",
         }),
         input: {
-          selector: "input",
+          maxElements: 10,
         },
       }),
     );
@@ -2544,11 +2594,11 @@ describe("mv3-shell manifest", () => {
       2,
       expect.objectContaining({
         module: expect.objectContaining({
-          id: "bbl.page.fill",
+          id: "bbl.page.click_xy",
         }),
         input: {
-          uid: inputUid,
-          value: "demo@example.com",
+          x: 100,
+          y: 120,
         },
       }),
     );
@@ -2556,10 +2606,10 @@ describe("mv3-shell manifest", () => {
       3,
       expect.objectContaining({
         module: expect.objectContaining({
-          id: "bbl.page.query",
+          id: "bbl.page.type_text",
         }),
         input: {
-          selector: "button",
+          text: "demo@example.com",
         },
       }),
     );
@@ -2567,10 +2617,10 @@ describe("mv3-shell manifest", () => {
       4,
       expect.objectContaining({
         module: expect.objectContaining({
-          id: "bbl.page.click",
+          id: "bbl.page.press_key",
         }),
         input: {
-          uid: buttonUid,
+          key: "Enter",
         },
       }),
     );
@@ -2628,7 +2678,7 @@ describe("mv3-shell manifest", () => {
         "plan:1_steps",
         "install:main:bbl-next.page-hook.page",
         "invoke:info",
-        "verify:page_query",
+        "verify:page_info",
       ],
     });
     expect(invokeRunner).toHaveBeenCalledWith(
@@ -2803,7 +2853,7 @@ describe("mv3-shell manifest", () => {
     harness.cleanup();
   });
 
-  it("routes page.query → fill → click through the MV3 bridge", async () => {
+  it("routes Browser Harness primitive page actions through the MV3 bridge", async () => {
     const harness = createIntegratedChromeHarness({
       activeTab: {
         id: 13,
@@ -2811,64 +2861,92 @@ describe("mv3-shell manifest", () => {
         title: "MV3 Fixture Form",
       },
     });
+    const invokePageAction = vi.fn(async ({ action, input }) => ({
+      result: {
+        ok: true,
+        action,
+        ...input,
+      },
+    }));
     const bridge = createBackgroundRunnerBridge({
       chromeApi: harness.chromeApi,
       timeoutMs: 50,
+      runtimeServices: {
+        invokePageAction,
+      },
     });
     const dispose = bridge.registerRuntimeListener();
 
-    const queryInputResult = await harness.runtimeApi.sendMessage({
+    const infoResult = await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "page.query",
-      selector: "input",
+      kind: "page.info",
+      maxElements: 10,
     });
-    const inputUid = getFirstElementUid((queryInputResult as { data: unknown }).data);
-    const fillResult = await harness.runtimeApi.sendMessage({
-      target: RUNNER_BACKGROUND_TARGET,
-      kind: "page.fill",
-      uid: inputUid,
-      value: "mv3@example.com",
-    });
-    const queryButtonResult = await harness.runtimeApi.sendMessage({
-      target: RUNNER_BACKGROUND_TARGET,
-      kind: "page.query",
-      selector: "button",
-    });
-    const buttonUid = getFirstElementUid((queryButtonResult as { data: unknown }).data);
     const clickResult = await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "page.click",
-      uid: buttonUid,
+      kind: "page.click_xy",
+      x: 100,
+      y: 120,
+    });
+    const typeResult = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "page.type_text",
+      text: "mv3@example.com",
+    });
+    const pressResult = await harness.runtimeApi.sendMessage({
+      target: RUNNER_BACKGROUND_TARGET,
+      kind: "page.press_key",
+      key: "Enter",
     });
 
-    expect(queryInputResult).toMatchObject({
+    expect(infoResult).toMatchObject({
       ok: true,
       data: {
         ok: true,
-        action: "query",
-        selector: "input",
-        count: 1,
-        elements: [expect.objectContaining({ tagName: "input" })],
-      },
-    });
-    expect(fillResult).toMatchObject({
-      ok: true,
-      data: {
-        ok: true,
-        action: "fill",
-        uid: inputUid,
-        value: "mv3@example.com",
-        tagName: "input",
+        action: "info",
+        maxElements: 10,
       },
     });
     expect(clickResult).toMatchObject({
       ok: true,
       data: {
         ok: true,
-        action: "click",
-        uid: buttonUid,
-        tagName: "button",
+        action: "click_xy",
+        x: 100,
+        y: 120,
       },
+    });
+    expect(typeResult).toMatchObject({
+      ok: true,
+      data: {
+        ok: true,
+        action: "type_text",
+        text: "mv3@example.com",
+      },
+    });
+    expect(pressResult).toMatchObject({
+      ok: true,
+      data: {
+        ok: true,
+        action: "press_key",
+        key: "Enter",
+      },
+    });
+    expect(invokePageAction).toHaveBeenNthCalledWith(1, {
+      action: "info",
+      input: { maxElements: 10, maxTextChars: undefined },
+    });
+    expect(invokePageAction).toHaveBeenNthCalledWith(2, {
+      action: "click_xy",
+      input: { x: 100, y: 120, button: undefined },
+    });
+    expect(invokePageAction).toHaveBeenNthCalledWith(3, {
+      action: "type_text",
+      input: { text: "mv3@example.com" },
+    });
+    expect(invokePageAction).toHaveBeenNthCalledWith(4, {
+      action: "press_key",
+      input: { key: "Enter" },
     });
 
     dispose();
@@ -5739,13 +5817,12 @@ describe("mv3-shell manifest", () => {
 
   it("reads timeline summary and rawEventTail through the shared observability resource.read path", async () => {
     const invokePageAction = vi.fn(async ({ action }) => {
-      if (action === "query") {
+      if (action === "info") {
         return {
           result: {
             ok: true,
-            action: "query",
-            count: 1,
-            elements: [{ uid: "query-result-1", tagName: "button" }],
+            action: "info",
+            interactiveElements: [{ tagName: "button", box: { x: 100, y: 160 } }],
           },
           timelineEvents: [
             {
@@ -5754,9 +5831,9 @@ describe("mv3-shell manifest", () => {
               eventType: "site.invoke",
               status: "started",
               timestamp: "2026-04-17T00:00:00.000Z",
-              summary: "Invoke page query",
+              summary: "Invoke page info",
               skillId: "site.fixture",
-              action: "query",
+              action: "info",
               tabId: 14,
             },
           ],
@@ -5768,17 +5845,17 @@ describe("mv3-shell manifest", () => {
               type: "site.invoke",
               payload: {
                 skillId: "site.fixture",
-                action: "query",
+                action: "info",
               },
             },
           ],
         };
       }
-      if (action === "click") {
+      if (action === "click_xy") {
         return {
           result: {
             ok: true,
-            action: "click",
+            action: "click_xy",
             verified: true,
           },
           timelineEvents: [
@@ -5788,9 +5865,9 @@ describe("mv3-shell manifest", () => {
               eventType: "site.verify",
               status: "succeeded",
               timestamp: "2026-04-17T00:00:01.000Z",
-              summary: "Verify page click",
+              summary: "Verify page click_xy",
               skillId: "site.fixture",
-              action: "click",
+              action: "click_xy",
               tabId: 14,
             },
           ],
@@ -5802,7 +5879,7 @@ describe("mv3-shell manifest", () => {
               type: "site.verify",
               payload: {
                 skillId: "site.fixture",
-                action: "click",
+                action: "click_xy",
               },
             },
           ],
@@ -5829,13 +5906,14 @@ describe("mv3-shell manifest", () => {
 
     await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "page.query",
-      selector: "button",
+      kind: "page.info",
+      maxElements: 10,
     });
     await harness.runtimeApi.sendMessage({
       target: RUNNER_BACKGROUND_TARGET,
-      kind: "page.click",
-      uid: "query-result-1",
+      kind: "page.click_xy",
+      x: 100,
+      y: 160,
     });
 
     await expect(

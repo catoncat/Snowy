@@ -11,13 +11,13 @@ describe("LoopEngine", () => {
 
   describe("turn creation", () => {
     it("creates a turn with unique ids and step index", () => {
-      const step: StepRequest = { capabilityId: "page.click" };
+      const step: StepRequest = { capabilityId: "page.click_xy" };
 
       const t1 = engine.createTurn(sid, step);
       expect(t1.turnId).toMatch(/^t-/);
       expect(t1.stepIndex).toBe(0);
       expect(t1.status).toBe("pending");
-      expect(t1.capabilityId).toBe("page.click");
+      expect(t1.capabilityId).toBe("page.click_xy");
 
       const t2 = engine.createTurn(sid, {});
       expect(t2.turnId).toMatch(/^t-/);
@@ -194,11 +194,11 @@ describe("LoopEngine", () => {
 
     it("does not terminate a run on no-progress detection", () => {
       for (let i = 0; i < 3; i++) {
-        const turn = engine.createTurn(sid, { capabilityId: "page.click" });
+        const turn = engine.createTurn(sid, { capabilityId: "page.click_xy" });
         engine.recordTurnResult(turn, { ok: true, data: "same" });
       }
 
-      const turn = engine.createTurn(sid, { capabilityId: "page.click" });
+      const turn = engine.createTurn(sid, { capabilityId: "page.click_xy" });
       const succeeded = engine.recordTurnResult(turn, { ok: true, data: "same" });
 
       expect(engine.checkNoProgress(sid)).toBe("repeat_signature");
@@ -213,7 +213,7 @@ describe("LoopEngine", () => {
 
     it("detects repeat_signature without mutating diagnostic state", () => {
       for (let i = 0; i < 2; i++) {
-        const turn = engine.createTurn(sid, { capabilityId: "page.click" });
+        const turn = engine.createTurn(sid, { capabilityId: "page.click_xy" });
         engine.recordTurnResult(turn, { ok: true, data: "same" });
       }
 
@@ -228,13 +228,13 @@ describe("LoopEngine", () => {
       });
 
       for (let i = 0; i < 3; i++) {
-        const turn = engine2.createTurn(sid, { capabilityId: "page.click" });
+        const turn = engine2.createTurn(sid, { capabilityId: "page.click_xy" });
         engine2.recordTurnResult(turn, { ok: true, data: "same" });
       }
 
       expect(engine2.checkNoProgress(sid)).toBe("repeat_signature");
 
-      const turn = engine2.createTurn(sid, { capabilityId: "page.click" });
+      const turn = engine2.createTurn(sid, { capabilityId: "page.click_xy" });
       engine2.recordTurnResult(turn, { ok: true, data: "same" });
 
       expect(engine2.checkNoProgress(sid)).toBe("repeat_signature");
@@ -243,7 +243,7 @@ describe("LoopEngine", () => {
     it("does not treat non-consecutive matches as repeat_signature", () => {
       const results = ["A", "B", "A"];
       for (const result of results) {
-        const turn = engine.createTurn(sid, { capabilityId: "page.click" });
+        const turn = engine.createTurn(sid, { capabilityId: "page.click_xy" });
         engine.recordTurnResult(turn, { ok: true, data: result });
       }
 
@@ -252,10 +252,10 @@ describe("LoopEngine", () => {
 
     it("detects ping_pong pattern", () => {
       const engine2 = new LoopEngine({ maxSteps: 50 });
-      const actions = ["page.click", "page.fill", "page.click", "page.fill"];
+      const actions = ["page.click_xy", "page.type_text", "page.click_xy", "page.type_text"];
       for (const cap of actions) {
         const turn = engine2.createTurn(sid, { capabilityId: cap });
-        engine2.recordTurnResult(turn, { ok: true, data: cap === "page.click" ? "A" : "B" });
+        engine2.recordTurnResult(turn, { ok: true, data: cap === "page.click_xy" ? "A" : "B" });
       }
 
       expect(engine2.checkNoProgress(sid)).toBe("ping_pong");

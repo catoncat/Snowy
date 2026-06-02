@@ -67,12 +67,12 @@ This is the next milestone because the current docs say many substrate gates are
 - Full visual Skill Studio.
 - Every old plugin UI affordance.
 - Tier 2 / Tier 3 browser automation breadth.
-- A bridge-side MCP server.
+- A bridge-side external export server.
 
 ## Impact Note
 
 1. Northbound surface impact: uses existing `skills.invoke` / `skills.install` / `skills.enable` actions and `skills.summary` / `audit.tail` resources; no new public capability namespace is added.
-2. Consumer impact: Skill runtime gains a shared MV3 invocation path for enabled executable skills, UI / Agent / system consumers can observe lifecycle and invocation evidence through existing shared resources, MCP export surface is unchanged.
+2. Consumer impact: Skill runtime gains a shared MV3 invocation path for enabled executable skills, UI / Agent / system consumers can observe lifecycle and invocation evidence through existing shared resources; external export surface is unchanged.
 3. Control-plane docs: `docs/ai-surface-index.md`, `docs/agent-bootstrap-context-pack.md`, `docs/cutover-readiness-criteria.md`, `docs/migration-parity-dashboard.md`, and `docs/legacy-to-vnext-migration-matrix.md` must stay synced with the exact proof scope.
 
 ## 工作总结

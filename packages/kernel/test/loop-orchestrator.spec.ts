@@ -1301,6 +1301,11 @@ describe("runLoop", () => {
       content: expect.stringContaining("loop_step: 2/50"),
     });
     expect(String(secondMessages[1]?.content)).toContain("tool_steps_done: 1");
+    expect(String(secondMessages[1]?.content)).toContain("completed_tool_calls");
+    expect(String(secondMessages[1]?.content)).toContain("tabs_navigate");
+    expect(String(secondMessages[1]?.content)).toContain("tabs.navigate");
+    expect(String(secondMessages[1]?.content)).toContain("status=ok");
+    expect(String(secondMessages[1]?.content)).toContain('"navigated":true');
   });
 
   it("preserves the full prompt context message set in the llm payload", async () => {
@@ -1355,13 +1360,13 @@ describe("runLoop", () => {
     });
   });
 
-  it("injects strategy hints after the same action target fails twice", async () => {
+  it("injects repeated action failures as diagnostics after the same target fails twice", async () => {
     const failingDescriptor = {
       ...TEST_DESCRIPTOR,
-      id: "page.click",
-      description: "Click an element by uid",
-      inputSchema: { type: "object", properties: { uid: { type: "string" } } },
-      executionBinding: { family: "page", operation: "click" },
+      id: "page.click_xy",
+      description: "Click viewport coordinates",
+      inputSchema: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } } },
+      executionBinding: { family: "page", operation: "click_xy" },
     };
 
     const storage: SessionStorage = new InMemorySessionStorage();
@@ -1395,7 +1400,7 @@ describe("runLoop", () => {
               {
                 index: 0,
                 id: `tc_${callCount}`,
-                function: { name: "page_click", arguments: '{"uid":"submit-button"}' },
+                function: { name: "page_click_xy", arguments: '{"x":420,"y":240}' },
               },
             ]),
             chatChunk(undefined, undefined, "tool_calls"),
@@ -1417,18 +1422,18 @@ describe("runLoop", () => {
     );
 
     const thirdMessages = payloads[2]?.messages as Array<Record<string, unknown>>;
-    expect(String(thirdMessages[1]?.content)).toContain("STRATEGY HINT");
-    expect(String(thirdMessages[1]?.content)).toContain("page_click");
-    expect(String(thirdMessages[1]?.content)).toContain("submit-button");
+    expect(String(thirdMessages[1]?.content)).toContain("DIAGNOSTIC");
+    expect(String(thirdMessages[1]?.content)).toContain("page_click_xy");
+    expect(String(thirdMessages[1]?.content)).toContain("coordinates 420,240");
   });
 
   it("keeps timeout failures terminal even with failure tracking enabled", async () => {
     const failingDescriptor = {
       ...TEST_DESCRIPTOR,
-      id: "page.click",
-      description: "Click an element by uid",
-      inputSchema: { type: "object", properties: { uid: { type: "string" } } },
-      executionBinding: { family: "page", operation: "click" },
+      id: "page.click_xy",
+      description: "Click viewport coordinates",
+      inputSchema: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } } },
+      executionBinding: { family: "page", operation: "click_xy" },
     };
 
     const storage: SessionStorage = new InMemorySessionStorage();
@@ -1460,7 +1465,7 @@ describe("runLoop", () => {
             {
               index: 0,
               id: "tc_timeout",
-              function: { name: "page_click", arguments: '{"uid":"submit-button"}' },
+              function: { name: "page_click_xy", arguments: '{"x":420,"y":240}' },
             },
           ]),
           chatChunk(undefined, undefined, "tool_calls"),
@@ -1482,10 +1487,10 @@ describe("runLoop", () => {
   it("tracks repeated failures per target instead of aggregating different targets", async () => {
     const failingDescriptor = {
       ...TEST_DESCRIPTOR,
-      id: "page.click",
-      description: "Click an element by uid",
-      inputSchema: { type: "object", properties: { uid: { type: "string" } } },
-      executionBinding: { family: "page", operation: "click" },
+      id: "page.click_xy",
+      description: "Click viewport coordinates",
+      inputSchema: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } } },
+      executionBinding: { family: "page", operation: "click_xy" },
     };
 
     const storage: SessionStorage = new InMemorySessionStorage();
@@ -1506,22 +1511,26 @@ describe("runLoop", () => {
     });
 
     const payloads: Array<Record<string, unknown>> = [];
-    const requestedUids = ["submit-button", "cancel-button", "fallback-button"];
+    const requestedPoints = [
+      { x: 420, y: 240 },
+      { x: 180, y: 240 },
+      { x: 320, y: 320 },
+    ];
     let callCount = 0;
     const provider: LlmProviderAdapter = {
       id: "test",
       resolveRequestUrl: () => "https://test.api/v1/chat/completions",
       send: async (input) => {
         payloads.push(input.payload);
-        const uid = requestedUids[callCount] ?? "fallback-button";
+        const point = requestedPoints[callCount] ?? { x: 320, y: 320 };
         callCount += 1;
-        if (callCount <= requestedUids.length) {
+        if (callCount <= requestedPoints.length) {
           return sseResponse([
             chatChunk(undefined, [
               {
                 index: 0,
                 id: `tc_${callCount}`,
-                function: { name: "page_click", arguments: JSON.stringify({ uid }) },
+                function: { name: "page_click_xy", arguments: JSON.stringify(point) },
               },
             ]),
             chatChunk(undefined, undefined, "tool_calls"),
@@ -1539,7 +1548,7 @@ describe("runLoop", () => {
     );
 
     const thirdMessages = payloads[2]?.messages as Array<Record<string, unknown>>;
-    expect(String(thirdMessages[1]?.content)).not.toContain("STRATEGY HINT");
+    expect(String(thirdMessages[1]?.content)).not.toContain("DIAGNOSTIC");
   });
 
   it("calls onDelta for streaming text", async () => {
@@ -1640,10 +1649,10 @@ describe("runLoop", () => {
   it("records errorCode in telemetry for failed tool executions", async () => {
     const failingDescriptor = {
       ...TEST_DESCRIPTOR,
-      id: "page.click",
+      id: "page.click_xy",
       description: "Click an element",
-      inputSchema: { type: "object", properties: { uid: { type: "string" } } },
-      executionBinding: { family: "page", operation: "click" },
+      inputSchema: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } } },
+      executionBinding: { family: "page", operation: "click_xy" },
     };
 
     const storage: SessionStorage = new InMemorySessionStorage();
@@ -1675,7 +1684,7 @@ describe("runLoop", () => {
               {
                 index: 0,
                 id: "tc_fail",
-                function: { name: "page_click", arguments: '{"uid":"btn"}' },
+                function: { name: "page_click_xy", arguments: '{"x":420,"y":240}' },
               },
             ]),
             chatChunk(undefined, undefined, "tool_calls"),
@@ -1698,7 +1707,7 @@ describe("runLoop", () => {
 
     expect(result.telemetry.length).toBeGreaterThanOrEqual(1);
     const entry = result.telemetry[0];
-    expect(entry.capabilityId).toBe("page.click");
+    expect(entry.capabilityId).toBe("page.click_xy");
     expect(entry.ok).toBe(false);
     expect(entry.errorCode).toBeDefined();
     expect(callCount).toBe(2);
@@ -1758,43 +1767,43 @@ describe("buildSystemPromptBase", () => {
         },
       },
       {
-        name: "page_query",
-        capabilityId: "page.query",
-        description: "q",
-        inputSchema: { type: "object" },
-        outputSchema: { type: "object" },
-        annotations: {
-          risk: "low",
-          sideEffects: "reads",
-          supportsVerify: false,
-          supportsStreaming: false,
-          ...BASE_TOOL_ANNOTATIONS,
-        },
-      },
-      {
-        name: "page_click",
-        capabilityId: "page.click",
+        name: "page_click_xy",
+        capabilityId: "page.click_xy",
         description: "c",
         inputSchema: { type: "object" },
         outputSchema: { type: "object" },
         annotations: {
           risk: "medium",
           sideEffects: "writes",
-          supportsVerify: true,
+          supportsVerify: false,
           supportsStreaming: false,
           ...BASE_TOOL_ANNOTATIONS,
         },
       },
       {
-        name: "page_fill",
-        capabilityId: "page.fill",
-        description: "f",
+        name: "page_type_text",
+        capabilityId: "page.type_text",
+        description: "t",
         inputSchema: { type: "object" },
         outputSchema: { type: "object" },
         annotations: {
           risk: "medium",
           sideEffects: "writes",
-          supportsVerify: true,
+          supportsVerify: false,
+          supportsStreaming: false,
+          ...BASE_TOOL_ANNOTATIONS,
+        },
+      },
+      {
+        name: "page_scroll",
+        capabilityId: "page.scroll",
+        description: "scroll",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        annotations: {
+          risk: "medium",
+          sideEffects: "writes",
+          supportsVerify: false,
           supportsStreaming: false,
           ...BASE_TOOL_ANNOTATIONS,
         },
@@ -1845,14 +1854,15 @@ describe("buildSystemPromptBase", () => {
 
     const prompt = buildSystemPromptBase(tools);
     expect(prompt).toContain("page_info");
-    expect(prompt).toContain("page_query");
-    expect(prompt).toContain("page_click");
-    expect(prompt).toContain("page_fill");
+    expect(prompt).toContain("page_click_xy");
+    expect(prompt).toContain("page_type_text");
     expect(prompt).toContain("page_press_key");
+    expect(prompt).toContain("page_scroll");
     expect(prompt).toContain("page_screenshot");
     expect(prompt).toContain("tabs_navigate");
     expect(prompt).not.toContain("page.info");
-    expect(prompt).not.toContain("page.query");
+    expect(prompt).not.toContain("page.click");
+    expect(prompt).not.toContain("page.fill");
     expect(prompt).not.toContain("tabs.navigate");
   });
 });

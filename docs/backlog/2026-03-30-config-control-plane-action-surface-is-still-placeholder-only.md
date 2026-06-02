@@ -57,7 +57,7 @@ claimed_at: 2026-03-30T02:34:41.204Z
 ## Impact Note
 
 - northbound surface：新增 public `config.update` action，并把 `config` 提升为正式 public capability namespace；`runtime.bootstrap` 的 `config` summary 也从 placeholder-only 变成与 mutation path 同结构的读面。
-- 影响消费者：聊天 Agent / Skill runtime 可以通过 `config.update` 走统一 control plane；MV3 bootstrap/bridge、未来 UI 与 MCP 投影都复用同一条 `config` 语义面。
+- 影响消费者：聊天 Agent / Skill runtime 可以通过 `config.update` 走统一 control plane；MV3 bootstrap/bridge、未来 UI 与 system 投影都复用同一条 `config` 语义面。
 - 文档同步：已更新 `docs/ai-surface-index.md`、`docs/agent-bootstrap-context-pack.md`、`docs/migration-parity-dashboard.md`、`docs/cutover-readiness-criteria.md`；`docs/legacy-to-vnext-migration-matrix.md` 已检查，当前口径无需额外改动。
 
 ## Sub Issues

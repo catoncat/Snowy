@@ -51,7 +51,7 @@ check_cmd: "bun run check"
 ## Impact Note
 
 - 影响的 northbound surface：`skills.uninstall` public action、`ctx.skills.uninstall()` facade、typed builtin capability map。
-- 影响的消费者：聊天 Agent、Skill runtime、后续接入同一 control plane 的 UI / MCP 消费者。
+- 影响的消费者：聊天 Agent、Skill runtime、后续接入同一 control plane 的 UI / system 消费者。
 - 控制面文档同步：需要，已同步 `docs/ai-surface-index.md` 与 lifecycle 边界文档。
 
 ## 工作总结

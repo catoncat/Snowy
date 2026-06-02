@@ -167,7 +167,7 @@
 则 issue 正文里应补一个 `## Impact Note`，回答：
 
 1. 影响哪些 northbound surface
-2. 影响聊天 Agent / Skill / UI / MCP 中的哪几类消费者
+2. 影响聊天 Agent / Skill / UI 中的哪几类消费者
 3. 是否需要同步控制面文档
 
 ## 7. 反模式

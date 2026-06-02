@@ -110,7 +110,7 @@
     return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
   }
 
-  function serializeInfoElement(el, uid) {
+  function serializeInfoElement(el) {
     const attrs = {};
     for (const name of [
       "aria-label",
@@ -129,7 +129,6 @@
       }
     }
     return {
-      uid,
       tagName: (el.tagName || "UNKNOWN").toLowerCase(),
       textContent: compactText(el.textContent, 160),
       ariaLabel: typeof el.getAttribute === "function" ? el.getAttribute("aria-label") : null,
@@ -290,11 +289,7 @@
         .sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x)
         .map(({ element }) => element)
         .slice(0, maxElements);
-      const interactiveElements = candidates.map((element) => {
-        const uid = `e-${++elementCounter}`;
-        elementRefs[uid] = element;
-        return serializeInfoElement(element, uid);
-      });
+      const interactiveElements = candidates.map((element) => serializeInfoElement(element));
       const infoResult = {
         ok: true,
         action,
@@ -464,78 +459,6 @@
       return queryResult;
     }
 
-    if (action === "click") {
-      const uid = input && typeof input === "object" ? input.uid : undefined;
-      if (typeof uid !== "string" || !uid) {
-        throw new Error("page.click requires input.uid");
-      }
-      const el = elementRefs[uid];
-      if (!el) {
-        throw new Error(`Element not found: ${uid}`);
-      }
-      if (typeof el.click === "function") {
-        el.click();
-      } else if (typeof el.dispatchEvent === "function") {
-        el.dispatchEvent(
-          new (globalScope.MouseEvent || globalScope.Event)("click", {
-            bubbles: true,
-            cancelable: true,
-          }),
-        );
-      }
-      const clickResult = {
-        ok: true,
-        action,
-        uid,
-        tagName: (el.tagName || "").toLowerCase(),
-        installationId,
-        installedScriptId: installed.scriptId,
-        tabUrl: String(ctx?.tab?.url || installed.url),
-        installCount: state.installs.length,
-      };
-      state.clickEvents.push(clickResult);
-      state.invocations.push(clickResult);
-      return clickResult;
-    }
-
-    if (action === "fill") {
-      const uid = input && typeof input === "object" ? input.uid : undefined;
-      const value = input && typeof input === "object" ? input.value : undefined;
-      if (typeof uid !== "string" || !uid) {
-        throw new Error("page.fill requires input.uid");
-      }
-      if (typeof value !== "string") {
-        throw new Error("page.fill requires input.value");
-      }
-      const el = elementRefs[uid];
-      if (!el) {
-        throw new Error(`Element not found: ${uid}`);
-      }
-      el.value = value;
-      if (typeof el.dispatchEvent === "function") {
-        if (typeof globalScope.InputEvent === "function") {
-          el.dispatchEvent(new globalScope.InputEvent("input", { bubbles: true }));
-        }
-        el.dispatchEvent(
-          new (globalScope.Event || globalScope.Object)("change", { bubbles: true }),
-        );
-      }
-      const fillResult = {
-        ok: true,
-        action,
-        uid,
-        value,
-        tagName: (el.tagName || "").toLowerCase(),
-        installationId,
-        installedScriptId: installed.scriptId,
-        tabUrl: String(ctx?.tab?.url || installed.url),
-        installCount: state.installs.length,
-      };
-      state.fillEvents.push(fillResult);
-      state.invocations.push(fillResult);
-      return fillResult;
-    }
-
     if (action === "fetch_with_session") {
       const url = input && typeof input === "object" ? input.url : undefined;
       const method =
@@ -682,26 +605,11 @@
         typeof result.visibleText === "string" &&
         state.infoEvents.some((entry) => entry.installationId === installationId);
     }
-    if (verified && action === "click") {
-      verified =
-        typeof result.uid === "string" &&
-        state.clickEvents.some(
-          (entry) => entry.installationId === installationId && entry.uid === result.uid,
-        );
-    }
     if (verified && action === "click_xy") {
       verified =
         typeof result.x === "number" &&
         typeof result.y === "number" &&
         state.clickXyEvents.some((entry) => entry.installationId === installationId);
-    }
-    if (verified && action === "fill") {
-      verified =
-        typeof result.uid === "string" &&
-        typeof result.value === "string" &&
-        state.fillEvents.some(
-          (entry) => entry.installationId === installationId && entry.uid === result.uid,
-        );
     }
     if (verified && action === "scroll") {
       verified =

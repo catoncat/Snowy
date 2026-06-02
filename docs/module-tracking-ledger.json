@@ -108,7 +108,7 @@
       "cutover_gate": "Gate G",
       "default_parallel_group": "contracts-core",
       "shipped_scope": [
-        "descriptor-owned northbound action projection controls (audiences/defaultExposed/confirmPolicy/executionTarget) across tool/chat/MCP projections",
+        "descriptor-owned northbound action projection controls (audiences/defaultExposed/confirmPolicy/executionTarget) across tool/chat projections",
         "shared runtime/config/skills/hosts bootstrap and summary resource surfaces through readAiSurfaceResource() / MV3 resource.read",
         "shared control-plane actions for runtime.capture_diagnostics/runtime.clear_error/config.update/skills.install|enable|disable|uninstall/hosts.connect|disconnect|set_default",
         "provider routing northbound surface through config.summary/config.update model + model.routing state",
@@ -116,8 +116,7 @@
       ],
       "deferred_scope": [
         "full Skill Studio/lifecycle/versioning UI beyond the shared management consumer",
-        "broader metadata-registry and audience-projection hardening across every future consumer",
-        "bridge-side MCP server/transport beyond the current descriptor-derived handoff contract"
+        "broader metadata-registry and audience-projection hardening across every future consumer"
       ],
       "deferral_rationale": "Gate G's minimum self-awareness surface is satisfied. ISSUE-153 and ISSUE-156 locked descriptor-owned action projection semantics, ISSUE-159/163/164 wired provider routing through the shared control-plane contract and runtime-owned rehydrate path, and ISSUE-093 closed the shared sidepanel management consumer. Remaining work is intentionally post-cutover product and export breadth."
     },
@@ -142,7 +141,7 @@
       "default_parallel_group": "site-runtime",
       "shipped_scope": [
         "active-tab-only site runtime boundary, explicit invoke-only injection, and real page-hook injection chain",
-        "page.query/click/fill/press_key/screenshot plus tabs.list/get_active/navigate runtime paths through MV3/runtime-services",
+        "Browser Harness primitives page.info/click_xy/type_text/press_key/scroll/screenshot plus tabs.list/get_active/navigate runtime paths through MV3/runtime-services; page.query is non-default debug readback and UID-only page.click/page.fill are deleted",
         "site.fetch_with_session active-tab session bridge",
         "background lane baseline with explicit target routing, DOM stabilization policy, and non-active-tab page action coverage",
         "cutover docs that lock Tier 1/Tier 2/Tier 3 browser automation scope"

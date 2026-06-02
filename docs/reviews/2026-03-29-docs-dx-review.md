@@ -118,7 +118,7 @@ skill-authoring-guide.md 和 skill-package-convention.md 质量不错。但 SDK 
 | **Linter** | **❌** | 无 eslint / biome |
 | **Formatter** | **❌** | 无 prettier / biome |
 | **CI/CD** | **❌** | 无 GitHub Actions workflow |
-| .vscode/ 配置 | ⚠️ | 仅 mcp.json，缺 settings/extensions/tasks |
+| .vscode/ 配置 | ⚠️ | 缺 settings/extensions/tasks |
 | dev 命令 | ❌ | 无 `dev` / `build` / `lint` |
 | monorepo path mapping | ❌ | tsconfig 无 paths 映射 |
 | engines / .nvmrc | ❌ | 无 runtime 版本约束 |

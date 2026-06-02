@@ -6,7 +6,6 @@
 
 - canonical `CapabilityDescriptor` model and `ToolContract` projection
 - action-only AI surface boundary for `CapabilityDescriptor` / `ToolContract`, with bootstrap resources kept separate
-- descriptor-derived MCP export handoff contract for exportable capabilities
 - minimal bootstrap read path for `runtime/config/skills/hosts` summaries via background bridge
 - minimal local `hosts.*` control plane for list/get/connect/disconnect/set_default/health
 - host substrate contract for `host.read/write/edit/exec`, including default-host routing through the MV3 background/offscreen bridge
@@ -26,6 +25,5 @@
 - real IndexedDB migration/versioning strategy
 - descriptor-driven full builtin catalog beyond the v0 namespace baseline
 - real local/remote execution host adapters behind the `host.*` substrate
-- bridge-side MCP export server/transport beyond the descriptor-derived handoff contract
 - full Skill Studio UI
 - Chrome integration for real script injection, runner RPC, and offscreen lifecycle

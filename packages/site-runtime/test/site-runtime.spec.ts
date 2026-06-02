@@ -43,9 +43,10 @@ interface PageHookBridgeState {
     invocations: Array<Record<string, unknown>>;
     verifications: Array<{ action: string; verified: boolean }>;
     keyEvents?: Array<Record<string, unknown>>;
+    infoEvents?: Array<Record<string, unknown>>;
     queryResults?: Array<Record<string, unknown>>;
-    clickEvents?: Array<Record<string, unknown>>;
-    fillEvents?: Array<Record<string, unknown>>;
+    clickXyEvents?: Array<Record<string, unknown>>;
+    typeTextEvents?: Array<Record<string, unknown>>;
     fetchEvents?: Array<Record<string, unknown>>;
   };
 }
@@ -60,19 +61,6 @@ function cloneSerializable<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function getFirstElementUid(result: unknown): string {
-  const elements = Array.from(
-    (((result as { elements?: ArrayLike<{ uid?: string }> } | null)?.elements ?? []) as ArrayLike<{
-      uid?: string;
-    }>) ?? [],
-  );
-  const first = elements[0];
-  if (!first?.uid) {
-    throw new Error("Expected query result to include at least one element uid");
-  }
-  return first.uid;
-}
-
 function createDomSandbox(options?: {
   delayedSelectors?: Record<
     string,
@@ -82,6 +70,7 @@ function createDomSandbox(options?: {
 }) {
   const dispatchLog: Array<{ target: string; type: string; key?: string }> = [];
   const delayedSelectorChecks = new Map<string, number>();
+  const documentRef: { current?: { activeElement?: unknown } } = {};
 
   function createTarget(target: string) {
     return {
@@ -143,11 +132,29 @@ function createDomSandbox(options?: {
 
   function createMockElement(tag: string, attrs: Record<string, string>, text: string) {
     const attrList = Object.entries(attrs).map(([name, value]) => ({ name, value }));
+    const rectByTag: Record<string, { x: number; y: number; width: number; height: number }> = {
+      button: { x: 80, y: 150, width: 120, height: 32 },
+      div: { x: 80, y: 210, width: 320, height: 80 },
+      input: { x: 80, y: 100, width: 240, height: 32 },
+    };
+    const rect = rectByTag[tag] ?? { x: 80, y: 260, width: 160, height: 32 };
     const el: Record<string, unknown> = {
       tagName: tag.toUpperCase(),
       textContent: text,
       value: attrs.value ?? "",
+      isContentEditable: attrs.contenteditable === "true",
       attributes: Object.assign(attrList, { length: attrList.length }),
+      getAttribute(name: string) {
+        return attrs[name] ?? null;
+      },
+      getBoundingClientRect() {
+        return rect;
+      },
+      focus() {
+        if (documentRef.current) {
+          documentRef.current.activeElement = el;
+        }
+      },
       dispatchEvent(event: { type: string }) {
         dispatchLog.push({ target: `${tag}#${attrs.id ?? "?"}`, type: event.type });
         return true;
@@ -168,13 +175,38 @@ function createDomSandbox(options?: {
   ];
 
   const activeElement = createTarget("activeElement");
-  const body = createTarget("body");
-  const documentElement = createTarget("documentElement");
+  const body = Object.assign(createTarget("body"), {
+    innerText: "Submit test@example.com Hello World",
+    scrollHeight: 900,
+    scrollWidth: 1200,
+  });
+  const documentElement = Object.assign(createTarget("documentElement"), {
+    scrollHeight: 900,
+    scrollWidth: 1200,
+  });
   const document = {
     activeElement,
     body,
     documentElement,
     dispatchEvent: createTarget("document").dispatchEvent,
+    title: "Fixture Page",
+    elementFromPoint(x: number, y: number) {
+      return (
+        mockElements.find((el) => {
+          const rect = (
+            el.getBoundingClientRect as () => {
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            }
+          )();
+          return (
+            x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height
+          );
+        }) ?? null
+      );
+    },
     querySelectorAll(selector: string) {
       const delayedSelector = options?.delayedSelectors?.[selector];
       if (delayedSelector) {
@@ -189,27 +221,50 @@ function createDomSandbox(options?: {
         return [];
       }
       if (selector === "*") return [...mockElements];
-      return mockElements.filter((el) => {
-        if ((el.tagName as string).toLowerCase() === selector.toLowerCase()) return true;
-        if (selector.startsWith("#")) {
-          return (el.attributes as Array<{ name: string; value: string }>).some(
-            (a) => a.name === "id" && a.value === selector.slice(1),
+      const selectors = selector
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      const matchesSimpleSelector = (el: Record<string, unknown>, simpleSelector: string) => {
+        const tagName = (el.tagName as string).toLowerCase();
+        const attrs = el.attributes as Array<{ name: string; value: string }>;
+        if (tagName === simpleSelector.toLowerCase()) return true;
+        if (simpleSelector.startsWith("#")) {
+          return attrs.some((a) => a.name === "id" && a.value === simpleSelector.slice(1));
+        }
+        if (simpleSelector.startsWith(".")) {
+          return attrs.some(
+            (a) =>
+              a.name === "class" &&
+              (a.value as string).split(" ").includes(simpleSelector.slice(1)),
           );
         }
-        if (selector.startsWith(".")) {
-          return (el.attributes as Array<{ name: string; value: string }>).some(
-            (a) => a.name === "class" && (a.value as string).split(" ").includes(selector.slice(1)),
+        if (simpleSelector.startsWith("[")) {
+          const match = simpleSelector.match(/^\[([^=\]]+)(?:="([^"]*)")?\]/);
+          if (!match) return false;
+          const [, attrName, attrValue] = match;
+          return attrs.some(
+            (a) => a.name === attrName && (typeof attrValue !== "string" || a.value === attrValue),
           );
         }
         return false;
+      };
+      return mockElements.filter((el) => {
+        return selectors.some((simpleSelector) => matchesSimpleSelector(el, simpleSelector));
       });
     },
     __dispatchLog: dispatchLog,
     __mockElements: mockElements,
   };
+  documentRef.current = document;
 
   return {
     document,
+    innerHeight: 800,
+    innerWidth: 1200,
+    location: { href: "https://fixture.test/demo" },
+    scrollX: 0,
+    scrollY: 0,
     KeyboardEvent,
     MouseEvent,
     InputEvent,
@@ -1222,7 +1277,7 @@ describe("site-runtime", () => {
     });
   });
 
-  it("dispatches query through the real page-hook bridge and returns serialized elements", async () => {
+  it("dispatches explicit debug query through the real page-hook bridge and returns serialized elements", async () => {
     const scriptingHarness = createScriptingChromeHarness();
     const pageHookBridge = createPageHookBridge({
       chromeApi: scriptingHarness.chromeApi,
@@ -1316,7 +1371,7 @@ describe("site-runtime", () => {
     });
   });
 
-  it("dispatches query → click → fill through the real page-hook bridge as a multi-step flow", async () => {
+  it("dispatches info → click_xy → type_text through the real page-hook bridge as a multi-step flow", async () => {
     const scriptingHarness = createScriptingChromeHarness();
     const pageHookBridge = createPageHookBridge({
       chromeApi: scriptingHarness.chromeApi,
@@ -1327,7 +1382,7 @@ describe("site-runtime", () => {
       matches: ["https://fixture.test/*"],
       actions: [
         {
-          name: "query",
+          name: "info",
           injectionSteps: [
             {
               world: "main",
@@ -1336,14 +1391,14 @@ describe("site-runtime", () => {
               runAt: "document_idle",
             },
           ],
-          verifier: "page_query",
+          verifier: "page_info",
           module: {
-            id: "fixture.page.query",
-            source: "exports.default = async ({ input }) => ({ selector: input.selector });",
+            id: "fixture.page.info",
+            source: "exports.default = async ({ input }) => ({ maxElements: input.maxElements });",
           },
         },
         {
-          name: "click",
+          name: "click_xy",
           injectionSteps: [
             {
               world: "main",
@@ -1352,14 +1407,14 @@ describe("site-runtime", () => {
               runAt: "document_idle",
             },
           ],
-          verifier: "page_click",
+          verifier: "page_click_xy",
           module: {
-            id: "fixture.page.click",
-            source: "exports.default = async ({ input }) => ({ uid: input.uid });",
+            id: "fixture.page.click_xy",
+            source: "exports.default = async ({ input }) => ({ x: input.x, y: input.y });",
           },
         },
         {
-          name: "fill",
+          name: "type_text",
           injectionSteps: [
             {
               world: "main",
@@ -1368,11 +1423,10 @@ describe("site-runtime", () => {
               runAt: "document_idle",
             },
           ],
-          verifier: "page_fill",
+          verifier: "page_type_text",
           module: {
-            id: "fixture.page.fill",
-            source:
-              "exports.default = async ({ input }) => ({ uid: input.uid, value: input.value });",
+            id: "fixture.page.type_text",
+            source: "exports.default = async ({ input }) => ({ text: input.text });",
           },
         },
       ],
@@ -1416,77 +1470,57 @@ describe("site-runtime", () => {
 
     const testTab = { tabId: 16, url: "https://fixture.test/demo", active: true };
 
-    // Step 1: Query to get element uids
-    const queryResult = await runtime.invoke({
+    const infoResult = await runtime.invoke({
       skillId: "fixture.page",
-      action: "query",
+      action: "info",
       tab: testTab,
-      input: { selector: "input" },
+      input: { maxElements: 10 },
     });
 
-    expect(queryResult).toMatchObject({
+    expect(infoResult).toMatchObject({
       verified: true,
       result: expect.objectContaining({
         ok: true,
-        action: "query",
-        count: 1,
-        elements: [expect.objectContaining({ tagName: "input" })],
+        action: "info",
+        interactiveElements: expect.arrayContaining([
+          expect.objectContaining({ tagName: "input" }),
+        ]),
       }),
     });
-
-    const querySnapshot = (await pageHookBridge.snapshotState({
-      tabId: 16,
-      world: "main",
-    })) as PageHookBridgeState["state"] | null;
-    const inputUid = getFirstElementUid(querySnapshot?.queryResults?.at(-1));
-
-    // Step 2: Fill the input field
-    const fillResult = await runtime.invoke({
-      skillId: "fixture.page",
-      action: "fill",
-      tab: testTab,
-      input: { uid: inputUid, value: "test@example.com" },
-    });
-
-    expect(fillResult).toMatchObject({
-      verified: true,
-      result: expect.objectContaining({
-        ok: true,
-        action: "fill",
-        uid: inputUid,
-        value: "test@example.com",
-        tagName: "input",
-      }),
-    });
-
-    // Step 3: Query button and click it
-    await runtime.invoke({
-      skillId: "fixture.page",
-      action: "query",
-      tab: testTab,
-      input: { selector: "button" },
-    });
-
-    const buttonSnapshot = (await pageHookBridge.snapshotState({
-      tabId: 16,
-      world: "main",
-    })) as PageHookBridgeState["state"] | null;
-    const buttonUid = getFirstElementUid(buttonSnapshot?.queryResults?.at(-1));
 
     const clickResult = await runtime.invoke({
       skillId: "fixture.page",
-      action: "click",
+      action: "click_xy",
       tab: testTab,
-      input: { uid: buttonUid },
+      input: { x: 100, y: 110 },
     });
 
     expect(clickResult).toMatchObject({
       verified: true,
       result: expect.objectContaining({
         ok: true,
-        action: "click",
-        uid: buttonUid,
-        tagName: "button",
+        action: "click_xy",
+        x: 100,
+        y: 110,
+        tagName: "input",
+      }),
+    });
+
+    const typeTextResult = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "type_text",
+      tab: testTab,
+      input: { text: "test@example.com" },
+    });
+
+    expect(typeTextResult).toMatchObject({
+      verified: true,
+      result: expect.objectContaining({
+        ok: true,
+        action: "type_text",
+        text: "test@example.com",
+        value: "test@example.com",
+        tagName: "input",
       }),
     });
 
@@ -1496,18 +1530,17 @@ describe("site-runtime", () => {
       world: "main",
     })) as PageHookBridgeState["state"] | null;
 
-    expect(snapshot?.queryResults).toHaveLength(2);
-    expect(snapshot?.clickEvents).toHaveLength(1);
-    expect(snapshot?.fillEvents).toHaveLength(1);
+    expect(snapshot?.infoEvents).toHaveLength(1);
+    expect(snapshot?.clickXyEvents).toHaveLength(1);
+    expect(snapshot?.typeTextEvents).toHaveLength(1);
     expect(snapshot?.verifications).toEqual([
-      { action: "query", verified: true },
-      { action: "fill", verified: true },
-      { action: "query", verified: true },
-      { action: "click", verified: true },
+      { action: "info", verified: true },
+      { action: "click_xy", verified: true },
+      { action: "type_text", verified: true },
     ]);
   });
 
-  it("dispatches query → fill → click through the real page-hook bridge on an explicit background lane", async () => {
+  it("dispatches info → click_xy → type_text through the real page-hook bridge on an explicit background lane", async () => {
     const scriptingHarness = createScriptingChromeHarness();
     const pageHookBridge = createPageHookBridge({
       chromeApi: scriptingHarness.chromeApi,
@@ -1518,7 +1551,7 @@ describe("site-runtime", () => {
       matches: ["https://fixture.test/*"],
       actions: [
         {
-          name: "query",
+          name: "info",
           injectionSteps: [
             {
               world: "main",
@@ -1527,14 +1560,14 @@ describe("site-runtime", () => {
               runAt: "document_idle",
             },
           ],
-          verifier: "page_query",
+          verifier: "page_info",
           module: {
-            id: "fixture.page.query",
-            source: "exports.default = async ({ input }) => ({ selector: input.selector });",
+            id: "fixture.page.info",
+            source: "exports.default = async ({ input }) => ({ maxElements: input.maxElements });",
           },
         },
         {
-          name: "click",
+          name: "click_xy",
           injectionSteps: [
             {
               world: "main",
@@ -1543,14 +1576,14 @@ describe("site-runtime", () => {
               runAt: "document_idle",
             },
           ],
-          verifier: "page_click",
+          verifier: "page_click_xy",
           module: {
-            id: "fixture.page.click",
-            source: "exports.default = async ({ input }) => ({ uid: input.uid });",
+            id: "fixture.page.click_xy",
+            source: "exports.default = async ({ input }) => ({ x: input.x, y: input.y });",
           },
         },
         {
-          name: "fill",
+          name: "type_text",
           injectionSteps: [
             {
               world: "main",
@@ -1559,11 +1592,10 @@ describe("site-runtime", () => {
               runAt: "document_idle",
             },
           ],
-          verifier: "page_fill",
+          verifier: "page_type_text",
           module: {
-            id: "fixture.page.fill",
-            source:
-              "exports.default = async ({ input }) => ({ uid: input.uid, value: input.value });",
+            id: "fixture.page.type_text",
+            source: "exports.default = async ({ input }) => ({ text: input.text });",
           },
         },
       ],
@@ -1607,53 +1639,76 @@ describe("site-runtime", () => {
 
     const testTab = { tabId: 17, url: "https://fixture.test/background", active: false };
 
-    const queryResult = await runtime.invoke({
+    const infoResult = await runtime.invoke({
       skillId: "fixture.page",
-      action: "query",
+      action: "info",
       lane: "background",
       tab: testTab,
-      input: { selector: "input" },
+      input: { maxElements: 10 },
     });
 
-    expect(queryResult).toMatchObject({
+    expect(infoResult).toMatchObject({
       verified: true,
       result: expect.objectContaining({
         ok: true,
-        action: "query",
-        count: 1,
+        action: "info",
         tabUrl: "https://fixture.test/background",
-        elements: [expect.objectContaining({ tagName: "input" })],
+        interactiveElements: expect.arrayContaining([
+          expect.objectContaining({ tagName: "input" }),
+        ]),
       }),
       trace: [
         "lane:background",
         "match:fixture.page",
         "plan:1_steps",
         "install:main:bbl-next.page-hook.page",
-        "invoke:query",
-        "verify:page_query",
+        "invoke:info",
+        "verify:page_info",
       ],
     });
 
-    const querySnapshot = (await pageHookBridge.snapshotState({
-      tabId: 17,
-      world: "main",
-    })) as PageHookBridgeState["state"] | null;
-    const inputUid = getFirstElementUid(querySnapshot?.queryResults?.at(-1));
-
-    const fillResult = await runtime.invoke({
+    const clickResult = await runtime.invoke({
       skillId: "fixture.page",
-      action: "fill",
+      action: "click_xy",
       lane: "background",
       tab: testTab,
-      input: { uid: inputUid, value: "background@example.com" },
+      input: { x: 100, y: 110 },
     });
 
-    expect(fillResult).toMatchObject({
+    expect(clickResult).toMatchObject({
       verified: true,
       result: expect.objectContaining({
         ok: true,
-        action: "fill",
-        uid: inputUid,
+        action: "click_xy",
+        x: 100,
+        y: 110,
+        tagName: "input",
+        tabUrl: "https://fixture.test/background",
+      }),
+      trace: [
+        "lane:background",
+        "match:fixture.page",
+        "plan:1_steps",
+        "install:main:bbl-next.page-hook.page",
+        "invoke:click_xy",
+        "verify:page_click_xy",
+      ],
+    });
+
+    const typeTextResult = await runtime.invoke({
+      skillId: "fixture.page",
+      action: "type_text",
+      lane: "background",
+      tab: testTab,
+      input: { text: "background@example.com" },
+    });
+
+    expect(typeTextResult).toMatchObject({
+      verified: true,
+      result: expect.objectContaining({
+        ok: true,
+        action: "type_text",
+        text: "background@example.com",
         value: "background@example.com",
         tagName: "input",
         tabUrl: "https://fixture.test/background",
@@ -1663,49 +1718,8 @@ describe("site-runtime", () => {
         "match:fixture.page",
         "plan:1_steps",
         "install:main:bbl-next.page-hook.page",
-        "invoke:fill",
-        "verify:page_fill",
-      ],
-    });
-
-    await runtime.invoke({
-      skillId: "fixture.page",
-      action: "query",
-      lane: "background",
-      tab: testTab,
-      input: { selector: "button" },
-    });
-
-    const buttonSnapshot = (await pageHookBridge.snapshotState({
-      tabId: 17,
-      world: "main",
-    })) as PageHookBridgeState["state"] | null;
-    const buttonUid = getFirstElementUid(buttonSnapshot?.queryResults?.at(-1));
-
-    const clickResult = await runtime.invoke({
-      skillId: "fixture.page",
-      action: "click",
-      lane: "background",
-      tab: testTab,
-      input: { uid: buttonUid },
-    });
-
-    expect(clickResult).toMatchObject({
-      verified: true,
-      result: expect.objectContaining({
-        ok: true,
-        action: "click",
-        uid: buttonUid,
-        tagName: "button",
-        tabUrl: "https://fixture.test/background",
-      }),
-      trace: [
-        "lane:background",
-        "match:fixture.page",
-        "plan:1_steps",
-        "install:main:bbl-next.page-hook.page",
-        "invoke:click",
-        "verify:page_click",
+        "invoke:type_text",
+        "verify:page_type_text",
       ],
     });
 
@@ -1714,29 +1728,24 @@ describe("site-runtime", () => {
       world: "main",
     })) as PageHookBridgeState["state"] | null;
 
-    expect(snapshot?.queryResults).toHaveLength(2);
-    expect(snapshot?.queryResults?.map((entry) => entry.tabUrl)).toEqual([
-      "https://fixture.test/background",
-      "https://fixture.test/background",
-    ]);
-    expect(snapshot?.clickEvents).toEqual([
+    expect(snapshot?.infoEvents).toHaveLength(1);
+    expect(snapshot?.clickXyEvents).toEqual([
       expect.objectContaining({
-        action: "click",
+        action: "click_xy",
         tabUrl: "https://fixture.test/background",
       }),
     ]);
-    expect(snapshot?.fillEvents).toEqual([
+    expect(snapshot?.typeTextEvents).toEqual([
       expect.objectContaining({
-        action: "fill",
+        action: "type_text",
         value: "background@example.com",
         tabUrl: "https://fixture.test/background",
       }),
     ]);
     expect(snapshot?.verifications).toEqual([
-      { action: "query", verified: true },
-      { action: "fill", verified: true },
-      { action: "query", verified: true },
-      { action: "click", verified: true },
+      { action: "info", verified: true },
+      { action: "click_xy", verified: true },
+      { action: "type_text", verified: true },
     ]);
   });
 
@@ -2231,29 +2240,30 @@ describe("site-runtime", () => {
       });
     });
 
-    it("uses caller-provided page.click handoff policy for verify failures", async () => {
+    it("uses caller-provided page.click_xy handoff policy for verify failures", async () => {
       const result = await invokeSingleActionSiteSkill({
         request: {
           skillId: "bbl.page",
-          action: "click",
-          tab: { tabId: 9, url: "https://fixture.test/click", active: true },
+          action: "click_xy",
+          tab: { tabId: 9, url: "https://fixture.test/click-xy", active: true },
           input: {
-            uid: "missing-button",
+            x: 420,
+            y: 240,
           },
           plan: {
             skillId: "bbl.page",
-            action: "click",
+            action: "click_xy",
             steps: [],
           },
           module: {
-            id: "bbl.page.click",
-            source: "exports.default = async ({ input }) => ({ uid: input.uid });",
+            id: "bbl.page.click_xy",
+            source: "exports.default = async ({ input }) => ({ x: input.x, y: input.y });",
           },
-          verifier: "page_click",
+          verifier: "page_click_xy",
           handoff: {
             kind: "takeover",
             title: "Page action needs human handoff",
-            message: "Finish the page.click step manually before continuing.",
+            message: "Finish the page.click_xy step manually before continuing.",
           },
         },
         runnerHost: new JsRunnerHost(),
@@ -2265,55 +2275,56 @@ describe("site-runtime", () => {
       expect(result).toMatchObject({
         verified: false,
         result: {
-          uid: "missing-button",
+          x: 420,
+          y: 240,
         },
         handoff: {
           kind: "takeover",
           trigger: "verify_failed",
           skillId: "bbl.page",
-          action: "click",
+          action: "click_xy",
           tabId: 9,
           payload: {
-            tabUrl: "https://fixture.test/click",
-            verifier: "page_click",
+            tabUrl: "https://fixture.test/click-xy",
+            verifier: "page_click_xy",
             result: {
-              uid: "missing-button",
+              x: 420,
+              y: 240,
             },
           },
         },
         trace: [
           "match:bbl.page",
-          "invoke:click",
-          "verify:page_click",
+          "invoke:click_xy",
+          "verify:page_click_xy",
           "handoff:takeover:verify_failed",
         ],
       });
     });
 
-    it("uses caller-provided page.fill handoff policy for runtime blocking failures", async () => {
+    it("uses caller-provided page.type_text handoff policy for runtime blocking failures", async () => {
       const result = await invokeSingleActionSiteSkill({
         request: {
           skillId: "bbl.page",
-          action: "fill",
-          tab: { tabId: 10, url: "https://fixture.test/fill", active: true },
+          action: "type_text",
+          tab: { tabId: 10, url: "https://fixture.test/type", active: true },
           input: {
-            uid: "email-input",
-            value: "demo@example.com",
+            text: "demo@example.com",
           },
           plan: {
             skillId: "bbl.page",
-            action: "fill",
+            action: "type_text",
             steps: [],
           },
           module: {
-            id: "bbl.page.fill",
+            id: "bbl.page.type_text",
             source: "exports.default = async () => ({ ok: true });",
           },
           handoff: {
             kind: "takeover",
             trigger: "runtime_blocked",
             title: "Page action needs human handoff",
-            message: "Finish the page.fill step manually before continuing.",
+            message: "Finish the page.type_text step manually before continuing.",
           },
           executeRunner: async () => {
             throw new Error("input disappeared");
@@ -2329,13 +2340,12 @@ describe("site-runtime", () => {
           kind: "takeover",
           trigger: "runtime_blocked",
           skillId: "bbl.page",
-          action: "fill",
+          action: "type_text",
           tabId: 10,
           payload: {
-            tabUrl: "https://fixture.test/fill",
+            tabUrl: "https://fixture.test/type",
             input: {
-              uid: "email-input",
-              value: "demo@example.com",
+              text: "demo@example.com",
             },
             error: {
               name: "Error",

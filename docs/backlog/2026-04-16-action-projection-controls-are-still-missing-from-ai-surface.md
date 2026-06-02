@@ -34,18 +34,18 @@ completed_at: 2026-04-16T17:10:00.000Z
 ## Review Finding
 
 - The AI surface design calls out missing action-level projection controls such as audiences default exposure confirm policy and execution target.
-- Current resource metadata helps with resource.read and runtime.bootstrap, but action exposure policy is still not descriptor-owned for chat skill system and MCP projections.
+- Current resource metadata helps with resource.read and runtime.bootstrap, but action exposure policy is still not descriptor-owned for chat skill system and external projections.
 
 ## Acceptance
 
 - Contracts define minimal action projection metadata for audience default exposure confirm policy and execution target semantics
 - Core can list or filter actions by projection using descriptor-owned metadata rather than ad-hoc allowlists
-- Docs and tests cover projection semantics across chat skill system and MCP surfaces
+- Docs and tests cover projection semantics across chat skill system and external surfaces
 
 ## Impact Note
 
-1. northbound surface：`CapabilityDescriptor` / `ToolContract` / MCP handoff 现在都带同一套 action projection metadata，`CapabilityRegistry` 也能按 projection 过滤 action。
-2. 影响消费者：聊天 tool surface、skill runtime、system-internal capability listing、MCP export projection 都改为可消费 descriptor-owned `audiences/defaultExposed/confirmPolicy/executionTarget`。
+1. northbound surface：`CapabilityDescriptor` / `ToolContract` / external handoff 现在都带同一套 action projection metadata，`CapabilityRegistry` 也能按 projection 过滤 action。
+2. 影响消费者：聊天 tool surface、skill runtime、system-internal capability listing、external export projection 都改为可消费 descriptor-owned `audiences/defaultExposed/confirmPolicy/executionTarget`。
 3. 控制面文档：已执行 Doc Freshness Gate，检查了 `docs/ai-surface-index.md`、`docs/agent-bootstrap-context-pack.md`、`docs/legacy-to-vnext-migration-matrix.md`、`docs/migration-parity-dashboard.md` 与 `docs/cutover-readiness-criteria.md`；本次只需同步 `docs/ai-surface-index.md`，其余文档当前口径不变。
 
 ## Sub Issues
@@ -56,14 +56,14 @@ completed_at: 2026-04-16T17:10:00.000Z
 
 ### 实现了什么
 
-- 在 `packages/contracts` 为 action descriptor 增加 `projection` metadata，并把 `audiences/defaultExposed/confirmPolicy/executionTarget` 投影到 `ToolContract` 和 MCP handoff annotations
-- 在 `packages/core` 新增 `CapabilityRegistry.listByProjection()`，让 tool 和 MCP projection 改为基于 descriptor-owned metadata 过滤，同时让 runtime confirm gate 支持 `confirmPolicy=always`
+- 在 `packages/contracts` 为 action descriptor 增加 `projection` metadata，并把 `audiences/defaultExposed/confirmPolicy/executionTarget` 投影到 `ToolContract` 和 external handoff annotations
+- 在 `packages/core` 新增 `CapabilityRegistry.listByProjection()`，让 tool 和 external projection 改为基于 descriptor-owned metadata 过滤，同时让 runtime confirm gate 支持 `confirmPolicy=always`
 - 同步 `docs/ai-surface-index.md`，并补 contracts/core/kernel 的聚焦测试；另外把聊天 tool surface 尚未消费 `defaultExposed` 的缺口拆成 follow-up `ISSUE-156`
 
 ### 实际跑了什么检查
 
 - `./node_modules/.bin/biome check packages/contracts/src/index.ts packages/contracts/test/contracts.spec.ts packages/core/src/index.ts packages/core/test/core.spec.ts docs/ai-surface-index.md`
-- `bun test packages/contracts/test/contracts.spec.ts packages/core/test/core.spec.ts -t 'derives action projection metadata and exposes it through tool annotations|filters descriptors by audience default exposure and execution target|requires the mcp audience in addition to exportable for MCP handoffs|lists and projects action capabilities by audience and default exposure|projects bridge-side MCP export handoffs from exportable descriptors only|honors descriptor confirmPolicy overrides in the runtime context'`
+- `bun test packages/contracts/test/contracts.spec.ts packages/core/test/core.spec.ts -t 'derives action projection metadata and exposes it through tool annotations|filters descriptors by audience default exposure and execution target|requires the external audience in addition to exportable for export handoffs|lists and projects action capabilities by audience and default exposure|projects bridge-side external export handoffs from exportable descriptors only|honors descriptor confirmPolicy overrides in the runtime context'`
 - `bun test packages/kernel/test/loop-orchestrator.spec.ts packages/kernel/test/prompt-builder.spec.ts -t 'uses actual tool names in guidance|injects available skills as compact xml context'`
 - `bun run typecheck`
 - `bun run check`

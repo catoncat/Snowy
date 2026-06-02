@@ -77,5 +77,5 @@ check_cmd: "bun run check"
 
 - `bunx vitest run apps/mv3-shell/test/manifest.spec.ts packages/core/test/core.spec.ts` ✅
 - `bun run typecheck` ✅
-- `bun run check` ❌ 被仓库现有、且本 issue write scope 外的格式化漂移阻塞（例如 `.vscode/mcp.json`、`apps/mv3-shell/manifest.json`、`packages/skill-sdk/test/skill-sdk.spec.ts`、`.codex/hooks/workflow-ticket.test.ts` 等）
+- `bun run check` ❌ 被仓库现有、且本 issue write scope 外的格式化漂移阻塞（例如 `.vscode/tooling config`、`apps/mv3-shell/manifest.json`、`packages/skill-sdk/test/skill-sdk.spec.ts`、`.codex/hooks/workflow-ticket.test.ts` 等）
 - `bunx biome check apps/mv3-shell/src/background.js apps/mv3-shell/test/manifest.spec.ts packages/core/src/index.ts packages/core/test/core.spec.ts ...` ✅（本次改动代码文件通过）

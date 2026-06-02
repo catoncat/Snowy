@@ -84,7 +84,7 @@
 剩余 blocker 不再是这条 old-product replacement loop 未证明，而是下面这些显式后置或治理项：
 
 - 完整 Skill Studio、版本选择、rollback、authoring studio 与旧 plugin 生态批量迁移仍属 post-cutover product breadth。
-- Tier 2 / Tier 3 browser automation、download/export composites、bulk debug export、bridge-side MCP server 等仍按各自 deferred scope 跟踪。
+- Tier 2 / Tier 3 browser automation、download/export composites、bulk debug export 等仍按各自 deferred scope 跟踪。
 - 是否把新仓正式切成旧主线替代，需要一次外部 cutover decision / release acceptance；本文件只提供 gate evidence，不自动执行切换。决策应从 `docs/release-cutover-decision-packet-2026-05-27.md` 开始。
 
 ## Soft Gates
@@ -109,7 +109,7 @@
 
 **状态：边界已裁决。** 详见 `docs/browser-automation-cutover-boundary.md`。
 
-Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tabs.navigate/get_active + verify + intervention。Tier 2（cutover 后可补）：scroll, select_option, hover, tabs.create/close, background mode 等。Tier 3（暂不纳入）：stealth tab, computer mode, batch download 等。当前阶段默认沿用 site-runtime / MV3 独立路径，不要求先补 page/tabs FamilyProvider bridge；其中 cutover 前必需的 active-tab Tier 1 闭环已经成立，`tabs.list`、`site.fetch_with_session` 与 background lane baseline 也已有最小 runtime/test 覆盖。当前剩余 scope 已收敛为 Tier 2 / Tier 3 breadth：`page.scroll/select_option/hover`、`tabs.create/close`、stealth/computer mode，以及 screenshot/download export composites 等 cutover 后范围。
+Tier 1（cutover 前必需）已纠偏为 Browser Harness primitives：`page.info/click_xy/type_text/press_key/scroll/screenshot` + `tabs.navigate/get_active` + explicit debug/artifact/observability tools。`page.query` 只作为非默认 debug readback；UID-only `page.click/page.fill` 已删除。Tier 2（cutover 后可补）：select_option, hover, tabs.create/close, background mode 等。Tier 3（暂不纳入）：stealth tab, computer mode, batch download 等。当前阶段默认沿用 site-runtime / MV3 独立路径，不要求先补 page/tabs FamilyProvider bridge；其中 cutover 前必需的 active-tab Harness 闭环已经成立，`tabs.list`、`site.fetch_with_session` 与 background lane baseline 也已有最小 runtime/test 覆盖。当前剩余 scope 已收敛为 Tier 2 / Tier 3 breadth：`page.select_option/hover`、`tabs.create/close`、stealth/computer mode，以及 screenshot/download export composites 等 cutover 后范围。
 
 补充裁决：background automation mode 与 background-specific failure tracking 不属于 cutover 前必需，详见 `docs/background-automation-mode-boundary.md`。cutover 前仅保留 kernel no-progress / diagnostics / verify 作为极简替代物。
 
@@ -144,7 +144,7 @@ Tier 1（cutover 前必需）：page.query/click/fill/press_key/screenshot + tab
 
 1. AI-native product control plane 的 Gate G 最小主链已成立；`config.*` / `skills.*` / `hosts.*`、`readAiSurfaceResource()` / MV3 `resource.read`、descriptor-owned action projection、`model.routing` shared control-plane、最小 `audit.tail`，以及 `ISSUE-172` / `ISSUE-173` / `ISSUE-174` / `ISSUE-175` / `ISSUE-176` 的 `install setupPlan → mem://skills package files → persist/restart → discover skill.json → expose actions in skills.summary/runtime.bootstrap → sidepanel Skills catalog → register handler.js → enable → skills.invoke → JS runner → tabs.get_active/memfs.read → audit.tail` executable skill 纵向证明已形成主链；`skills.discover` 进一步把旧产品目录扫描导入接回同一 summary/action/audit 面；`ISSUE-181` 继续补上 `eventSubscriptions → runtime.event.dispatch → event-triggered skills.invoke → audit.tail` 的 hook/event pilot；`ISSUE-184` 把该 pilot 升级为真实 Chromium MV3 release smoke，覆盖 sandboxed handler execution、`ctx.call("memfs.read")` gateway 和 `audit.tail` 读回。
 2. `ISSUE-177` 把早期证据映射到 Level 2 gates，并把 `old-product-replacement-loop` 记录为 shipped-with-deferred-scope；`ISSUE-178` 到 `ISSUE-181` 继续补强 version / rollback / author-update / event subscription。后续 planning 不应再把 `ISSUE-172` 到 `ISSUE-181` 拆成局部补票。
-3. 完整 Skill Studio/lifecycle UI、版本管理、旧 plugin 生态全迁移、Tier 2 / Tier 3 browser automation、download/export composites、bulk debug export 与 bridge-side MCP server 仍是 deferred breadth，不是当前代表性 old-product replacement proof 的 blocker。
+3. 完整 Skill Studio/lifecycle UI、版本管理、旧 plugin 生态全迁移、Tier 2 / Tier 3 browser automation、download/export composites 与 bulk debug export 仍是 deferred breadth，不是当前代表性 old-product replacement proof 的 blocker。
 4. `docs/level-2-cutover-acceptance-2026-05-27.md` 是当前接受包：下一步只应是外部 release acceptance、一个明确 UAT 场景，或显式把某个 deferred breadth 提升为主线；通过 `bun run check` 只能证明仓库质量门禁，不等于产品切换批准。
 
 ## Maintenance Rule

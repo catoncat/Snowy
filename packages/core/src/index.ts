@@ -719,8 +719,22 @@ function defaultCatalogExecutionTarget(
   }
 }
 
+function defaultCatalogToolExposure(family: string, operation: string): boolean {
+  switch (family) {
+    case "page":
+    case "tabs":
+    case "debug":
+      return true;
+    case "runtime":
+      return operation === "capture_diagnostics";
+    default:
+      return false;
+  }
+}
+
 function buildCatalogProjection(input: {
   family: string;
+  operation: string;
   exportable: boolean;
   projection?: Partial<NonNullable<CapabilityDescriptor["projection"]>>;
 }): NonNullable<CapabilityDescriptor["projection"]> {
@@ -728,7 +742,7 @@ function buildCatalogProjection(input: {
     audiences: input.exportable
       ? [...AI_SURFACE_ACTION_AUDIENCES]
       : [...DEFAULT_CATALOG_ACTION_AUDIENCES],
-    defaultExposed: true,
+    defaultExposed: defaultCatalogToolExposure(input.family, input.operation),
     confirmPolicy: "inherit-risk",
     executionTarget: defaultCatalogExecutionTarget(input.family),
     ...input.projection,
@@ -767,6 +781,7 @@ function catalogEntry(input: CatalogEntryInput): CapabilityDescriptor {
     exportRisk: exportRisk ?? risk,
     projection: buildCatalogProjection({
       family,
+      operation,
       exportable,
       projection,
     }),
@@ -1167,22 +1182,16 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       risk: "low",
       sideEffects: "reads",
       permissions: ["page.query"],
-      description: "Query elements on the active page",
+      description:
+        "Debug-only DOM selector read helper; not part of the default Browser Harness action path",
+      projection: {
+        defaultExposed: false,
+      },
       inputSchema: {
         type: "object",
         properties: { selector: { type: "string" } },
         required: ["selector"],
       },
-    }),
-    catalogEntry({
-      id: "page.click",
-      family: "page",
-      operation: "click",
-      risk: "medium",
-      sideEffects: "writes",
-      permissions: ["page.click"],
-      description: "Click an element on the active page",
-      inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] },
     }),
     catalogEntry({
       id: "page.click_xy",
@@ -1211,20 +1220,6 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
         required: ["ok", "x", "y"],
       },
       supportsVerify: true,
-    }),
-    catalogEntry({
-      id: "page.fill",
-      family: "page",
-      operation: "fill",
-      risk: "medium",
-      sideEffects: "writes",
-      permissions: ["page.fill"],
-      description: "Fill a form field on the active page",
-      inputSchema: {
-        type: "object",
-        properties: { uid: { type: "string" }, value: { type: "string" } },
-        required: ["uid", "value"],
-      },
     }),
     catalogEntry({
       id: "page.type_text",
@@ -1757,6 +1752,50 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
       permissions: ["runtime.clear_error"],
       description: "Clear the current runtime error state, idempotent if no error is present",
       inputSchema: { type: "object" },
+    }),
+  ],
+  debug: [
+    catalogEntry({
+      id: "debug.bundle",
+      family: "debug",
+      operation: "bundle",
+      risk: "low",
+      sideEffects: "reads",
+      permissions: ["debug.bundle"],
+      description:
+        "Read a compact browser debug bundle with lane map, tool-call summary, and explicit evidence resource references",
+      inputSchema: {
+        type: "object",
+        properties: {
+          includeTimeline: {
+            type: "boolean",
+            default: false,
+          },
+          includeRawTail: {
+            type: "boolean",
+            default: false,
+          },
+          limit: {
+            type: "number",
+            minimum: 1,
+            maximum: 50,
+            default: 20,
+          },
+        },
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          debugBundleId: { type: "string" },
+          schema: { type: "string" },
+          generatedAt: { type: "string" },
+          laneMap: { type: "array" },
+          toolCalls: { type: "array" },
+          resourceRefs: { type: "array" },
+        },
+        required: ["debugBundleId", "schema", "generatedAt", "laneMap", "toolCalls"],
+      },
+      supportsVerify: false,
     }),
   ],
   hosts: [
@@ -3708,10 +3747,13 @@ export interface BuiltinCapabilityMap {
   page: {
     info: CapabilityFn;
     query: CapabilityFn;
-    click: CapabilityFn;
-    fill: CapabilityFn;
+    clickXy: CapabilityFn;
+    click_xy: CapabilityFn;
+    typeText: CapabilityFn;
+    type_text: CapabilityFn;
     pressKey: CapabilityFn;
     press_key: CapabilityFn;
+    scroll: CapabilityFn;
     screenshot: CapabilityFn;
   };
   site: {
@@ -3743,6 +3785,9 @@ export interface BuiltinCapabilityMap {
     get_capability: CapabilityFn;
     captureDiagnostics: CapabilityFn;
     capture_diagnostics: CapabilityFn;
+  };
+  debug: {
+    bundle: CapabilityFn;
   };
   hosts: {
     list: CapabilityFn;

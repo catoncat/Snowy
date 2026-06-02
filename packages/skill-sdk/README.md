@@ -15,9 +15,9 @@ import { defineSkill } from "@bbl-next/skill-sdk";
 
 const mySkill = defineSkill({
   id: "my-skill",
-  permissions: ["page.click", "page.snapshot"] as const,
+  permissions: ["page.click_xy", "page.screenshot"] as const,
   handler: async (ctx, input) => {
-    const result = await ctx.capabilities.page.click(input);
+    const result = await ctx.capabilities.page.click_xy(input);
     return result;
   },
 });

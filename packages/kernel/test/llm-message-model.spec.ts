@@ -369,7 +369,7 @@ describe("stepResultToToolMessagePayload", () => {
           },
         },
       },
-      { toolCallId: "call_1", toolName: "page_click" },
+      { toolCallId: "call_1", toolName: "page_click_xy" },
     );
 
     expect(JSON.parse(result.text)).toEqual({

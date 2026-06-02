@@ -30,7 +30,7 @@ Auto-generated from the current backlog issues selected for Batch 2.
   - ready_now: no (completed)
   - depends_on: (none)
   - write_scope: packages/core/src/index.ts, packages/core/test/core.spec.ts, packages/skill-sdk/src/index.ts, packages/skill-sdk/test/skill-sdk.spec.ts
-- ISSUE-019 Review: bridge-side MCP export is still descriptor-only
+- ISSUE-019 Review: bridge-side external export is still descriptor-only
   - priority: p1
   - status: done
   - ready_now: no (completed)

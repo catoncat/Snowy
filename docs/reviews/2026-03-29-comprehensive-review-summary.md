@@ -125,7 +125,7 @@ Integration   ████████████░░ 24%
 | Linter / Formatter | 高 | 完全缺失 |
 | CI/CD | 高 | 无 GitHub Actions |
 | Quickstart | 中 | 根 README 无 Getting Started |
-| .vscode 配置 | 中 | 仅 mcp.json |
+| .vscode 配置 | 中 | 缺 settings/extensions/tasks |
 
 ---
 

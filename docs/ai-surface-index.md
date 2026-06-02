@@ -24,7 +24,7 @@
 3. skill/workflow
 4. audit
 
-## 2. 当前 action surface (46 actions)
+## 2. 当前 action surface (51 actions)
 
 ### Browser-local substrate (memfs / page / tabs / site)
 
@@ -40,10 +40,13 @@
 - `memfs.stage`
 - `memfs.snapshot`
 - `memfs.rehydrate`
-- `page.query`
-- `page.click`
-- `page.fill`
+- `debug.bundle`
+- `page.info`
+- `page.query`（非默认 debug DOM readback）
+- `page.click_xy`
+- `page.type_text`
 - `page.press_key`
+- `page.scroll`
 - `page.screenshot`
 - `tabs.list`
 - `tabs.get_active`
@@ -139,21 +142,19 @@
 - 聊天默认可见
 - Skill runtime 可见
 - 系统内部可见
-- MCP/export 可见
+- 外部导出可见
 
-当前 resources 的 audience 投影由 `listAiSurfaceResourcesForAudience()` 收口；聊天 / skill / system / mcp 的默认 read 面不再靠散落常量或文档描述维护。
+当前 resources 的 audience 投影由 `listAiSurfaceResourcesForAudience()` 收口；聊天 / skill / system 的默认 read 面不再靠散落常量或文档描述维护。
 
 当前 action 的 audience / projection 也已收口到 descriptor-owned metadata：
 
 - `CapabilityDescriptor.projection` 负责 `audiences` / `defaultExposed` / `confirmPolicy` / `executionTarget`
 - `packages/contracts` 提供 `getCapabilityProjectionMetadata()` 与 `filterCapabilityDescriptorsByProjection()`
-- `packages/core` 的 `CapabilityRegistry.listByProjection()` / `projectTools()` / `projectMcpExportHandoffs()` 使用同一套 metadata 做过滤
+- `packages/core` 的 `CapabilityRegistry.listByProjection()` / `projectTools()` 使用同一套 metadata 做过滤
 - `defaultExposed` 表示“在该 audience 的默认 tool surface 是否直出”；例如 `runner.invoke` 仍属于聊天 audience，但默认不直出
 - `confirmPolicy` 当前最小语义：
   - `inherit-risk`：沿用高风险 action 的 confirm gate
   - `always`：即使不是 high risk，也要求显式确认
-- MCP export 除了 `exportable` 之外，还要求 descriptor 的 `audiences` 包含 `mcp`
-
 当前明确不该默认直接摊给聊天面的：
 
 - `runner.invoke`

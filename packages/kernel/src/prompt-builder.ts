@@ -11,8 +11,8 @@ const AVAILABLE_SKILLS_CLOSE_TAG = "</available_skills>";
 const BASE_GUIDELINES = `
 ## Guidelines
 
-1. **Browser automation priority**: Prefer a small set of direct browser primitives. Orient with the active tab and visible evidence (\`tabs_get_active\`, \`page_screenshot\`) when useful, then take the smallest direct action (\`tabs_navigate\`, \`page_click\`, \`page_fill\`, \`page_press_key\`). Treat \`page_query\` as optional DOM readback, not the default locator path.
-2. **File operations**: Use memfs.* for browser-side virtual files (mem:// protocol). Use host.* for host-side filesystem operations through the WebSocket bridge.
+1. **Browser automation priority**: Prefer Browser Harness primitives. Orient with the active tab and visible evidence (\`tabs_get_active\`, \`page_info\`, \`page_screenshot\`) when useful, then take the smallest direct action (\`tabs_navigate\`, \`page_click_xy\`, \`page_type_text\`, \`page_press_key\`, \`page_scroll\`). Use DOM/debug readback only when that tool is explicitly listed.
+2. **Evidence boundary**: Ordinary tool results are compact projections. Use explicit debug/artifact/observability tools when listed to read fuller evidence; do not expect raw DOM, full screenshots, network dumps, or provider bodies to appear automatically.
 3. **Verification**: Judge progress from explicit evidence that is visible in the current result or the next observation. Do not invent hidden scoring, ranking, or automatic verification loops.
 4. **One step at a time**: Execute one tool call per turn when possible. Batch only when operations are independent.
 5. **Error handling**: If a tool call fails, try an alternative approach rather than repeating the same call. After 2 failures with the same tool, switch strategy.
@@ -179,18 +179,16 @@ export function buildSystemPromptBase(
 
   // Role
   sections.push(
-    "You are an expert browser automation agent operating inside a Chrome extension. You can interact with web pages, manage tabs, read and write files in a virtual filesystem, and execute tasks through a WebSocket bridge to a local host.",
+    "You are an expert browser automation agent operating inside a Chrome extension. Use only the tools listed in this request; do not assume access to unlisted browser, filesystem, host, or private runtime capabilities.",
   );
 
   // Environment
-  const browserCwd = options?.browserCwd ?? "mem://";
   sections.push(
     `
 ## Environment
 
-- **Browser sandbox**: Virtual filesystem at \`${browserCwd}\` (ephemeral workspace, persisted to IndexedDB)
-- **Host bridge**: Local filesystem access via \`host.*\` capabilities through WebSocket
-- **Active tabs**: You can query, navigate, and interact with browser tabs
+- **Tool boundary**: The Available Tools section is the complete callable surface for this chat turn
+- **Active tabs**: You can observe, navigate, and interact with browser tabs when the corresponding tools are listed
 - **Runtime**: Chrome MV3 extension with service worker kernel`.trim(),
   );
 
@@ -243,7 +241,16 @@ export interface TaskProgressInput {
   toolStep: number;
   retryAttempt?: number;
   retryMaxAttempts?: number;
+  completedToolCalls?: CompletedToolCallSummary[];
   actionFailureHints?: ActionFailureHint[];
+}
+
+export interface CompletedToolCallSummary {
+  toolName: string;
+  capabilityId: string;
+  ok: boolean;
+  argsSummary?: string;
+  resultSummary?: string;
 }
 
 export interface ActionFailureHint {
@@ -253,9 +260,30 @@ export interface ActionFailureHint {
   failureCount: number;
 }
 
+const COMPLETED_TOOL_CALL_LIMIT = 6;
+const COMPLETED_TOOL_SUMMARY_LIMIT = 600;
+
+function truncateProgressText(text: string, limit: number): string {
+  return text.length > limit ? `${text.slice(0, limit)}[truncated]` : text;
+}
+
+function formatCompletedToolCall(call: CompletedToolCallSummary): string {
+  const parts = [
+    `- ${call.toolName} (${call.capabilityId})`,
+    `status=${call.ok ? "ok" : "failed"}`,
+  ];
+  if (call.argsSummary) {
+    parts.push(`args=${truncateProgressText(call.argsSummary, COMPLETED_TOOL_SUMMARY_LIMIT)}`);
+  }
+  if (call.resultSummary) {
+    parts.push(`result=${truncateProgressText(call.resultSummary, COMPLETED_TOOL_SUMMARY_LIMIT)}`);
+  }
+  return parts.join("; ");
+}
+
 function formatActionFailureHint(hint: ActionFailureHint): string {
   const target = hint.target ? ` on ${hint.target}` : "";
-  return `- STRATEGY HINT: \`${hint.toolName}\`${target} failed ${hint.failureCount} times. Switch tactics: re-query state, choose a different target, or use an alternative tool instead of retrying the same action.`;
+  return `- DIAGNOSTIC: \`${hint.toolName}\`${target} failed ${hint.failureCount} times. Treat this as evidence only; judge the next step from the current page observation and available tools.`;
 }
 
 /**
@@ -267,6 +295,7 @@ export function buildTaskProgressMessage(input: TaskProgressInput): string {
   const tool = Math.max(0, input.toolStep);
   const retry = input.retryAttempt ?? 0;
   const retryMax = input.retryMaxAttempts ?? 0;
+  const completedToolCalls = input.completedToolCalls ?? [];
   const actionFailureHints = input.actionFailureHints ?? [];
 
   const lines = [
@@ -279,6 +308,13 @@ export function buildTaskProgressMessage(input: TaskProgressInput): string {
     lines.push(`- retry_state: ${retry}/${retryMax}`);
   }
 
+  if (completedToolCalls.length > 0) {
+    lines.push("- completed_tool_calls:");
+    for (const call of completedToolCalls.slice(-COMPLETED_TOOL_CALL_LIMIT)) {
+      lines.push(formatCompletedToolCall(call));
+    }
+  }
+
   if (actionFailureHints.length > 0) {
     lines.push("- repeated_action_failures:");
     for (const hint of actionFailureHints) {
@@ -287,6 +323,11 @@ export function buildTaskProgressMessage(input: TaskProgressInput): string {
   }
 
   lines.push("- Keep moving toward the same user goal; avoid repeating already completed steps.");
+  if (completedToolCalls.length > 0) {
+    lines.push(
+      "- Use completed tool results above instead of repeating the same tool call/arguments. If more evidence is needed, call explicit debug/artifact/resource tools listed for this turn.",
+    );
+  }
 
   return lines.join("\n");
 }

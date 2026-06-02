@@ -36,7 +36,7 @@ write_scope:
   - .agents/skills/next-batch-planner/scripts/create-review-issue.ts
   - .agents/skills/next-batch-planner/scripts/create-review-issue.test.ts
   - .codex/hooks/workflow-ticket.test.ts
-  - .vscode/mcp.json
+  - .vscode/tooling config
 acceptance_ref: docs/reviews/2026-03-29-docs-dx-review.md
 check_cmd: "bun run check"
 ---

@@ -68,7 +68,7 @@
 
 1. 外部 cutover decision / release acceptance
 2. 如果 release acceptance 要求补证，只接受一个明确 UAT 场景或一个被显式提升的 deferred breadth
-3. 完整 Skill Studio / lifecycle / versioning 产品面、Tier 2 / Tier 3 browser automation、download/export composites、diagnostics/debug bulk export、bridge-side MCP server 与更广 provider policy hardening 都默认属于后置 breadth，不再自动拆票
+3. 完整 Skill Studio / lifecycle / versioning 产品面、Tier 2 / Tier 3 browser automation、download/export composites、diagnostics/debug bulk export 与更广 provider policy hardening 都默认属于后置 breadth，不再自动拆票
 
 ## 6. 新 Agent 默认 operating loop
 

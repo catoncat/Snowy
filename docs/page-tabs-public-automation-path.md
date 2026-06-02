@@ -1,6 +1,6 @@
 # Page/Tabs Public Automation Path
 
-> 2026-05-31 修正：browser automation 的第一性原则以 `docs/browser-automation-first-principles.md` 为准。本文中关于 UID strategy、Tier 1 DOM query 和 verify pipe 的历史设计只作为迁移背景；后续新设计不得沿着旧仓 `search_elements` / UID ranking / score / stabilizer 路线继续扩张，也不得为了保留既有实现而写防御性兼容层。
+> 2026-06-01 修正：browser automation 的第一性原则以 `docs/browser-automation-first-principles.md` 为准。本文中关于 UID strategy、Tier 1 DOM query 和 verify pipe 的历史设计只作为迁移背景；后续新设计不得沿着旧仓 `search_elements` / UID ranking / score / stabilizer 路线继续扩张，也不得为了保留既有实现而写防御性兼容层。`page.click` / `page.fill` UID-only 产品路径已删除；默认主线是 `page.info` / `page.screenshot` / `page.click_xy` / `page.type_text` / `page.press_key` / `page.scroll` / `tabs.*` / explicit debug tools。
 
 本文件回答 ISSUE-037 的核心问题：
 
@@ -21,8 +21,8 @@
 
 | 旧工具 | 参数 | 执行路径 | vNext 对应 |
 |--------|------|---------|-----------|
-| `click` | `{ uid }` + options | `chrome.scripting.executeScript` → `runDomAction({ action: "click", uid })` | `page.click` |
-| `fill_element_by_uid` | `{ uid, value }` + options | 同上 → `runDomAction({ action: "fill", uid, value })` | `page.fill` |
+| `click` | `{ uid }` + options | `chrome.scripting.executeScript` → `runDomAction({ action: "click", uid })` | 已删除；用 `page.click_xy` |
+| `fill_element_by_uid` | `{ uid, value }` + options | 同上 → `runDomAction({ action: "fill", uid, value })` | 已删除；用 `page.click_xy` + `page.type_text` |
 | `hover_element_by_uid` | `{ uid }` + options | 同上 → `runDomAction({ action: "hover", uid })` | Tier 2 (`page.hover`) |
 | `select_option_by_uid` | `{ uid, value }` | 同上 → `runDomAction({ action: "select" })` | Tier 2 (`page.select_option`) |
 | `get_editor_value` | `{ uid }` | 同上 → `runDomAction({ action: "value", uid })` | Tier 2（可由 `page.query` snapshot 获取 value） |
@@ -68,9 +68,10 @@
 | Capability ID | 状态 | 参数 | Risk | Side Effects | 执行路径 |
 |--------------|------|------|------|-------------|---------|
 | `page.query` | **已声明** | `{ selector: string }` | low | reads | content script injection → DOM snapshot |
-| `page.click` | **已声明** | `{ uid: string }` | medium | writes | `chrome.scripting.executeScript` → DomLocator click |
-| `page.fill` | **已声明** | `{ uid: string, value: string }` | medium | writes | `chrome.scripting.executeScript` → DomLocator fill |
+| `page.click_xy` | **已实现** | `{ x: number, y: number }` | medium | writes | `chrome.scripting.executeScript` → page hook coordinate click |
+| `page.type_text` | **已实现** | `{ text: string }` | medium | writes | `chrome.scripting.executeScript` → focused element text input |
 | `page.press_key` | **已实现** | `{ key: string }` | medium | writes | `chrome.scripting.executeScript` → site-runtime invoke pipe → tab-level key dispatch |
+| `page.scroll` | **已实现** | `{ deltaX?: number, deltaY?: number }` | low | writes | `chrome.scripting.executeScript` → page hook scroll |
 | `page.screenshot` | **已实现** | `{ format?: string, quality?: number }` | low | reads | `chrome.tabs.captureVisibleTab` |
 
 ### `tabs.*` — Tab 管理原语
@@ -218,34 +219,14 @@
 { selector: string } → 查询结果
 ```
 
-**映射到旧仓 `search_elements`（DOM snapshot）：**
-- 旧仓返回完整 DOM tree snapshot（`SerializedDomSnapshot`），包含 UID、role、name、value 等
-- vNext 应沿用 UID 标注模式：snapshot 打 `data-brain-uid` → 返回给 LLM → LLM 用 UID 调用 click/fill
-- `selector` 参数语义：CSS 选择器（限定 snapshot 范围）或空（全页面 snapshot）
+**当前定位：**
+- `page.query` 是显式 debug DOM readback，不进入默认 Chat tool surface。
+- 完整 query 证据只能写入 artifact / debug bundle 引用；普通 Chat context 只允许 compact projection。
+- 不再沿用“query 产生 UID → click/fill 消费 UID”的主线。
 
-### `page.click`（无变更）
+### 已删除：`page.click` / `page.fill`
 
-当前声明：
-```typescript
-{ uid: string } → 点击结果
-```
-
-**映射到旧仓 `click`：**
-- `uid` = `data-brain-uid` 属性值
-- 执行层：`queryByUid(uid)` → 递归搜索 document + ShadowDOM + same-origin iframe → `mousedown → mouseup → click` 事件序列
-- 不暴露 `count`（双击）、`highlight`、`scroll` 选项——这些是调试/辅助功能，不进 public path
-
-### `page.fill`（无变更）
-
-当前声明：
-```typescript
-{ uid: string, value: string } → 填写结果
-```
-
-**映射到旧仓 `fill_element_by_uid`：**
-- 三路径：contentEditable → `textContent`；input/textarea → 清空 + 设 `.value`
-- 触发事件序列：`focus → input → change → blur`
-- React 兼容：执行层需要 `syncReactValueTracker` 处理 controlled input
+UID-only `page.click` / `page.fill` 已不再是产品 public path。2026-06-01 的 MDN 真实表单 dogfood 证明 `page.info` / `page.screenshot` / `page.click_xy` / `page.type_text` / `page.press_key` / `debug_bundle` 能完成同类任务，artifact 见 `.ml-cache/dogfood/debug-bundle-mdn-harness-primitives-2026-06-01/`。
 
 ### `tabs.get_active`（无变更）
 
@@ -267,8 +248,8 @@ ISSUE-045 已锁定：
 因此，page/tabs 的最小 production path 是 **双轨并行**：
 
 1. **Capability Path（descriptor → provider → execute）**
-   - `page.query/click/fill/press_key/screenshot` + `tabs.get_active/navigate` 通过 `CapabilityDescriptor` 声明
-   - 真实 provider 绑定在后续批次补——cutover 前先声明 descriptor、确认参数 shape
+   - `page.info/query/click_xy/type_text/press_key/scroll/screenshot` + `tabs.get_active/navigate` 通过 `CapabilityDescriptor` 声明
+   - `page.query` 是非默认 debug read helper；UID-only `page.click` / `page.fill` 已删除
    - AI Surface 看到的是统一的 capability namespace
 
 2. **Site Runtime Path（skill → match → install → invoke → verify）**

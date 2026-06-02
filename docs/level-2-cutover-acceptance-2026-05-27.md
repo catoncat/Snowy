@@ -63,7 +63,6 @@ These items remain deliberately outside the current Level 2 proof. They should n
 - Tier 2 / Tier 3 browser automation such as scroll, select option, hover, tabs create/close, stealth/computer mode
 - screenshot/download export composites
 - bulk debug dump/export and deeper observability productization
-- bridge-side MCP server/transport
 - broader provider policy hardening outside current kernel/control-plane routing
 
 ## Next Decision Boundary

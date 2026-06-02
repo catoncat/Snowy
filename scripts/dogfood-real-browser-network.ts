@@ -576,10 +576,28 @@ function networkSummary(events: NetworkEvent[]) {
   };
 }
 
+async function captureDebugBundleArtifact(
+  sidepanelPage: Page,
+  extensionId: string,
+  artifactDir: string,
+) {
+  const diagnostics = await runtimeSend(sidepanelPage, extensionId, {
+    kind: "runtime.capture_diagnostics",
+  });
+  const debugBundle = diagnostics.ok
+    ? (diagnostics.data?.debug?.bundle ?? diagnostics.data?.debug ?? diagnostics.data)
+    : diagnostics;
+  const debugBundlePath = resolve(artifactDir, "debug-bundle.json");
+  writeFileSync(debugBundlePath, JSON.stringify(debugBundle, null, 2));
+  return { debugBundle, debugBundlePath };
+}
+
 function writeReport({
   artifactDir,
   bootstrap,
   completionReason,
+  debugBundle,
+  debugBundlePath,
   effectiveExtensionDir,
   extensionId,
   llmConfig,
@@ -592,6 +610,8 @@ function writeReport({
   artifactDir: string;
   bootstrap: any;
   completionReason: string;
+  debugBundle: any;
+  debugBundlePath: string;
   effectiveExtensionDir: string;
   extensionId: string;
   llmConfig: unknown;
@@ -622,6 +642,8 @@ function writeReport({
     `- Latest assistant text: ${latestAssistantText(bootstrap) || "(empty)"}`,
     `- Task screenshot: ${screenshots.task}`,
     `- Sidepanel screenshot: ${screenshots.sidepanel}`,
+    `- Debug bundle: ${debugBundlePath}`,
+    `- Debug bundle lanes: ${JSON.stringify(debugBundle?.laneMap ?? [])}`,
     `- Network requests: ${summary.requestCount}`,
     `- Network responses: ${summary.responseCount}`,
     `- Network failures: ${summary.failedCount}`,
@@ -721,6 +743,11 @@ export async function runRealBrowserNetworkDogfood(options = parseOptions(proces
         extensionId,
         "observability.rawEventTail",
       );
+      const { debugBundle, debugBundlePath } = await captureDebugBundleArtifact(
+        sidepanelPage,
+        extensionId,
+        artifactDir,
+      );
       const taskScreenshot = resolve(artifactDir, "task-page.png");
       await taskPage.screenshot({ fullPage: true, path: taskScreenshot });
       const sidepanelScreenshot = resolve(artifactDir, "sidepanel.png");
@@ -747,6 +774,8 @@ export async function runRealBrowserNetworkDogfood(options = parseOptions(proces
         artifactDir,
         bootstrap,
         effectiveExtensionDir: extensionDir,
+        debugBundle,
+        debugBundlePath,
         extensionId,
         llmConfig,
         completionReason: "prepare-login",
@@ -802,6 +831,11 @@ export async function runRealBrowserNetworkDogfood(options = parseOptions(proces
       extensionId,
       "observability.rawEventTail",
     );
+    const { debugBundle, debugBundlePath } = await captureDebugBundleArtifact(
+      sidepanelPage,
+      extensionId,
+      artifactDir,
+    );
 
     const taskScreenshot = resolve(artifactDir, "task-page.png");
     await taskPage.screenshot({ fullPage: true, path: taskScreenshot });
@@ -825,6 +859,8 @@ export async function runRealBrowserNetworkDogfood(options = parseOptions(proces
     const reportPath = writeReport({
       artifactDir,
       bootstrap,
+      debugBundle,
+      debugBundlePath,
       effectiveExtensionDir: extensionDir,
       extensionId,
       llmConfig,

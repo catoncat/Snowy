@@ -48,4 +48,4 @@ Remaining decisions are outside this repository's autonomous workflow:
 2. Request a human-defined UAT scenario with real browser/profile data.
 3. Promote one named deferred breadth item to mainline with a product reason.
 
-Do not treat deferred breadth rows such as version selection, package diff/preview, bulk debug export, bridge-side MCP transport, or full plugin ecosystem migration as default queue filler after this UAT.
+Do not treat deferred breadth rows such as version selection, package diff/preview, bulk debug export, or full plugin ecosystem migration as default queue filler after this UAT.

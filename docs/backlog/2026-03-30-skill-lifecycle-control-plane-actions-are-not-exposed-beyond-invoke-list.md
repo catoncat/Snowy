@@ -53,7 +53,7 @@ check_cmd: "bun run check"
 ## Impact Note
 
 - 影响的 northbound surface：`skills.install`、`skills.enable`、`skills.disable` 现已进入 builtin action surface；`skills.uninstall` 仍保持 deferred。
-- 影响的消费者：聊天 Agent、skill runtime、未来管理 UI 都会通过同一套 `skills.*` control-plane action 读到这组动作；MCP/export 只间接受 descriptor 变化影响。
+- 影响的消费者：聊天 Agent、skill runtime、未来管理 UI 都会通过同一套 `skills.*` control-plane action 读到这组动作；external export 只间接受 descriptor 变化影响。
 - 控制面文档：已更新 `docs/ai-surface-index.md`；已检查 `docs/agent-bootstrap-context-pack.md`、`docs/module-tracking-ledger.json`、`docs/legacy-to-vnext-migration-matrix.md`、`docs/migration-parity-dashboard.md`、`docs/cutover-readiness-criteria.md`，当前无需同步。
 
 ## 工作总结

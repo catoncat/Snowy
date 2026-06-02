@@ -88,7 +88,7 @@
 | assertCapabilityDescriptor | 5/11+ case (45%) | 高影响 case 已覆盖，输入校验边界不足 |
 | MAX_SKILL_CALL_DEPTH | 行为覆盖 | 超深被阻断 ✅，但常量值 3 未被测试精确锁定 |
 | Host control plane | 核心路径 ✅ | 全生命周期在 mv3 集成测试中验证 |
-| MCP export handoff | 投影路径 ✅ | 数据投影完整，bridge 执行未实现 |
+| External export handoff | 投影路径 ✅ | 数据投影完整，bridge 执行未实现 |
 | Typed facade | 4/4 路径 ✅ | 全量/过滤/窄化/子集均覆盖 |
 
 ### 3.3 关键测试缺口

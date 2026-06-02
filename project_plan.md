@@ -9,7 +9,7 @@
   - v0 第一里程碑只证明核心内核 slice：Capability API + BrowserVFS + JS Runner + 最小 Site Skill
     激活链路，不先做完整产品壳。
   - 架构主轴固定为：Skill 是唯一产品概念，CapabilityDescriptor 是唯一 canonical model，
-    ToolContract / Skill SDK / MCP export 都是它的投影。
+    ToolContract / Skill SDK 都是它的投影。
 
   ## Decisions Locked
 
@@ -183,21 +183,6 @@
       - E_RUNTIME
       - E_REENTRANCY_BLOCKED
 
-  ### D9 MCP Export
-
-  - v0 不实现完整 MCP export server，但 descriptor 必须预留：
-      - exportable
-      - exportName
-      - exportRisk
-  - 正式 MCP server 放 Bridge 侧。
-  - 导出粒度：per-capability。
-  - 默认可导出候选：
-      - memfs.* 只读类
-      - page.* 只读类
-      - tabs.list
-      - runtime.list_capabilities
-  - 认证复用 BRIDGE_TOKEN。
-
   ## Implementation Plan
 
   ### Phase 0: New Repo Bootstrap
@@ -240,9 +225,8 @@
   - 实现 draft/staged/installed/enabled/disabled/archived 转换与 trusted flag。
   - 实现版本保留、rollback gate、legacy plugin unsupported 流程。
 
-  ### Phase 6: Export / Migration Readiness
+  ### Phase 6: Migration Readiness
 
-  - 预留 MCP export metadata。
   - 准备旧仓反向移植 checklist：
       - descriptor model
       - VFS
