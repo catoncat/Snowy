@@ -45,22 +45,22 @@ The package command normalizes ZIP metadata so repeated runs with the same exten
 
 Latest generated upload bundle candidate:
 
-- source_commit: `576a7ef06a3362890d9b4877d3db2c91f348e10f`
-- source_pr: https://github.com/catoncat/Snowy/pull/18
+- source_commit: `ed68a9f7245bbee930b64833a537f9ddb4b9a2a6`
+- source_pr: `main@ed68a9f7245bbee930b64833a537f9ddb4b9a2a6`
 - artifact: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
-- sha256: `df920371c30d663edf4aa8bceb5d7634594e8eba06de4a072673b8cfe35bb769`
-- prepared_at: 2026-05-31T06:19:38.815Z
-- command: `bun run release:submission:prepare -- --channel external-store-or-deployment --source-pr https://github.com/catoncat/Snowy/pull/18`
-- status: pre-merge PR candidate; after PR #18 lands, rerun the prepare command from the accepted release branch before external upload
+- sha256: `b8f166070a4058d9be7bb54755bfb78570ffc6bf15a688497f4bc655a8942dd5`
+- prepared_at: 2026-06-02T08:45:13.162Z
+- command: `bun run release:submission:prepare -- --channel external-store-or-deployment --source-pr main@ed68a9f7245bbee930b64833a537f9ddb4b9a2a6`
+- status: ready for upload; generated from accepted `origin/main` after Browser Harness debug bundle closeout
 
 Latest generated handoff manifest candidate:
 
-- source_commit: `576a7ef06a3362890d9b4877d3db2c91f348e10f`
-- source_pr: https://github.com/catoncat/Snowy/pull/18
+- source_commit: `ed68a9f7245bbee930b64833a537f9ddb4b9a2a6`
+- source_pr: `main@ed68a9f7245bbee930b64833a537f9ddb4b9a2a6`
 - manifest: `.ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.manifest.json`
-- generated_at: 2026-05-31T06:19:54.427Z
+- generated_at: 2026-06-02T08:45:25.614Z
 - channel: `external-store-or-deployment`
-- artifact_sha256: `df920371c30d663edf4aa8bceb5d7634594e8eba06de4a072673b8cfe35bb769`
+- artifact_sha256: `b8f166070a4058d9be7bb54755bfb78570ffc6bf15a688497f4bc655a8942dd5`
 - review_status: `ready_for_upload`
 
 Manifest summary:
@@ -159,11 +159,21 @@ Latest command verification:
 
 Latest artifact-level smoke verification:
 
-- checked_at: 2026-05-31T06:24:39Z
+- checked_at: 2026-06-02T08:45:42Z
 - command: `bun run release:smoke:mv3 -- --artifact .ml-cache/release-artifacts/browser-brain-loop-next-mv3-external-submission-2026-05-27.zip`
-- artifact_sha256: `df920371c30d663edf4aa8bceb5d7634594e8eba06de4a072673b8cfe35bb769`
+- artifact_sha256: `b8f166070a4058d9be7bb54755bfb78570ffc6bf15a688497f4bc655a8942dd5`
 - result: `ok: true`
 - extension_source_kind: `artifact`
 - profile_mode: `temporary`
 - scenario: `release-smoke`
 - dispatched_count: 1
+
+Latest pre-submission gate verification:
+
+- checked_at: 2026-06-02T08:45:24.601Z
+- command: `bun run release:cutover:status`
+- result: `ok: true`
+- blockers: `[]`
+- queue_entries: 0
+- active_lease_sessions: `[]`
+- current_accepted_main_commit: `ed68a9f7245bbee930b64833a537f9ddb4b9a2a6`
