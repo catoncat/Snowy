@@ -1,28 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-08T15:36:47.112Z",
+  "generated_at": "2026-07-08T15:53:06.805Z",
   "repo_root": "/private/tmp/Snowy",
   "entries": [
-    {
-      "issue_id": "ISSUE-190",
-      "issue_path": "docs/backlog/2026-07-08-m1-first-run-experience-and-honest-tool-surface.md",
-      "title": "M1 里程碑：首跑体验与诚实工具面",
-      "parallel_group": "mv3-shell",
-      "module_id": "ai-surface-control-plane",
-      "module_stage": "secondary",
-      "tracking_kind": "mainline",
-      "check_cmd": "bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/sidepanel-app.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "apps/mv3-shell/src/sidepanel/",
-        "apps/mv3-shell/src/runtime-services.ts",
-        "apps/mv3-shell/src/background.ts",
-        "packages/core/src/index.ts",
-        "packages/core/test/core.spec.ts",
-        "apps/mv3-shell/test/sidepanel-app.spec.ts",
-        "apps/mv3-shell/test/runtime-chat.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-191",
       "issue_path": "docs/backlog/2026-07-08-m1-skill-editor-readback-builtin-examples-and-honest-run.md",

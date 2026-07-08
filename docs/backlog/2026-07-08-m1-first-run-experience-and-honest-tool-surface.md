@@ -29,6 +29,7 @@ write_scope:
   - apps/mv3-shell/test/runtime-chat.spec.ts
 acceptance_ref: docs/product-roadmap-2026-07-08.md
 check_cmd: "bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/sidepanel-app.spec.ts"
+completed_at: 2026-07-08T15:53:03.473Z
 ---
 
 ## Goal
@@ -63,6 +64,15 @@ check_cmd: "bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/
 
 ## 工作总结
 
+### 实现了什么
+- 首跑中文引导卡+预检；tabs.create/close catalog+transport+provider+confirmPolicy:always；suggestion卡审核；英文fallback改中文
+
+### 实际跑了什么检查
+- bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/sidepanel-app.spec.ts
+
+### 残留风险
+- 无
+
 ### 实现内容
 
 **1. 首跑引导（App.vue + runtime-services.ts）**
@@ -95,5 +105,7 @@ check_cmd: "bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/
 - 真实 Chrome dogfood 记录留到 M1 整体收口时补充。
 
 ## 相关 commits
+
+- `3ea182a425af` docs(issue-190): mark done, add work summary
 
 - `8f9db69` — feat(m1): first-run onboarding, honest tool surface, tabs.create/close (ISSUE-190)
