@@ -57,6 +57,7 @@ bun run lint:fix     # biome 自动修复
 
 ## 文档
 
+- [产品续航规划](docs/product-roadmap-2026-07-08.md) — 当前产品章节主线（M1-M4 里程碑与砍掉清单）
 - [从这里开始](docs/start-here.md) — 仓库目标与必读顺序
 - [真实来源地图](docs/source-of-truth-map.md) — 哪些文档驱动实际实现
 - [锁定决策](docs/locked-decisions-2026-03-29.md) — 不应偏离的架构约束

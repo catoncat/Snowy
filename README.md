@@ -57,6 +57,7 @@ bun run lint:fix     # biome auto-fix
 
 ## Docs
 
+- [Product Roadmap](docs/product-roadmap-2026-07-08.md) — current product-chapter mainline (M1-M4 milestones and the cut list)
 - [Start Here](docs/start-here.md) — repo purpose and mandatory reading order
 - [Source Of Truth Map](docs/source-of-truth-map.md) — which docs actually drive implementation
 - [Locked Decisions](docs/locked-decisions-2026-03-29.md) — architecture constraints that should not drift

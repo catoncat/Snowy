@@ -21,14 +21,16 @@
 
 当前仓库的真实状态是：
 
-- `v0` 已完成的是 `substrate foundation`
-- 当前主线不是继续横向补 substrate
-- 当前主线是补回 `browser-side kernel`
+- `v0` 完成了 `substrate foundation`
+- 复刻章节（browser-side kernel + 旧产品替代证明）已于 2026-05-27 外部接受、2026-07-08 正式关章
+- 当前主线是产品章节：`docs/product-roadmap-2026-07-08.md` 的 M1-M4 里程碑
 
 因此要这样理解真相源：
 
 - `AGENTS.md` + `docs/locked-decisions-2026-03-29.md`
   - 定义不能改口的仓库边界
+- `docs/product-roadmap-2026-07-08.md`
+  - 定义产品章节的北极星、砍掉清单和里程碑批次；queue 为空时的规划入口
 - `docs/browser-automation-first-principles.md`
   - 定义 browser automation lane 的第一性原则；优先级高于旧仓迁移清单、AIPex alignment 和历史 Tier 拆分
 - `docs/module-tracking-ledger.json`
@@ -64,7 +66,8 @@
 
 | 你要回答的问题 | 先看哪里 |
 |---|---|
-| 这仓库现在到底想成为什么 | `AGENTS.md` → `docs/start-here.md` → `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md` |
+| 这仓库现在到底想成为什么 | `AGENTS.md` → `docs/product-roadmap-2026-07-08.md` → `docs/start-here.md` |
+| 产品章节接下来做什么 / 什么被砍掉 | `docs/product-roadmap-2026-07-08.md` |
 | 哪些原则不能变 | `AGENTS.md` → `docs/locked-decisions-2026-03-29.md` |
 | browser automation 该怎么设计 | `AGENTS.md` → `docs/browser-automation-first-principles.md` |
 | browser automation 接下来先做什么 | `docs/browser-automation-dogfood-todo.md` |
@@ -262,6 +265,8 @@ planning 额外要做的不是“多读几份文档”，而是：
 - 把 claim 顺序从 kernel 再拉回 review-first
 
 ## 8. 现在该怎么继续规划
+
+2026-07-08 起，产品章节的规划以 `docs/product-roadmap-2026-07-08.md` 为入口：queue 为空时先对照当前里程碑（M1 可日用 → M2 视觉化 Agent → M3 Skill/新一代油猴脚本 → M4 极致探索）判断收口状态，再规划下一批 1-3 张里程碑票；本节其余内容保留为复刻章节的历史规划程序。
 
 默认规划顺序是：
 

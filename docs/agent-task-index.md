@@ -82,22 +82,19 @@
 
 ### D. Queue 为空，或要做下一批规划
 
-先判断是否已经进入 cutover delivery mode：
+产品章节（2026-07-08 起）的规划入口是 roadmap，不再是 cutover gate：
 
-- 如果 `docs/release-cutover-decision-packet-2026-05-27.md` 显示 repo-side Level 2 evidence ready
-- 且 `docs/workflow/live-queue.json` 为空、lease 为空
-- 先运行 `bun run release:cutover:status`
-
-如果 gate 绿，不要进入下一批规划；当前动作是推进 PR / CI / 外部 release acceptance / old-mainline cutover decision。只有 gate 暴露真实产品能力缺口，或用户明确提升某个 deferred breadth，才继续规划 backlog issue。
+- 先读 `docs/product-roadmap-2026-07-08.md`
+- 对照当前里程碑（M1 → M2 → M3 → M4）判断：是里程碑没收口（缺验收或缺 dogfood 证据），还是真的该规划下一批
+- 下一批默认是 1-3 张用户可感知的里程碑票，不是 parity / review inventory 拆票
 
 读：
 
-1. `docs/source-of-truth-map.md`
-2. `docs/module-tracking-ledger.json`
-3. `docs/backlog/README.md`
-4. `docs/multi-agent-workflow.md`
-5. `docs/reviews/2026-03-29-vnext-architecture-recovery-report.md`
-6. `docs/kernel-skeleton-design.md`
+1. `docs/product-roadmap-2026-07-08.md`
+2. `docs/source-of-truth-map.md`
+3. `docs/module-tracking-ledger.json`
+4. `docs/backlog/README.md`
+5. `docs/multi-agent-workflow.md`（仅当需要理解并行协作规则）
 
 按需再读：
 
@@ -160,9 +157,9 @@
 - queue 空了进入 planning commit；queue 被 lease 占满时可先做 planning preview：
   - `bun run workflow:plan:preview`
   - `bun run workflow:plan`
-- queue 空且 cutover delivery 可能已 ready：
-  - `bun run release:cutover:status`
+- queue 空时先对照 roadmap 判断里程碑收口状态：
+  - `docs/product-roadmap-2026-07-08.md`
 
 ## One-Line Rule
 
-先锁任务，再补上下文；实现看 issue 和代码，收口看 Completion Record；queue 空时先判断 cutover delivery 是否已经 ready，不要默认继续拆小 issue。
+先锁任务，再补上下文；实现看 issue 和代码，收口看 Completion Record；queue 空时先对照 `docs/product-roadmap-2026-07-08.md` 判断当前里程碑是否收口，不要默认继续拆小 issue。
