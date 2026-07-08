@@ -1,0 +1,36 @@
+apps/mv3-shell/src/sidepanel/App.vue
+  s_eca3b6cde00730::t_5f20c1b54ccad5 2162,2167
+  s_eca3b6cde00730::t_cc44e588511866 1371,1380,1382-1390,1392,2151
+  s_eca3b6cde00730::t_3c69d4144d5860 3316,3320-3321
+  s_eca3b6cde00730::t_481fc2bc5b3b22 1064,1096,1103-1104,1107-1129,2138,2157
+  s_eca3b6cde00730::t_f4a656eb0b091d 238
+  s_eca3b6cde00730::t_f3a68fe514d9c3 34-35
+  s_eca3b6cde00730::t_d930ef94155416 2135-2137,2139-2150,2152-2156,2158-2159,3322,3496-3499
+apps/mv3-shell/src/runtime-services.ts
+  s_eca3b6cde00730::t_2f85dba0052198 4425-4446
+  s_eca3b6cde00730::t_9ffdb1b8b22b7d 5715
+apps/mv3-shell/src/sidepanel/management.ts
+  s_eca3b6cde00730::t_94d7404dc43565 377-478
+  s_eca3b6cde00730::t_f48ea60e43b60b 479-481
+apps/mv3-shell/src/background.ts
+  s_eca3b6cde00730::t_37360dd6c01a57 3048-3051
+  s_eca3b6cde00730::t_a03073aac28b49 3052
+apps/mv3-shell/test/sidepanel-app.spec.ts
+  s_eca3b6cde00730::t_1f215b8ca4d134 1324-1325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2104cfc971e40d84456c2a492b0256d788084cdc",
+  "prompts": {},
+  "sessions": {
+    "s_eca3b6cde00730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f4255-f8c7-705f-994b-732cc46d3f9c",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "cat <git@chen.rs>"
+    }
+  }
+}
