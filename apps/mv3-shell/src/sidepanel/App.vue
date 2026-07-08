@@ -31,7 +31,8 @@ import {
 import { SidepanelIcon } from "./icons";
 import {
   createInitialManagementState,
-  createSkillEditorSetupPlan,
+: createSkillEditorSetupPlan,
+  createBuiltinExampleSetupPlans,
   createSkillRunPrompt,
   listSkillCatalogItems,
   listPendingInterventions,
@@ -234,6 +235,7 @@ const skillNameDraft = ref("新技能");
 const skillDescriptionDraft = ref("描述这个技能要解决什么问题");
 const skillLocationDraft = ref(skillMarkdownLocationForId(skillIdDraft.value));
 const skillBodyDraft = ref("# SKILL\n1. 读取输入\n2. 执行步骤\n3. 输出结果\n");
+const skillHandlerDraft = ref("");
 const skillEditorOpen = ref(false);
 const skillEditorMode = ref<"create" | "import" | "edit">("create");
 
@@ -1059,6 +1061,7 @@ function resetSkillPackageDraft() {
   skillDescriptionDraft.value = "描述这个技能要解决什么问题";
   skillLocationDraft.value = skillMarkdownLocationForId(skillIdDraft.value);
   skillBodyDraft.value = "# SKILL\n1. 读取输入\n2. 执行步骤\n3. 输出结果\n";
+  skillHandlerDraft.value = "";
 }
 
 function openSkillCreateEditor() {
@@ -1090,16 +1093,40 @@ function openSkillImportEditor() {
   void openSkillDiscoverPanelAndFocus();
 }
 
-function editSkillPackageDraft(skill: SkillCatalogItem) {
+: editSkillPackageDraft(skill: SkillCatalogItem) {
   managementError.value = null;
   managementNotice.value = null;
   skillIdDraft.value = skill.skillId;
   skillNameDraft.value = skillDisplayName(skill);
   skillDescriptionDraft.value = skillDescription(skill) || "描述这个技能要解决什么问题";
   skillLocationDraft.value = skillMarkdownLocationForId(skill.skillId);
-  skillBodyDraft.value = "# SKILL\n1. 读取输入\n2. 执行步骤\n3. 输出结果\n";
+  skillBodyDraft.value = "加载中…";
+  skillHandlerDraft.value = "加载中…";
   skillEditorMode.value = "edit";
   skillEditorOpen.value = true;
+
+  void callRuntime<{ skillMarkdown: string; handlerSource: string; manifestJson: string }>(
+    "skill.read",
+    { skillId: skill.skillId },
+  )
+    .then((result) => {
+      skillBodyDraft.value = result.skillMarkdown || "# SKILL\n";
+      skillHandlerDraft.value = result.handlerSource || "";
+      if (result.manifestJson) {
+        try {
+          const manifest = JSON.parse(result.manifestJson);
+          if (manifest.name) skillNameDraft.value = manifest.name;
+          if (manifest.description) skillDescriptionDraft.value = manifest.description;
+        } catch {
+          // keep existing drafts
+        }
+      }
+    })
+    .catch((error) => {
+      skillBodyDraft.value = "# SKILL\n1. 读取输入\n2. 执行步骤\n3. 输出结果\n";
+      skillHandlerDraft.value = "";
+      managementError.value = `读取技能文件失败：${error instanceof Error ? error.message : String(error)}`;
+    });
 }
 
 function closeSkillEditor() {
@@ -1341,7 +1368,7 @@ function useSkillInComposer(skill: SkillCatalogItem) {
   void focusComposer();
 }
 
-async function runSkillFromManagement(skill: SkillCatalogItem) {
+: runSkillFromManagement(skill: SkillCatalogItem) {
   if (isSkillRunPending(skill.skillId) || sending.value) {
     return;
   }
@@ -1350,17 +1377,19 @@ async function runSkillFromManagement(skill: SkillCatalogItem) {
     return;
   }
   setSkillRunPending(skill.skillId, true);
+  managementError.value = null;
   try {
-    managementError.value = null;
-    draft.value = createSkillRunPrompt(skill.skillId, skillRunArgs.value);
-    selectedTabs.value = [];
-    selectedSkills.value = [skill];
-    composerContextExpanded.value = false;
-    activePane.value = "chat";
-    await nextTick();
-    await sendPrompt("normal");
+    const result = await callRuntime<{ ok: boolean; data?: unknown; error?: { message?: string } }>(
+      "skills.invoke",
+      { skillId: skill.skillId, action: "run", args: skillRunArgs.value || undefined },
+    );
+    if (result.ok) {
+      managementNotice.value = `技能运行完成：${JSON.stringify(result.data)}`;
+    } else {
+      managementError.value = `技能运行失败：${result.error?.message ?? "未知错误"}`;
+    }
   } catch (error) {
-    managementError.value = error instanceof Error ? error.message : String(error);
+    managementError.value = `技能运行失败：${error instanceof Error ? error.message : String(error)}`;
   } finally {
     setSkillRunPending(skill.skillId, false);
   }
@@ -2103,13 +2132,39 @@ function submitSkillDiscover() {
   });
 }
 
+async function installBuiltinExamples() {
+  if (managementBusy.value) {
+    return;
+  }
+  managementError.value = null;
+  const plans = createBuiltinExampleSetupPlans();
+  let installed = 0;
+  for (const plan of plans) {
+    try {
+      await callRuntime("skills.install", {
+        skillId: plan.skillId,
+        setupPlan: plan.setupPlan,
+        metadata: { source: "sidepanel.builtin-examples" },
+      });
+      installed += 1;
+    } catch (error) {
+      managementError.value = `安装示例技能 ${plan.skillId} 失败：${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+  if (installed > 0) {
+    managementNotice.value = `已安装 ${installed} 个示例技能`;
+    await refreshManagement();
+  }
+}
+
 function submitSkillPackageInstall() {
   try {
-    const setupPlan = createSkillEditorSetupPlan({
+: createSkillEditorSetupPlan({
       skillId: skillIdDraft.value,
       skillName: skillNameDraft.value,
       skillDescription: skillDescriptionDraft.value,
       body: skillBodyDraft.value,
+      handlerSource: skillHandlerDraft.value || undefined,
     });
     void runManagementAction("skills.install", {
       skillId: setupPlan.skillId,
@@ -3258,9 +3313,12 @@ onUnmounted(() => {
                 <h3 class="text-[11px] font-bold uppercase tracking-normal text-slate-500">技能管理</h3>
                 <p class="text-[12px] leading-5 text-slate-500">先管理已有技能；需要新建或修改时，再进入编辑界面。</p>
               </div>
-              <div class="flex flex-wrap items-center gap-2">
+: "flex flex-wrap items-center gap-2">
                 <button type="button" class="rounded-md bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-slate-800" @click="openSkillCreateEditor">
                   新建技能
+                </button>
+                <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50" :disabled="managementBusy" @click="installBuiltinExamples">
+                  安装示例技能
                 </button>
                 <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700 hover:bg-slate-100" :aria-expanded="showSkillDiscoverPanel ? 'true' : 'false'" aria-controls="skills-discover-panel" @click="toggleSkillDiscoverPanel">
                   {{ showSkillDiscoverPanel ? "收起导入面板" : "导入已有技能" }}
@@ -3434,6 +3492,10 @@ onUnmounted(() => {
             <label class="block space-y-1.5">
               <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">SKILL 正文</span>
               <textarea v-model="skillBodyDraft" class="min-h-44 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none focus:border-blue-500" />
+            </label>
+            <label class="block space-y-1.5">
+              <span class="block text-[11px] font-bold uppercase tracking-normal text-slate-500">handler.js（可执行代码）</span>
+              <textarea v-model="skillHandlerDraft" class="min-h-32 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 font-mono text-[12px] leading-5 text-slate-950 outline-none focus:border-blue-500" placeholder="// 可选：编写 JS handler 代码" />
             </label>
           </section>
         </section>

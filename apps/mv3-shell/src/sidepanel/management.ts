@@ -374,6 +374,111 @@ export function createInitialManagementState(): ManagementState {
   };
 }
 
+export interface BuiltinExampleSkill {
+  skillId: string;
+  skillName: string;
+  skillDescription: string;
+  body: string;
+  handlerSource: string;
+}
+
+export function getBuiltinExampleSkills(): BuiltinExampleSkill[] {
+  return [
+    {
+      skillId: "example.page-summary",
+      skillName: "页面摘要",
+      skillDescription: "总结当前页面的主要内容，提取关键信息",
+      body: [
+        "# 页面摘要",
+        "",
+        "## 用途",
+        "读取当前页面内容，生成简洁摘要。",
+        "",
+        "## 步骤",
+        "1. 调用 page.info 获取页面结构",
+        "2. 提取主要文本内容",
+        "3. 生成不超过 3 句话的摘要",
+      ].join("\n"),
+      handlerSource: [
+        "exports.default = async ({ input, tools }) => {",
+        "  const info = await tools.call('page.info', { maxElements: 200 });",
+        "  return { action: input.action, summary: '页面信息已获取', tabCount: 1 };",
+        "};",
+      ].join("\n"),
+    },
+    {
+      skillId: "example.tab-cleanup",
+      skillName: "标签页清理",
+      skillDescription: "列出所有标签页，找出重复的并提供关闭建议",
+      body: [
+        "# 标签页清理",
+        "",
+        "## 用途",
+        "扫描所有打开的标签页，找出 URL 重复的标签。",
+        "",
+        "## 步骤",
+        "1. 调用 tabs.list 获取所有标签页",
+        "2. 按 URL 分组找出重复项",
+        "3. 使用 tabs.close 逐个关闭重复标签",
+      ].join("\n"),
+      handlerSource: [
+        "exports.default = async ({ input, tools }) => {",
+        "  const tabs = await tools.call('tabs.list', {});",
+        "  const seen = new Map();",
+        "  const duplicates = [];",
+        "  for (const tab of tabs) {",
+        "    if (seen.has(tab.url)) {",
+        "      duplicates.push(tab);",
+        "    } else {",
+        "      seen.set(tab.url, tab);",
+        "    }",
+        "  }",
+        "  return { action: input.action, totalTabs: tabs.length, duplicateCount: duplicates.length };",
+        "};",
+      ].join("\n"),
+    },
+    {
+      skillId: "example.quick-search",
+      skillName: "快速搜索",
+      skillDescription: "在当前标签页打开新的搜索标签页",
+      body: [
+        "# 快速搜索",
+        "",
+        "## 用途",
+        "根据输入关键词，在新标签页中打开搜索引擎。",
+        "",
+        "## 步骤",
+        "1. 获取搜索关键词",
+        "2. 调用 tabs.create 打开搜索页面",
+      ].join("\n"),
+      handlerSource: [
+        "exports.default = async ({ input, tools }) => {",
+        "  const query = input.args || '';",
+        "  const url = 'https://www.google.com/search?q=' + encodeURIComponent(query);",
+        "  const tab = await tools.call('tabs.create', { url });",
+        "  return { action: input.action, openedUrl: url, tabId: tab.tabId };",
+        "};",
+      ].join("\n"),
+    },
+  ];
+}
+
+export function createBuiltinExampleSetupPlans(): Array<{
+  skillId: string;
+  setupPlan: SkillPackageSetupPlan;
+}> {
+  return getBuiltinExampleSkills().map((skill) => ({
+    skillId: skill.skillId,
+    setupPlan: createSkillEditorSetupPlan({
+      skillId: skill.skillId,
+      skillName: skill.skillName,
+      skillDescription: skill.skillDescription,
+      body: skill.body,
+      handlerSource: skill.handlerSource,
+    }),
+  }));
+}
+
 export function createSkillRunPrompt(skillIdValue: string, argsText = ""): string {
   const skillId = requireNonEmptyString(skillIdValue, "skillId 不能为空");
   const args = String(argsText || "").trim();

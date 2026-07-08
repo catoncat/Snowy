@@ -4422,6 +4422,28 @@ export function createBackgroundRuntimeServices({
     );
   }
 
+  async function readSkillPackageFiles(skillId) {
+    const services = await ensureServices();
+    const baseUri = `mem://skills/${skillId}`;
+    const result = { skillMarkdown: "", handlerSource: "", manifestJson: "" };
+    try {
+      result.skillMarkdown = await services.browserVfs.read(`${baseUri}/SKILL.md`);
+    } catch {
+      // file may not exist
+    }
+    try {
+      result.handlerSource = await services.browserVfs.read(`${baseUri}/handler.js`);
+    } catch {
+      // file may not exist
+    }
+    try {
+      result.manifestJson = await services.browserVfs.read(`${baseUri}/skill.json`);
+    } catch {
+      // file may not exist
+    }
+    return result;
+  }
+
   async function ensureSkillInvokable(skillId) {
     const record = (await skillManager.list()).find((item) => item.skillId === skillId);
     if (!record) {
@@ -5690,6 +5712,7 @@ export function createBackgroundRuntimeServices({
     listInterventions,
     readInterventionAudit,
     readReplayContinuityMarkers,
+    readSkillPackageFiles,
     refreshChatSessionTitle,
     resolveDogfoodExternalPageRequest,
     requestSiteHandoff,

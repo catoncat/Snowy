@@ -3045,6 +3045,11 @@ export function createBackgroundRunnerBridge({
           action: message.action,
           args: message.args,
         });
+      case "skill.read":
+        return {
+          ok: true,
+          data: await getRuntimeServices().readSkillPackageFiles(message.skillId),
+        };
       case "skills.discover":
         return controlPlaneRoutePlan.route(message);
       case "skills.install":
