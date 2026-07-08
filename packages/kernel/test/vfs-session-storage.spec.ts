@@ -1,6 +1,10 @@
 import { SessionStore, VfsSessionStorage } from "@bbl-next/kernel";
 import { beforeEach, describe, expect, it } from "vitest";
-import { BrowserVfs } from "../../browser-vfs/src/index.js";
+import {
+  BrowserVfs,
+  type PersistentVfsStore,
+  type VfsNodeRecord,
+} from "../../browser-vfs/src/index.js";
 
 describe("VfsSessionStorage", () => {
   let vfs: BrowserVfs;
@@ -146,5 +150,63 @@ describe("VfsSessionStorage", () => {
         ],
       },
     });
+  });
+
+  it("survives across VFS instances when backed by a persistent store", async () => {
+    const records = new Map<string, VfsNodeRecord>();
+    const persistentStore: PersistentVfsStore = {
+      async load(scope, workspaceId) {
+        return [...records.values()].filter(
+          (record) =>
+            record.scope === scope && (scope === "library" || record.workspaceId === workspaceId),
+        );
+      },
+      async put(record) {
+        records.set(record.key, { ...record });
+      },
+      async delete(key) {
+        records.delete(key);
+      },
+    };
+
+    // First VFS instance — create session and append entries
+    const vfsA = await BrowserVfs.create({
+      workspaceId: "persist-test",
+      store: persistentStore,
+    });
+    const storageA = new VfsSessionStorage(vfsA);
+
+    await storageA.createSession({
+      id: "s-persist-1",
+      createdAt: "2026-07-08T00:00:00.000Z",
+      title: "Persisted Session",
+    });
+    await storageA.appendEntry("s-persist-1", {
+      entryId: "e-p1",
+      type: "message",
+      timestamp: "2026-07-08T00:00:01.000Z",
+      payload: { role: "user", text: "persist across restart" },
+    });
+    await storageA.writeKernelSnapshot("s-persist-1", {
+      interventions: { records: [], audit: [] },
+    });
+
+    // Simulate SW restart: drop vfsA, create a fresh VFS from the same store
+    const vfsB = await BrowserVfs.create({
+      workspaceId: "persist-test",
+      store: persistentStore,
+    });
+    const storageB = new VfsSessionStorage(vfsB);
+
+    const sessions = await storageB.listSessions();
+    expect(sessions.map((s) => s.id)).toEqual(["s-persist-1"]);
+    expect(sessions[0]?.title).toBe("Persisted Session");
+
+    const entries = await storageB.getEntries("s-persist-1");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.payload).toEqual({ role: "user", text: "persist across restart" });
+
+    const snapshot = await storageB.readKernelSnapshot("s-persist-1");
+    expect(snapshot).toEqual({ interventions: { records: [], audit: [] } });
   });
 });

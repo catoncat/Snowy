@@ -3974,4 +3974,73 @@ describe("mv3-shell intervention bridge integration", () => {
       verified: true,
     });
   });
+
+  it("persists session data across MV3 Service Worker restart via chrome.storage-backed VFS", async () => {
+    const storedData: Record<string, unknown> = {};
+    const createStorageArea = () => ({
+      get: vi.fn(async (keys) => {
+        const result: Record<string, unknown> = {};
+        for (const key of Array.isArray(keys) ? keys : [keys]) {
+          if (storedData[key]) {
+            result[key] = storedData[key];
+          }
+        }
+        return result;
+      }),
+      set: vi.fn(async (items) => {
+        Object.assign(storedData, items);
+      }),
+    });
+
+    const chromeApiWithStorage = {
+      ...createFixtureChromeApi(),
+      storage: { local: createStorageArea() },
+    };
+
+    // Phase 1: boot runtime, create a session, add entries, then tear down
+    const firstRuntime = createBackgroundRuntimeServices({
+      chromeApi: chromeApiWithStorage,
+    });
+    const { kernel: firstKernel } = await firstRuntime.ensureServices();
+    const firstSessionStore = firstKernel.sessions;
+    const createdSession = await firstSessionStore.createSession({
+      title: "restart-persist-test",
+    });
+    await firstSessionStore.appendEntry(createdSession.id, "message", {
+      role: "user",
+      text: "hello before restart",
+    });
+    await firstSessionStore.appendEntry(createdSession.id, "message", {
+      role: "assistant",
+      text: "hi after restart",
+    });
+
+    // Simulate SW restart: drop the first runtime entirely
+    // (servicesPromise, all in-memory maps are GC'd)
+
+    // Phase 2: boot a fresh runtime from the same chrome.storage
+    const secondRuntime = createBackgroundRuntimeServices({
+      chromeApi: chromeApiWithStorage,
+    });
+    const { kernel: secondKernel } = await secondRuntime.ensureServices();
+    const secondSessionStore = secondKernel.sessions;
+
+    const sessions = await secondSessionStore.listSessions();
+    const restored = sessions.find(
+      (s: { id: string; title: string }) => s.title === "restart-persist-test",
+    );
+    expect(restored).toBeDefined();
+    expect(restored?.id).toBe(createdSession.id);
+
+    const entries = await secondSessionStore.getEntries(createdSession.id);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]?.payload).toEqual({
+      role: "user",
+      text: "hello before restart",
+    });
+    expect(entries[1]?.payload).toEqual({
+      role: "assistant",
+      text: "hi after restart",
+    });
+  });
 });

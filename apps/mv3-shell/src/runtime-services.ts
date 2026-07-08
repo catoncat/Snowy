@@ -18,7 +18,6 @@ import {
   dispatchCapabilityCall,
 } from "@bbl-next/core";
 import {
-  InMemorySessionStorage,
   LlmProviderRegistry,
   VfsSessionStorage,
   createKernel,
@@ -72,6 +71,7 @@ const SKILL_STATUS_BY_ACTION = {
 const SKILL_LIFECYCLE_STORAGE_KEY = "bbl-next.skills.lifecycle.v1";
 const SKILL_LIFECYCLE_STATUSES = new Set(Object.values(SKILL_STATUS_BY_ACTION));
 const BROWSER_VFS_STORAGE_KEY = "bbl-next.browser-vfs.nodes.v1";
+const SESSION_VFS_STORAGE_KEY = "bbl-next.browser-vfs.sessions.v1";
 const SKILL_PACKAGE_MANIFEST_FILE = "skill.json";
 const DEFAULT_SKILL_PACKAGE_ENTRY = "handler.js";
 
@@ -149,43 +149,44 @@ function normalizeStoredVfsRecord(record) {
   };
 }
 
-async function loadStoredVfsRecords(storageArea) {
-  const result = await storageArea.get(BROWSER_VFS_STORAGE_KEY);
-  const stored = result?.[BROWSER_VFS_STORAGE_KEY];
+async function loadStoredVfsRecords(storageArea, storageKey = BROWSER_VFS_STORAGE_KEY) {
+  const result = await storageArea.get(storageKey);
+  const stored = result?.[storageKey];
   const records = Array.isArray(stored) ? stored : [];
   return records.map((record) => normalizeStoredVfsRecord(record)).filter(Boolean);
 }
 
-async function saveStoredVfsRecords(storageArea, records) {
+async function saveStoredVfsRecords(storageArea, records, storageKey = BROWSER_VFS_STORAGE_KEY) {
   await storageArea.set({
-    [BROWSER_VFS_STORAGE_KEY]: records.map((record) => ({ ...record })),
+    [storageKey]: records.map((record) => ({ ...record })),
   });
 }
 
-function createChromeStorageVfsStore(chromeApi) {
+function createChromeStorageVfsStore(chromeApi, storageKey = BROWSER_VFS_STORAGE_KEY) {
   const storageArea = chromeApi?.storage?.local;
   if (typeof storageArea?.get !== "function" || typeof storageArea?.set !== "function") {
     return undefined;
   }
   return {
     async load(scope, workspaceId) {
-      const records = await loadStoredVfsRecords(storageArea);
+      const records = await loadStoredVfsRecords(storageArea, storageKey);
       return records.filter(
         (record) =>
           record.scope === scope && (scope === "library" || record.workspaceId === workspaceId),
       );
     },
     async put(record) {
-      const records = await loadStoredVfsRecords(storageArea);
+      const records = await loadStoredVfsRecords(storageArea, storageKey);
       const next = records.filter((item) => item.key !== record.key);
       next.push({ ...record });
-      await saveStoredVfsRecords(storageArea, next);
+      await saveStoredVfsRecords(storageArea, next, storageKey);
     },
     async delete(key) {
-      const records = await loadStoredVfsRecords(storageArea);
+      const records = await loadStoredVfsRecords(storageArea, storageKey);
       await saveStoredVfsRecords(
         storageArea,
         records.filter((record) => record.key !== key),
+        storageKey,
       );
     },
   };
@@ -820,14 +821,15 @@ function settleKernelRun(kernel, sessionId, shouldPause) {
   }
 }
 
-async function createSessionStorage({ sessionStorage, workspaceId }) {
+async function createSessionStorage({ sessionStorage, chromeApi, workspaceId }) {
   if (sessionStorage) {
     return sessionStorage;
   }
-  if (typeof indexedDB === "undefined") {
-    return new InMemorySessionStorage();
-  }
-  const vfs = await BrowserVfs.create({ workspaceId });
+  const store = createChromeStorageVfsStore(chromeApi, SESSION_VFS_STORAGE_KEY);
+  const vfs = await BrowserVfs.create({
+    workspaceId,
+    ...(store ? { store } : {}),
+  });
   return new VfsSessionStorage(vfs);
 }
 
@@ -3883,6 +3885,7 @@ export function createBackgroundRuntimeServices({
       servicesPromise = (async () => {
         const storage = await createSessionStorage({
           sessionStorage,
+          chromeApi,
           workspaceId,
         });
         const browserVfs = await createRuntimeBrowserVfs({
