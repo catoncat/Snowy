@@ -91,10 +91,12 @@
 读：
 
 1. `docs/product-roadmap-2026-07-08.md`
-2. `docs/source-of-truth-map.md`
-3. `docs/module-tracking-ledger.json`
-4. `docs/backlog/README.md`
-5. `docs/multi-agent-workflow.md`（仅当需要理解并行协作规则）
+2. `docs/planning/2026-07-08-handoff-prompt.md`（新 agent 接手时）
+3. `docs/planning/2026-07-08-product-discovery-notes.md`（需复盘调查过程时）
+4. `docs/source-of-truth-map.md`
+5. `docs/module-tracking-ledger.json`
+6. `docs/backlog/README.md`
+7. `docs/multi-agent-workflow.md`（仅当需要理解并行协作规则）
 
 按需再读：
 

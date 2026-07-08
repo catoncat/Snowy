@@ -58,6 +58,8 @@ bun run lint:fix     # biome auto-fix
 ## Docs
 
 - [Product Roadmap](docs/product-roadmap-2026-07-08.md) — current product-chapter mainline (M1-M4 milestones and the cut list)
+- [Planning discovery notes](docs/planning/2026-07-08-product-discovery-notes.md) — 2026-07-08 code-level investigation and decision log
+- [Handoff prompt for next session](docs/planning/2026-07-08-handoff-prompt.md) — copy-paste onboarding for the next agent conversation
 - [Start Here](docs/start-here.md) — repo purpose and mandatory reading order
 - [Source Of Truth Map](docs/source-of-truth-map.md) — which docs actually drive implementation
 - [Locked Decisions](docs/locked-decisions-2026-03-29.md) — architecture constraints that should not drift

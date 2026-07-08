@@ -68,6 +68,8 @@
 |---|---|
 | 这仓库现在到底想成为什么 | `AGENTS.md` → `docs/product-roadmap-2026-07-08.md` → `docs/start-here.md` |
 | 产品章节接下来做什么 / 什么被砍掉 | `docs/product-roadmap-2026-07-08.md` |
+| 上一段规划对话的调查结论 | `docs/planning/2026-07-08-product-discovery-notes.md` |
+| 下一会话如何零 loss 接手 | `docs/planning/2026-07-08-handoff-prompt.md` |
 | 哪些原则不能变 | `AGENTS.md` → `docs/locked-decisions-2026-03-29.md` |
 | browser automation 该怎么设计 | `AGENTS.md` → `docs/browser-automation-first-principles.md` |
 | browser automation 接下来先做什么 | `docs/browser-automation-dogfood-todo.md` |
