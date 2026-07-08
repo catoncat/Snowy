@@ -1,0 +1,19 @@
+docs/backlog/2026-07-08-m1-skill-editor-readback-builtin-examples-and-honest-run.md
+  s_eca3b6cde00730::t_0a902e40cfe184 4,8,45-49,58-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bdd7ee98113c405f3a5101e719af72c3552c5bab",
+  "prompts": {},
+  "sessions": {
+    "s_eca3b6cde00730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f4255-f8c7-705f-994b-732cc46d3f9c",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "cat <git@chen.rs>"
+    }
+  }
+}
