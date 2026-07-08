@@ -595,6 +595,8 @@ export interface TabsCapabilityTransport {
   list(): Promise<TabsCapabilityRecord[]>;
   getActive(actionKind: string): Promise<TabsCapabilityRecord>;
   navigate(url: string): Promise<TabsCapabilityRecord>;
+  create(url: string): Promise<TabsCapabilityRecord>;
+  close(tabId?: number): Promise<TabsCapabilityRecord>;
 }
 
 export interface MemfsCapabilityTransport {
@@ -1413,6 +1415,56 @@ export const BUILTIN_CATALOG: Readonly<Record<string, CapabilityDescriptor[]>> =
         required: ["tabId", "url", "active"],
       },
       supportsVerify: true,
+    }),
+    catalogEntry({
+      id: "tabs.create",
+      family: "tabs",
+      operation: "create",
+      risk: "medium",
+      sideEffects: "writes",
+      permissions: ["tabs.create"],
+      description: "Open a new browser tab and navigate it to a URL",
+      inputSchema: {
+        type: "object",
+        properties: { url: { type: "string" } },
+        required: ["url"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          tabId: { type: "number" },
+          url: { type: "string" },
+          active: { type: "boolean" },
+          title: { type: "string" },
+        },
+        required: ["tabId", "url", "active"],
+      },
+    }),
+    catalogEntry({
+      id: "tabs.close",
+      family: "tabs",
+      operation: "close",
+      risk: "high",
+      sideEffects: "writes",
+      permissions: ["tabs.close"],
+      description: "Close a browser tab by id, or the active tab if no id is given",
+      inputSchema: {
+        type: "object",
+        properties: { tabId: { type: "number" } },
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          tabId: { type: "number" },
+          url: { type: "string" },
+          active: { type: "boolean" },
+          title: { type: "string" },
+        },
+        required: ["tabId", "url", "active"],
+      },
+      projection: {
+        confirmPolicy: "always",
+      },
     }),
   ],
   runner: [
@@ -3342,6 +3394,17 @@ export function createTabsCapabilityProvider(
             throw new CapabilityError("E_BAD_INPUT", "tabs.navigate requires a non-empty url");
           }
           return transport.navigate(input.url.trim());
+        }
+        case "create": {
+          if (!isPlainObject(input) || typeof input.url !== "string" || !input.url.trim()) {
+            throw new CapabilityError("E_BAD_INPUT", "tabs.create requires a non-empty url");
+          }
+          return transport.create(input.url.trim());
+        }
+        case "close": {
+          const tabId =
+            isPlainObject(input) && typeof input.tabId === "number" ? input.tabId : undefined;
+          return transport.close(tabId);
         }
         default:
           throw new CapabilityError(

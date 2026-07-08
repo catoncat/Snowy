@@ -26,6 +26,7 @@ write_scope:
   - apps/mv3-shell/test/runtime-chat.spec.ts
 acceptance_ref: docs/product-roadmap-2026-07-08.md
 check_cmd: "bunx vitest run packages/kernel/test/vfs-session-storage.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts"
+completed_at: 2026-07-08T15:36:43.479Z
 ---
 
 ## Goal
@@ -54,6 +55,15 @@ check_cmd: "bunx vitest run packages/kernel/test/vfs-session-storage.spec.ts app
 
 ## 工作总结
 
+### 实现了什么
+- createSessionStorage 接 chrome.storage-backed persistent VFS store (SESSION_VFS_STORAGE_KEY)；移除 InMemorySessionStorage fallback；新增 restart round-trip 测试 (vfs-session-storage + runtime-chat)
+
+### 实际跑了什么检查
+- bunx vitest run packages/kernel/test/vfs-session-storage.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts
+
+### 残留风险
+- 无
+
 ### 问题根因
 
 `createSessionStorage()` 调 `BrowserVfs.create({ workspaceId })` 时未传 `store` 参数，导致 `VfsSessionStorage` 落在纯内存 VFS 上。每次 MV3 Service Worker 被回收，所有会话历史、entries、kernel snapshot 随之消失。
@@ -77,5 +87,7 @@ check_cmd: "bunx vitest run packages/kernel/test/vfs-session-storage.spec.ts app
 - 真实 Chrome dogfood 记录（重载扩展后继续既有会话）需要在真实浏览器环境执行，留作 M1 整体收口时补充。代码与测试层面已证明持久化链路完整。
 
 ## 相关 commits
+
+- `5f1127ad157a` docs(issue-189): mark done, add work summary and commit ref
 
 - `6f9229c` — fix(kernel): persist session storage across MV3 Service Worker restart (ISSUE-189)

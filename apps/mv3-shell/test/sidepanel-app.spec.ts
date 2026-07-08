@@ -1274,6 +1274,23 @@ describe("sidepanel chat transcript component", () => {
     expect(source).not.toContain("useSuggestion('帮我填这个表')");
   });
 
+  it("shows a first-run onboarding card with model config entry when LLM is not configured", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("isLlmConfigured");
+    expect(source).toContain("配置 AI 模型后即可开始对话");
+    expect(source).toContain("配置模型");
+    expect(source).toContain("selectPane('provider')");
+    expect(source).not.toContain("No LLM provider is configured");
+  });
+
+  it("includes tabs.create and tabs.close suggestions in the tab management category", () => {
+    const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
+
+    expect(source).toContain("打开新标签页");
+    expect(source).toContain("关掉重复标签页");
+  });
+
   it("surfaces pending interventions through shared management actions", () => {
     const source = readFileSync("apps/mv3-shell/src/sidepanel/App.vue", "utf8");
 

@@ -137,7 +137,8 @@ const suggestionCategories: { icon: string; title: string; items: SuggestionItem
     title: "标签页管理",
     items: [
       { label: "查看所有标签页", text: "查看所有打开的标签页" },
-      { label: "关掉重复标签页", text: "帮我关掉所有重复的标签页" },
+      { label: "打开新标签页", text: "帮我打开一个新的标签页，地址是 https://example.com" },
+      { label: "关掉重复标签页", text: "帮我查看所有标签页，然后关掉重复的标签页" },
     ],
   },
   {
@@ -238,6 +239,16 @@ const skillEditorMode = ref<"create" | "import" | "edit">("create");
 
 const isRunning = computed(() => chatState.value.status === "running");
 const isStopped = computed(() => chatState.value.status === "stopped");
+const isLlmConfigured = computed(() => {
+  const summary = configSummary.value;
+  if (!summary || summary.status !== "ready") {
+    return false;
+  }
+  const model = readModelConfigRecord();
+  const hasApiKey = Boolean(readStringField(model, "apiKey") || readStringField(model, "llmKey"));
+  const hasModel = Boolean(readStringField(model, "model") || readStringField(model, "llmModel"));
+  return hasApiKey || hasModel;
+});
 const hasComposerPayload = computed(
   () => draft.value.trim().length > 0 || selectedTabs.value.length > 0 || selectedSkills.value.length > 0,
 );
@@ -1745,6 +1756,10 @@ async function sendPrompt(mode: ChatSendMode = isRunning.value ? "steer" : "norm
   if (!canSend.value) {
     return;
   }
+  if (!isLlmConfigured.value) {
+    conversationNotice.value = { type: "error", message: "请先配置 AI 模型（点击「配置模型」或顶栏设置图标）。" };
+    return;
+  }
 
   const optimisticId = `local-user-${crypto.randomUUID()}`;
   const sendMode = isRunning.value && mode === "normal" ? "steer" : mode;
@@ -2528,6 +2543,31 @@ onUnmounted(() => {
               <img src="/icon-48.png" alt="白雪" class="h-9 w-9 rounded-xl" aria-hidden="true" />
               <h1 class="text-lg font-black tracking-normal text-slate-950">白雪</h1>
             </div>
+
+            <div
+              v-if="!isLlmConfigured && !loading"
+              class="mb-4 w-full rounded-xl border border-amber-200 bg-amber-50 p-4"
+            >
+              <div class="flex items-start gap-2">
+                <span class="text-lg" aria-hidden="true">🔑</span>
+                <div class="flex-1">
+                  <p class="text-[13px] font-semibold text-slate-800">
+                    配置 AI 模型后即可开始对话
+                  </p>
+                  <p class="mt-1 text-[12px] text-slate-500">
+                    填入 API Key 和模型名称，即可开始使用。支持 OpenAI 等兼容接口。
+                  </p>
+                  <button
+                    type="button"
+                    class="mt-2 rounded-lg bg-slate-900 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                    @click="selectPane('provider')"
+                  >
+                    配置模型 →
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <p class="mb-4 text-[13px] text-slate-500">试试这些：</p>
             <div class="grid w-full grid-cols-2 gap-2">
               <div

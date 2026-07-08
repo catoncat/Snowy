@@ -34,6 +34,7 @@ import {
   createMcpCapabilityProjection,
   createObservabilityExportBuilder,
   createSkillRuntimeContext,
+  createTabsCapabilityProvider,
   disconnectExecutionHost,
   dispatchCapabilityCall,
   getBuiltinsByNamespace,
@@ -45,7 +46,7 @@ import {
   typedCapabilities,
   typedCapabilitiesForPermissions,
 } from "@bbl-next/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { JsRunnerHost } from "../../js-runner/src/index";
 import { invokeSingleActionSiteSkill } from "../../site-runtime/src/index";
 
@@ -216,6 +217,8 @@ describe("core", () => {
       "tabs.list",
       "tabs.get_active",
       "tabs.navigate",
+      "tabs.create",
+      "tabs.close",
     ]);
     expect(getBuiltinsByNamespace("tabs")).toMatchObject([
       {
@@ -241,6 +244,23 @@ describe("core", () => {
         outputSchema: {
           required: ["tabId", "url", "active"],
         },
+      },
+      {
+        id: "tabs.create",
+        sideEffects: "writes",
+        supportsVerify: false,
+        inputSchema: {
+          required: ["url"],
+        },
+        outputSchema: {
+          required: ["tabId", "url", "active"],
+        },
+      },
+      {
+        id: "tabs.close",
+        sideEffects: "writes",
+        supportsVerify: false,
+        risk: "high",
       },
     ]);
   });
@@ -1631,6 +1651,48 @@ describe("core", () => {
     });
   });
 
+  it("dispatches tabs.create and tabs.close through the tabs capability provider", async () => {
+    const transport = {
+      list: vi.fn(async () => []),
+      getActive: vi.fn(async () => ({ tabId: 1, url: "https://a.test", active: true, title: "A" })),
+      navigate: vi.fn(async (url: string) => ({ tabId: 1, url, active: true, title: "A" })),
+      create: vi.fn(async (url: string) => ({ tabId: 2, url, active: true, title: "" })),
+      close: vi.fn(async (tabId?: number) => ({
+        tabId: tabId ?? 1,
+        url: "https://a.test",
+        active: true,
+        title: "A",
+      })),
+    };
+    const provider = createTabsCapabilityProvider(transport);
+    const createDesc = getBuiltinsByNamespace("tabs").find((d) => d.id === "tabs.create")!;
+    const closeDesc = getBuiltinsByNamespace("tabs").find((d) => d.id === "tabs.close")!;
+
+    const createResult = await provider.invoke({
+      descriptor: createDesc,
+      binding: { family: "tabs", operation: "create" },
+      input: { url: "https://b.test" },
+    });
+    expect(transport.create).toHaveBeenCalledWith("https://b.test");
+    expect(createResult).toEqual({ tabId: 2, url: "https://b.test", active: true, title: "" });
+
+    const closeResult = await provider.invoke({
+      descriptor: closeDesc,
+      binding: { family: "tabs", operation: "close" },
+      input: { tabId: 5 },
+    });
+    expect(transport.close).toHaveBeenCalledWith(5);
+    expect(closeResult).toEqual({ tabId: 5, url: "https://a.test", active: true, title: "A" });
+
+    // close without tabId → defaults to active tab
+    await provider.invoke({
+      descriptor: closeDesc,
+      binding: { family: "tabs", operation: "close" },
+      input: {},
+    });
+    expect(transport.close).toHaveBeenCalledWith(undefined);
+  });
+
   it("passes the original skill management payload to the runtime manager", async () => {
     const registry = new CapabilityRegistry(BUILTIN_CAPABILITIES);
     const providers = new FamilyProviderRegistry();
@@ -2027,6 +2089,8 @@ describe("core", () => {
         "tabs.list",
         "tabs.get_active",
         "tabs.navigate",
+        "tabs.create",
+        "tabs.close",
         "runtime.capture_diagnostics",
         "debug.bundle",
       ]);

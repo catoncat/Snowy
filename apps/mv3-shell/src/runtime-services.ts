@@ -890,6 +890,18 @@ async function requireActiveTab(chromeApi, actionKind) {
   return activeTab;
 }
 
+async function safeGetTab(chromeApi, tabId) {
+  if (typeof chromeApi?.tabs?.get !== "function") {
+    const tabs = await chromeApi.tabs.query({});
+    return Array.isArray(tabs) ? (tabs.find((tab) => tab?.id === tabId) ?? null) : null;
+  }
+  try {
+    return await chromeApi.tabs.get(tabId);
+  } catch {
+    return null;
+  }
+}
+
 function createChromeTabsTransport({ chromeApi }) {
   return {
     async list() {
@@ -924,6 +936,36 @@ function createChromeTabsTransport({ chromeApi }) {
               active: true,
             },
       );
+    },
+    async create(url) {
+      if (!chromeApi?.tabs?.create) {
+        throw new CapabilityError("E_RUNTIME", "chrome.tabs.create is required for tabs.create");
+      }
+      const createdTab = await chromeApi.tabs.create({ url });
+      return toCanonicalTab(
+        createdTab && typeof createdTab.id === "number"
+          ? createdTab
+          : {
+              id: -1,
+              url,
+              active: true,
+              title: "",
+            },
+      );
+    },
+    async close(tabId) {
+      if (!chromeApi?.tabs?.remove) {
+        throw new CapabilityError("E_RUNTIME", "chrome.tabs.remove is required for tabs.close");
+      }
+      const targetTab =
+        typeof tabId === "number"
+          ? await safeGetTab(chromeApi, tabId)
+          : await requireActiveTab(chromeApi, "tabs.close");
+      if (!targetTab) {
+        throw new CapabilityError("E_BAD_INPUT", `tabs.close: tab ${tabId} not found`);
+      }
+      await chromeApi.tabs.remove(targetTab.id);
+      return toCanonicalTab(targetTab);
     },
   };
 }
@@ -4789,7 +4831,7 @@ export function createBackgroundRuntimeServices({
     if (!managedProfileConfig) {
       throw new CapabilityError(
         "E_RUNTIME",
-        "No LLM provider is configured. Please set an API key via config.update to refresh session titles.",
+        "尚未配置 AI 模型，无法生成会话标题。请在侧边栏配置模型后再试。",
       );
     }
 
@@ -5166,7 +5208,7 @@ export function createBackgroundRuntimeServices({
         if (!hasLlmConfig) {
           // Fallback: no LLM configured, emit a helpful message
           const fallbackText =
-            "No LLM provider is configured. Please set an API key via config.update to enable the agent loop.";
+            "尚未配置 AI 模型。请点击下方「配置模型」按钮，填入 API Key 后即可开始对话。";
           finalAssistantText = fallbackText;
 
           await emitRuntimeChatEvent(chromeApi, {

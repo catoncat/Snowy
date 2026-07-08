@@ -130,7 +130,7 @@ describe("mv3-shell runtime chat bridge", () => {
           (msg as { event?: { type?: string } }).event?.type === "assistant.done",
       )
       .map((msg) => msg.event);
-    expect(doneEvent[0]?.text).toContain("No LLM provider is configured");
+    expect(doneEvent[0]?.text).toContain("尚未配置 AI 模型");
     expect(doneEvent[0]?.phase).toBe("finalizing");
   });
 
@@ -1180,7 +1180,7 @@ describe("mv3-shell end-to-end loop integration", () => {
       ),
     ).toEqual([
       "user:第一个问题",
-      "assistant:No LLM provider is configured. Please set an API key via config.update to enable the agent loop.",
+      "assistant:尚未配置 AI 模型。请点击下方「配置模型」按钮，填入 API Key 后即可开始对话。",
     ]);
     expect(
       bootstrap.messages.some(
@@ -1271,7 +1271,7 @@ describe("mv3-shell end-to-end loop integration", () => {
       "user:第一个问题",
       "assistant:第一个回答",
       "user:最后一个问题",
-      "assistant:No LLM provider is configured. Please set an API key via config.update to enable the agent loop.",
+      "assistant:尚未配置 AI 模型。请点击下方「配置模型」按钮，填入 API Key 后即可开始对话。",
     ]);
     expect(
       bootstrap.messages.some((item: { text?: string }) => item.text === "需要重写的旧回答"),
@@ -1332,7 +1332,7 @@ describe("mv3-shell end-to-end loop integration", () => {
       "user:保留的问题",
       "assistant:保留的回答",
       "user:编辑后的问题",
-      "assistant:No LLM provider is configured. Please set an API key via config.update to enable the agent loop.",
+      "assistant:尚未配置 AI 模型。请点击下方「配置模型」按钮，填入 API Key 后即可开始对话。",
     ]);
     expect(bootstrap.messages.some((item: { text?: string }) => item.text === "旧问题")).toBe(
       false,
@@ -1395,7 +1395,7 @@ describe("mv3-shell end-to-end loop integration", () => {
       ),
     ).toEqual([
       "user:编辑后的历史问题",
-      "assistant:No LLM provider is configured. Please set an API key via config.update to enable the agent loop.",
+      "assistant:尚未配置 AI 模型。请点击下方「配置模型」按钮，填入 API Key 后即可开始对话。",
     ]);
 
     const sessions = await services.listChatSessions();
@@ -1875,6 +1875,8 @@ describe("mv3-shell end-to-end loop integration", () => {
         "tabs_list",
         "tabs_get_active",
         "tabs_navigate",
+        "tabs_create",
+        "tabs_close",
         "runtime_capture_diagnostics",
         "debug_bundle",
       ]);
@@ -2443,7 +2445,7 @@ describe("mv3-shell end-to-end loop integration", () => {
       )
       .map((msg) => msg.event);
 
-    expect(doneEvent[0]?.text).toContain("No LLM provider is configured");
+    expect(doneEvent[0]?.text).toContain("尚未配置 AI 模型");
   });
 
   it("reads compaction continuity markers for observability replay consumers", async () => {
@@ -2831,7 +2833,7 @@ describe("mv3-shell end-to-end loop integration", () => {
         input: expect.arrayContaining([{ role: "user", content: "Use saved provider" }]),
       });
       expect(doneEvent?.event.text).toBe("Hello from saved provider");
-      expect(doneEvent?.event.text).not.toContain("No LLM provider is configured");
+      expect(doneEvent?.event.text).not.toContain("尚未配置 AI 模型");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -2923,7 +2925,7 @@ describe("mv3-shell end-to-end loop integration", () => {
 
       expect(fetchCallCount).toBeGreaterThan(0);
       expect(doneEvent?.event.text).toBe("Hello from provider alias");
-      expect(doneEvent?.event.text).not.toContain("No LLM provider is configured");
+      expect(doneEvent?.event.text).not.toContain("尚未配置 AI 模型");
     } finally {
       globalThis.fetch = originalFetch;
     }
