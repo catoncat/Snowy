@@ -1,0 +1,21 @@
+docs/backlog/2026-07-08-m0-ledger-product-chapter-reshape-and-acceptance-gate-pinning.md
+  s_eca3b6cde00730::t_b58231efd262cf 29,59-67,96-98
+docs/workflow/live-queue.json
+  s_eca3b6cde00730::t_152e54c0d6cb5d 3,5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "681e32a3412defe7b2476028f80a5f42d1143614",
+  "prompts": {},
+  "sessions": {
+    "s_eca3b6cde00730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f4255-f8c7-705f-994b-732cc46d3f9c",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "cat <git@chen.rs>"
+    }
+  }
+}
