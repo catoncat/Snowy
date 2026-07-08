@@ -1,26 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-08T15:53:06.805Z",
+  "generated_at": "2026-07-08T16:18:09.362Z",
   "repo_root": "/private/tmp/Snowy",
   "entries": [
-    {
-      "issue_id": "ISSUE-191",
-      "issue_path": "docs/backlog/2026-07-08-m1-skill-editor-readback-builtin-examples-and-honest-run.md",
-      "title": "M1 里程碑：技能编辑真实回读、内置示例技能与运行语义诚实化",
-      "parallel_group": "sdk-docs",
-      "module_id": "skill-runtime-sdk-studio",
-      "module_stage": "deferred",
-      "tracking_kind": "gap",
-      "check_cmd": "bunx vitest run apps/mv3-shell/test/sidepanel-management.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts",
-      "depends_on": [],
-      "write_scope": [
-        "apps/mv3-shell/src/sidepanel/",
-        "apps/mv3-shell/src/runtime-services.ts",
-        "packages/skill-sdk/src/index.ts",
-        "apps/mv3-shell/test/sidepanel-management.spec.ts",
-        "apps/mv3-shell/test/runtime-chat.spec.ts"
-      ]
-    },
     {
       "issue_id": "ISSUE-192",
       "issue_path": "docs/backlog/2026-07-08-m0-ledger-product-chapter-reshape-and-acceptance-gate-pinning.md",

@@ -26,6 +26,7 @@ write_scope:
   - apps/mv3-shell/test/runtime-chat.spec.ts
 acceptance_ref: docs/product-roadmap-2026-07-08.md
 check_cmd: "bunx vitest run apps/mv3-shell/test/sidepanel-management.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts"
+completed_at: 2026-07-08T16:18:04.700Z
 ---
 
 ## Goal
@@ -57,6 +58,15 @@ check_cmd: "bunx vitest run apps/mv3-shell/test/sidepanel-management.spec.ts app
 - 不做 diff / preview / 交互式版本选择 UI。
 
 ## 工作总结
+
+### 实现了什么
+- 技能编辑回读(skill.read路由)；handler.js textarea；3个内置示例技能(installBuiltinExamples)；运行改为真实skills.invoke
+
+### 实际跑了什么检查
+- bunx vitest run apps/mv3-shell/test/sidepanel-management.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts
+
+### 残留风险
+- 无
 
 ### 1. 技能编辑真实回读
 - `editSkillPackageDraft` 改为异步回读：通过新增 `skill.read` 后端路由从 VFS 读取 `SKILL.md`、`handler.js`、`skill.json` 的真实内容，填入编辑表单。
@@ -94,5 +104,7 @@ check_cmd: "bunx vitest run apps/mv3-shell/test/sidepanel-management.spec.ts app
 - snapshot/rollback 行为未回归（沿用既有 skills.install 路径，已有测试锁定）。
 
 ## 相关 commits
+
+- `bdd7ee98113c` docs(issue-191): mark done, add work summary
 
 - `2104cfc` — feat(m1): skill editor readback, builtin examples, honest run (ISSUE-191)
