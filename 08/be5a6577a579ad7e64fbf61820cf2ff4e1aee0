@@ -1,0 +1,21 @@
+docs/backlog/2026-07-08-m1-first-run-experience-and-honest-tool-surface.md
+  s_379430867635e9::t_7e7424de1f2d71 32,67-75,109-111
+docs/workflow/live-queue.json
+  s_379430867635e9::t_5fa04ddc04b2e4 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "08be5a6577a579ad7e64fbf61820cf2ff4e1aee0",
+  "prompts": {},
+  "sessions": {
+    "s_379430867635e9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3b96-d0ce-7ce3-b9a0-8d0e7aafffe1",
+        "model": "gpt-5.5"
+      },
+      "human_author": "cat <git@chen.rs>"
+    }
+  }
+}
