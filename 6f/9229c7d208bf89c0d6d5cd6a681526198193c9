@@ -1,0 +1,27 @@
+apps/mv3-shell/src/runtime-services.ts
+  s_eca3b6cde00730::t_8d3dd10b603760 74,152-154,159,161,165,172,179,182,185,189,824,828-832,3888
+apps/mv3-shell/test/runtime-chat.spec.ts
+  s_eca3b6cde00730::t_117329d633b0fc 3977-4004,4006-4025,4027-4028,4030-4043
+  s_eca3b6cde00730::t_d12448b3563af4 4029
+  s_eca3b6cde00730::t_71c78b43d13c96 4005,4026
+  s_eca3b6cde00730::t_c6e0d5272ec7fb 4044-4045
+packages/kernel/test/vfs-session-storage.spec.ts
+  s_eca3b6cde00730::t_023f0840df6a54 3-7,154-207
+  s_eca3b6cde00730::t_f0f984a71ba53b 208-211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6f9229c7d208bf89c0d6d5cd6a681526198193c9",
+  "prompts": {},
+  "sessions": {
+    "s_eca3b6cde00730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f4255-f8c7-705f-994b-732cc46d3f9c",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "cat <git@chen.rs>"
+    }
+  }
+}
