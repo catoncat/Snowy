@@ -1,6 +1,81 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-31T05:46:22.299Z",
-  "repo_root": "/Users/envvar/work/repos/snowy/browser-brain-loop-next",
-  "entries": []
+  "generated_at": "2026-07-08T15:03:26.297Z",
+  "repo_root": "/workspace",
+  "entries": [
+    {
+      "issue_id": "ISSUE-189",
+      "issue_path": "docs/backlog/2026-07-08-m1-session-and-run-state-survive-restart.md",
+      "title": "M1 里程碑：会话与运行状态跨重启持久化",
+      "parallel_group": "kernel",
+      "module_id": "kernel",
+      "module_stage": "mainline",
+      "tracking_kind": "mainline",
+      "check_cmd": "bunx vitest run packages/kernel/test/vfs-session-storage.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "apps/mv3-shell/src/runtime-services.ts",
+        "packages/kernel/src/vfs-session-storage.ts",
+        "packages/browser-vfs/src/index.ts",
+        "packages/kernel/test/vfs-session-storage.spec.ts",
+        "apps/mv3-shell/test/runtime-chat.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-190",
+      "issue_path": "docs/backlog/2026-07-08-m1-first-run-experience-and-honest-tool-surface.md",
+      "title": "M1 里程碑：首跑体验与诚实工具面",
+      "parallel_group": "mv3-shell",
+      "module_id": "ai-surface-control-plane",
+      "module_stage": "secondary",
+      "tracking_kind": "mainline",
+      "check_cmd": "bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/sidepanel-app.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "apps/mv3-shell/src/sidepanel/",
+        "apps/mv3-shell/src/runtime-services.ts",
+        "apps/mv3-shell/src/background.ts",
+        "packages/core/src/index.ts",
+        "packages/core/test/core.spec.ts",
+        "apps/mv3-shell/test/sidepanel-app.spec.ts",
+        "apps/mv3-shell/test/runtime-chat.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-191",
+      "issue_path": "docs/backlog/2026-07-08-m1-skill-editor-readback-builtin-examples-and-honest-run.md",
+      "title": "M1 里程碑：技能编辑真实回读、内置示例技能与运行语义诚实化",
+      "parallel_group": "sdk-docs",
+      "module_id": "skill-runtime-sdk-studio",
+      "module_stage": "deferred",
+      "tracking_kind": "gap",
+      "check_cmd": "bunx vitest run apps/mv3-shell/test/sidepanel-management.spec.ts apps/mv3-shell/test/runtime-chat.spec.ts",
+      "depends_on": [],
+      "write_scope": [
+        "apps/mv3-shell/src/sidepanel/",
+        "apps/mv3-shell/src/runtime-services.ts",
+        "packages/skill-sdk/src/index.ts",
+        "apps/mv3-shell/test/sidepanel-management.spec.ts",
+        "apps/mv3-shell/test/runtime-chat.spec.ts"
+      ]
+    },
+    {
+      "issue_id": "ISSUE-192",
+      "issue_path": "docs/backlog/2026-07-08-m0-ledger-product-chapter-reshape-and-acceptance-gate-pinning.md",
+      "title": "M0 收尾：module ledger 产品章节重排与 release acceptance gate 冻结",
+      "parallel_group": "sdk-docs",
+      "module_id": "repo-workflow-dx",
+      "module_stage": "deferred",
+      "tracking_kind": "doc-debt",
+      "check_cmd": "bun run release:acceptance && bun run workflow:queue:build",
+      "depends_on": [],
+      "write_scope": [
+        "docs/module-tracking-ledger.json",
+        "scripts/release-acceptance.ts",
+        "docs/migration-parity-dashboard.md",
+        "docs/legacy-to-vnext-migration-matrix.md",
+        "docs/cutover-readiness-criteria.md"
+      ]
+    }
+  ]
 }
