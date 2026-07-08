@@ -1,0 +1,47 @@
+apps/mv3-shell/src/sidepanel/App.vue
+  s_eca3b6cde00730::t_b574c8d541e4fc 34,1096,1371,2162,3316
+docs/cutover-readiness-criteria.md
+  s_4f6c4c0ef95586::t_ded1691cf15f23 3-6
+docs/legacy-to-vnext-migration-matrix.md
+  s_4f6c4c0ef95586::t_c5c7706f3e9632 3-6
+docs/migration-parity-dashboard.md
+  s_4f6c4c0ef95586::t_55dbf5fb4a7a5e 3-6
+docs/module-tracking-ledger.json
+  s_eca3b6cde00730::t_ad8745f6cd8c33 3,19-20,57-58,92-93,124-125,158-159,191-192,225-226,281-282,329-330,346-347,367-368,381-443
+docs/workflow/live-queue.json
+  s_eca3b6cde00730::t_e2235c6aaea971 3
+scripts/release-acceptance.ts
+  s_4de9ad417933c1::t_c9732606cce7d2 71-76,85-87,103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6c951dba9830f1517554022591acbf82dc153383",
+  "prompts": {},
+  "sessions": {
+    "s_4de9ad417933c1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f4282-14ec-7439-9efb-1acfa241db4f",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "cat <git@chen.rs>"
+    },
+    "s_4f6c4c0ef95586": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3cff-ef74-72a3-8bb8-14ec89a9f5d0",
+        "model": "gpt-5.5"
+      },
+      "human_author": "cat <git@chen.rs>"
+    },
+    "s_eca3b6cde00730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f4255-f8c7-705f-994b-732cc46d3f9c",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "cat <git@chen.rs>"
+    }
+  }
+}
