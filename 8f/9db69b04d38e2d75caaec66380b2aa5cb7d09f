@@ -1,0 +1,53 @@
+packages/core/test/core.spec.ts
+  s_eca3b6cde00730::t_e37ec04d76c729 2092-2093
+  s_eca3b6cde00730::t_d44263be23b768 37
+  s_eca3b6cde00730::t_a16ce32814a6c4 1654-1667,1670-1671,1673-1679,1681-1688,1690-1695
+  s_eca3b6cde00730::t_1d21f6cac247cf 1668-1669,1672,1680,1689
+  s_eca3b6cde00730::t_31168a30e938b5 49
+  s_eca3b6cde00730::t_cc15058df30ba6 220-221,248-264
+packages/core/src/index.ts
+  s_eca3b6cde00730::t_580cff792079ec 1419-1468
+  s_eca3b6cde00730::t_30f8f8cfdd2884 3398-3408
+  s_c896a4c3057bbd::t_437bc81ce75c2f 598-599
+apps/mv3-shell/src/runtime-services.ts
+  s_eca3b6cde00730::t_b2d894af19918c 893-904
+  s_eca3b6cde00730::t_61144157802ed2 940-969
+  s_eca3b6cde00730::t_9d2c7da5c8a638 4834,5211
+apps/mv3-shell/src/sidepanel/App.vue
+  s_eca3b6cde00730::t_f2062a874a501a 140-141
+  s_eca3b6cde00730::t_2e14767707ca98 1759-1762
+  s_eca3b6cde00730::t_9b09f92d54f50e 2546-2570
+  s_eca3b6cde00730::t_2f97d8f6890def 242-251
+apps/mv3-shell/test/runtime-chat.spec.ts
+  s_eca3b6cde00730::t_0fcdbd12244cc7 133,1183,1274,1335,1398,1878-1879,2448,2836,2928
+apps/mv3-shell/test/sidepanel-app.spec.ts
+  s_eca3b6cde00730::t_02b6ed492dcb1c 1277-1293
+docs/backlog/2026-07-08-m1-session-and-run-state-survive-restart.md
+  s_eca3b6cde00730::t_7754c95f6c6d32 29,58-66,91-93
+docs/workflow/live-queue.json
+  s_eca3b6cde00730::t_7de69f28d58033 3-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8f9db69b04d38e2d75caaec66380b2aa5cb7d09f",
+  "prompts": {},
+  "sessions": {
+    "s_c896a4c3057bbd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f424b-5503-7b80-9788-acb7d5ef7768",
+        "model": "gpt-5.5"
+      },
+      "human_author": "cat <git@chen.rs>"
+    },
+    "s_eca3b6cde00730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f4255-f8c7-705f-994b-732cc46d3f9c",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "cat <git@chen.rs>"
+    }
+  }
+}
