@@ -1,0 +1,20 @@
+docs/backlog/2026-07-08-m1-first-run-experience-and-honest-tool-surface.md
+  s_eca3b6cde00730::t_59579262fb0e2a 4,8
+  s_eca3b6cde00730::t_766a7ba9c79036 47-50,63-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3ea182a425af1d9c55c62bd85ecb200bca685749",
+  "prompts": {},
+  "sessions": {
+    "s_eca3b6cde00730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f4255-f8c7-705f-994b-732cc46d3f9c",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "cat <git@chen.rs>"
+    }
+  }
+}
