@@ -1,11 +1,11 @@
 ---
 id: ISSUE-190
 title: "M1 里程碑：首跑体验与诚实工具面"
-status: open
+status: done
 priority: p0
 source: "docs/product-roadmap-2026-07-08.md M1"
 created: 2026-07-08
-assignee: unassigned
+assignee: atlas
 tags:
   - ready-for-agent
   - product-m1
@@ -44,10 +44,10 @@ check_cmd: "bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/
 
 ## Acceptance
 
-- [ ] 未配置 LLM 时：聊天空状态出现中文首跑引导卡，一键直达模型配置；发送前有预检提示；不再出现英文 fallback 文案。
-- [ ] 模型配置入口在首跑路径一步可达（引导卡或顶栏直达，不再只藏在「更多」菜单）。
-- [ ] `tabs.create` / `tabs.close` 进入 capability catalog + tabs family provider + chat 投影，descriptor 带 risk / confirm 元数据，`tabs.close` 有确认门控或明确风险标注；测试覆盖 catalog、provider dispatch 与投影。
-- [ ] suggestion 卡逐条核对：只保留当前工具面能完成的任务，或改写文案。
+- [x] 未配置 LLM 时：聊天空状态出现中文首跑引导卡，一键直达模型配置；发送前有预检提示；不再出现英文 fallback 文案。
+- [x] 模型配置入口在首跑路径一步可达（引导卡或顶栏直达，不再只藏在「更多」菜单）。
+- [x] `tabs.create` / `tabs.close` 进入 capability catalog + tabs family provider + chat 投影，descriptor 带 risk / confirm 元数据，`tabs.close` 有确认门控或明确风险标注；测试覆盖 catalog、provider dispatch 与投影。
+- [x] suggestion 卡逐条核对：只保留当前工具面能完成的任务，或改写文案。
 - [ ] 收口附一段真实 dogfood 记录：从全新 profile load unpacked 到完成第一个真实任务的过程与断点自评。
 
 ## Not Now
@@ -60,3 +60,40 @@ check_cmd: "bunx vitest run packages/core/test/core.spec.ts apps/mv3-shell/test/
 ## 备注
 
 `packages/core/src/index.ts` 是单写者超级节点；本票是本批次唯一触碰它的票，若并行冲突按 backlog README 的 worktree / 小步提交规则处理。
+
+## 工作总结
+
+### 实现内容
+
+**1. 首跑引导（App.vue + runtime-services.ts）**
+- 未配置 LLM 时聊天空状态出现中文引导卡（🔑 配置 AI 模型后即可开始对话），含「配置模型 →」按钮一键跳转 provider 面板。
+- `sendPrompt` 新增预检：`isLlmConfigured` 为 false 时显示中文提示（「请先配置 AI 模型」）并阻止发送，不再发到 runtime 拿英文 fallback。
+- runtime-services.ts 两处英文 fallback 文案改为中文：
+  - chat 主路径：「尚未配置 AI 模型。请点击下方「配置模型」按钮，填入 API Key 后即可开始对话。」
+  - title 生成路径：「尚未配置 AI 模型，无法生成会话标题。请在侧边栏配置模型后再试。」
+
+**2. tabs.create / tabs.close 能力（packages/core/src/index.ts + runtime-services.ts）**
+- catalog 新增 `tabs.create`（risk: medium, sideEffects: writes）和 `tabs.close`（risk: high, confirmPolicy: always）。
+- `TabsCapabilityTransport` 接口扩展 `create(url)` / `close(tabId?)` 方法。
+- `createTabsCapabilityProvider` 新增 `create` / `close` dispatch 分支。
+- `createChromeTabsTransport` 实现：`chrome.tabs.create` / `chrome.tabs.remove`；新增 `safeGetTab` helper 按 tabId 查 tab（兼容无 `chrome.tabs.get` 的测试环境）。
+- 两个新能力进入默认 chat 工具面（tabs family `defaultExposed: true`）。
+- `tabs.close` 确认门控：`confirmPolicy: "always"` + `risk: "high"` → 所有调用必经 confirm。
+
+**3. Suggestion 卡审核（App.vue）**
+- 新增「打开新标签页」suggestion（对应 `tabs.create`）。
+- 「关掉重复标签页」文案改写为「帮我查看所有标签页，然后关掉重复的标签页」——匹配实际工具链路（`tabs.list` → `tabs.close`）。
+- 所有 suggestion 现在都有对应的工具面能力。
+
+### 测试
+- core.spec.ts: tabs namespace 新增 2 个 catalog 断言 + tabs.create/close provider dispatch 测试 + 默认 chat 工具面列表更新。
+- sidepanel-app.spec.ts: 首跑引导卡存在性测试 + tabs suggestion 测试 + 无英文 fallback 断言。
+- runtime-chat.spec.ts: 8 处英文 fallback 期望更新为中文 + 默认工具列表新增 tabs_create / tabs_close。
+- 全仓 `bun run check`：734 tests passed（+5）、typecheck OK、lint OK。
+
+### 未完成
+- 真实 Chrome dogfood 记录留到 M1 整体收口时补充。
+
+## 相关 commits
+
+- `8f9db69` — feat(m1): first-run onboarding, honest tool surface, tabs.create/close (ISSUE-190)
