@@ -416,6 +416,16 @@
 2. 当前任务对应的最小 read path
 3. 当前 issue / 当前 package 的 `src/` 和 `test/`
 
+## Cursor Cloud specific instructions
+
+Standard commands live in `README.md` / root `package.json` `scripts` (`bun install`, `bun run check`, `bun run test`, `bun run typecheck`, `bun run lint`, `bun run ext:build`). Only the non-obvious caveats are captured here.
+
+- Toolchain: this repo uses **Bun** (≥1.3) as the package manager and runner; there is no npm/yarn/pnpm lockfile. The cloud VM's startup update script runs `bun install`, so dependencies are already refreshed when a session begins. `bun` lives at `~/.bun/bin/bun`.
+- Lockfile gotcha: `bun.lock`, `node_modules`, and `dist` are all git-ignored (no lockfile is committed). Locally use plain `bun install`; CI's `bun install --frozen-lockfile` will not have a committed lockfile to honor, so do not rely on it locally.
+- Workspace package resolution: `@bbl-next/*` imports only resolve from **inside a workspace member** that declares them as deps (Bun does not symlink them into a top-level `node_modules/@bbl-next`). To run a throwaway script that imports these packages, drop it inside a member dir (e.g. `packages/kernel/`) and run it with `bun`, not from the repo root.
+- The MV3 extension has **no dev server / localhost**. `bun run ext:dev` is `vite build --watch` and `bun run ext:build` produces `apps/mv3-shell/dist/`, which you load as an unpacked extension in Chrome (`--load-extension=/workspace/apps/mv3-shell/dist`).
+- Running the side panel's actual AI agent loop requires an OpenAI-compatible LLM provider configured at runtime (API key via `config.update`). Without it the UI loads and accepts input but replies "No LLM provider is configured." The UI, session/run state, and capability dispatch are fully testable without a key; only the live LLM turn needs one.
+
 <!-- mainline:agents:start version=28 checksum=sha256:7d47b5355fb5a47f07d94fb2efc10dd0d5441f8f93d91b63bd95ae54ab8a40ac -->
 ## Mainline
 
