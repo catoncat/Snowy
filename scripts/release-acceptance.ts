@@ -68,8 +68,12 @@ function checkModuleLedger(): DocumentCheck {
       }>;
     };
     const modules = ledger.modules ?? [];
-    const activeModules = modules.filter((module) => module.stage !== "deferred");
-    const nonShipped = activeModules
+    // Freeze check to replication-chapter modules only.
+    // Product-chapter modules (M1-M4) are tracked by roadmap milestones, not this historical gate.
+    const frozenModules = modules.filter(
+      (module) => module.chapter !== "product" && module.stage !== "deferred",
+    );
+    const nonShipped = frozenModules
       .filter((module) => module.status !== "shipped")
       .map((module) => `${module.module_id ?? "(unknown)"}=${module.status ?? "(missing)"}`);
     const oldProductLoop = modules.find(
@@ -78,7 +82,9 @@ function checkModuleLedger(): DocumentCheck {
     const oldProductScope = oldProductLoop?.shipped_scope ?? [];
     const hasIssue184 = oldProductScope.some((item) => item.includes("ISSUE-184"));
     const failures = [
-      ...nonShipped.map((item) => `non-deferred module is not shipped: ${item}`),
+      ...nonShipped.map(
+        (item) => `replication-chapter non-deferred module is not shipped: ${item}`,
+      ),
       ...(oldProductLoop?.stage === "mainline"
         ? []
         : ["old-product-replacement-loop is not mainline"]),
@@ -94,7 +100,7 @@ function checkModuleLedger(): DocumentCheck {
       ok: failures.length === 0,
       detail:
         failures.length === 0
-          ? "non-deferred modules are shipped and old-product-replacement-loop includes the real MV3 proof"
+          ? "replication chapter frozen evidence: non-deferred modules are shipped and old-product-replacement-loop includes the real MV3 proof (product-chapter modules are exempt from this historical gate)"
           : failures.join("; "),
     };
   } catch (error) {

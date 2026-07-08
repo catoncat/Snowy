@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-04-17",
+  "updated_at": "2026-07-08",
   "modules": [
     {
       "module_id": "kernel",
@@ -16,7 +16,8 @@
         "docs/kernel-skeleton-design.md"
       ],
       "cutover_gate": null,
-      "default_parallel_group": "kernel"
+      "default_parallel_group": "kernel",
+      "chapter": "replication"
     },
     {
       "module_id": "observability-audit",
@@ -53,7 +54,8 @@
         "shared debug dump/export action (operator-level bulk export)",
         "richer future event-source breadth from full skill SDK/studio and wider browser automation composites"
       ],
-      "deferral_rationale": "Gate F (Operability) is satisfied. ISSUE-143 landed the export schema/builder, ISSUE-161 closed the page-action handoff boundary that previously blocked browser-automation event production, and ISSUE-166 exposed observability.timeline/summary/rawEventTail through the shared MV3 read path. Remaining work is intentionally post-cutover breadth: bulk dump/export and richer future event sources."
+      "deferral_rationale": "Gate F (Operability) is satisfied. ISSUE-143 landed the export schema/builder, ISSUE-161 closed the page-action handoff boundary that previously blocked browser-automation event production, and ISSUE-166 exposed observability.timeline/summary/rawEventTail through the shared MV3 read path. Remaining work is intentionally post-cutover breadth: bulk dump/export and richer future event sources.",
+      "chapter": "replication"
     },
     {
       "module_id": "intervention-handoff",
@@ -87,7 +89,8 @@
       "deferred_scope": [
         "richer studio/operator workflow polish beyond the shared sidepanel management surface"
       ],
-      "deferral_rationale": "Current cutover-critical intervention scope is landed. Remaining UI polish belongs to adjacent AI-surface/studio work and no longer justifies keeping intervention-handoff itself in partial status."
+      "deferral_rationale": "Current cutover-critical intervention scope is landed. Remaining UI polish belongs to adjacent AI-surface/studio work and no longer justifies keeping intervention-handoff itself in partial status.",
+      "chapter": "replication"
     },
     {
       "module_id": "ai-surface-control-plane",
@@ -118,7 +121,8 @@
         "full Skill Studio/lifecycle/versioning UI beyond the shared management consumer",
         "broader metadata-registry and audience-projection hardening across every future consumer"
       ],
-      "deferral_rationale": "Gate G's minimum self-awareness surface is satisfied. ISSUE-153 and ISSUE-156 locked descriptor-owned action projection semantics, ISSUE-159/163/164 wired provider routing through the shared control-plane contract and runtime-owned rehydrate path, and ISSUE-093 closed the shared sidepanel management consumer. Remaining work is intentionally post-cutover product and export breadth."
+      "deferral_rationale": "Gate G's minimum self-awareness surface is satisfied. ISSUE-153 and ISSUE-156 locked descriptor-owned action projection semantics, ISSUE-159/163/164 wired provider routing through the shared control-plane contract and runtime-owned rehydrate path, and ISSUE-093 closed the shared sidepanel management consumer. Remaining work is intentionally post-cutover product and export breadth.",
+      "chapter": "replication"
     },
     {
       "module_id": "site-runtime-browser-automation",
@@ -151,7 +155,8 @@
         "download/export composites such as screenshot_with_highlight, download_image, and download_chat_images",
         "future provider-bridge unification if page/tabs/site runtime is later routed through FamilyProvider by default"
       ],
-      "deferral_rationale": "Soft Gate 2's cutover-critical scope is landed and no longer needs an executable live slice. Remaining work is intentionally outside the current cutover bar or belongs to later product/export breadth, so the module should be tracked as shipped-with-deferred-scope rather than partial."
+      "deferral_rationale": "Soft Gate 2's cutover-critical scope is landed and no longer needs an executable live slice. Remaining work is intentionally outside the current cutover bar or belongs to later product/export breadth, so the module should be tracked as shipped-with-deferred-scope rather than partial.",
+      "chapter": "replication"
     },
     {
       "module_id": "execution-host-bridge",
@@ -183,7 +188,8 @@
         "additional remote transport/providers beyond the current cutover path",
         "old host_bash-style homogeneous host parity where local and remote hosts pretend to be interchangeable"
       ],
-      "deferral_rationale": "Gate C is satisfied. ISSUE-038/073/125/126/127/134/157/165 closed the cutover-critical host path, including remote exec, health, transport config, multi-remote rehydrate, and capability-aware default routing. Remaining work is broader host productization, not an executable cutover gap."
+      "deferral_rationale": "Gate C is satisfied. ISSUE-038/073/125/126/127/134/157/165 closed the cutover-critical host path, including remote exec, health, transport config, multi-remote rehydrate, and capability-aware default routing. Remaining work is broader host productization, not an executable cutover gap.",
+      "chapter": "replication"
     },
     {
       "module_id": "provider-profile-routing",
@@ -216,7 +222,8 @@
         "broader provider-policy hardening beyond the current runtime-owned baseline",
         "richer operator tooling around provider ownership and policy governance"
       ],
-      "deferral_rationale": "The provider/profile routing mainline no longer lacks an executable live slice. ISSUE-150 resolved kernel-local taxonomy/reusable route resolution, ISSUE-159 exposed the shared control-plane update surface, and ISSUE-163/164 completed routing override management plus runtime-owned rehydrate. Remaining work is broader rollout and hardening, not a current mainline coverage gap."
+      "deferral_rationale": "The provider/profile routing mainline no longer lacks an executable live slice. ISSUE-150 resolved kernel-local taxonomy/reusable route resolution, ISSUE-159 exposed the shared control-plane update surface, and ISSUE-163/164 completed routing override management plus runtime-owned rehydrate. Remaining work is broader rollout and hardening, not a current mainline coverage gap.",
+      "chapter": "replication"
     },
     {
       "module_id": "old-product-replacement-loop",
@@ -271,7 +278,8 @@
         "bulk migration of every old plugin ecosystem affordance",
         "post-cutover product polish around package browsing, install sources, and studio workflows"
       ],
-      "deferral_rationale": "ISSUE-172 through ISSUE-181 prove one representative old product capability loop end-to-end on the shared vNext runtime and product surface, including authoring, install, update, package persistence, discovery, sidepanel management, invocation, rollback, event subscription, and audit evidence. ISSUE-184 adds real Chromium MV3 CSP proof, and ISSUE-185 provides the one-command release acceptance evidence refresh. Remaining items are broader product/ecosystem breadth and no longer block the cutover-critical replacement proof."
+      "deferral_rationale": "ISSUE-172 through ISSUE-181 prove one representative old product capability loop end-to-end on the shared vNext runtime and product surface, including authoring, install, update, package persistence, discovery, sidepanel management, invocation, rollback, event subscription, and audit evidence. ISSUE-184 adds real Chromium MV3 CSP proof, and ISSUE-185 provides the one-command release acceptance evidence refresh. Remaining items are broader product/ecosystem breadth and no longer block the cutover-critical replacement proof.",
+      "chapter": "replication"
     },
     {
       "module_id": "skill-studio-completion-loop",
@@ -318,7 +326,8 @@
         "bulk migration of legacy plugin ecosystem affordances",
         "richer editor polish and package source browsing"
       ],
-      "deferral_rationale": "ISSUE-178 through ISSUE-180 close the product-level lifecycle/version/author-update chain through shared AI-surface resources and actions. Remaining items are workflow breadth and UX polish, not blockers for the browser plugin refactor's representative Skill Studio completion loop."
+      "deferral_rationale": "ISSUE-178 through ISSUE-180 close the product-level lifecycle/version/author-update chain through shared AI-surface resources and actions. Remaining items are workflow breadth and UX polish, not blockers for the browser plugin refactor's representative Skill Studio completion loop.",
+      "chapter": "replication"
     },
     {
       "module_id": "browser-vfs",
@@ -334,7 +343,8 @@
         "docs/migration-parity-dashboard.md"
       ],
       "cutover_gate": "Gate B",
-      "default_parallel_group": "browser-vfs"
+      "default_parallel_group": "browser-vfs",
+      "chapter": "replication"
     },
     {
       "module_id": "skill-runtime-sdk-studio",
@@ -354,7 +364,8 @@
         "docs/cutover-readiness-criteria.md"
       ],
       "cutover_gate": "Soft Gate 1",
-      "default_parallel_group": "sdk-docs"
+      "default_parallel_group": "sdk-docs",
+      "chapter": "replication"
     },
     {
       "module_id": "repo-workflow-dx",
@@ -367,7 +378,69 @@
       "code_roots": [".agents/skills/", "docs/", ".github/workflows/"],
       "source_docs": ["docs/source-of-truth-map.md", "docs/multi-agent-workflow.md"],
       "cutover_gate": null,
-      "default_parallel_group": "sdk-docs"
+      "default_parallel_group": "sdk-docs",
+      "chapter": "replication"
+    },
+    {
+      "module_id": "product-daily-usability",
+      "title": "Product M1: Daily Usability",
+      "summary": "M1 能用：可日用的助手。会话持久化、首跑引导、诚实工具面、技能编辑回读、内置示例技能。",
+      "tracking_order": 110,
+      "stage": "mainline",
+      "status": "in-progress",
+      "chapter": "product",
+      "depends_on_modules": ["kernel", "ai-surface-control-plane", "skill-runtime-sdk-studio"],
+      "code_roots": ["apps/mv3-shell/src/", "packages/kernel/src/", "packages/core/src/"],
+      "source_docs": ["docs/product-roadmap-2026-07-08.md"],
+      "cutover_gate": null,
+      "default_parallel_group": "mv3-shell",
+      "milestone_ref": "M1",
+      "issues": ["ISSUE-189", "ISSUE-190", "ISSUE-191"]
+    },
+    {
+      "module_id": "agent-vision-loop",
+      "title": "Product M2: Vision Agent",
+      "summary": "M2 能看见：视觉化 Agent。截图进 LLM context、多模态消息模型、视觉预算策略、原语补全。",
+      "tracking_order": 120,
+      "stage": "mainline",
+      "status": "not-started",
+      "chapter": "product",
+      "depends_on_modules": ["product-daily-usability"],
+      "code_roots": ["packages/kernel/src/", "apps/mv3-shell/src/"],
+      "source_docs": ["docs/product-roadmap-2026-07-08.md"],
+      "cutover_gate": null,
+      "default_parallel_group": "kernel",
+      "milestone_ref": "M2"
+    },
+    {
+      "module_id": "skill-userscript-loop",
+      "title": "Product M3: Skill As Userscript",
+      "summary": "M3 新一代油猴脚本：Agent 固化会话为技能、skills.invoke 进默认工具面、站点感知、自愈循环、轻量分享。",
+      "tracking_order": 130,
+      "stage": "mainline",
+      "status": "not-started",
+      "chapter": "product",
+      "depends_on_modules": ["agent-vision-loop"],
+      "code_roots": ["packages/skill-sdk/", "apps/mv3-shell/src/"],
+      "source_docs": ["docs/product-roadmap-2026-07-08.md"],
+      "cutover_gate": null,
+      "default_parallel_group": "sdk-docs",
+      "milestone_ref": "M3"
+    },
+    {
+      "module_id": "agent-frontier",
+      "title": "Product M4: Agent Frontier",
+      "summary": "M4 极致探索：多 provider 原生 adapter、后台长任务、CDP escape hatch、多 Agent child-run。",
+      "tracking_order": 140,
+      "stage": "mainline",
+      "status": "not-started",
+      "chapter": "product",
+      "depends_on_modules": ["skill-userscript-loop"],
+      "code_roots": [],
+      "source_docs": ["docs/product-roadmap-2026-07-08.md"],
+      "cutover_gate": null,
+      "default_parallel_group": "kernel",
+      "milestone_ref": "M4"
     }
   ]
 }

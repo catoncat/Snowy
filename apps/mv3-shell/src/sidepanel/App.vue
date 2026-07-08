@@ -31,7 +31,7 @@ import {
 import { SidepanelIcon } from "./icons";
 import {
   createInitialManagementState,
-: createSkillEditorSetupPlan,
+  createSkillEditorSetupPlan,
   createBuiltinExampleSetupPlans,
   createSkillRunPrompt,
   listSkillCatalogItems,
@@ -1093,7 +1093,7 @@ function openSkillImportEditor() {
   void openSkillDiscoverPanelAndFocus();
 }
 
-: editSkillPackageDraft(skill: SkillCatalogItem) {
+async function editSkillPackageDraft(skill: SkillCatalogItem) {
   managementError.value = null;
   managementNotice.value = null;
   skillIdDraft.value = skill.skillId;
@@ -1368,7 +1368,7 @@ function useSkillInComposer(skill: SkillCatalogItem) {
   void focusComposer();
 }
 
-: runSkillFromManagement(skill: SkillCatalogItem) {
+async function runSkillFromManagement(skill: SkillCatalogItem) {
   if (isSkillRunPending(skill.skillId) || sending.value) {
     return;
   }
@@ -2159,7 +2159,7 @@ async function installBuiltinExamples() {
 
 function submitSkillPackageInstall() {
   try {
-: createSkillEditorSetupPlan({
+    const setupPlan = createSkillEditorSetupPlan({
       skillId: skillIdDraft.value,
       skillName: skillNameDraft.value,
       skillDescription: skillDescriptionDraft.value,
@@ -3313,7 +3313,7 @@ onUnmounted(() => {
                 <h3 class="text-[11px] font-bold uppercase tracking-normal text-slate-500">技能管理</h3>
                 <p class="text-[12px] leading-5 text-slate-500">先管理已有技能；需要新建或修改时，再进入编辑界面。</p>
               </div>
-: "flex flex-wrap items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <button type="button" class="rounded-md bg-slate-950 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-slate-800" @click="openSkillCreateEditor">
                   新建技能
                 </button>

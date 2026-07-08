@@ -1,5 +1,9 @@
 # Legacy To vNext Migration Matrix
 
+
+> **⚠️ 复刻章节历史证据**——本文件属于复刻章节（已关闭），产品章节规划见 [`docs/product-roadmap-2026-07-08.md`](../product-roadmap-2026-07-08.md)。
+
+
 本文件解决两个问题：
 
 1. 旧仓到底有哪些能力面需要迁到新仓

@@ -1,5 +1,9 @@
 # Cutover Readiness Criteria
 
+
+> **⚠️ 复刻章节历史证据**——本文件属于复刻章节（已关闭），产品章节规划见 [`docs/product-roadmap-2026-07-08.md`](../product-roadmap-2026-07-08.md)。
+
+
 本文件定义：
 
 什么时候新仓可以从“重构实验仓”进入“可替代旧主线”的状态。
