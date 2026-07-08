@@ -1,25 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-08T16:31:27.642Z",
+  "generated_at": "2026-07-08T16:32:43.345Z",
   "repo_root": "/private/tmp/Snowy",
-  "entries": [
-    {
-      "issue_id": "ISSUE-192",
-      "issue_path": "docs/backlog/2026-07-08-m0-ledger-product-chapter-reshape-and-acceptance-gate-pinning.md",
-      "title": "M0 收尾：module ledger 产品章节重排与 release acceptance gate 冻结",
-      "parallel_group": "sdk-docs",
-      "module_id": "repo-workflow-dx",
-      "module_stage": "deferred",
-      "tracking_kind": "doc-debt",
-      "check_cmd": "bun run release:acceptance && bun run workflow:queue:build",
-      "depends_on": [],
-      "write_scope": [
-        "docs/module-tracking-ledger.json",
-        "scripts/release-acceptance.ts",
-        "docs/migration-parity-dashboard.md",
-        "docs/legacy-to-vnext-migration-matrix.md",
-        "docs/cutover-readiness-criteria.md"
-      ]
-    }
-  ]
+  "entries": []
 }

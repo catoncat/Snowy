@@ -26,6 +26,7 @@ write_scope:
   - docs/cutover-readiness-criteria.md
 acceptance_ref: docs/product-roadmap-2026-07-08.md
 check_cmd: "bun run release:acceptance && bun run workflow:queue:build"
+completed_at: 2026-07-08T16:32:38.702Z
 ---
 
 ## Goal
@@ -55,6 +56,15 @@ check_cmd: "bun run release:acceptance && bun run workflow:queue:build"
 
 ## 工作总结
 
+### 实现了什么
+- ledger加4个产品模块+chapter标注；release-acceptance冻结到复刻章节；3个parity文档加历史横幅
+
+### 实际跑了什么检查
+- bun run release:acceptance && bun run workflow:queue:build
+
+### 残留风险
+- 无
+
 ### 1. Module ledger 重排
 - 所有现有复刻章节模块新增 `chapter: "replication"` 字段。
 - 新增 4 个产品章节模块（`chapter: "product"`）：
@@ -82,5 +92,7 @@ check_cmd: "bun run release:acceptance && bun run workflow:queue:build"
 - ISSUE-189/190/191 保留在原 module_id（kernel / ai-surface-control-plane / skill-runtime-sdk-studio），未迁移到 `product-daily-usability`。理由：三张票的 write_scope 跨多个复刻章节模块，迁移 module_id 会导致 queue builder 的 module 校验回归。产品模块 `product-daily-usability` 在 ledger 中以 `issues` 字段引用这三张票作为追踪关联。
 
 ## 相关 commits
+
+- `81b4a6772ec8` docs(issue-192): mark done, add work summary
 
 - `6c951db` — chore(m0): freeze ledger gate, add product modules, fix Vue template corruptions (ISSUE-192)
