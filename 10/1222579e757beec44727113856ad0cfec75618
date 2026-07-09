@@ -1,0 +1,21 @@
+apps/mv3-shell/test/manifest.spec.ts
+  s_eca3b6cde00730::t_4d7a5e1a5b8146 647
+apps/mv3-shell/manifest.json
+  s_eca3b6cde00730::t_a54346f58549aa 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "101222579e757beec44727113856ad0cfec75618",
+  "prompts": {},
+  "sessions": {
+    "s_eca3b6cde00730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f4255-f8c7-705f-994b-732cc46d3f9c",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "cat <git@chen.rs>"
+    }
+  }
+}
