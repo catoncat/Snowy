@@ -644,7 +644,7 @@ describe("mv3-shell manifest", () => {
     expect(manifest.permissions).toContain("offscreen");
     expect(manifest.permissions).toContain("activeTab");
     expect(manifest.permissions).toContain("sidePanel");
-    expect(hostPermissions).toEqual([]);
+    expect(hostPermissions).toEqual(["<all_urls>"]);
     expect(webAccessibleResources).toEqual([]);
     expect(manifest.background).toMatchObject({
       service_worker: "src/background.js",
