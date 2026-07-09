@@ -1282,6 +1282,22 @@ export function createBackgroundRunnerBridge({
             durationMs: entry.durationMs,
             ...(entry.errorCode ? { error: entry.errorCode } : {}),
           });
+          // Debug beacon: POST to local debug server if running (production only)
+          if (typeof chrome !== "undefined" && chrome.runtime?.id) {
+            try {
+              void fetch("http://127.0.0.1:9876/debug", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  ts: new Date().toISOString(),
+                  type: "loop.telemetry",
+                  entry,
+                }),
+              }).catch(() => {});
+            } catch {
+              // debug server not running — silently ignore
+            }
+          }
         },
         onObservabilityEvent: async (event, rawEvent) => {
           appendObservabilityExportEvents({
