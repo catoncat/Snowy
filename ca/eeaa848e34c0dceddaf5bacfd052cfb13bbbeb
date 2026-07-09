@@ -1,0 +1,22 @@
+scripts/debug-server.ts
+  s_eca3b6cde00730::t_7fca19ff674d40 1-70
+  s_eca3b6cde00730::t_77bcbca56698c7 71-74
+apps/mv3-shell/src/background.ts
+  s_eca3b6cde00730::t_650bfdd4f4d28d 1285-1300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "caeeaa848e34c0dceddaf5bacfd052cfb13bbbeb",
+  "prompts": {},
+  "sessions": {
+    "s_eca3b6cde00730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f4255-f8c7-705f-994b-732cc46d3f9c",
+        "model": "glm-5.2:cloud"
+      },
+      "human_author": "cat <git@chen.rs>"
+    }
+  }
+}
